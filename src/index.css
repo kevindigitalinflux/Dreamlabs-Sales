@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #040F49;
+  --color-violet: #8B32FF;
+  --color-purple: #64378B;
+  --color-magenta: #F0386B;
+  --color-cyan: #00DFDF;
+  --color-offwhite: #F4F4F8;
+  --color-bg: #09102E;
+  --color-card: #111C6A;
+  --color-surface: #1A2575;
+  --color-muted: rgba(244, 244, 248, 0.55);
+  --color-line: rgba(255, 255, 255, 0.08);
+  --font-heading: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-bg font-body text-offwhite;
+    font-size: 16px;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+  }
+  h1, h2, h3, h4 {
+    @apply font-heading;
+    line-height: 1.25;
+  }
+}
