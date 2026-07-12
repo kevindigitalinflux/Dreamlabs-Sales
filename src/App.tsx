@@ -4,6 +4,7 @@ import { AdminRoute, ProtectedRoute } from './components/layout/ProtectedRoute';
 import { AppShell } from './components/layout/AppShell';
 import { ComingSoon } from './components/layout/ComingSoon';
 import { Login } from './pages/Login';
+import { Welcome } from './pages/Welcome';
 import { Dashboard } from './pages/Dashboard';
 import { PipelineRedirect } from './pages/PipelineRedirect';
 import { PipelineKanban } from './pages/PipelineKanban';
@@ -19,6 +20,7 @@ export function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/welcome" element={<Welcome />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route path="/" element={<Dashboard />} />
