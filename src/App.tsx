@@ -1,22 +1,18 @@
 import { BrowserRouter, Route, Routes } from 'react-router';
-import { AuthProvider, useAuth } from './hooks/useAuth';
-import { ProtectedRoute } from './components/layout/ProtectedRoute';
+import { AuthProvider } from './hooks/useAuth';
+import { AdminRoute, ProtectedRoute } from './components/layout/ProtectedRoute';
+import { AppShell } from './components/layout/AppShell';
+import { ComingSoon } from './components/layout/ComingSoon';
 import { Login } from './pages/Login';
+import { Dashboard } from './pages/Dashboard';
+import { PipelineRedirect } from './pages/PipelineRedirect';
+import { PipelineKanban } from './pages/PipelineKanban';
+import { PipelineList } from './pages/PipelineList';
+import { LeadDetailPage } from './pages/LeadDetailPage';
+import { Settings } from './pages/Settings';
+import { Admin } from './pages/Admin';
 
-function Home() {
-  const { profile, signOut } = useAuth();
-  return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-3">
-      <h1 className="text-[22px] font-bold">Signed in as {profile?.full_name ?? profile?.email}</h1>
-      <p className="text-muted">Role: {profile?.role}</p>
-      <button type="button" onClick={() => void signOut()} className="min-h-11 cursor-pointer rounded-lg bg-surface px-4 font-semibold">
-        Sign out
-      </button>
-    </div>
-  );
-}
-
-/** App root: router + auth provider. Full route tree arrives in Task 6. */
+/** App root: full SPEC.md §13 route tree (later-cycle modules render ComingSoon). */
 export function App() {
   return (
     <BrowserRouter>
@@ -24,7 +20,21 @@ export function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route element={<ProtectedRoute />}>
-            <Route path="/" element={<Home />} />
+            <Route element={<AppShell />}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/pipeline" element={<PipelineRedirect />} />
+              <Route path="/pipeline/kanban" element={<PipelineKanban />} />
+              <Route path="/pipeline/list" element={<PipelineList />} />
+              <Route path="/pipeline/leads/:id" element={<LeadDetailPage />} />
+              <Route path="/scraper/*" element={<ComingSoon module="Lead Scraper" />} />
+              <Route path="/emails/*" element={<ComingSoon module="Email Automation" />} />
+              <Route path="/analytics" element={<ComingSoon module="Analytics" />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route element={<AdminRoute />}>
+                <Route path="/admin" element={<Admin />} />
+              </Route>
+              <Route path="*" element={<ComingSoon module="This page" />} />
+            </Route>
           </Route>
         </Routes>
       </AuthProvider>
