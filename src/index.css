@@ -28,3 +28,9 @@
     line-height: 1.25;
   }
 }
+
+/* Right slide-in for the lead panel (referenced as animate-[slidein_...]). */
+@keyframes slidein {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}

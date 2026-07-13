@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useEffect, useState } from 'react';
 import { Inbox, Plus } from 'lucide-react';
 import { useLeads } from '../hooks/useLeads';
 import { useProfiles } from '../hooks/useProfiles';
@@ -9,14 +8,21 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { AddLeadWizard } from '../components/pipeline/AddLeadWizard';
 import { KanbanBoard } from '../components/pipeline/KanbanBoard';
 import { ViewToggle } from '../components/pipeline/ViewToggle';
+import { LeadPanel } from '../components/pipeline/LeadPanel';
 import type { Lead, Stage } from '../types';
 
 /** Kanban pipeline page (desktop). Mobile users are pointed to the list view. */
 export function PipelineKanban() {
   const { leads, loading, error, createLead, updateLead } = useLeads();
   const { profiles } = useProfiles();
-  const navigate = useNavigate();
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [selected, setSelected] = useState<Lead | null>(null);
+
+  // Keep the open panel's lead fresh when realtime refreshes the list.
+  useEffect(() => {
+    if (selected) setSelected(leads.find((l) => l.id === selected.id) ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leads]);
 
   function assigneeNameFor(lead: Lead): string | null {
     if (!lead.assigned_to) return null;
@@ -66,13 +72,14 @@ export function PipelineKanban() {
           <KanbanBoard
             leads={leads}
             onMove={handleMove}
-            onOpen={(lead) => navigate(`/pipeline/leads/${lead.id}`)}
+            onOpen={(lead) => setSelected(lead)}
             assigneeNameFor={assigneeNameFor}
           />
         )}
       </div>
 
       <AddLeadWizard open={wizardOpen} onClose={() => setWizardOpen(false)} onCreate={createLead} />
+      <LeadPanel lead={selected} profiles={profiles} onClose={() => setSelected(null)} onUpdate={updateLead} />
     </div>
   );
 }
