@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowRight, X } from 'lucide-react';
 import type { LeadPatch } from '../../lib/leadUpdates';
@@ -10,6 +11,7 @@ import { SelectField } from '../ui/Input';
 import { StageBadge } from './StageBadge';
 import { NextActionEditor } from './NextActionEditor';
 import { ContactInfo, NotesPreview, PipelineInfo } from './LeadPanelSections';
+import { NoteComposer } from './NoteComposer';
 
 interface LeadPanelProps {
   lead: Lead | null;
@@ -31,7 +33,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps) {
   const navigate = useNavigate();
   const { profile: me } = useAuth();
-  const { notes, loading: notesLoading } = useLeadNotes(lead?.id ?? 'none');
+  const [noteOpen, setNoteOpen] = useState(false);
+  const { notes, loading: notesLoading, addNote } = useLeadNotes(lead?.id ?? 'none');
 
   if (!lead) return null;
   return (
@@ -80,6 +83,7 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
         <Section title="Recent notes"><NotesPreview notes={notes} loading={notesLoading} /></Section>
 
         <div className="mt-auto flex flex-col gap-2">
+          <Button onClick={() => setNoteOpen(true)}>Log note</Button>
           <Button onClick={() => navigate(`/pipeline/leads/${lead.id}`)}>
             Open full record <ArrowRight className="h-4 w-4" aria-hidden />
           </Button>
@@ -89,6 +93,15 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
           </div>
         </div>
       </aside>
+      {lead && (
+        <NoteComposer
+          open={noteOpen}
+          onClose={() => setNoteOpen(false)}
+          lead={lead}
+          addNote={addNote}
+          onUpdateLead={(patch) => onUpdate(lead.id, patch)}
+        />
+      )}
     </div>
   );
 }

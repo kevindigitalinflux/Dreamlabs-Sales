@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import { useParams } from 'react-router';
-import { FileQuestion, MapPin } from 'lucide-react';
+import { FileQuestion, MapPin, Plus } from 'lucide-react';
 import { useLead } from '../hooks/useLead';
 import { useLeadNotes } from '../hooks/useLeadNotes';
 import { useProfiles } from '../hooks/useProfiles';
 import { STAGES, formatCurrency, initials } from '../lib/utils';
 import type { Stage } from '../types';
+import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { SelectField } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
@@ -13,14 +15,16 @@ import { StageBadge } from '../components/pipeline/StageBadge';
 import { NextActionEditor } from '../components/pipeline/NextActionEditor';
 import { ContactInfo, PipelineInfo } from '../components/pipeline/LeadPanelSections';
 import { NotesTimeline } from '../components/pipeline/NotesTimeline';
+import { NoteComposer } from '../components/pipeline/NoteComposer';
 import { ActivityHistory, EmailLogSection, SequencesSection } from '../components/pipeline/LeadDetailSections';
 
 /** Full lead record (SPEC.md §6 "Lead Detail Page") — 8 sections, vertical scroll. */
 export function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { lead, loading, error, updateLead } = useLead(id ?? 'none');
-  const { notes, loading: notesLoading } = useLeadNotes(id ?? 'none');
+  const { notes, loading: notesLoading, addNote } = useLeadNotes(id ?? 'none');
   const { profiles } = useProfiles();
+  const [noteOpen, setNoteOpen] = useState(false);
 
   function authorName(userId: string | null): string {
     const p = profiles.find((x) => x.id === userId);
@@ -75,7 +79,10 @@ export function LeadDetailPage() {
       </Card>
 
       <Card>
-        <h2 className="mb-2 text-[18px] font-bold">Notes</h2>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-[18px] font-bold">Notes</h2>
+          <Button variant="secondary" onClick={() => setNoteOpen(true)}>Add note</Button>
+        </div>
         <NotesTimeline notes={notes} loading={notesLoading} authorName={authorName} />
       </Card>
 
@@ -93,6 +100,22 @@ export function LeadDetailPage() {
         <h2 className="mb-2 text-[18px] font-bold">Activity</h2>
         <ActivityHistory notes={notes} loading={notesLoading} />
       </Card>
+
+      <button
+        type="button"
+        onClick={() => setNoteOpen(true)}
+        aria-label="Add note"
+        className="fixed bottom-20 right-4 z-40 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-violet shadow-lg md:hidden"
+      >
+        <Plus className="h-6 w-6" aria-hidden />
+      </button>
+      <NoteComposer
+        open={noteOpen}
+        onClose={() => setNoteOpen(false)}
+        lead={lead}
+        addNote={addNote}
+        onUpdateLead={(patch) => updateLead(patch)}
+      />
     </div>
   );
 }
