@@ -3,6 +3,7 @@ import { useLeads } from '../hooks/useLeads';
 import { useProfiles } from '../hooks/useProfiles';
 import { useAuth } from '../hooks/useAuth';
 import { useDashboardStats } from '../hooks/useDashboardStats';
+import { useFocusMode } from '../hooks/useFocusMode';
 import { Card } from '../components/ui/Card';
 import { Skeleton } from '../components/ui/Skeleton';
 import { StatsBar } from '../components/dashboard/StatsBar';
@@ -26,6 +27,7 @@ export function Dashboard() {
   const { leads, loading, error, updateLead } = useLeads();
   const { profiles } = useProfiles();
   const { draftCount, callsThisWeek } = useDashboardStats();
+  const { focusMode } = useFocusMode();
   const [selected, setSelected] = useState<Lead | null>(null);
 
   useEffect(() => {
@@ -43,7 +45,7 @@ export function Dashboard() {
         <p className="text-muted">{today}</p>
       </header>
 
-      <StatsBar leads={leads} leadsLoading={loading} draftCount={draftCount} callsThisWeek={callsThisWeek} />
+      {!focusMode && <StatsBar leads={leads} leadsLoading={loading} draftCount={draftCount} callsThisWeek={callsThisWeek} />}
 
       <Card>
         <h2 className="mb-3 text-[18px] font-bold">Today's follow-ups</h2>
@@ -57,16 +59,18 @@ export function Dashboard() {
         <EmailReviewQueue draftCount={draftCount} />
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <h2 className="mb-3 text-[18px] font-bold">Recently active</h2>
-          {loading ? <Skeleton className="h-24 w-full" /> : <RecentlyActive leads={leads} onOpen={setSelected} />}
-        </Card>
-        <Card>
-          <h2 className="mb-3 text-[18px] font-bold">Pipeline snapshot</h2>
-          {loading ? <Skeleton className="h-24 w-full" /> : <PipelineSnapshot leads={leads} />}
-        </Card>
-      </div>
+      {!focusMode && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <h2 className="mb-3 text-[18px] font-bold">Recently active</h2>
+            {loading ? <Skeleton className="h-24 w-full" /> : <RecentlyActive leads={leads} onOpen={setSelected} />}
+          </Card>
+          <Card>
+            <h2 className="mb-3 text-[18px] font-bold">Pipeline snapshot</h2>
+            {loading ? <Skeleton className="h-24 w-full" /> : <PipelineSnapshot leads={leads} />}
+          </Card>
+        </div>
+      )}
 
       <LeadPanel lead={selected} profiles={profiles} onClose={() => setSelected(null)} onUpdate={updateLead} />
     </div>
