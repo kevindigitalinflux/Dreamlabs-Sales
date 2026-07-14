@@ -60,7 +60,7 @@ export function LeadDetailPage() {
 
       <Card>
         <h2 className="mb-2 text-[18px] font-bold">Contact</h2>
-        <ContactInfo lead={lead} />
+        <ContactInfo lead={lead} onSave={(patch) => updateLead(patch)} />
       </Card>
 
       <Card>
@@ -70,7 +70,7 @@ export function LeadDetailPage() {
             {STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </SelectField>
         </div>
-        <PipelineInfo lead={lead} />
+        <PipelineInfo lead={lead} onSave={(patch) => updateLead(patch)} />
       </Card>
 
       <Card>
