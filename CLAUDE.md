@@ -159,24 +159,34 @@ vite.config.ts
 ---
 
 ## Key Files
-*(Populate as you build)*
 
 | File | Purpose |
 |---|---|
 | `src/lib/supabase.ts` | Supabase client with typed DB schema |
-| `src/types/index.ts` | All shared interfaces (Lead, RawLead, ScrapeJob, EmailTemplate, etc.) |
-| `src/hooks/useAuth.ts` | Auth context, role guard, contractor vs admin |
+| `src/types/index.ts` | All shared interfaces (Lead, LeadNote, Profile, Stage, NoteType, etc.) |
+| `src/hooks/useAuth.tsx` | Auth context, role guard, contractor vs admin |
 | `supabase/migrations/001_initial_schema.sql` | Full DB schema — all tables, RLS policies |
-| `src/lib/utils.ts` | Stage colour map, date helpers, ICP field labels |
+| `src/lib/utils.ts` | STAGES order, date/currency helpers, due/overdue logic |
+| `src/lib/leadUpdates.ts` | Single lead-mutation path — auto-logs stage changes to lead_notes |
+| `src/lib/leadFilters.ts` | List-view filter + sort logic (unit-tested) |
+| `src/hooks/useLeads.ts` | Pipeline CRUD + realtime subscription |
+| `src/hooks/useLeadNotes.ts` | Notes per lead; call notes bump call_count/last_contacted_at |
+| `supabase/functions/admin-users/` | Edge function: invite users, set roles (service-role only) |
 | `SPEC.md` | Full product spec — feature detail, schema, routes, design system |
 
 ---
 
 ## Current Status
-**Working:** Nothing yet — project setup phase  
-**In progress:** Initial project scaffold, Supabase project creation, schema migration  
-**Not yet started:** Lead scraper, pipeline tracker, email automation, dashboard, admin panel  
-**Known issues:** None
+**Working:** Auth (invite-only, admin/contractor roles, RLS-enforced), app shell + routing, full pipeline
+(Kanban drag-and-drop, list view with search/filter/sort, lead detail, expanded side panel), note logging
+(guided debrief + free text + next-action prompt), Today's Focus dashboard, focus mode, admin panel
+(invite, roles, lead assignment).
+**In progress:** Nothing — cycle 1 complete.
+**Not yet started:** Email automation (cycle 2), lead scraper (cycle 2/3), analytics, Cloudflare Pages deploy.
+**Known issues:** Kanban reordering *within* a column is deferred (cross-column drag only). AI note parsing
+toggle is visible but disabled until parse-notes ships. gemini-1.5-flash in SPEC.md is deprecated — use
+gemini-2.5-flash when building cycle 2 (recorded in the design doc). Production bundle exceeds Vite's 500 kB
+chunk warning — consider route-level code-splitting in a later cycle.
 
 ---
 
