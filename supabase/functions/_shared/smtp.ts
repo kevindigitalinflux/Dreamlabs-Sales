@@ -21,11 +21,15 @@ export async function sendMail(
       auth: { username: cfg.user, password: cfg.pass },
     },
   });
+  // strip CR/LF — SMTP header injection guard
+  const fromName = cfg.fromName ? cfg.fromName.replace(/[\r\n]+/g, ' ').trim() : cfg.fromName;
+  const to = msg.to.replace(/[\r\n]+/g, ' ').trim();
+  const subject = msg.subject.replace(/[\r\n]+/g, ' ').trim();
   try {
     await client.send({
-      from: cfg.fromName ? `${cfg.fromName} <${cfg.user}>` : cfg.user,
-      to: msg.to,
-      subject: msg.subject,
+      from: fromName ? `${fromName} <${cfg.user}>` : cfg.user,
+      to,
+      subject,
       content: msg.body,
     });
   } finally {
