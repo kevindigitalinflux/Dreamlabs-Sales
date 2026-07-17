@@ -17,6 +17,7 @@ import { ContactInfo, PipelineInfo } from '../components/pipeline/LeadPanelSecti
 import { NotesTimeline } from '../components/pipeline/NotesTimeline';
 import { NoteComposer } from '../components/pipeline/NoteComposer';
 import { ActivityHistory, EmailLogSection, SequencesSection } from '../components/pipeline/LeadDetailSections';
+import { EmailComposer } from '../components/emails/EmailComposer';
 
 /** Full lead record (SPEC.md §6 "Lead Detail Page") — 8 sections, vertical scroll. */
 export function LeadDetailPage() {
@@ -25,6 +26,7 @@ export function LeadDetailPage() {
   const { notes, loading: notesLoading, addNote } = useLeadNotes(id ?? 'none');
   const { profiles } = useProfiles();
   const [noteOpen, setNoteOpen] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   function authorName(userId: string | null): string {
     const p = profiles.find((x) => x.id === userId);
@@ -49,6 +51,7 @@ export function LeadDetailPage() {
           </span>
         )}
         {lead.deal_value !== null && <span className="ml-auto font-heading text-[22px] font-bold text-cyan">{formatCurrency(lead.deal_value)}</span>}
+        <Button variant="secondary" onClick={() => setEmailOpen(true)}>Draft email</Button>
       </header>
 
       {(lead.address || lead.city || lead.postcode) && (
@@ -116,6 +119,7 @@ export function LeadDetailPage() {
         addNote={addNote}
         onUpdateLead={(patch) => updateLead(patch)}
       />
+      <EmailComposer lead={lead} open={emailOpen} onClose={() => setEmailOpen(false)} />
     </div>
   );
 }

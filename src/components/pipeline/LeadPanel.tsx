@@ -12,6 +12,7 @@ import { StageBadge } from './StageBadge';
 import { NextActionEditor } from './NextActionEditor';
 import { ContactInfo, NotesPreview, PipelineInfo } from './LeadPanelSections';
 import { NoteComposer } from './NoteComposer';
+import { EmailComposer } from '../emails/EmailComposer';
 
 interface LeadPanelProps {
   lead: Lead | null;
@@ -34,6 +35,7 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
   const navigate = useNavigate();
   const { profile: me } = useAuth();
   const [noteOpen, setNoteOpen] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
   const { notes, loading: notesLoading, addNote } = useLeadNotes(lead?.id ?? 'none');
 
   if (!lead) return null;
@@ -88,7 +90,7 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
             Open full record <ArrowRight className="h-4 w-4" aria-hidden />
           </Button>
           <div className="flex gap-2">
-            <Button variant="secondary" className="flex-1" disabled title="Email automation arrives in cycle 2">Draft email</Button>
+            <Button variant="secondary" className="flex-1" onClick={() => setEmailOpen(true)}>Draft email</Button>
             <Button variant="secondary" className="flex-1" disabled title="Sequences arrive in cycle 2">Enroll in sequence</Button>
           </div>
         </div>
@@ -102,6 +104,7 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
           onUpdateLead={(patch) => onUpdate(lead.id, patch)}
         />
       )}
+      {lead && <EmailComposer lead={lead} open={emailOpen} onClose={() => setEmailOpen(false)} />}
     </div>
   );
 }
