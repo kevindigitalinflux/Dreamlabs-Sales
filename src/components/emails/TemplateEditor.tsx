@@ -66,7 +66,7 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
         <div className="flex flex-wrap gap-1">
           {TEMPLATE_VARIABLES.map((v) => (
             <button key={v.key} type="button" onClick={() => insertVar(v.key)}
-              className="cursor-pointer rounded-md border border-line px-2 py-1 text-xs text-muted hover:border-cyan hover:text-cyan">
+              className="min-h-11 cursor-pointer rounded-md border border-line px-3 text-xs text-muted hover:border-cyan hover:text-cyan">
               {v.label}
             </button>
           ))}
