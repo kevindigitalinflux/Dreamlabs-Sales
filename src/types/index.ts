@@ -58,3 +58,88 @@ export interface LeadNote {
   ai_extracted_data: unknown;
   created_at: string;
 }
+
+export type TemplateType =
+  | 'initial_followup' | 'second_chase' | 'not_now_nurture'
+  | 'audit_confirmation' | 'proposal_followup' | 'custom';
+
+export interface EmailTemplate {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+  template_type: TemplateType;
+  is_default: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface SequenceStep {
+  delay_days: number;
+  template_type: TemplateType;
+  subject_override: string | null;
+}
+
+export interface EmailSequence {
+  id: string;
+  name: string;
+  description: string | null;
+  steps: SequenceStep[];
+  is_default: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
+export type EnrollmentStatus = 'active' | 'paused' | 'completed' | 'cancelled';
+
+export interface SequenceEnrollment {
+  id: string;
+  lead_id: string;
+  sequence_id: string;
+  current_step: number;
+  next_send_at: string | null;
+  status: EnrollmentStatus;
+  enrolled_by: string | null;
+  created_at: string;
+}
+
+export type EmailLogStatus = 'draft' | 'sent' | 'failed';
+
+export interface EmailLog {
+  id: string;
+  lead_id: string | null;
+  sequence_enrollment_id: string | null;
+  sent_by: string | null;
+  to_email: string;
+  subject: string;
+  body: string;
+  status: EmailLogStatus;
+  error_message: string | null;
+  sent_at: string;
+}
+
+export type EmailProvider = 'gmail' | 'outlook' | 'yahoo' | 'smtp';
+
+export interface UserEmailSettings {
+  id: string;
+  user_id: string;
+  provider: EmailProvider;
+  smtp_host: string | null;
+  smtp_port: number;
+  smtp_user: string | null;
+  from_name: string | null;
+  is_verified: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** parse-notes suggestion: only fields the AI wants to change are present. */
+export interface LeadSuggestion {
+  stage?: Stage;
+  deal_value?: number;
+  package_tier?: PackageTier;
+  next_action_date?: string;
+  next_action_note?: string;
+  pain_point?: string;
+  rationale: string;
+}
