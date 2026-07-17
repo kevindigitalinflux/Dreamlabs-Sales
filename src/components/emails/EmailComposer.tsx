@@ -80,8 +80,12 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
     const { data, error } = await supabase.functions.invoke('generate-email', {
       body: { lead_id: lead.id, template_id: templateId, use_ai: useAi },
     });
+    if (error) {
+      const text = await readableInvokeError(error);
+      setBusy(null);
+      return setMsg({ kind: 'err', text });
+    }
     setBusy(null);
-    if (error) return setMsg({ kind: 'err', text: await readableInvokeError(error) });
     const r = data as { subject: string; body: string; ai_used: boolean; missing: string[]; error?: string };
     if (r.error) return setMsg({ kind: 'err', text: r.error });
     if (useAi && !r.ai_used) setMsg({ kind: 'warn', text: 'AI unavailable — using the plain template instead.' });
@@ -106,8 +110,12 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
     const { data, error } = await supabase.functions.invoke('send-email', {
       body: { to_email: lead.email, subject, body, lead_id: lead.id, log_id: draft?.log_id },
     });
+    if (error) {
+      const text = await readableInvokeError(error);
+      setBusy(null);
+      return setMsg({ kind: 'err', text });
+    }
     setBusy(null);
-    if (error) return setMsg({ kind: 'err', text: await readableInvokeError(error) });
     const r = data as { ok?: boolean; error?: string; warning?: string };
     if (r.error) return setMsg({ kind: 'err', text: r.error });
     if (r.warning) { setMsg({ kind: 'warn', text: `Sent ✓ — ${r.warning}` }); setTimeout(onClose, 1200); return; }
@@ -139,7 +147,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
             {diff.map((l, i) => (
               <p key={i} className={`whitespace-pre-wrap ${l.kind === 'added' ? 'text-emerald-400' : l.kind === 'removed' ? 'text-red-400/70 line-through' : 'text-muted/60'}`}>{l.text || ' '}</p>
             ))}
-            <button type="button" onClick={() => setShowDiff(false)} className="mt-2 cursor-pointer text-cyan">Hide diff</button>
+            <button type="button" onClick={() => setShowDiff(false)} className="mt-1 flex min-h-11 cursor-pointer items-center text-cyan">Hide diff</button>
           </div>
         )}
         <Textarea label="Body (plain text — lands in inboxes better)" rows={10} value={body} onChange={(e) => setBody(e.target.value)} />
