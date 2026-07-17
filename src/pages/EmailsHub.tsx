@@ -1,6 +1,7 @@
 import { useSearchParams } from 'react-router';
 import { ComingSoon } from '../components/layout/ComingSoon';
 import { TemplateList } from '../components/emails/TemplateList';
+import { SequenceList } from '../components/emails/SequenceList';
 
 const TABS = [
   { key: 'templates', label: 'Templates' },
@@ -25,7 +26,7 @@ export function EmailsHub() {
         ))}
       </div>
       {tab === 'templates' && <TemplateList />}
-      {tab === 'sequences' && <ComingSoon module="Sequences" />}
+      {tab === 'sequences' && <SequenceList />}
       {tab === 'logs' && <ComingSoon module="Email logs" />}
     </div>
   );
