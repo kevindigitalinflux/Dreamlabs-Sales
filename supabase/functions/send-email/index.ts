@@ -56,13 +56,23 @@ Deno.serve(async (req) => {
     sent_at: new Date().toISOString(),
   };
   let logId = body.log_id ?? null;
+  let logFailed = false;
   if (logId) {
-    await service.from('email_logs').update(row).eq('id', logId);
+    const { error: logErr } = await service.from('email_logs').update(row).eq('id', logId).eq('sent_by', user.id);
+    if (logErr) {
+      console.error('email_logs update failed:', logErr.message);
+      logFailed = true;
+    }
   } else {
-    const { data: inserted } = await service.from('email_logs').insert(row).select('id').single();
+    const { data: inserted, error: logErr } = await service.from('email_logs').insert(row).select('id').single();
+    if (logErr) {
+      console.error('email_logs insert failed:', logErr.message);
+      logFailed = true;
+    }
     logId = (inserted as { id: string } | null)?.id ?? null;
   }
 
-  if (status === 'failed') return json({ error: 'Send failed: ' + errorMessage, log_id: logId }, 400, headers);
-  return json({ ok: true, log_id: logId }, 200, headers);
+  const warning = logFailed ? 'Email sent but logging failed' : undefined;
+  if (status === 'failed') return json({ error: 'Send failed: ' + errorMessage, log_id: logId, ...(warning ? { warning } : {}) }, 400, headers);
+  return json({ ok: true, log_id: logId, ...(warning ? { warning } : {}) }, 200, headers);
 });
