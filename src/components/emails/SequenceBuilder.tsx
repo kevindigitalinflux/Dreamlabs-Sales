@@ -31,7 +31,7 @@ function StepCard({ index, step, templates, onChange, onRemove }: {
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }}
       className="flex items-end gap-2 rounded-lg border border-line bg-surface/40 p-3">
-      <button type="button" {...attributes} {...listeners} aria-label="Reorder step" className="mb-2 cursor-grab text-muted"><GripVertical className="h-4 w-4" aria-hidden /></button>
+      <button type="button" {...attributes} {...listeners} aria-label="Reorder step" className="mb-1 flex h-11 w-11 shrink-0 cursor-grab items-center justify-center rounded-lg text-muted hover:bg-surface"><GripVertical className="h-4 w-4" aria-hidden /></button>
       <div className="w-24">
         <Input label={index === 0 ? 'Start after (days)' : 'Wait (days)'} type="number" min="0" value={String(step.delay_days)}
           onChange={(e) => onChange({ delay_days: Math.max(0, Number(e.target.value) || 0) })} />
