@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { Link } from 'react-router';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/Button';
@@ -40,10 +41,10 @@ export function Settings() {
           </div>
         </form>
       </Card>
-      <Card>
-        <h2 className="mb-1 text-[18px] font-bold">Email sending</h2>
-        <p className="text-sm text-muted">SMTP configuration arrives with the Email Automation module in the next build cycle.</p>
-      </Card>
+      <Link to="/settings/email" className="block rounded-xl border border-line bg-card p-5 hover:bg-surface/50">
+        <h2 className="text-[18px] font-bold">Email sending</h2>
+        <p className="text-sm text-muted">Connect your Gmail/Outlook so Dreamlabs Sales can send from your address.</p>
+      </Link>
     </div>
   );
 }
