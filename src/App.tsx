@@ -13,6 +13,7 @@ import { PipelineList } from './pages/PipelineList';
 import { LeadDetailPage } from './pages/LeadDetailPage';
 import { Settings } from './pages/Settings';
 import { EmailConfig } from './pages/EmailConfig';
+import { EmailsHub } from './pages/EmailsHub';
 import { Admin } from './pages/Admin';
 
 /** App root: full SPEC.md §13 route tree (later-cycle modules render ComingSoon). */
@@ -32,7 +33,8 @@ export function App() {
               <Route path="/pipeline/list" element={<PipelineList />} />
               <Route path="/pipeline/leads/:id" element={<LeadDetailPage />} />
               <Route path="/scraper/*" element={<ComingSoon module="Lead Scraper" />} />
-              <Route path="/emails/*" element={<ComingSoon module="Email Automation" />} />
+              <Route path="/emails" element={<EmailsHub />} />
+              <Route path="/emails/*" element={<EmailsHub />} />
               <Route path="/analytics" element={<ComingSoon module="Analytics" />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/settings/email" element={<EmailConfig />} />

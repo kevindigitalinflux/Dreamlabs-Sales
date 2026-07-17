@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { forwardRef, useId } from 'react';
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
 
 const FIELD_CLASSES =
@@ -27,16 +27,19 @@ interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
 }
 
 /** Labelled textarea — 18px font so iOS never auto-zooms (SPEC.md §12). */
-export function Textarea({ label, error, className = '', ...rest }: TextareaProps) {
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea(
+  { label, error, className = '', ...rest },
+  ref,
+) {
   const id = useId();
   return (
     <div className="flex w-full flex-col gap-1.5">
       <label htmlFor={id} className="text-xs font-semibold text-muted">{label}</label>
-      <textarea id={id} className={`min-h-28 py-2 text-[18px] ${FIELD_CLASSES} ${className}`} {...rest} />
+      <textarea ref={ref} id={id} className={`min-h-28 py-2 text-[18px] ${FIELD_CLASSES} ${className}`} {...rest} />
       {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
     </div>
   );
-}
+});
 
 interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label: string;
