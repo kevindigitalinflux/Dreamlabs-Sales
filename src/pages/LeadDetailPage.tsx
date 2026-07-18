@@ -16,8 +16,9 @@ import { NextActionEditor } from '../components/pipeline/NextActionEditor';
 import { ContactInfo, PipelineInfo } from '../components/pipeline/LeadPanelSections';
 import { NotesTimeline } from '../components/pipeline/NotesTimeline';
 import { NoteComposer } from '../components/pipeline/NoteComposer';
-import { ActivityHistory, EmailLogSection, SequencesSection } from '../components/pipeline/LeadDetailSections';
+import { ActivityHistory, EmailLogSection } from '../components/pipeline/LeadDetailSections';
 import { EmailComposer } from '../components/emails/EmailComposer';
+import { EnrollmentControl } from '../components/emails/EnrollmentControl';
 
 /** Full lead record (SPEC.md §6 "Lead Detail Page") — 8 sections, vertical scroll. */
 export function LeadDetailPage() {
@@ -96,7 +97,7 @@ export function LeadDetailPage() {
 
       <Card>
         <h2 className="mb-2 text-[18px] font-bold">Sequences</h2>
-        <SequencesSection leadId={lead.id} />
+        <EnrollmentControl lead={lead} />
       </Card>
 
       <Card>

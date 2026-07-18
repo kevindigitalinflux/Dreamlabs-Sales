@@ -13,6 +13,7 @@ import { NextActionEditor } from './NextActionEditor';
 import { ContactInfo, NotesPreview, PipelineInfo } from './LeadPanelSections';
 import { NoteComposer } from './NoteComposer';
 import { EmailComposer } from '../emails/EmailComposer';
+import { EnrollmentControl } from '../emails/EnrollmentControl';
 
 interface LeadPanelProps {
   lead: Lead | null;
@@ -71,6 +72,8 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
           <NextActionEditor lead={lead} onSave={(patch) => onUpdate(lead.id, patch)} />
         </Section>
 
+        <Section title="Sequence"><EnrollmentControl lead={lead} /></Section>
+
         {me?.role === 'admin' && (
           <Section title="Assignment">
             <SelectField label="Assigned to" value={lead.assigned_to ?? ''} onChange={(e) => void onUpdate(lead.id, { assigned_to: e.target.value || null })}>
@@ -89,10 +92,7 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
           <Button onClick={() => navigate(`/pipeline/leads/${lead.id}`)}>
             Open full record <ArrowRight className="h-4 w-4" aria-hidden />
           </Button>
-          <div className="flex gap-2">
-            <Button variant="secondary" className="flex-1" onClick={() => setEmailOpen(true)}>Draft email</Button>
-            <Button variant="secondary" className="flex-1" disabled title="Sequences arrive in cycle 2">Enroll in sequence</Button>
-          </div>
+          <Button variant="secondary" onClick={() => setEmailOpen(true)}>Draft email</Button>
         </div>
       </aside>
       {lead && (
