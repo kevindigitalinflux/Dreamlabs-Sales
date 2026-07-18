@@ -3,6 +3,8 @@ import { useLeads } from '../hooks/useLeads';
 import { useProfiles } from '../hooks/useProfiles';
 import { useAuth } from '../hooks/useAuth';
 import { useDashboardStats } from '../hooks/useDashboardStats';
+import { useDrafts } from '../hooks/useDrafts';
+import type { DraftLog } from '../hooks/useDrafts';
 import { useFocusMode } from '../hooks/useFocusMode';
 import { Card } from '../components/ui/Card';
 import { Skeleton } from '../components/ui/Skeleton';
@@ -12,6 +14,7 @@ import { EmailReviewQueue } from '../components/dashboard/EmailReviewQueue';
 import { RecentlyActive } from '../components/dashboard/RecentlyActive';
 import { PipelineSnapshot } from '../components/dashboard/PipelineSnapshot';
 import { LeadPanel } from '../components/pipeline/LeadPanel';
+import { EmailComposer } from '../components/emails/EmailComposer';
 import type { Lead } from '../types';
 
 function greeting(now: Date = new Date()): string {
@@ -26,9 +29,12 @@ export function Dashboard() {
   const { profile } = useAuth();
   const { leads, loading, error, updateLead } = useLeads();
   const { profiles } = useProfiles();
-  const { draftCount, callsThisWeek } = useDashboardStats();
+  const { callsThisWeek } = useDashboardStats();
+  const { drafts, loading: draftsLoading, refresh: refreshDrafts } = useDrafts();
   const { focusMode } = useFocusMode();
   const [selected, setSelected] = useState<Lead | null>(null);
+  const [reviewing, setReviewing] = useState<DraftLog | null>(null);
+  const reviewLead = reviewing?.lead ? leads.find((l) => l.id === reviewing.lead!.id) ?? null : null;
 
   useEffect(() => {
     if (selected) setSelected(leads.find((l) => l.id === selected.id) ?? null);
@@ -45,7 +51,7 @@ export function Dashboard() {
         <p className="text-muted">{today}</p>
       </header>
 
-      {!focusMode && <StatsBar leads={leads} leadsLoading={loading} draftCount={draftCount} callsThisWeek={callsThisWeek} />}
+      {!focusMode && <StatsBar leads={leads} leadsLoading={loading} draftCount={draftsLoading ? null : drafts.length} callsThisWeek={callsThisWeek} />}
 
       <Card>
         <h2 className="mb-3 text-[18px] font-bold">Today's follow-ups</h2>
@@ -56,7 +62,7 @@ export function Dashboard() {
 
       <Card>
         <h2 className="mb-3 text-[18px] font-bold">Emails ready to review</h2>
-        <EmailReviewQueue draftCount={draftCount} />
+        <EmailReviewQueue drafts={drafts} loading={draftsLoading} onReview={setReviewing} onChanged={() => void refreshDrafts()} />
       </Card>
 
       {!focusMode && (
@@ -73,6 +79,15 @@ export function Dashboard() {
       )}
 
       <LeadPanel lead={selected} profiles={profiles} onClose={() => setSelected(null)} onUpdate={updateLead} />
+
+      {reviewing && reviewLead && (
+        <EmailComposer
+          lead={reviewLead}
+          open
+          onClose={() => { setReviewing(null); void refreshDrafts(); }}
+          draft={{ log_id: reviewing.id, subject: reviewing.subject, body: reviewing.body }}
+        />
+      )}
     </div>
   );
 }
