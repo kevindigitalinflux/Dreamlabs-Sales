@@ -1,0 +1,4 @@
+project_id = "wgomksxelyfkzepbnkdd"
+
+[functions.check-sequences]
+verify_jwt = false
