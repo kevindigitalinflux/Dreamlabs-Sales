@@ -19,16 +19,11 @@ or retired.** (Requested by Kevin, 2026-07-17.)
 | Stage-change logging | App logic (`applyLeadUpdate`) | Lead stage edit | Auto-inserts "Stage changed: X → Y" note to `lead_notes` |
 | Call-stats bump | App logic (`useLeadNotes.addNote`) | Call note saved | Increments `call_count`, sets `last_contacted_at` |
 | Realtime pipeline sync | Supabase Realtime | `leads` table change | Live-updates Kanban/list/dashboard without refresh |
-
-## Cycle 2 (approved design — being built)
-
-| Automation | Type | Trigger | What it does |
-|---|---|---|---|
-| `email-settings` | Edge function | User saves SMTP config | Writes credentials to Supabase Vault (never client-readable); test-email action |
-| `generate-email` | Edge function + AI | Composer / check-sequences | Personalises a template via Gemini 2.5 Flash (free tier, ~250 req/day cap — ample; swappable `draftEmail()` interface). Falls back to plain substitution on AI failure |
-| `send-email` | Edge function | **User clicks Send** | SMTP send from the user's own address (Vault creds); logs status to `email_logs` |
-| `check-sequences` | pg_cron daily 06:00 UTC → edge function | Schedule | Drafts due sequence emails into the review queue (`status='draft'`), advances enrollment pointers. **Drafts only — never sends** |
-| `parse-notes` | Edge function + AI | Note saved with AI toggle on | Suggests lead field updates from the note; user reviews a diff and clicks Apply — AI never writes to leads directly |
+| `email-settings` | Edge function | User saves SMTP config | Writes credentials to Supabase Vault via `app_set_smtp_secret` (service-role-only SQL fn); test-email action sets `is_verified`. **Live since cycle 2 (2026-07-19)** |
+| `generate-email` | Edge function + AI | Composer / check-sequences | Personalises a template via Gemini 2.5 Flash (swappable `draftEmail()` in `_shared/ai.ts`; free tier ~250 req/day — ample). Falls back to plain substitution on any AI failure. Caller-JWT data access (RLS enforced). **Waiting on GEMINI_API_KEY (human step) — falls back until then** |
+| `send-email` | Edge function | **User clicks Send** | SMTP send from the user's own verified address (Vault creds via `app_get_smtp_secret`); CR/LF header-injection guard in `_shared/smtp.ts`; logs `sent`/`failed`+error to `email_logs`, surfaces a `warning` if the audit log write itself fails. **Waiting on Kevin's SMTP setup (human step)** |
+| `check-sequences` | pg_cron daily 06:00 UTC → edge function | Schedule (job `check-sequences-daily`) | Drafts due sequence emails into the review queue (`status='draft'`), advances enrollment pointers; skips (and retries next run) on missing email/template or insert failure; 7s spacing for Gemini RPM. Gated by `x-cron-secret` (Vault). `verify_jwt=false` pinned in `supabase/config.toml`. **Drafts only — never sends. Live, e2e-proven** |
+| `parse-notes` | Edge function + AI | Note saved with AI toggle on | Suggests lead field updates from the note; client whitelist-validates (`sanitizeSuggestion`) then shows a review diff; only the user's Apply click writes, via the stage-auto-logging path. **Live (falls back to no-suggestion until GEMINI_API_KEY set)** |
 
 ## Backlog (future cycles)
 

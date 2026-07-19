@@ -178,15 +178,22 @@ vite.config.ts
 
 ## Current Status
 **Working:** Auth (invite-only, admin/contractor roles, RLS-enforced), app shell + routing, full pipeline
-(Kanban drag-and-drop, list view with search/filter/sort, lead detail, expanded side panel), note logging
-(guided debrief + free text + next-action prompt), Today's Focus dashboard, focus mode, admin panel
-(invite, roles, lead assignment).
-**In progress:** Nothing — cycle 1 complete.
-**Not yet started:** Email automation (cycle 2), lead scraper (cycle 2/3), analytics, Cloudflare Pages deploy.
-**Known issues:** Kanban reordering *within* a column is deferred (cross-column drag only). AI note parsing
-toggle is visible but disabled until parse-notes ships. gemini-1.5-flash in SPEC.md is deprecated — use
-gemini-2.5-flash when building cycle 2 (recorded in the design doc). Production bundle exceeds Vite's 500 kB
-chunk warning — consider route-level code-splitting in a later cycle.
+(Kanban drag-and-drop, list view with search/filter/sort, lead detail with inline-editable fields, expanded
+side panel), note logging (guided debrief + free text + next-action prompt + AI lead-update suggestions with
+review diff), full email module: SMTP config (Vault-stored creds, Gmail/Outlook/custom), template library
+with variable substitution, AI-personalised composer with diff view (Gemini 2.5 Flash, plain fallback),
+sequences (builder, enrollment, daily draft cron), review-before-send queue on the dashboard, email logs
+with CSV export. Today's Focus dashboard, focus mode, admin panel.
+**In progress:** Nothing — cycle 2 complete.
+**Not yet started:** Lead scraper (cycle 3), analytics, Cloudflare Pages deploy.
+**Known issues / pending human steps:** GEMINI_API_KEY not yet set (AI drafting + note parsing fall back
+gracefully until Kevin creates a free key at aistudio.google.com/apikey and runs
+`npx supabase secrets set GEMINI_API_KEY=...`). Kevin's SMTP credentials not yet entered
+(/settings/email → save + test; until then sends return a friendly settings-gate error).
+Sequence steps are limited to the 5 default templates (custom templates can't be steps yet).
+check-sequences insert+advance is not transactional (worst case: a duplicate draft appears in the review
+queue after a mid-run crash — self-healing since nothing auto-sends). Kanban within-column reordering
+deferred. Production bundle exceeds Vite's 500 kB chunk warning — consider route-level code-splitting.
 
 ---
 
