@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { supabase } from '../../lib/supabase';
 import type { LeadPatch } from '../../lib/leadUpdates';
-import type { Lead, NoteType } from '../../types';
+import type { Lead, LeadSuggestion, NoteType } from '../../types';
 import { Button } from '../ui/Button';
 import { Input, SelectField, Textarea } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { DebriefWizard } from './DebriefWizard';
+import { sanitizeSuggestion, SuggestionDiff } from './SuggestionDiff';
 
 interface NoteComposerProps {
   open: boolean;
@@ -14,7 +16,7 @@ interface NoteComposerProps {
   onUpdateLead: (patch: LeadPatch) => Promise<string | null>;
 }
 
-type Phase = 'compose' | 'next-action';
+type Phase = 'compose' | 'next-action' | 'suggest';
 
 /** Log-note dialog: guided debrief OR free text, then a "set your next action" prompt. */
 export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: NoteComposerProps) {
@@ -26,6 +28,8 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
   const [nextNote, setNextNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [aiParse, setAiParse] = useState(true);
+  const [suggestion, setSuggestion] = useState<LeadSuggestion | null>(null);
 
   function reset() {
     setTab('debrief');
@@ -35,7 +39,24 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
     setNextDate('');
     setNextNote('');
     setError(null);
+    setSuggestion(null);
     onClose();
+  }
+
+  /** Calls parse-notes when the toggle is on; falls through to a clean reset on any failure or empty result — never blocks the note flow. */
+  async function maybeSuggest(noteText: string) {
+    if (!aiParse) return reset();
+    setBusy(true);
+    const { data } = await supabase.functions.invoke('parse-notes', { body: { lead_id: lead.id, note: noteText } });
+    setBusy(false);
+    const raw = (data as { suggestion?: unknown } | null)?.suggestion;
+    const clean = raw ? sanitizeSuggestion(raw) : null;
+    if (clean) {
+      setSuggestion(clean);
+      setPhase('suggest');
+    } else {
+      reset();
+    }
   }
 
   async function saveDebrief(compiled: string, nextAction: { date: string | null; note: string | null }) {
@@ -46,7 +67,7 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
     }
     setBusy(false);
     if (err) setError(err);
-    else reset();
+    else void maybeSuggest(compiled);
   }
 
   async function saveFreeText() {
@@ -65,12 +86,21 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
     const err = await onUpdateLead({ next_action_date: nextDate || null, next_action_note: nextNote || null });
     setBusy(false);
     if (err) setError(err);
-    else reset();
+    else void maybeSuggest(freeText);
   }
 
+  const title = phase === 'compose' ? `Log note — ${lead.business_name}` : phase === 'suggest' ? 'AI suggestions' : 'Set your next action';
+
   return (
-    <Modal open={open} onClose={reset} title={phase === 'compose' ? `Log note — ${lead.business_name}` : 'Set your next action'}>
-      {phase === 'compose' ? (
+    <Modal open={open} onClose={reset} title={title}>
+      {phase === 'suggest' && suggestion ? (
+        <SuggestionDiff
+          lead={lead}
+          suggestion={suggestion}
+          onApply={(patch) => { void onUpdateLead(patch).then(() => reset()); }}
+          onDismiss={reset}
+        />
+      ) : phase === 'compose' ? (
         <div className="flex flex-col gap-4">
           <div className="flex overflow-hidden rounded-lg border border-line" role="tablist">
             <button type="button" role="tab" aria-selected={tab === 'debrief'} onClick={() => setTab('debrief')} className={`min-h-11 flex-1 cursor-pointer text-sm font-semibold ${tab === 'debrief' ? 'bg-violet/25' : 'text-muted'}`}>
@@ -81,9 +111,9 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
             </button>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-muted">
-            <input type="checkbox" disabled className="h-4 w-4" />
-            Let AI update this lead from your notes — arrives in cycle 2
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={aiParse} onChange={(e) => setAiParse(e.target.checked)} className="h-4 w-4 accent-violet-500" />
+            Let AI suggest lead updates from this note
           </label>
 
           {tab === 'debrief' && <DebriefWizard onSubmit={(c, n) => void saveDebrief(c, n)} onCancel={reset} />}
