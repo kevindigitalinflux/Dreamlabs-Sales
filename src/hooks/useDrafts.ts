@@ -4,7 +4,7 @@ import type { EmailLog } from '../types';
 
 export type DraftLog = EmailLog & { lead: { id: string; business_name: string } | null };
 
-/** The caller's draft emails awaiting review (RLS scopes to own; admin sees all). */
+/** Draft + failed emails awaiting review/retry (SPEC §4: failed sends stay in the queue). RLS scopes to own; admin sees all. */
 export function useDrafts() {
   const [drafts, setDrafts] = useState<DraftLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -13,7 +13,7 @@ export function useDrafts() {
     const { data } = await supabase
       .from('email_logs')
       .select('*, lead:leads(id, business_name)')
-      .eq('status', 'draft')
+      .in('status', ['draft', 'failed'])
       .order('sent_at', { ascending: false });
     setDrafts((data as DraftLog[] | null) ?? []);
     setLoading(false);

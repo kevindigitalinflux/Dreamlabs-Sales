@@ -30,6 +30,11 @@ export function EmailReviewQueue({ drafts, loading, onReview, onChanged }: Email
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${d.sequence_enrollment_id ? 'bg-violet/25 text-offwhite' : 'bg-surface text-muted'}`}>
             {d.sequence_enrollment_id ? 'Sequence' : 'Manual'}
           </span>
+          {d.status === 'failed' && (
+            <span title={d.error_message ?? 'Send failed'} className="rounded-full bg-red-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-red-400">
+              Failed — retry
+            </span>
+          )}
           <span className="w-full truncate text-sm text-muted sm:w-auto sm:flex-1">{d.subject}</span>
           <div className="ml-auto flex gap-2">
             <button type="button" onClick={() => void discard(d.id)} aria-label="Discard draft" className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-muted hover:text-red-400"><Trash2 className="h-4 w-4" aria-hidden /></button>
