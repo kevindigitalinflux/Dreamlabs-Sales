@@ -33,6 +33,10 @@ export async function sendMail(
       content: msg.body,
     });
   } finally {
-    await client.close().catch(() => undefined);
+    try {
+      await client.close();
+    } catch {
+      // ignore close errors — the send result above is what matters
+    }
   }
 }
