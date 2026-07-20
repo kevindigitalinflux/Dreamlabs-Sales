@@ -4,6 +4,26 @@ From the cycle-2 final whole-branch review (2026-07-19, verdict READY). Ordered 
 Items here are accepted debt — none block current use. The scraper module (SPEC §5/§6) is
 cycle 3's headline feature; schedule these around it.
 
+0. **[HIGH — Kevin-flagged, live pain point] Make SMTP setup actually self-service.** Kevin
+   hit this himself on 2026-07-20: even with the in-app numbered Gmail steps already showing,
+   he needed real-time chat guidance to find and generate an App Password, and his first
+   attempt (using his normal Google password) failed with a cryptic Gmail SMTP error. Contractors
+   won't have that chat support — this will block onboarding. Two options, not mutually exclusive:
+   - **A (quick win, do first):** Upgrade `/settings/email`'s instructions from plain numbered
+     text to something that can't be missed — add a "Open Google App Passwords" button that
+     opens `https://myaccount.google.com/apppasswords` in a new tab (same idea for Outlook's
+     security page), and add an explicit warning line *above* the password field: "This is
+     **not** your normal Gmail password — Google will reject it. Generate a 16-character App
+     Password using the button above." Also surface SMTP auth-failure error text more clearly
+     (denomailer's raw error, e.g. "Application-specific password required," is informative but
+     needs a friendlier wrapper sentence). Small, contained to `EmailConfig.tsx`.
+   - **B (bigger lift, proper fix):** Replace app-password SMTP entirely with "Connect Gmail" /
+     "Connect Outlook" OAuth buttons (Gmail API `users.messages.send` via a delegated OAuth
+     token, or Microsoft Graph `sendMail`) — no app passwords, no 2FA hunting, just a standard
+     Google/Microsoft consent screen. Removes the support burden completely but is a real
+     architecture change: needs a Google Cloud OAuth consent screen + client credentials,
+     refresh-token storage in Vault, and a new send path alongside/replacing the current SMTP
+     one. Worth its own brainstorm → spec before building, not a quick task.
 1. **Enrollment/cron integrity batch** — make check-sequences' draft-insert + enrollment-advance
    a single transactional RPC; add a partial unique index
    `sequence_enrollments(lead_id) WHERE status IN ('active','paused')` to prevent duplicate
