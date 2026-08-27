@@ -85,6 +85,8 @@ Deno.serve(async (req) => {
     if (!email) return json({ error: 'email is required' }, 400, headers);
     if (!APP_ORIGINS.some((o) => redirectTo.startsWith(o))) return json({ error: 'redirect_to not allowed' }, 400, headers);
     if (!(await canManageOrg(orgId))) return json({ error: 'Admin only' }, 403, headers);
+    const { data: org } = await service.from('organizations').select('id').eq('id', orgId).maybeSingle();
+    if (!org) return json({ error: 'Organization not found' }, 404, headers);
 
     const { data: invited, error } = await service.auth.admin.inviteUserByEmail(email, {
       data: { full_name: fullName },
