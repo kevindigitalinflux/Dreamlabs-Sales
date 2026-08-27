@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router';
 import { AuthProvider } from './hooks/useAuth';
 import { FocusModeProvider } from './hooks/useFocusMode';
+import { OrgProvider } from './hooks/useOrg';
 import { AdminRoute, ProtectedRoute } from './components/layout/ProtectedRoute';
 import { AppShell } from './components/layout/AppShell';
 import { ComingSoon } from './components/layout/ComingSoon';
@@ -22,6 +23,7 @@ export function App() {
     <BrowserRouter>
       <AuthProvider>
         <FocusModeProvider>
+        <OrgProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/welcome" element={<Welcome />} />
@@ -45,6 +47,7 @@ export function App() {
             </Route>
           </Route>
         </Routes>
+        </OrgProvider>
         </FocusModeProvider>
       </AuthProvider>
     </BrowserRouter>

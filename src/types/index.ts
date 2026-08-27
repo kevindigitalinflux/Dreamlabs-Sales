@@ -1,5 +1,13 @@
 export type Role = 'admin' | 'contractor';
 
+export type PlatformRole = 'platform_admin' | 'user';
+
+export interface OrgMembership {
+  id: string;
+  name: string;
+  role: Role;
+}
+
 export type Stage =
   | 'new_lead' | 'contacted' | 'audit_booked' | 'proposal_sent'
   | 'negotiating' | 'won' | 'lost' | 'not_now_nurture';
@@ -16,6 +24,7 @@ export interface Profile {
   email: string;
   full_name: string | null;
   role: Role;
+  platform_role: PlatformRole;
   avatar_url: string | null;
   created_at: string;
   updated_at: string;

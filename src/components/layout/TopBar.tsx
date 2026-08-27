@@ -2,6 +2,7 @@ import { Focus, LogOut } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useFocusMode } from '../../hooks/useFocusMode';
 import { initials } from '../../lib/utils';
+import { OrgSwitcher } from './OrgSwitcher';
 
 /** Top bar: focus-mode toggle + user identity + sign out. */
 export function TopBar() {
@@ -18,6 +19,7 @@ export function TopBar() {
         <Focus className="h-4 w-4" aria-hidden />
         {focusMode ? 'Exit focus' : 'Focus'}
       </button>
+      <OrgSwitcher />
       <span
         aria-hidden
         className="flex h-8 w-8 items-center justify-center rounded-full bg-purple text-xs font-bold"
