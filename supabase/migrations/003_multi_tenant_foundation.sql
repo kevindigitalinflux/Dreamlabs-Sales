@@ -86,3 +86,37 @@ INSERT INTO organizations (name, use_global_api_fallback) VALUES
   ('Mr Brush & Co', true),
   ('Digital Influx', false),
   ('UX Tree', false);
+
+-- ─────────────────────────────────────────
+-- CYCLE 3 PART B: additive org_id columns + backfill + platform_role.
+-- Nullable/new-column-only — old code, old RLS policies, old profiles.role
+-- and is_admin() are completely unaffected by this section.
+-- ─────────────────────────────────────────
+
+ALTER TABLE leads ADD COLUMN org_id UUID REFERENCES organizations(id);
+ALTER TABLE scrape_jobs ADD COLUMN org_id UUID REFERENCES organizations(id);
+ALTER TABLE email_logs ADD COLUMN org_id UUID REFERENCES organizations(id);
+ALTER TABLE email_templates ADD COLUMN org_id UUID REFERENCES organizations(id);
+ALTER TABLE email_sequences ADD COLUMN org_id UUID REFERENCES organizations(id);
+-- email_templates/email_sequences.org_id stays nullable forever:
+-- NULL = platform default (today's 5 templates / 2 sequences), unchanged.
+
+ALTER TABLE profiles ADD COLUMN platform_role TEXT DEFAULT 'user' CHECK (platform_role IN ('platform_admin','user'));
+
+DO $$
+DECLARE di_org_id UUID;
+BEGIN
+  SELECT id INTO di_org_id FROM organizations WHERE name = 'Digital Influx Dreamlabs';
+
+  UPDATE leads SET org_id = di_org_id WHERE org_id IS NULL;
+  UPDATE scrape_jobs SET org_id = di_org_id WHERE org_id IS NULL;
+  UPDATE email_logs SET org_id = di_org_id WHERE org_id IS NULL;
+  UPDATE email_templates SET org_id = di_org_id WHERE org_id IS NULL AND is_default = false;
+  UPDATE email_sequences SET org_id = di_org_id WHERE org_id IS NULL AND is_default = false;
+
+  INSERT INTO org_members (org_id, user_id, role)
+  SELECT di_org_id, id, role FROM profiles
+  ON CONFLICT (org_id, user_id) DO NOTHING;
+
+  UPDATE profiles SET platform_role = 'platform_admin' WHERE email = 'kevindigitalinflux@gmail.com';
+END $$;
