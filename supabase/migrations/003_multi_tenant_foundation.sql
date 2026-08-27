@@ -120,3 +120,28 @@ BEGIN
 
   UPDATE profiles SET platform_role = 'platform_admin' WHERE email = 'kevindigitalinflux@gmail.com';
 END $$;
+
+-- ─────────────────────────────────────────
+-- HOTFIX (found + applied live during Task 3 verification): the original
+-- Task 1 policies below caused infinite RLS recursion (Postgres error
+-- 42P17) on every authenticated select against org_members or
+-- organizations — org_members_admin_read had a raw self-referential
+-- subquery on org_members written inside a policy ON org_members, and
+-- organizations_member_read transitively triggered the same recursion via
+-- its own subquery against org_members. Fix: route both through the
+-- SECURITY DEFINER is_org_admin()/is_org_member() helpers, which bypass
+-- RLS internally and are exactly what they exist for — this is the
+-- documented Postgres/Supabase pattern for avoiding self-referential RLS
+-- recursion. Applied to the live DB and verified (org_members/organizations
+-- reads now succeed as expected) before this fix was committed here.
+-- ─────────────────────────────────────────
+
+DROP POLICY "org_members_admin_read" ON org_members;
+CREATE POLICY "org_members_admin_read" ON org_members FOR SELECT USING (
+  is_org_admin(org_id)
+);
+
+DROP POLICY "organizations_member_read" ON organizations;
+CREATE POLICY "organizations_member_read" ON organizations FOR SELECT USING (
+  is_org_member(id)
+);
