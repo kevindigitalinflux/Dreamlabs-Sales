@@ -53,9 +53,9 @@ CREATE TABLE organizations (
   created_at              TIMESTAMPTZ DEFAULT NOW()
 );
 ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "organizations_member_read" ON organizations FOR SELECT USING (
-  EXISTS (SELECT 1 FROM org_members WHERE org_id = organizations.id AND user_id = auth.uid())
-);
+-- organizations_member_read policy is created further down, AFTER
+-- org_members exists — Postgres requires a referenced table to exist
+-- before a policy naming it can be created.
 
 CREATE TABLE org_members (
   id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -72,6 +72,10 @@ CREATE POLICY "org_members_admin_read" ON org_members FOR SELECT USING (
 );
 -- No client write policy: membership changes (invite/role-change) go through
 -- the admin-users edge function (service role) only — see Task 4.
+
+CREATE POLICY "organizations_member_read" ON organizations FOR SELECT USING (
+  EXISTS (SELECT 1 FROM org_members WHERE org_id = organizations.id AND user_id = auth.uid())
+);
 
 CREATE OR REPLACE FUNCTION is_org_admin(target_org UUID)
 RETURNS BOOLEAN LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public AS $$
