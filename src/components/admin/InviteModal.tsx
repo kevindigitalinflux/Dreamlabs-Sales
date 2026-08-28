@@ -2,19 +2,21 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
+import { Input, SelectField } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 
 interface InviteModalProps {
   open: boolean;
   onClose: () => void;
+  orgId: string;
   onInvited: () => void;
 }
 
-/** Sends a contractor invite via the admin-users Edge Function. */
-export function InviteModal({ open, onClose, onInvited }: InviteModalProps) {
+/** Sends an org invite via the admin-users Edge Function. */
+export function InviteModal({ open, onClose, orgId, onInvited }: InviteModalProps) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [orgRole, setOrgRole] = useState<'admin' | 'contractor'>('contractor');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -25,6 +27,8 @@ export function InviteModal({ open, onClose, onInvited }: InviteModalProps) {
     const { data, error: err } = await supabase.functions.invoke('admin-users', {
       body: {
         action: 'invite',
+        org_id: orgId,
+        org_role: orgRole,
         email,
         full_name: fullName,
         redirect_to: `${window.location.origin}/welcome`,
@@ -35,6 +39,7 @@ export function InviteModal({ open, onClose, onInvited }: InviteModalProps) {
     if (apiError) return setError(apiError);
     setFullName('');
     setEmail('');
+    setOrgRole('contractor');
     onInvited();
     onClose();
   }
@@ -44,6 +49,10 @@ export function InviteModal({ open, onClose, onInvited }: InviteModalProps) {
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input label="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
         <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <SelectField label="Role" value={orgRole} onChange={(e) => setOrgRole(e.target.value as 'admin' | 'contractor')}>
+          <option value="contractor">Contractor</option>
+          <option value="admin">Admin</option>
+        </SelectField>
         {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
         <Button type="submit" disabled={submitting}>
           {submitting ? 'Sending…' : 'Send invite'}

@@ -142,6 +142,12 @@ export interface UserEmailSettings {
   updated_at: string;
 }
 
+export interface OrgMemberRow {
+  role: Role;
+  created_at: string;
+  profiles: { id: string; email: string; full_name: string | null; created_at: string };
+}
+
 /** parse-notes suggestion: only fields the AI wants to change are present. */
 export interface LeadSuggestion {
   stage?: Stage;

@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { UserCheck } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import type { Lead, Profile } from '../../types';
+import type { Lead } from '../../types';
 import { Button } from '../ui/Button';
 import { SelectField } from '../ui/Input';
 import { EmptyState } from '../ui/EmptyState';
 import { Skeleton } from '../ui/Skeleton';
 
 /** Bulk-assign unassigned leads to a contractor (SPEC.md §10). */
-export function AssignmentPanel({ profiles }: { profiles: Profile[] }) {
+export function AssignmentPanel({ contractors }: { contractors: { id: string; full_name: string | null; email: string }[] }) {
   const [unassigned, setUnassigned] = useState<Lead[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [assignee, setAssignee] = useState('');
@@ -69,7 +69,7 @@ export function AssignmentPanel({ profiles }: { profiles: Profile[] }) {
       <div className="flex items-end gap-3">
         <SelectField label="Assign selected to" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
           <option value="">Choose contractor…</option>
-          {profiles.map((p) => (
+          {contractors.map((p) => (
             <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>
           ))}
         </SelectField>
