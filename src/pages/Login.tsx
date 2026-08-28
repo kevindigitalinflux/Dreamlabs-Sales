@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router';
+import { Globe } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 
@@ -24,6 +26,14 @@ export function Login() {
     else navigate('/', { replace: true });
   }
 
+  /** Kicks off the Google OAuth redirect flow; AuthCallback enforces invite-only access. */
+  async function handleGoogleSignIn() {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-xl border border-line bg-card p-8">
@@ -37,6 +47,13 @@ export function Login() {
           {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
           <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? 'Signing in…' : 'Sign in'}
+          </Button>
+          <div className="my-1 flex items-center gap-3 text-xs text-muted">
+            <span className="h-px flex-1 bg-line" />or<span className="h-px flex-1 bg-line" />
+          </div>
+          <Button type="button" variant="secondary" className="w-full" onClick={() => void handleGoogleSignIn()}>
+            <Globe className="h-4 w-4" aria-hidden />
+            Sign in with Google
           </Button>
         </div>
       </form>

@@ -6,6 +6,7 @@ import { AdminRoute, ProtectedRoute } from './components/layout/ProtectedRoute';
 import { AppShell } from './components/layout/AppShell';
 import { ComingSoon } from './components/layout/ComingSoon';
 import { Login } from './pages/Login';
+import { AuthCallback } from './pages/AuthCallback';
 import { Welcome } from './pages/Welcome';
 import { Dashboard } from './pages/Dashboard';
 import { PipelineRedirect } from './pages/PipelineRedirect';
@@ -27,6 +28,7 @@ export function App() {
         <OrgProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
