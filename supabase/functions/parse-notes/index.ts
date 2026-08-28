@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { parseNotes } from '../_shared/ai.ts';
+import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -22,8 +23,15 @@ Deno.serve(async (req) => {
   // RLS applies: contractors can only parse notes for leads they can see.
   const { data: lead, error: leadErr } = await client.from('leads').select('*').eq('id', body.lead_id).single();
   if (leadErr || !lead) return json({ error: 'Lead not found' }, 404, headers);
+
+  const service = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  );
+  const apiKey = await resolveOrgApiKey(service, (lead as { org_id: string }).org_id, 'gemini');
+  if (!apiKey) return json({ suggestion: null, error: 'AI unavailable' }, 200, headers);
   try {
-    const suggestion = await parseNotes({ note: String(body.note ?? ''), lead: lead as Record<string, unknown> });
+    const suggestion = await parseNotes({ note: String(body.note ?? ''), lead: lead as Record<string, unknown>, apiKey });
     return json({ suggestion }, 200, headers);
   } catch (e) {
     console.error('parse-notes failed:', e);

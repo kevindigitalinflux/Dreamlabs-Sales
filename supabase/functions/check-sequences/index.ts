@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { json } from '../_shared/cors.ts';
 import { draftEmail } from '../_shared/ai.ts';
+import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { buildTemplateVars, substituteVariables } from '../_shared/templateVars.ts';
 
 interface Step { delay_days: number; template_type: string; subject_override: string | null }
@@ -71,11 +72,14 @@ Deno.serve(async (req) => {
 
     let finalSubject = subject.text;
     let finalBody = bodyText.text;
-    try {
-      const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts, contractorName });
-      finalSubject = ai.subject; finalBody = ai.body;
-    } catch (e) {
-      console.error(`AI draft failed for enrollment ${enrollment.id}, using plain template:`, e);
+    const apiKey = await resolveOrgApiKey(service, lead.org_id as string, 'gemini');
+    if (apiKey) {
+      try {
+        const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts, contractorName, apiKey });
+        finalSubject = ai.subject; finalBody = ai.body;
+      } catch (e) {
+        console.error(`AI draft failed for enrollment ${enrollment.id}, using plain template:`, e);
+      }
     }
 
     const { error: insertErr } = await service.from('email_logs').insert({

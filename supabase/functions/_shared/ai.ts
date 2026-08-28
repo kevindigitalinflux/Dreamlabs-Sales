@@ -1,10 +1,11 @@
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-export const AI_MODEL = 'gemini-2.5-flash';
+// gemini-2.5-flash was retired by Google ("no longer available to new users")
+// sometime after cycle 2 shipped — discovered live during Task 5 smoke testing
+// when the global-fallback path silently degraded to plain-template emails.
+export const AI_MODEL = 'gemini-3.6-flash';
 
-async function geminiJson(prompt: string): Promise<unknown> {
-  const key = Deno.env.get('GEMINI_API_KEY');
-  if (!key) throw new Error('GEMINI_API_KEY not configured');
-  const res = await fetch(`${GEMINI_URL}/${AI_MODEL}:generateContent?key=${key}`, {
+async function geminiJson(prompt: string, apiKey: string): Promise<unknown> {
+  const res = await fetch(`${GEMINI_URL}/${AI_MODEL}:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -21,7 +22,7 @@ async function geminiJson(prompt: string): Promise<unknown> {
 
 /** Personalises an already-variable-substituted draft using lead context + notes. Throws on failure. */
 export async function draftEmail(input: {
-  subject: string; body: string; lead: Record<string, unknown>; notes: string[]; contractorName: string;
+  subject: string; body: string; lead: Record<string, unknown>; notes: string[]; contractorName: string; apiKey: string;
 }): Promise<{ subject: string; body: string }> {
   const result = await geminiJson(
 `You are a sales assistant for Digital Influx Dreamlabs, a UK agency selling automation/AI systems to small businesses.
@@ -34,13 +35,14 @@ SENDER NAME: ${input.contractorName}
 DRAFT SUBJECT: ${input.subject}
 DRAFT BODY:
 ${input.body}`,
+    input.apiKey,
   ) as { subject?: string; body?: string };
   if (!result.subject || !result.body) throw new Error('Gemini draft missing fields');
   return { subject: result.subject, body: result.body };
 }
 
 /** Suggests lead field updates from a note. Throws on failure. */
-export async function parseNotes(input: { note: string; lead: Record<string, unknown> }): Promise<Record<string, unknown>> {
+export async function parseNotes(input: { note: string; lead: Record<string, unknown>; apiKey: string }): Promise<Record<string, unknown>> {
   return await geminiJson(
 `You extract CRM field updates from a sales call note. Compare the note against the current lead and output ONLY fields that should change, as JSON with any of these keys:
 stage (one of: new_lead, contacted, audit_booked, proposal_sent, negotiating, won, lost, not_now_nurture),
@@ -52,5 +54,6 @@ Suggest nothing you are not confident about. Today is ${new Date().toISOString()
 CURRENT LEAD: ${JSON.stringify(input.lead)}
 NOTE:
 ${input.note}`,
+    input.apiKey,
   ) as Record<string, unknown>;
 }

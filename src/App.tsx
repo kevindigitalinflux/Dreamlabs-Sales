@@ -13,6 +13,7 @@ import { PipelineKanban } from './pages/PipelineKanban';
 import { PipelineList } from './pages/PipelineList';
 import { LeadDetailPage } from './pages/LeadDetailPage';
 import { Settings } from './pages/Settings';
+import { OrganizationSettings } from './pages/OrganizationSettings';
 import { EmailConfig } from './pages/EmailConfig';
 import { EmailsHub } from './pages/EmailsHub';
 import { Admin } from './pages/Admin';
@@ -40,6 +41,7 @@ export function App() {
               <Route path="/analytics" element={<ComingSoon module="Analytics" />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/settings/email" element={<EmailConfig />} />
+              <Route path="/settings/organization" element={<OrganizationSettings />} />
               <Route element={<AdminRoute />}>
                 <Route path="/admin" element={<Admin />} />
               </Route>

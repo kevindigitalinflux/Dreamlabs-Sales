@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { draftEmail } from '../_shared/ai.ts';
+import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { buildTemplateVars, substituteVariables } from '../_shared/templateVars.ts';
 
 Deno.serve(async (req) => {
@@ -16,6 +17,11 @@ Deno.serve(async (req) => {
   );
   const { data: userData } = await client.auth.getUser();
   if (!userData?.user) return json({ error: 'Not signed in' }, 401, headers);
+
+  const service = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  );
 
   const body = (await req.json()) as { lead_id?: string; template_id?: string; use_ai?: boolean };
   if (!body.lead_id || !body.template_id) return json({ error: 'lead_id and template_id required' }, 400, headers);
@@ -40,8 +46,12 @@ Deno.serve(async (req) => {
   if (body.use_ai === false) {
     return json({ subject: subject.text, body: bodyText.text, ai_used: false, missing }, 200, headers);
   }
+  const apiKey = await resolveOrgApiKey(service, (lead as { org_id: string }).org_id, 'gemini');
+  if (!apiKey) {
+    return json({ subject: subject.text, body: bodyText.text, ai_used: false, missing }, 200, headers);
+  }
   try {
-    const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: lead as Record<string, unknown>, notes: noteTexts, contractorName });
+    const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: lead as Record<string, unknown>, notes: noteTexts, contractorName, apiKey });
     return json({ subject: ai.subject, body: ai.body, ai_used: true, missing }, 200, headers);
   } catch (e) {
     console.error('draftEmail failed, falling back to plain template:', e);

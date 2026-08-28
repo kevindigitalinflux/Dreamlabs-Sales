@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { Link } from 'react-router';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
+import { useOrg } from '../hooks/useOrg';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -10,6 +11,7 @@ import { Card } from '../components/ui/Card';
 /** Profile settings: display name. Email SMTP config arrives in cycle 2. */
 export function Settings() {
   const { profile } = useAuth();
+  const { currentOrg } = useOrg();
   const [fullName, setFullName] = useState('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
@@ -45,6 +47,12 @@ export function Settings() {
         <h2 className="text-[18px] font-bold">Email sending</h2>
         <p className="text-sm text-muted">Connect your Gmail/Outlook so Dreamlabs Sales can send from your address.</p>
       </Link>
+      {currentOrg?.role === 'admin' && (
+        <Link to="/settings/organization" className="block rounded-xl border border-line bg-card p-5 hover:bg-surface/50">
+          <h2 className="text-[18px] font-bold">Organization API keys</h2>
+          <p className="text-sm text-muted">Bring your own Gemini/Places/Companies House keys for {currentOrg.name}.</p>
+        </Link>
+      )}
     </div>
   );
 }
