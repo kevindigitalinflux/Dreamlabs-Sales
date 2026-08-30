@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { UserCheck } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useOrg } from '../../hooks/useOrg';
 import type { Lead } from '../../types';
 import { Button } from '../ui/Button';
 import { SelectField } from '../ui/Input';
@@ -9,6 +10,7 @@ import { Skeleton } from '../ui/Skeleton';
 
 /** Bulk-assign unassigned leads to a contractor (SPEC.md §10). */
 export function AssignmentPanel({ contractors }: { contractors: { id: string; full_name: string | null; email: string }[] }) {
+  const { currentOrg } = useOrg();
   const [unassigned, setUnassigned] = useState<Lead[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [assignee, setAssignee] = useState('');
@@ -16,12 +18,13 @@ export function AssignmentPanel({ contractors }: { contractors: { id: string; fu
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!currentOrg) return;
     const { data, error: err } = await supabase
-      .from('leads').select('*').is('assigned_to', null).order('created_at');
+      .from('leads').select('*').eq('org_id', currentOrg.id).is('assigned_to', null).order('created_at');
     if (err) setError(err.message);
     else setUnassigned(data as Lead[]);
     setLoading(false);
-  }, []);
+  }, [currentOrg]);
 
   useEffect(() => {
     void load();

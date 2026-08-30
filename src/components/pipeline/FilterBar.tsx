@@ -4,7 +4,7 @@ import type { LeadFilters } from '../../lib/leadFilters';
 import type { Profile } from '../../types';
 import type { Stage } from '../../types';
 import { MultiSelect } from '../ui/MultiSelect';
-import { useAuth } from '../../hooks/useAuth';
+import { useOrg } from '../../hooks/useOrg';
 
 interface FilterBarProps {
   filters: LeadFilters;
@@ -14,7 +14,7 @@ interface FilterBarProps {
 
 /** Search + stage/assignee multi-selects + overdue toggle (SPEC.md §6 list view). */
 export function FilterBar({ filters, onChange, profiles }: FilterBarProps) {
-  const { profile: me } = useAuth();
+  const { currentOrg } = useOrg();
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div className="relative min-w-56 flex-1">
@@ -34,7 +34,7 @@ export function FilterBar({ filters, onChange, profiles }: FilterBarProps) {
         selected={filters.stages}
         onChange={(stages) => onChange({ ...filters, stages: stages as Stage[] })}
       />
-      {me?.role === 'admin' && (
+      {currentOrg?.role === 'admin' && (
         <MultiSelect
           label="Assigned to"
           options={profiles.map((p) => ({ value: p.id, label: p.full_name ?? p.email }))}

@@ -4,7 +4,7 @@ import { ArrowRight, X } from 'lucide-react';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import { STAGES } from '../../lib/utils';
 import { useLeadNotes } from '../../hooks/useLeadNotes';
-import { useAuth } from '../../hooks/useAuth';
+import { useOrg } from '../../hooks/useOrg';
 import type { Lead, Profile, Stage } from '../../types';
 import { Button } from '../ui/Button';
 import { SelectField } from '../ui/Input';
@@ -34,7 +34,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 /** Right slide-in expanded card (SPEC.md §6). Renders nothing when no lead selected. */
 export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps) {
   const navigate = useNavigate();
-  const { profile: me } = useAuth();
+  const { currentOrg } = useOrg();
   const [noteOpen, setNoteOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
   const { notes, loading: notesLoading, addNote } = useLeadNotes(lead?.id ?? 'none');
@@ -74,7 +74,7 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
 
         <Section title="Sequence"><EnrollmentControl lead={lead} /></Section>
 
-        {me?.role === 'admin' && (
+        {currentOrg?.role === 'admin' && (
           <Section title="Assignment">
             <SelectField label="Assigned to" value={lead.assigned_to ?? ''} onChange={(e) => void onUpdate(lead.id, { assigned_to: e.target.value || null })}>
               <option value="">Unassigned</option>

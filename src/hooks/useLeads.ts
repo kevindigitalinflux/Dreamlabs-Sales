@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { applyLeadUpdate } from '../lib/leadUpdates';
 import type { LeadPatch } from '../lib/leadUpdates';
 import { useAuth } from './useAuth';
+import { useOrg } from './useOrg';
 import type { Lead, PackageTier, Stage } from '../types';
 
 export interface LeadInput {
@@ -26,20 +27,19 @@ export interface LeadInput {
 /** All leads visible to the current user, kept fresh via a realtime subscription. */
 export function useLeads() {
   const { session } = useAuth();
+  const { currentOrg } = useOrg();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!currentOrg) { setLeads([]); setLoading(false); return; }
     const { data, error: err } = await supabase
-      .from('leads').select('*').order('kanban_position').order('created_at');
+      .from('leads').select('*').eq('org_id', currentOrg.id).order('kanban_position').order('created_at');
     if (err) setError(err.message);
-    else {
-      setLeads(data as Lead[]);
-      setError(null);
-    }
+    else { setLeads(data as Lead[]); setError(null); }
     setLoading(false);
-  }, []);
+  }, [currentOrg]);
 
   useEffect(() => {
     void refresh();
@@ -55,6 +55,7 @@ export function useLeads() {
   /** Inserts a lead owned by the current user; returns error message or null. */
   const createLead = useCallback(
     async (input: LeadInput): Promise<string | null> => {
+      if (!currentOrg) return 'No organization selected';
       const stage = input.stage ?? 'new_lead';
       const maxPos = Math.max(0, ...leads.filter((l) => l.stage === stage).map((l) => l.kanban_position));
       const { error: err } = await supabase.from('leads').insert({
@@ -62,12 +63,13 @@ export function useLeads() {
         stage,
         kanban_position: maxPos + 1,
         created_by: session?.user.id,
+        org_id: currentOrg.id,
       });
       if (err) return err.message;
       await refresh();
       return null;
     },
-    [leads, session, refresh],
+    [leads, session, currentOrg, refresh],
   );
 
   /** Patches a lead (stage changes auto-logged); optimistic local update, then refresh. */

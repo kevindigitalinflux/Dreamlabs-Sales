@@ -145,3 +145,29 @@ DROP POLICY "organizations_member_read" ON organizations;
 CREATE POLICY "organizations_member_read" ON organizations FOR SELECT USING (
   is_org_member(id)
 );
+
+-- ─────────────────────────────────────────
+-- CYCLE 3 PART C (Task 8): leads + lead_notes RLS cutover
+-- ─────────────────────────────────────────
+
+ALTER TABLE leads ALTER COLUMN org_id SET NOT NULL;
+
+DROP POLICY "leads_own" ON leads;
+DROP POLICY "leads_admin" ON leads;
+CREATE POLICY "leads_org_admin" ON leads FOR ALL USING (is_org_admin(org_id));
+CREATE POLICY "leads_own_in_org" ON leads FOR ALL USING (
+  is_org_member(org_id) AND (auth.uid() = created_by OR auth.uid() = assigned_to)
+);
+
+DROP POLICY "notes_lead_access" ON lead_notes;
+DROP POLICY "notes_admin" ON lead_notes;
+CREATE POLICY "notes_org_admin" ON lead_notes FOR ALL USING (
+  EXISTS (SELECT 1 FROM leads WHERE id = lead_notes.lead_id AND is_org_admin(leads.org_id))
+);
+CREATE POLICY "notes_own_in_org" ON lead_notes FOR ALL USING (
+  EXISTS (
+    SELECT 1 FROM leads
+    WHERE id = lead_notes.lead_id AND is_org_member(leads.org_id)
+    AND (leads.created_by = auth.uid() OR leads.assigned_to = auth.uid())
+  )
+);
