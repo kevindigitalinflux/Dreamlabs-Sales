@@ -7,16 +7,47 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
+import { ProviderGuide } from '../components/settings/ProviderGuide';
 
-const PROVIDERS: { key: OrgApiSetting['provider']; label: string; hint: string }[] = [
-  { key: 'gemini', label: 'Gemini (AI drafting)', hint: 'Free key from aistudio.google.com/apikey' },
-  { key: 'google_places', label: 'Google Places (lead scraper)', hint: 'From Google Cloud Console — $200/month free credit' },
-  { key: 'companies_house', label: 'Companies House (lead scraper)', hint: 'Free key from developer.company-information.service.gov.uk' },
+const PROVIDERS: {
+  key: OrgApiSetting['provider'];
+  label: string;
+  url: string;
+  ctaLabel: string;
+  freeText: string;
+  steps?: string[];
+}[] = [
+  {
+    key: 'gemini',
+    label: 'Gemini (AI drafting)',
+    url: 'https://aistudio.google.com/apikey',
+    ctaLabel: 'Get your free Gemini API key →',
+    freeText: "Free — no credit card needed. This is a one-time setup for the whole organization, done once by whoever administers it. Usage bills to your own Google account, never Kevin's.",
+    steps: [
+      'Click the button above and sign in with your Google account.',
+      'Click "Create API key".',
+      'Copy the key and paste it into the box below.',
+    ],
+  },
+  {
+    key: 'google_places',
+    label: 'Google Places (lead scraper)',
+    url: 'https://console.cloud.google.com/google/maps-apis/credentials',
+    ctaLabel: 'Open Google Cloud Console for Places →',
+    freeText: "Google gives every account a $200/month free credit, which comfortably covers normal usage here — so it isn't unconditionally free above that. One-time setup for the whole organization; usage bills to your own Google Cloud account, never Kevin's.",
+  },
+  {
+    key: 'companies_house',
+    label: 'Companies House (lead scraper)',
+    url: 'https://developer.company-information.service.gov.uk/',
+    ctaLabel: 'Register for a free Companies House key →',
+    freeText: "Free — registration has no cost. One-time setup for the whole organization, done once by whoever administers it.",
+  },
 ];
 
-function ProviderRow({ provider, label, hint, configured, onSave }: {
-  provider: OrgApiSetting['provider']; label: string; hint: string; configured: boolean;
-  onSave: (provider: OrgApiSetting['provider'], key: string) => Promise<string | null>;
+function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configured, onSave }: {
+  provider: OrgApiSetting['provider']; label: string; url: string; ctaLabel: string; freeText: string; steps?: string[];
+  configured: boolean; onSave: (provider: OrgApiSetting['provider'], key: string) => Promise<string | null>;
 }) {
   const [key, setKey] = useState('');
   const [busy, setBusy] = useState(false);
@@ -33,7 +64,7 @@ function ProviderRow({ provider, label, hint, configured, onSave }: {
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-line p-4">
+    <div className="flex flex-col gap-3 rounded-lg border border-line p-4">
       <div className="flex items-center gap-2">
         <p className="font-semibold">{label}</p>
         {configured && (
@@ -42,7 +73,7 @@ function ProviderRow({ provider, label, hint, configured, onSave }: {
           </span>
         )}
       </div>
-      <p className="text-xs text-muted">{hint}</p>
+      <ProviderGuide url={url} ctaLabel={ctaLabel} freeText={freeText} steps={steps} />
       <div className="flex items-end gap-2">
         <div className="flex-1">
           <Input label="API key" type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={configured ? 'Replace the saved key' : ''} />
@@ -78,7 +109,10 @@ export function OrganizationSettings() {
               key={p.key}
               provider={p.key}
               label={p.label}
-              hint={p.hint}
+              url={p.url}
+              ctaLabel={p.ctaLabel}
+              freeText={p.freeText}
+              steps={p.steps}
               configured={settings.find((s) => s.provider === p.key)?.is_configured ?? false}
               onSave={save}
             />
