@@ -75,7 +75,9 @@ Deno.serve(async (req) => {
     const apiKey = await resolveOrgApiKey(service, lead.org_id as string, 'gemini');
     if (apiKey) {
       try {
-        const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts, contractorName, apiKey });
+        const { data: org } = await service.from('organizations').select('name').eq('id', lead.org_id as string).maybeSingle();
+        const orgName = org?.name ?? 'our team';
+        const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts, contractorName, orgName, apiKey });
         finalSubject = ai.subject; finalBody = ai.body;
       } catch (e) {
         console.error(`AI draft failed for enrollment ${enrollment.id}, using plain template:`, e);

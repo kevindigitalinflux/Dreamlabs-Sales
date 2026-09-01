@@ -22,10 +22,10 @@ async function geminiJson(prompt: string, apiKey: string): Promise<unknown> {
 
 /** Personalises an already-variable-substituted draft using lead context + notes. Throws on failure. */
 export async function draftEmail(input: {
-  subject: string; body: string; lead: Record<string, unknown>; notes: string[]; contractorName: string; apiKey: string;
+  subject: string; body: string; lead: Record<string, unknown>; notes: string[]; contractorName: string; orgName: string; apiKey: string;
 }): Promise<{ subject: string; body: string }> {
   const result = await geminiJson(
-`You are a sales assistant for Digital Influx Dreamlabs, a UK agency selling automation/AI systems to small businesses.
+`You are a sales assistant for ${input.orgName}, a UK agency selling automation/AI systems to small businesses.
 Personalise this follow-up email using the lead data and call notes. Keep it plain text, warm, brief, UK English.
 Do not invent facts not present in the data. Keep any URLs intact. Return JSON: {"subject": string, "body": string}.
 

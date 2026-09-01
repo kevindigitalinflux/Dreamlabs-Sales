@@ -46,12 +46,15 @@ Deno.serve(async (req) => {
   if (body.use_ai === false) {
     return json({ subject: subject.text, body: bodyText.text, ai_used: false, missing }, 200, headers);
   }
-  const apiKey = await resolveOrgApiKey(service, (lead as { org_id: string }).org_id, 'gemini');
+  const orgId = (lead as { org_id: string }).org_id;
+  const apiKey = await resolveOrgApiKey(service, orgId, 'gemini');
   if (!apiKey) {
     return json({ subject: subject.text, body: bodyText.text, ai_used: false, missing }, 200, headers);
   }
+  const { data: org } = await service.from('organizations').select('name').eq('id', orgId).maybeSingle();
+  const orgName = org?.name ?? 'our team';
   try {
-    const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: lead as Record<string, unknown>, notes: noteTexts, contractorName, apiKey });
+    const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: lead as Record<string, unknown>, notes: noteTexts, contractorName, orgName, apiKey });
     return json({ subject: ai.subject, body: ai.body, ai_used: true, missing }, 200, headers);
   } catch (e) {
     console.error('draftEmail failed, falling back to plain template:', e);
