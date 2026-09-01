@@ -214,3 +214,46 @@ CREATE POLICY "sequences_org_update" ON email_sequences FOR UPDATE USING (
 CREATE POLICY "sequences_org_delete" ON email_sequences FOR DELETE USING (
   org_id IS NOT NULL AND is_org_member(org_id)
 );
+
+-- ─────────────────────────────────────────
+-- CYCLE 3 PART C (Task 10): sequence_enrollments, email_logs, scrape_jobs,
+-- raw_leads RLS cutover
+-- ─────────────────────────────────────────
+
+DROP POLICY "enrollments_own" ON sequence_enrollments;
+DROP POLICY "enrollments_admin" ON sequence_enrollments;
+CREATE POLICY "enrollments_org_admin" ON sequence_enrollments FOR ALL USING (
+  EXISTS (SELECT 1 FROM leads WHERE id = sequence_enrollments.lead_id AND is_org_admin(leads.org_id))
+);
+CREATE POLICY "enrollments_own_in_org" ON sequence_enrollments FOR ALL USING (
+  EXISTS (SELECT 1 FROM leads WHERE id = sequence_enrollments.lead_id AND is_org_member(leads.org_id))
+  AND auth.uid() = enrolled_by
+);
+
+ALTER TABLE email_logs ALTER COLUMN org_id SET NOT NULL;
+DROP POLICY "logs_own" ON email_logs;
+DROP POLICY "logs_admin" ON email_logs;
+CREATE POLICY "logs_org_admin" ON email_logs FOR ALL USING (is_org_admin(org_id));
+CREATE POLICY "logs_own_in_org" ON email_logs FOR ALL USING (
+  is_org_member(org_id) AND auth.uid() = sent_by
+);
+
+ALTER TABLE scrape_jobs ALTER COLUMN org_id SET NOT NULL;
+DROP POLICY "scrape_jobs_own" ON scrape_jobs;
+DROP POLICY "scrape_jobs_admin" ON scrape_jobs;
+CREATE POLICY "scrape_jobs_org_admin" ON scrape_jobs FOR ALL USING (is_org_admin(org_id));
+CREATE POLICY "scrape_jobs_own_in_org" ON scrape_jobs FOR ALL USING (
+  is_org_member(org_id) AND auth.uid() = created_by
+);
+
+DROP POLICY "raw_leads_own" ON raw_leads;
+DROP POLICY "raw_leads_admin" ON raw_leads;
+CREATE POLICY "raw_leads_org_admin" ON raw_leads FOR ALL USING (
+  EXISTS (SELECT 1 FROM scrape_jobs WHERE id = raw_leads.scrape_job_id AND is_org_admin(scrape_jobs.org_id))
+);
+CREATE POLICY "raw_leads_own_in_org" ON raw_leads FOR ALL USING (
+  EXISTS (
+    SELECT 1 FROM scrape_jobs
+    WHERE id = raw_leads.scrape_job_id AND is_org_member(scrape_jobs.org_id) AND scrape_jobs.created_by = auth.uid()
+  )
+);

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Send, Sparkles, WandSparkles } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useOrg } from '../../hooks/useOrg';
 import { useTemplates } from '../../hooks/useTemplates';
 import type { Lead } from '../../types';
 import { Button } from '../ui/Button';
@@ -63,6 +64,7 @@ async function readableInvokeError(error: unknown): Promise<string> {
 /** Draft-email modal: template → optional AI personalisation with diff → edit → send. */
 export function EmailComposer({ lead, open, onClose, draft = null }: EmailComposerProps) {
   const { templates } = useTemplates();
+  const { currentOrg } = useOrg();
   const [templateId, setTemplateId] = useState('');
   const [subject, setSubject] = useState(draft?.subject ?? '');
   const [body, setBody] = useState(draft?.body ?? '');
@@ -101,6 +103,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
       const { error } = await supabase.from('email_logs').insert({
         lead_id: lead.id, to_email: lead.email, subject, body, status: 'draft',
         sent_by: (await supabase.auth.getUser()).data.user?.id,
+        org_id: currentOrg?.id,
       });
       setBusy(null);
       if (error) return setMsg({ kind: 'err', text: error.message });

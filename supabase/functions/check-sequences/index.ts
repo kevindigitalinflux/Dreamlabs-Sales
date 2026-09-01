@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
 
     const { error: insertErr } = await service.from('email_logs').insert({
       lead_id: lead.id, sequence_enrollment_id: enrollment.id, sent_by: enrollment.enrolled_by,
-      to_email: lead.email, subject: finalSubject, body: finalBody, status: 'draft',
+      to_email: lead.email, subject: finalSubject, body: finalBody, status: 'draft', org_id: lead.org_id,
     });
     if (insertErr) {
       // Don't advance — the next daily run re-picks this enrollment (intended retry).

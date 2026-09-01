@@ -32,6 +32,13 @@ Deno.serve(async (req) => {
   const { data: pass } = await service.rpc('app_get_smtp_secret', { uid: user.id });
   if (!pass) return json({ error: 'No stored email password — re-save your settings' }, 400, headers);
 
+  let orgId: string | null = null;
+  if (body.lead_id) {
+    const { data: lead } = await service.from('leads').select('org_id').eq('id', body.lead_id).maybeSingle();
+    orgId = (lead as { org_id: string } | null)?.org_id ?? null;
+  }
+  if (!orgId && !body.log_id) return json({ error: 'lead_id is required to send a new email' }, 400, headers);
+
   // If updating an existing draft, make sure it belongs to the caller.
   if (body.log_id) {
     const { data: log } = await service.from('email_logs').select('sent_by').eq('id', body.log_id).single();
@@ -50,11 +57,12 @@ Deno.serve(async (req) => {
     errorMessage = e instanceof Error ? e.message : String(e);
   }
 
-  const row = {
+  const row: Record<string, unknown> = {
     lead_id: body.lead_id ?? null, sent_by: user.id, to_email: body.to_email,
     subject: body.subject, body: body.body, status, error_message: errorMessage,
     sent_at: new Date().toISOString(),
   };
+  if (orgId) row.org_id = orgId; // omitted on update-only calls where org_id is already set on the existing row
   let logId = body.log_id ?? null;
   let logFailed = false;
   if (logId) {

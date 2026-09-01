@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Mail } from 'lucide-react';
 import { useEmailLogs } from '../../hooks/useEmailLogs';
 import { useProfiles } from '../../hooks/useProfiles';
-import { useAuth } from '../../hooks/useAuth';
+import { useOrg } from '../../hooks/useOrg';
 import { supabase } from '../../lib/supabase';
 import { toCsv } from '../../lib/csv';
 import { formatShortDate, initials } from '../../lib/utils';
@@ -91,7 +91,7 @@ function FilterRow({ filters, onChange, contractors, isAdmin, onExport }: Filter
 export function EmailLogList() {
   const { logs, loading, error } = useEmailLogs();
   const { profiles } = useProfiles();
-  const { profile } = useAuth();
+  const { currentOrg } = useOrg();
   const [leadNames, setLeadNames] = useState<Map<string, string>>(new Map());
   const [filters, setFilters] = useState<LogFilters>(EMPTY_FILTERS);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -133,7 +133,7 @@ export function EmailLogList() {
         filters={filters}
         onChange={setFilters}
         contractors={profiles.map((p) => ({ id: p.id, label: p.full_name ?? p.email }))}
-        isAdmin={profile?.role === 'admin'}
+        isAdmin={currentOrg?.role === 'admin'}
         onExport={() => exportCsv(filtered, companyOf)}
       />
       <div className="overflow-x-auto rounded-xl border border-line">
