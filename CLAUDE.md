@@ -176,24 +176,63 @@ vite.config.ts
 
 ---
 
-## Current Status
-**Working:** Auth (invite-only, admin/contractor roles, RLS-enforced), app shell + routing, full pipeline
-(Kanban drag-and-drop, list view with search/filter/sort, lead detail with inline-editable fields, expanded
-side panel), note logging (guided debrief + free text + next-action prompt + AI lead-update suggestions with
-review diff), full email module: SMTP config (Vault-stored creds, Gmail/Outlook/custom), template library
-with variable substitution, AI-personalised composer with diff view (Gemini 2.5 Flash, plain fallback),
-sequences (builder, enrollment, daily draft cron), review-before-send queue on the dashboard, email logs
-with CSV export. Today's Focus dashboard, focus mode, admin panel.
-**In progress:** Nothing — cycle 2 complete.
-**Not yet started:** Lead scraper (cycle 3), analytics, Cloudflare Pages deploy.
-**Known issues / pending human steps:** GEMINI_API_KEY not yet set (AI drafting + note parsing fall back
-gracefully until Kevin creates a free key at aistudio.google.com/apikey and runs
-`npx supabase secrets set GEMINI_API_KEY=...`). Kevin's SMTP credentials not yet entered
-(/settings/email → save + test; until then sends return a friendly settings-gate error).
-Sequence steps are limited to the 5 default templates (custom templates can't be steps yet).
-check-sequences insert+advance is not transactional (worst case: a duplicate draft appears in the review
-queue after a mid-run crash — self-healing since nothing auto-sends). Kanban within-column reordering
-deferred. Production bundle exceeds Vite's 500 kB chunk warning — consider route-level code-splitting.
+## Current Status (updated 2026-09-02)
+**Working:** Cycle 1-2 (single-tenant foundation, full pipeline, email automation incl. AI-personalised
+composer/sequences/review queue) — see prior status below, all still functional. **Cycle 3 (multi-tenant
+foundation)** Tasks 1-8 done and pushed to `origin/main`: `organizations`/`org_members` schema, `useOrg`
+hook + org switcher, org-scoped `admin-users` edge fn + admin panel, org-level BYO API keys
+(`org_api_settings`, Vault-stored, live-validated), Google Sign-In (invite-only), and RLS cutover on
+`leads`+`lead_notes` (org-scoped policies, controller-verified via live browser pass 2026-08-30).
+AI_MODEL is `gemini-3.6-flash` (2.5-flash was retired by Google mid-cycle-3, silently broke all AI features
+until caught in Task 5). Four orgs live: **Mr Brush & Co** and **DI Dreamlabs** (Kevin-owned, priority,
+`use_global_api_fallback=true` — fall back to Kevin's global keys if org hasn't configured its own),
+**UX Tree** (Valentina-owned) and **Digital Influx Academy** (Suj-owned) (`use_global_api_fallback=false`
+— must configure their own API keys before AI/scraper features activate; this is the actual mechanism
+that guarantees Kevin never pays for their usage). Org names were corrected 2026-09-01 (was "Digital
+Influx"/"Digital Influx Dreamlabs", now "Digital Influx Academy"/"DI Dreamlabs") — renamed directly in the
+DB, no code changes needed since the UI renders org names dynamically.
+
+**Also done, controller-verified, committed locally but NOT YET PUSHED as of 2026-09-02 (awaiting Kevin's
+final review batch):**
+- `0e235bd` — fixed `_shared/ai.ts` hardcoding "Digital Influx Dreamlabs" as the AI email-drafting sender
+  identity regardless of which org is actually sending; `draftEmail()` now takes `orgName`, threaded
+  through from `generate-email`/`check-sequences` via an `organizations` lookup on the lead's `org_id`.
+- `65d2a00` — guided, non-technical-friendly redesign of `OrganizationSettings.tsx`'s API-key setup flow
+  (get-the-key buttons, plain-English one-time-per-org framing, numbered mini-guide for Gemini). Kevin
+  explicitly rejected a Google OAuth consent flow for this after research showed it needs Google's
+  restricted-scope app verification (weeks of lead time) and still requires the org to have its own GCP
+  project — no easier for non-technical admins than a good guided key-paste flow.
+- `7a8c2ae` — Task 9, RLS cutover on `email_templates`+`email_sequences`. Found and fixed a real ordering
+  bug in the plan's own SQL during apply (`is_org_admin_of_any()` was referenced before it was defined —
+  same bug class as Task 1's `org_members`-before-defined issue); rolled back cleanly on the failed first
+  attempt (zero data touched), reapplied successfully after reordering. Controller-verified via live
+  browser pass: created a real custom template through the UI, confirmed its `org_id` via SQL, confirmed
+  the admin-only "Default template" toggle still renders for Kevin, then cleaned up the test row.
+
+**Process note (2026-09-02):** the Claude Code auto-mode classifier blocks destructive live-DB SQL from a
+*subagent's* sandbox even after Kevin approves the equivalent action in the main session — per-session
+permission boundaries mean a subagent's blocked action can't be authorized cross-session. When this
+happens, the fix is: the controller (main session) builds the exact SQL/script, Kevin runs it himself via
+`!`, the controller verifies the result, then resumes the subagent past that step. This applied to both
+the Task 9 migration apply and its JWT-authed verification step (the latter was substituted with a
+controller browser pass instead, which is arguably stronger verification anyway).
+
+**In progress:** Nothing — next up is Task 10 (RLS cutover — sequence_enrollments, email_logs,
+scrape_jobs, raw_leads), not yet started.
+**Not yet started:** Tasks 10-12 (remaining RLS cutover + final audit/docs), lead scraper, analytics,
+Cloudflare Pages deploy, outreach automation (spec exists at
+`C:\Users\kevin\Downloads\dreamlabs-sales-outreach-spec.md`, needs updating for the 4-org model — was
+written for 2 orgs — before it's build-ready; scheduled after cycle 3 finishes). Outreach AI drafting
+model split (Gemini for internal/background AI, a smarter model — Sonnet or Haiku, undecided — for
+outreach content specifically) is agreed in principle but not implemented; `draftEmail()` was built as a
+swappable interface in cycle 2 specifically to allow this later.
+**Known issues / pending human steps:** Kevin's SMTP credentials not yet entered for the DI Dreamlabs org
+(/settings/email → save + test; until then sends return a friendly settings-gate error). Sequence steps
+are limited to the 5 default templates (custom templates can't be steps yet). check-sequences insert+advance
+is not transactional (worst case: a duplicate draft appears in the review queue after a mid-run crash —
+self-healing since nothing auto-sends). Kanban within-column reordering deferred. Production bundle exceeds
+Vite's 500 kB chunk warning — consider route-level code-splitting. Full triage list in
+`docs/CYCLE3-BACKLOG.md`.
 
 ---
 
