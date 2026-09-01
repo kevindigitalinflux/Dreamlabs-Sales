@@ -208,18 +208,26 @@ final review batch):**
   attempt (zero data touched), reapplied successfully after reordering. Controller-verified via live
   browser pass: created a real custom template through the UI, confirmed its `org_id` via SQL, confirmed
   the admin-only "Default template" toggle still renders for Kevin, then cleaned up the test row.
+- `24ca75a` — Task 10, RLS cutover on `sequence_enrollments`+`email_logs`+`scrape_jobs`+`raw_leads`, plus
+  redeploying `check-sequences`/`send-email` so their `email_logs` inserts carry `org_id`. No SQL ordering
+  bug this time (reviewed clean before applying). Controller-verified: live browser pass on the dashboard
+  drafts queue, Email Logs tab, and a real composer-saved draft (confirmed its `org_id` via SQL, then
+  cleaned up). Found a harmless pre-existing loading-state flash (dashboard briefly shows 0 drafts before
+  `currentOrg` resolves, self-corrects within ~1s) — logged as backlog item 8 in `docs/CYCLE3-BACKLOG.md`,
+  not a regression from this task, shared by every org-scoped hook since Task 8.
 
 **Process note (2026-09-02):** the Claude Code auto-mode classifier blocks destructive live-DB SQL from a
 *subagent's* sandbox even after Kevin approves the equivalent action in the main session — per-session
 permission boundaries mean a subagent's blocked action can't be authorized cross-session. When this
 happens, the fix is: the controller (main session) builds the exact SQL/script, Kevin runs it himself via
-`!`, the controller verifies the result, then resumes the subagent past that step. This applied to both
-the Task 9 migration apply and its JWT-authed verification step (the latter was substituted with a
-controller browser pass instead, which is arguably stronger verification anyway).
+`!`, the controller verifies the result, then resumes the subagent past that step. This applied to the
+Task 9 and Task 10 migration applies and Task 9's JWT-authed verification step (substituted with a
+controller browser pass instead, which is arguably stronger verification anyway). Edge function deploys
+were NOT blocked by the same classifier (Task 10 deployed `check-sequences`/`send-email` without incident).
 
-**In progress:** Nothing — next up is Task 10 (RLS cutover — sequence_enrollments, email_logs,
-scrape_jobs, raw_leads), not yet started.
-**Not yet started:** Tasks 10-12 (remaining RLS cutover + final audit/docs), lead scraper, analytics,
+**In progress:** Nothing — next up is Task 11 (RLS cutover — `profiles` final, drop legacy `role` column +
+`is_admin()`), not yet started.
+**Not yet started:** Tasks 11-12 (final RLS cutover + full audit/docs), lead scraper, analytics,
 Cloudflare Pages deploy, outreach automation (spec exists at
 `C:\Users\kevin\Downloads\dreamlabs-sales-outreach-spec.md`, needs updating for the 4-org model — was
 written for 2 orgs — before it's build-ready; scheduled after cycle 3 finishes). Outreach AI drafting

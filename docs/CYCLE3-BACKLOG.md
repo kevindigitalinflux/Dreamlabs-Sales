@@ -53,3 +53,12 @@ cycle 3's headline feature; schedule these around it.
 7. **Cosmetic** — rename seeded templates if the "(7 days)"-style names mislead against actual
    sequence delays; sequence steps limited to the 5 default templates (allow custom templates
    as steps if Kevin wants it).
+8. **Org-scoped loading-state flash** (found during Task 10 controller verification, 2026-09-02)
+   — every org-scoped hook added in cycle 3 (`useLeads`, `useTemplates`, `useSequences`,
+   `useDrafts`, etc.) follows the pattern `if (!currentOrg) { setX([]); setLoading(false); ... }`,
+   which makes "org context still resolving" indistinguishable from "genuinely zero rows" for one
+   render — e.g. the dashboard's "Emails ready to review" briefly shows 0/empty before
+   `currentOrg` loads, then self-corrects within ~1s once the org-scoped query re-fires. Harmless
+   (self-corrects, no data loss, confirmed via network-log trace) but could read as a bug to a
+   user glancing at the dashboard during that window. Fix: track "org not yet resolved" as its
+   own loading state distinct from "resolved, zero results" across all the org-scoped hooks.
