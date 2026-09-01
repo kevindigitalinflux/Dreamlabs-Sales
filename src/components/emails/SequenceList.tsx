@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ListOrdered, Plus, Star } from 'lucide-react';
 import { useSequences } from '../../hooks/useSequences';
 import { useAuth } from '../../hooks/useAuth';
+import { useOrg } from '../../hooks/useOrg';
 import { timelineLabel } from '../../lib/sequenceMath';
 import type { EmailSequence } from '../../types';
 import { Button } from '../ui/Button';
@@ -12,10 +13,11 @@ import { SequenceBuilder } from './SequenceBuilder';
 /** Sequence library: defaults first, then own; click to edit (own or admin), New to create. */
 export function SequenceList() {
   const { sequences, loading, error, save, remove } = useSequences();
-  const { profile, session } = useAuth();
+  const { session } = useAuth();
+  const { currentOrg } = useOrg();
   const [editing, setEditing] = useState<EmailSequence | null | 'new'>(null);
 
-  const canEdit = (s: EmailSequence) => profile?.role === 'admin' || s.created_by === session?.user.id;
+  const canEdit = (s: EmailSequence) => currentOrg?.role === 'admin' || s.created_by === session?.user.id;
 
   if (loading) return <Skeleton className="h-40 w-full" />;
   if (error) return <p role="alert" className="text-sm text-red-400">{error}</p>;
@@ -45,7 +47,7 @@ export function SequenceList() {
       {editing && (
         <SequenceBuilder
           sequence={editing === 'new' ? null : editing}
-          isAdmin={profile?.role === 'admin'}
+          isAdmin={currentOrg?.role === 'admin'}
           onSave={(input, id) => save(input, id)}
           onDelete={(id) => remove(id)}
           onClose={() => setEditing(null)}

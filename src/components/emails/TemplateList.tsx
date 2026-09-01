@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { FileText, Plus, Star } from 'lucide-react';
 import { useTemplates } from '../../hooks/useTemplates';
 import { useAuth } from '../../hooks/useAuth';
+import { useOrg } from '../../hooks/useOrg';
 import type { EmailTemplate } from '../../types';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
@@ -11,10 +12,11 @@ import { TemplateEditor } from './TemplateEditor';
 /** Template library: defaults first, then own; click to edit (own or admin), New to create. */
 export function TemplateList() {
   const { templates, loading, error, save, remove } = useTemplates();
-  const { profile, session } = useAuth();
+  const { session } = useAuth();
+  const { currentOrg } = useOrg();
   const [editing, setEditing] = useState<EmailTemplate | null | 'new'>(null);
 
-  const canEdit = (t: EmailTemplate) => profile?.role === 'admin' || t.created_by === session?.user.id;
+  const canEdit = (t: EmailTemplate) => currentOrg?.role === 'admin' || t.created_by === session?.user.id;
 
   if (loading) return <Skeleton className="h-40 w-full" />;
   if (error) return <p role="alert" className="text-sm text-red-400">{error}</p>;
@@ -43,7 +45,7 @@ export function TemplateList() {
       {editing && (
         <TemplateEditor
           template={editing === 'new' ? null : editing}
-          isAdmin={profile?.role === 'admin'}
+          isAdmin={currentOrg?.role === 'admin'}
           onSave={(input, id) => save(input, id)}
           onDelete={(id) => remove(id)}
           onClose={() => setEditing(null)}

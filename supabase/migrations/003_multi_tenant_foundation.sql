@@ -171,3 +171,46 @@ CREATE POLICY "notes_own_in_org" ON lead_notes FOR ALL USING (
     AND (leads.created_by = auth.uid() OR leads.assigned_to = auth.uid())
   )
 );
+
+-- ─────────────────────────────────────────
+-- CYCLE 3 PART C (Task 9): email_templates + email_sequences RLS cutover
+-- ─────────────────────────────────────────
+
+-- Helper: is the caller an admin of ANY org (needed only for editing the
+-- global org_id=NULL default templates/sequences — restricted to admins,
+-- not every member of every org, so a random contractor can't edit shared
+-- platform defaults). Defined before first use (plan had this after its
+-- first reference in templates_org_update - live-DB ordering bug found and
+-- fixed 2026-09-02, same bug class as Task 1's org_members-before-defined issue).
+CREATE OR REPLACE FUNCTION is_org_admin_of_any()
+RETURNS BOOLEAN LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public AS $$
+  SELECT EXISTS (SELECT 1 FROM org_members WHERE user_id = auth.uid() AND role = 'admin')
+$$;
+
+DROP POLICY "templates_read_all" ON email_templates;
+DROP POLICY "templates_own_write" ON email_templates;
+DROP POLICY "templates_admin" ON email_templates;
+CREATE POLICY "templates_read" ON email_templates FOR SELECT USING (
+  org_id IS NULL OR is_org_member(org_id)
+);
+CREATE POLICY "templates_org_write" ON email_templates FOR INSERT WITH CHECK (is_org_member(org_id));
+CREATE POLICY "templates_org_update" ON email_templates FOR UPDATE USING (
+  (org_id IS NOT NULL AND is_org_member(org_id)) OR (org_id IS NULL AND is_org_admin_of_any())
+);
+CREATE POLICY "templates_org_delete" ON email_templates FOR DELETE USING (
+  org_id IS NOT NULL AND is_org_member(org_id)
+);
+
+DROP POLICY "sequences_read" ON email_sequences;
+DROP POLICY "sequences_write" ON email_sequences;
+DROP POLICY "sequences_admin" ON email_sequences;
+CREATE POLICY "sequences_read" ON email_sequences FOR SELECT USING (
+  org_id IS NULL OR is_org_member(org_id)
+);
+CREATE POLICY "sequences_org_write" ON email_sequences FOR INSERT WITH CHECK (is_org_member(org_id));
+CREATE POLICY "sequences_org_update" ON email_sequences FOR UPDATE USING (
+  (org_id IS NOT NULL AND is_org_member(org_id)) OR (org_id IS NULL AND is_org_admin_of_any())
+);
+CREATE POLICY "sequences_org_delete" ON email_sequences FOR DELETE USING (
+  org_id IS NOT NULL AND is_org_member(org_id)
+);
