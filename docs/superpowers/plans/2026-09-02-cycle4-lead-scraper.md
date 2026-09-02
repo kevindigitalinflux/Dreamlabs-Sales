@@ -913,10 +913,14 @@ git commit -m "feat: scrape-companies-house edge function"
 ### Task 7: Edge functions — `enrich-apollo` + `enrich-hunter`
 
 **Files:**
+- Create: `supabase/functions/_shared/domain.ts`
 - Create: `supabase/functions/enrich-apollo/index.ts`
 - Create: `supabase/functions/enrich-hunter/index.ts`
 
 **Interfaces:**
+- Produces: `bareDomain(website: string): string | null` in `_shared/domain.ts` — both enrichment
+  functions import this shared helper rather than each defining their own copy (DRY, same
+  cross-function `_shared/` convention as `runBounded` in Task 5).
 - Consumes: `resolveOrgApiKey()` (providers `'apollo'`/`'hunter'`), a single `raw_lead_id`.
 - Produces: updates the one `raw_leads` row's `email`/`owner_name` in place (only when the
   provider actually returned a better value), stashes the full raw response under
@@ -924,15 +928,12 @@ git commit -m "feat: scrape-companies-house edge function"
 
 Both are small, synchronous, single-lead calls — no background execution needed.
 
-- [ ] **Step 1: Write `enrich-apollo/index.ts`**
+- [ ] **Step 1: Write `_shared/domain.ts`**
 
 ```ts
-// supabase/functions/enrich-apollo/index.ts
-import { createClient } from 'npm:@supabase/supabase-js@2';
-import { corsHeaders, json } from '../_shared/cors.ts';
-import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
-
-function bareDomain(website: string): string | null {
+// supabase/functions/_shared/domain.ts
+/** Strips protocol and leading www. to get a bare domain Apollo/Hunter expect (e.g. "example.com"). */
+export function bareDomain(website: string): string | null {
   try {
     const url = new URL(website.startsWith('http') ? website : `https://${website}`);
     return url.hostname.replace(/^www\./, '');
@@ -940,6 +941,16 @@ function bareDomain(website: string): string | null {
     return null;
   }
 }
+```
+
+- [ ] **Step 2: Write `enrich-apollo/index.ts`**
+
+```ts
+// supabase/functions/enrich-apollo/index.ts
+import { createClient } from 'npm:@supabase/supabase-js@2';
+import { corsHeaders, json } from '../_shared/cors.ts';
+import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
+import { bareDomain } from '../_shared/domain.ts';
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -995,22 +1006,14 @@ Deno.serve(async (req) => {
 });
 ```
 
-- [ ] **Step 2: Write `enrich-hunter/index.ts`**
+- [ ] **Step 3: Write `enrich-hunter/index.ts`**
 
 ```ts
 // supabase/functions/enrich-hunter/index.ts
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
-
-function bareDomain(website: string): string | null {
-  try {
-    const url = new URL(website.startsWith('http') ? website : `https://${website}`);
-    return url.hostname.replace(/^www\./, '');
-  } catch {
-    return null;
-  }
-}
+import { bareDomain } from '../_shared/domain.ts';
 
 interface HunterEmail { value: string; type: string; confidence: number; first_name?: string; last_name?: string; position?: string }
 
@@ -1068,14 +1071,14 @@ Deno.serve(async (req) => {
 });
 ```
 
-- [ ] **Step 3: Deploy both**
+- [ ] **Step 4: Deploy both**
 
 ```bash
 npx supabase functions deploy enrich-apollo
 npx supabase functions deploy enrich-hunter
 ```
 
-- [ ] **Step 4: Live-verify (completing Task 1 Step 5's deferred check too)**
+- [ ] **Step 5: Live-verify (completing Task 1 Step 5's deferred check too)**
 
 For an org **without** Apollo/Hunter configured: call both functions for a real `raw_lead_id`
 belonging to that org — confirm both return the `No <Provider> API key configured` 400, proving
@@ -1086,10 +1089,10 @@ domain is still proof the function reached the provider correctly): confirm a su
 updates `raw_leads.raw_data.enrichment.apollo`/`.hunter` and, for Hunter, `email` when it was
 previously null.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add supabase/functions/enrich-apollo supabase/functions/enrich-hunter
+git add supabase/functions/_shared/domain.ts supabase/functions/enrich-apollo supabase/functions/enrich-hunter
 git commit -m "feat: enrich-apollo + enrich-hunter edge functions (opt-in, per-lead, paid)"
 ```
 
