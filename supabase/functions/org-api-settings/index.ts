@@ -26,11 +26,17 @@ async function validateKey(provider: Provider, key: string): Promise<string | nu
       return res.ok ? null : `Companies House rejected the key (HTTP ${res.status})`;
     }
     if (provider === 'apollo') {
-      // Free health-check endpoint — does not consume Apollo credits.
+      // Free health-check endpoint — does not consume Apollo credits. It always
+      // returns HTTP 200 regardless of key validity (it's a service health
+      // check, not a key-auth check) — the real signal is the is_logged_in
+      // field in the response body, confirmed live 2026-09-02 against a
+      // deliberately invalid key ({"healthy":true,"is_logged_in":false}, HTTP 200).
       const res = await fetch('https://api.apollo.io/api/v1/auth/health', {
         headers: { 'X-Api-Key': key, 'Content-Type': 'application/json' },
       });
-      return res.ok ? null : `Apollo rejected the key (HTTP ${res.status})`;
+      if (!res.ok) return `Apollo rejected the key (HTTP ${res.status})`;
+      const data = await res.json() as { is_logged_in?: boolean };
+      return data.is_logged_in ? null : 'Apollo rejected the key (invalid API key)';
     }
     // hunter — /v2/account is Hunter's free account-info call, used purely to verify the key.
     const res = await fetch(`https://api.hunter.io/v2/account?api_key=${key}`);
