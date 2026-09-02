@@ -176,7 +176,7 @@ vite.config.ts
 
 ---
 
-## Current Status (updated 2026-09-02)
+## Current Status (updated 2026-09-03)
 **Working:** Cycle 1-2 (single-tenant foundation, full pipeline, email automation incl. AI-personalised
 composer/sequences/review queue) — see prior status below, all still functional. **Cycle 3 (multi-tenant
 foundation) is FULLY COMPLETE** — Tasks 1-12 done, controller-verified, and pushed:
@@ -247,11 +247,13 @@ after the controller created two throwaway users directly (see process note abov
 Every RLS boundary cycle 3 was built to enforce is now empirically proven, not just individually
 spot-checked per-task. Cycle 3 is fully complete — Phase A, Phase B, and this final audit all done.
 
-**Cycle 4 (lead scraper) — design + implementation plan both done, execution next (2026-09-02).**
-Plan doc: `docs/superpowers/plans/2026-09-02-cycle4-lead-scraper.md` (10 tasks). Design doc at
+**Cycle 4 (lead scraper) — FULLY COMPLETE (2026-09-03).** All 10 tasks implemented, each individually
+spec+quality reviewed (2 needed a fix round for real bugs — see below), plus a final whole-branch review
+that caught 4 more cross-task issues, all fixed and re-verified clean. Plan doc:
+`docs/superpowers/plans/2026-09-02-cycle4-lead-scraper.md`. Design doc:
 `docs/superpowers/specs/2026-09-02-cycle4-lead-scraper-design.md`. Scope: Google Places (UK **and**
 US discovery — it's a global API, no separate US source needed), Companies House (UK-only registry
-supplement, source checkbox auto-disables for non-UK ICPs), plus Apollo/Hunter as optional **paid**
+supplement, source picker auto-disables for non-UK ICPs), plus Apollo/Hunter as optional **paid**
 BYO-key per-lead enrichment buttons in the review table (never covered by Kevin's global-fallback —
 that stays Gemini/Places/Companies-House only). Researched and ruled out a free US-equivalent-to-
 Companies-House source: Apollo/Hunter free tiers have no API access at all; OpenCorporates' free key
@@ -259,9 +261,49 @@ is restricted to non-commercial use; SAM.gov is free+commercial-legal but only c
 contractors, not general SMEs — no free option adds real discovery value for this ICP. Execution
 model: background processing via Deno `EdgeRuntime.waitUntil()`, verified against Supabase's current
 150s Free-plan background-task wall-clock limit (this project's plan) — concurrency-bounded website
-email-discovery fetches sized to clear 60 results well inside that ceiling. Building for Mr Brush &
-Co + DI Dreamlabs first; architecture is fully org-scoped so UX Tree/DI Academy work as soon as they
-configure their own keys via the existing guided settings UI.
+email-discovery fetches sized to clear 60 results well inside that ceiling. Live for Mr Brush & Co +
+DI Dreamlabs first; architecture is fully org-scoped so UX Tree/DI Academy work as soon as they
+configure their own keys via the existing guided settings UI (fixed 2026-09-03 to actually be reachable
+by non-admin org members — see below).
+
+**New tables/functions this cycle:** `scrape_jobs`/`raw_leads` (migration `004_lead_scraper.sql`, org-scoped
+RLS matching cycle 3's pattern), 5 new edge functions (`parse-icp`, `scrape-google-places`,
+`scrape-companies-house`, `enrich-apollo`, `enrich-hunter`), 2 new hooks (`useScrapeJob`,
+`useRawLeadActions`), 2 new pages (`/scraper` wizard, `/scraper/jobs/:id` review table). Source selection
+is single-select (radio, not checkboxes) — a mid-cycle correctness bug (Task 9) had the UI's copy promising
+both sources would run when only one ever did, because the backend is genuinely one-job-per-source
+architecture (confirmed: no job-history/multi-job page exists in this plan); fixed by making the UI honest
+about that instead of redesigning the backend.
+
+**Final whole-branch review (2026-09-03) caught 4 real cross-task bugs no single-task review could have
+seen, all fixed same-day (commit `59b4709`) and re-verified:**
+1. `parse-icp` was the only new edge function missing the org-membership check present in its four
+   siblings — closed before the bug class was discovered in Task 5, missed by the later proactive sweep
+   which only covered Tasks 6-8. Now fixed.
+2. `scrape_jobs`/`raw_leads` were never added to the `supabase_realtime` publication (migration
+   `005_lead_scraper_realtime.sql`) — the review table's live progress subscription was inert, so
+   "still running…" never auto-updated to "completed" without a manual reload. Fixed and applied live.
+3. `org-api-settings`'s `action:'get'` required admin role, but `/scraper` and `/scraper/jobs/:id` are
+   contractor-reachable pages — a non-admin contractor got an empty settings response, which permanently
+   disabled both source radios and blocked them from ever starting a scrape. Split the gate: any org
+   member can read config status (`is_configured` booleans only, never secrets), only admin/platform_admin
+   can write a key.
+4. `useRawLeadActions.approve()` wrote `org_id` from the org-switcher's currently-selected org rather
+   than the scraped job's actual org — a user in 2+ orgs (e.g. Kevin) who switches orgs while viewing
+   another org's review page got a silent wrong-tenant `leads` insert. Now sourced from `job.org_id`
+   (added to the `ScrapeJob` type) instead.
+
+**Known issues / pending human steps (cycle 4):** `GOOGLE_PLACES_API_KEY` and `COMPANIES_HOUSE_API_KEY`
+are not yet set as live Supabase secrets — full E2E of a *real* scrape (not the SQL-seeded verification
+used during review) needs Kevin to run
+`npx supabase secrets set GOOGLE_PLACES_API_KEY=<key> COMPANIES_HOUSE_API_KEY=<key> --project-ref wgomksxelyfkzepbnkdd`
+himself. No live-tested *successful* Apollo/Hunter provider match yet (no org has a real paid key
+configured) — scoped as optional, the rejection/error paths are fully verified. `enrich-apollo` selects
+`raw_leads.owner_name` but never writes an updated value back — a minor pre-existing inconsistency between
+the brief's prose and its own code, not a blocker. CSV export in the review table includes all statuses,
+not just the pending/duplicate rows the table displays — arguably intended, worth a UX pass later. No
+`/scraper/jobs` history page exists yet — a job is only reachable via the immediate post-trigger redirect
+or its raw URL; flagged as a fast-follow, not in this cycle's scope.
 
 **Not yet started:** analytics,
 Cloudflare Pages deploy, outreach automation (spec exists at
