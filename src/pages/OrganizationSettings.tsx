@@ -43,6 +43,20 @@ const PROVIDERS: {
     ctaLabel: 'Register for a free Companies House key →',
     freeText: "Free — registration has no cost. One-time setup for the whole organization, done once by whoever administers it.",
   },
+  {
+    key: 'apollo',
+    label: 'Apollo.io (optional lead enrichment)',
+    url: 'https://app.apollo.io/#/settings/integrations/api',
+    ctaLabel: 'Get your Apollo API key →',
+    freeText: "Paid — Apollo's free plan has no API access, so this needs a paid Apollo plan. Usage bills to your own Apollo account, never Kevin's. Entirely optional: only appears as an \"Enrich with Apollo\" button on individual leads if configured — nothing runs automatically.",
+  },
+  {
+    key: 'hunter',
+    label: 'Hunter.io (optional email finder)',
+    url: 'https://hunter.io/api-keys',
+    ctaLabel: 'Get your Hunter API key →',
+    freeText: "Hunter's free plan includes some monthly credits but API access requires a paid plan. Usage bills to your own Hunter account, never Kevin's. Entirely optional: only appears as a \"Find email with Hunter\" button on individual leads if configured.",
+  },
 ];
 
 function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configured, onSave }: {
