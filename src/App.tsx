@@ -13,6 +13,8 @@ import { PipelineRedirect } from './pages/PipelineRedirect';
 import { PipelineKanban } from './pages/PipelineKanban';
 import { PipelineList } from './pages/PipelineList';
 import { LeadDetailPage } from './pages/LeadDetailPage';
+import { Scraper } from './pages/Scraper';
+import { ScraperJob } from './pages/ScraperJob';
 import { Settings } from './pages/Settings';
 import { OrganizationSettings } from './pages/OrganizationSettings';
 import { EmailConfig } from './pages/EmailConfig';
@@ -37,7 +39,8 @@ export function App() {
               <Route path="/pipeline/kanban" element={<PipelineKanban />} />
               <Route path="/pipeline/list" element={<PipelineList />} />
               <Route path="/pipeline/leads/:id" element={<LeadDetailPage />} />
-              <Route path="/scraper/*" element={<ComingSoon module="Lead Scraper" />} />
+              <Route path="/scraper" element={<Scraper />} />
+              <Route path="/scraper/jobs/:id" element={<ScraperJob />} />
               <Route path="/emails" element={<EmailsHub />} />
               <Route path="/emails/*" element={<EmailsHub />} />
               <Route path="/analytics" element={<ComingSoon module="Analytics" />} />
