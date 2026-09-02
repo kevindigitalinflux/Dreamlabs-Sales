@@ -23,7 +23,8 @@ content and is carried forward unchanged.
 | Prospect source (cold email + JV) | The existing `leads` table — leads already approved into the pipeline via the scraper's review flow. No separate/unreviewed prospecting mechanism. |
 | Cold email + JV pitch infrastructure | Extend the existing sequence engine (`email_templates`/`email_sequences`/`sequence_enrollments`/`check-sequences`) — new templates + sequences, not new tables or a new cron. |
 | LinkedIn DM infrastructure | New — no sequence/cron fit (sending itself can't be automated). New table + edge function + queue UI, reusing the existing review-queue *pattern* only. |
-| Outreach AI model | Claude, not Gemini (Gemini stays for internal/background AI — ICP parsing, note parsing, unchanged). LinkedIn DM + JV pitch always use Sonnet. Cold email auto-routes per lead: Sonnet if `lead_notes` exist for that lead at send time (a real personalization signal), Haiku otherwise (generic-fallback, higher-volume case). |
+| Outreach AI model | Claude, not Gemini (Gemini stays for internal/background AI — ICP parsing, note parsing, unchanged). LinkedIn DM + JV pitch always use Sonnet. Cold email routes to Sonnet if **either** the lead is manually flagged priority **or** `lead_notes` exist for it (both signals count, not one replacing the other) — Haiku otherwise. |
+| Reply detection | Built in, not deferred — IMAP polling (`npm:imapflow`) against each contractor's own verified mailbox, matching replies to sent emails via the `In-Reply-To`/`References` headers against a stored `Message-ID`. Auto-pauses the enrollment on match. Whether a detected reply also gets an AI-drafted suggested response is a **per-sequence toggle** (`email_sequences.auto_draft_on_reply`), not one fixed behavior. |
 | Anthropic API cost model | BYO-per-org, matching the existing pattern — but specifically the *Gemini/Places/Companies-House* variant of that pattern (global fallback available), not the Apollo/Hunter variant (never falls back). Mr Brush & Co and DI Dreamlabs (`use_global_api_fallback=true`) fall back to Kevin's global `ANTHROPIC_API_KEY` if they haven't configured their own; UX Tree and DI Academy must configure their own key before any outreach channel activates for them, same as every other paid provider today. **Flagging this interpretation explicitly for review** — the brainstorming answer was "BYO-per-org, matching existing pattern," and this repo's "existing pattern" is genuinely two-tier (Gemini/Places/CH have a fallback for Kevin's orgs; Apollo/Hunter never do) — this spec picks the Gemini-style tier since Anthropic costs are Gemini-scale trivial, not Apollo/Hunter-scale meaningful. Say so if the no-fallback-ever variant was actually intended. |
 | Auto-enrollment trigger | A lead newly approved into the pipeline (`stage = 'new_lead'`) with no existing active/paused `sequence_enrollments` row gets auto-enrolled into its org's default cold-outreach sequence. The schema already enforces max one active/paused enrollment per lead, so this can't conflict with a manual enrollment — a contractor manually enrolling a lead into a different sequence simply supersedes the automated one (same `enroll()` call already in `useEnrollments.ts`, no new conflict-handling needed). |
 | JV pitch scope | Mr Brush & Co only, matching the original doc — the audience (local commercial real-estate/facilities contacts) isn't sourced via the scraper's ICP flow (different business type from cleaning-service prospects), so JV contacts are added manually, not auto-enrolled. |
@@ -69,7 +70,13 @@ For each org with a cold_outreach_default sequence configured:
 enrollment view can show "Auto-enrolled" instead of a contractor's name when this is null) — no
 schema change needed, `enrolled_by` is already nullable.
 
-### 1c. AI routing (extends `_shared/ai.ts` + `check-sequences`)
+### 1c. Manual priority flag (new column)
+
+`leads` gains `is_priority boolean NOT NULL DEFAULT false` — a plain toggle on the lead detail
+page (any contractor or admin can set it; it's a triage signal, not a permission). No new table:
+this is the same tier of change as `is_priority` on any other CRM lead flag.
+
+### 1d. AI routing (extends `_shared/ai.ts` + `check-sequences`)
 
 `_shared/ai.ts` gains a Claude-backed sibling to `draftEmail`, same signature and contract (throws
 on failure, returns `{subject, body}`), hitting `https://api.anthropic.com/v1/messages` instead of
@@ -82,9 +89,9 @@ model selected by the caller.
    fetched when the due step's `template_type` starts with `cold_outreach_` or `jv_pitch_`
    (outreach templates), leaving every other template type's Gemini path completely untouched.
 2. For `jv_pitch_*` template types: always Sonnet.
-3. For `cold_outreach_*` template types: query `lead_notes` for this lead (already fetched a few
-   lines above in the existing code, for template variable substitution) — if any notes exist,
-   Sonnet; if none, Haiku.
+3. For `cold_outreach_*` template types: `lead.is_priority OR (lead_notes for this lead exist)` →
+   Sonnet; otherwise Haiku. `lead_notes` are already fetched a few lines above in the existing code
+   for template variable substitution, so this reuses that query rather than adding a second one.
 4. If no Anthropic key is configured/resolved for an outreach template, skip drafting for that
    enrollment this run (same `skipped.push(...)` pattern already used for missing templates/leads)
    rather than falling back to Gemini — outreach content must never silently degrade to the wrong
@@ -96,15 +103,49 @@ Everything downstream is unchanged: the AI-drafted result still lands in `email_
 and sends it through the existing `send-email` path. No new send infrastructure, no new UI for
 these two channels' approval step.
 
-### 1d. Reply handling
+### 1e. Reply detection (new — built in, not deferred)
 
-The original doc's "pause sequence on reply" (inbox webhook/polling) is **out of scope for this
-build** — this repo has no IMAP/inbox-polling infrastructure today (SMTP is send-only), and
-building real reply detection (webhook or polling, parsing, matching a reply to a lead/enrollment)
-is a substantial separate piece of work with its own edge cases. Ship without it first: a
-contractor manually pauses an enrollment (`useEnrollments.setStatus('paused')`, already built) when
-they see a reply come into their own inbox. Flagged as a fast-follow, not silently dropped — see
-Out of Scope.
+**Data model additions:**
+- `user_email_settings` gains `imap_host text` / `imap_port integer` — auto-derived and hidden
+  from the settings UI for `gmail`/`outlook`/`yahoo` (`imap.gmail.com:993`,
+  `outlook.office365.com:993`, `imap.mail.yahoo.com:993`), required manual input for the generic
+  `smtp` provider (mirroring how `smtp_host`/`smtp_port` already work for that provider today).
+  Reuses the same Vault-stored password already collected for SMTP send — every provider this app
+  supports uses one app-password/credential for both SMTP and IMAP, so no second credential
+  collection step.
+- `email_logs` gains `message_id text` — the `Message-ID` header of the sent email, captured and
+  stored by `send-email` at send time (denomailer's send result exposes this; if the specific
+  version in use doesn't, generate and set the header explicitly before sending so it's always
+  known). This is what makes reply-matching precise instead of a fuzzy same-sender-address guess.
+- `email_sequences` gains `auto_draft_on_reply boolean NOT NULL DEFAULT false`. The two new
+  sequences this build adds (`cold_outreach_default`, `jv_pitch_default`) are created with this set
+  `true`; every pre-existing cycle-2 sequence keeps the column's default `false`, so no existing
+  sequence's behavior changes.
+
+**New edge function `check-replies`**, cron-triggered on the same schedule as `check-sequences`
+(a second function on the same cron event, not a second cron job):
+1. For each user with `user_email_settings.is_verified = true`: connect via `npm:imapflow` using
+   their stored IMAP host/port + Vault credential.
+2. List inbox messages received since this user's last check (a new
+   `user_email_settings.last_imap_check_at timestamptz` tracks the watermark).
+3. For each message, check its `In-Reply-To`/`References` headers against `email_logs` rows with
+   `status = 'sent'` and a `message_id` — a match identifies exactly which sent email this is a
+   reply to, and therefore which `lead_id`/`sequence_enrollment_id`.
+4. On a match: pause the enrollment (`sequence_enrollments.status = 'paused'`, same transition
+   `useEnrollments.setStatus` already performs) and insert an `email_replies` row (new table:
+   `email_log_id`, `lead_id`, `org_id`, `from_email`, `subject`, `body`, `received_at`) — this
+   becomes the reply's permanent record, surfaced on the lead detail page alongside `lead_notes`.
+5. If the paused enrollment's `email_sequences.auto_draft_on_reply` is `true`: draft a suggested
+   response (same Claude-routing rules as §1d apply — Sonnet if priority-flagged or notes exist,
+   Haiku otherwise) using the reply's content + lead context, and insert it into `email_logs` as a
+   normal `status: 'draft'` row — it lands in the existing review queue exactly like any other
+   draft. Never auto-sent, matching every other AI-drafted message in this app.
+6. If `auto_draft_on_reply` is `false`: no draft is created — the paused enrollment and the new
+   `email_replies` row are the only signal, surfaced as a "needs your attention" item (dashboard
+   addition, detail TBD in the implementation plan).
+
+This applies to cold email and JV pitch (both run through `sequence_enrollments`); LinkedIn's reply
+handling stays manual, per §2d — there's no inbox to poll for a DM sent outside this app.
 
 ---
 
@@ -185,24 +226,27 @@ the requirement set, but it's explicitly deferred, not built.
 ## Testing
 
 - Unit: the Claude-routing logic in `_shared/ai.ts` (model selection given template_type +
-  notes-present), matching this repo's existing test coverage style for `_shared/` helpers where
-  it has any (check current coverage before assuming a pattern to follow).
+  priority-flag/notes-present), matching this repo's existing test coverage style for `_shared/`
+  helpers where it has any (check current coverage before assuming a pattern to follow).
 - Live verification (controller-performed, matching this cycle's established pattern): throwaway
-  org + lead + notes combination to prove the Sonnet/Haiku routing fires correctly on both branches;
-  throwaway `linkedin_contacts` row with and without `context_signal` to prove template-variant
-  selection; auto-enrollment cron run against a throwaway new_lead-stage lead to confirm one (and
-  only one) enrollment is created and a second run doesn't double-enroll it.
-- Full E2E of an actual sent cold email / LinkedIn message is out of reach without a real
-  Anthropic key configured and a real SMTP-verified org — same accepted pattern as cycle 4's
-  Google Places/Companies House gap: ship with the rejection/skip paths fully verified, flag the
-  success path as a pending human step once Kevin sets `ANTHROPIC_API_KEY`.
+  org + lead + notes combination to prove the Sonnet/Haiku routing fires correctly on all three
+  branches (priority-flagged, notes-present, neither); a throwaway priority-flagged lead with no
+  notes to prove the flag alone is sufficient; throwaway `linkedin_contacts` row with and without
+  `context_signal` to prove template-variant selection; auto-enrollment cron run against a
+  throwaway new_lead-stage lead to confirm one (and only one) enrollment is created and a second
+  run doesn't double-enroll it; a throwaway sent `email_logs` row + a manually-injected IMAP test
+  reply (a real test mailbox, not production) to prove `check-replies` correctly matches via
+  `Message-ID` headers, pauses the enrollment, and respects `auto_draft_on_reply` in both states.
+- Full E2E of an actual sent cold email / LinkedIn message, and of a real end-to-end IMAP reply
+  round-trip, is out of reach without a real Anthropic key and a real IMAP-capable verified
+  mailbox configured — same accepted pattern as cycle 4's Google Places/Companies House gap: ship
+  with every rejection/skip/no-match path fully verified, flag the success paths as pending human
+  steps once Kevin sets `ANTHROPIC_API_KEY` and re-verifies IMAP against his own real mailbox.
 
 ## Out of Scope (this build)
 
-- Automatic reply detection/pause for cold email and JV pitch (inbox webhook/polling) — manual
-  pause via the existing enrollment UI instead. Real scope for a later cycle once this ships and
-  proves out.
-- LinkedIn reply tracking — fully manual, no field for it yet.
+- LinkedIn reply tracking — fully manual, no field for it yet (no inbox API exists to poll for a
+  DM sent outside this app, unlike email's IMAP path).
 - Automated content-mining from replies/wins.
 - UX Tree / DI Academy's own copy, ICP, and channel mix — needs a session with Valentina/Suj first,
   unrelated to whether the underlying plumbing (this spec) supports them (it will, once they
