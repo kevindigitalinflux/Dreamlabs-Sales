@@ -16,31 +16,44 @@ interface PlaceResult {
   rating?: number; user_ratings_total?: number;
 }
 
+// Asset/image extensions that commonly appear as the "TLD" portion of a
+// false-positive plain-text email match (e.g. `logo@2x.png` in a srcset).
+const NON_EMAIL_TLDS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico']);
+
 /** Best-effort: fetch a business website and pull the first plausible contact email from it. */
 async function findEmail(website: string | undefined): Promise<string | null> {
   if (!website) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
     const res = await fetch(website, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
-    clearTimeout(timeout);
     if (!res.ok) return null;
     const html = await res.text();
     const mailto = html.match(/mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
     if (mailto) return mailto[1];
-    const plain = html.match(/\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b/);
-    return plain ? plain[0] : null;
+    const plain = html.match(/\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.([a-zA-Z]{2,})\b/);
+    if (!plain) return null;
+    const tld = plain[1].toLowerCase();
+    return NON_EMAIL_TLDS.has(tld) ? null : plain[0];
   } catch {
     return null; // timeout, network error, or a hostile/broken site — never fail the job for this
+  } finally {
+    // Keep the abort signal armed through the full res.text() read, not just
+    // the initial fetch() resolution (which only waits for headers).
+    clearTimeout(timeout);
   }
 }
 
 async function fetchPlaceDetails(placeId: string, apiKey: string): Promise<{ phone: string | null; website: string | null }> {
-  const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_phone_number,website&key=${apiKey}`;
-  const res = await fetch(url);
-  if (!res.ok) return { phone: null, website: null };
-  const data = await res.json() as { result?: { formatted_phone_number?: string; website?: string } };
-  return { phone: data.result?.formatted_phone_number ?? null, website: data.result?.website ?? null };
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=formatted_phone_number,website&key=${apiKey}`;
+    const res = await fetch(url);
+    if (!res.ok) return { phone: null, website: null };
+    const data = await res.json() as { result?: { formatted_phone_number?: string; website?: string } };
+    return { phone: data.result?.formatted_phone_number ?? null, website: data.result?.website ?? null };
+  } catch {
+    return { phone: null, website: null }; // one bad lookup must never fail the whole job
+  }
 }
 
 function buildQuery(icp: IcpParams): string {
@@ -61,6 +74,11 @@ async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: strin
         : `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${apiKey}`;
       const res = await fetch(url);
       const data = await res.json() as { results?: PlaceResult[]; next_page_token?: string; status: string };
+      if (data.status === 'INVALID_REQUEST' && pageToken) {
+        // A too-early next_page_token is a documented, expected possibility —
+        // keep whatever we already collected instead of failing the whole job.
+        break;
+      }
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
         throw new Error(`Google Places ${data.status}`);
       }
@@ -70,7 +88,17 @@ async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: strin
       // Google requires a short delay before a next_page_token becomes valid.
       await new Promise((r) => setTimeout(r, 2000));
     }
-    const places = allPlaces.slice(0, 60);
+    // Apply the ICP's rating/review-count filters — parsed by parse-icp and shown
+    // to the user as confirmed search criteria, so results must actually honour
+    // them. min_staff has no Google Places equivalent and is intentionally left
+    // unfiltered. Places missing rating/review data are kept (can't disprove a
+    // filter against data Google didn't return).
+    const places = allPlaces.slice(0, 60).filter((place) => {
+      if (icp.min_rating != null && place.rating != null && place.rating < icp.min_rating) return false;
+      if (icp.max_rating != null && place.rating != null && place.rating > icp.max_rating) return false;
+      if (icp.max_reviews != null && place.user_ratings_total != null && place.user_ratings_total > icp.max_reviews) return false;
+      return true;
+    });
 
     // Existing org data for duplicate detection — fetched once, matched in-memory.
     const { data: existingLeads } = await service.from('leads')
@@ -154,6 +182,10 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
+  const { data: membership } = await service.from('org_members')
+    .select('role').eq('org_id', orgId).eq('user_id', userData.user.id).maybeSingle();
+  if (!membership) return json({ error: 'Not a member of this organization' }, 403, headers);
+
   const apiKey = await resolveOrgApiKey(service, orgId, 'google_places');
   if (!apiKey) return json({ error: 'No Google Places API key configured for this organization' }, 400, headers);
 
@@ -163,8 +195,11 @@ Deno.serve(async (req) => {
   }).select('id').single();
   if (jobErr || !job) return json({ error: jobErr?.message ?? 'Could not create job' }, 500, headers);
 
-  // deno-lint-ignore no-explicit-any
-  (globalThis as any).EdgeRuntime?.waitUntil(runScrapeJob(service, job.id, orgId, body.icp_params, apiKey));
+  // Construct the promise outside the optional chain — `a?.b(c())` short-circuits
+  // the entire call including argument evaluation when `a` is nullish, so
+  // hoisting this out ensures runScrapeJob always actually runs.
+  const task = runScrapeJob(service, job.id, orgId, body.icp_params, apiKey);
+  (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime?.waitUntil(task);
 
   return json({ job_id: job.id }, 200, headers);
 });
