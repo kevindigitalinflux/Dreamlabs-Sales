@@ -21,7 +21,7 @@ export function Scraper() {
   const [step, setStep] = useState(1);
   const [rawInput, setRawInput] = useState('');
   const [icp, setIcp] = useState<IcpParams | null>(null);
-  const [sources, setSources] = useState<Set<ScrapeSource>>(new Set(['google_places']));
+  const [source, setSource] = useState<ScrapeSource>('google_places');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +40,7 @@ export function Scraper() {
     if (result.error) return setError(result.error);
     if (result.params) {
       setIcp(result.params);
-      if (result.params.country !== 'GB') sources.delete('companies_house');
+      if (result.params.country !== 'GB' && source === 'companies_house') setSource('google_places');
       setStep(2);
     }
   }
@@ -48,7 +48,7 @@ export function Scraper() {
   async function runScrape() {
     if (!currentOrg || !icp) return;
     setBusy(true); setError(null);
-    const functionName = sources.has('google_places') ? 'scrape-google-places' : 'scrape-companies-house';
+    const functionName = source === 'google_places' ? 'scrape-google-places' : 'scrape-companies-house';
     const { data, error: err } = await supabase.functions.invoke(functionName, {
       body: { org_id: currentOrg.id, icp_raw_input: rawInput, icp_params: icp },
     });
@@ -59,12 +59,8 @@ export function Scraper() {
     if (result.job_id) navigate(`/scraper/jobs/${result.job_id}`);
   }
 
-  function toggleSource(source: ScrapeSource) {
-    const next = new Set(sources);
-    if (next.has(source)) next.delete(source);
-    else next.add(source);
-    setSources(next);
-  }
+  const sourceUnavailable =
+    source === 'google_places' ? !placesConfigured : icp?.country !== 'GB' || !chConfigured;
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
@@ -116,19 +112,20 @@ export function Scraper() {
       {step === 3 && icp && (
         <Card>
           <div className="flex flex-col gap-3">
-            <p className="font-semibold">Choose data sources</p>
+            <p className="font-semibold">Choose one data source</p>
+            <p className="text-sm text-muted">Each search runs against a single source — pick the one that fits this ICP.</p>
             <label className="flex min-h-11 items-center gap-2">
-              <input type="checkbox" checked={sources.has('google_places')} onChange={() => toggleSource('google_places')} disabled={!placesConfigured} className="h-4 w-4 accent-violet-500" />
+              <input type="radio" name="scrape-source" checked={source === 'google_places'} onChange={() => setSource('google_places')} disabled={!placesConfigured} className="h-4 w-4 accent-violet-500" />
               Google Places {!placesConfigured && <span className="text-xs text-muted">(no key configured — see Settings)</span>}
             </label>
             <label className="flex min-h-11 items-center gap-2">
-              <input type="checkbox" checked={sources.has('companies_house')} onChange={() => toggleSource('companies_house')} disabled={icp.country !== 'GB' || !chConfigured} className="h-4 w-4 accent-violet-500" />
+              <input type="radio" name="scrape-source" checked={source === 'companies_house'} onChange={() => setSource('companies_house')} disabled={icp.country !== 'GB' || !chConfigured} className="h-4 w-4 accent-violet-500" />
               Companies House {icp.country !== 'GB' && <span className="text-xs text-muted">(UK only)</span>}
               {icp.country === 'GB' && !chConfigured && <span className="text-xs text-muted">(no key configured — see Settings)</span>}
             </label>
             <div className="flex justify-between">
               <Button variant="secondary" onClick={() => setStep(2)}>Back</Button>
-              <Button onClick={() => setStep(4)} disabled={sources.size === 0}>Continue</Button>
+              <Button onClick={() => setStep(4)} disabled={sourceUnavailable}>Continue</Button>
             </div>
           </div>
         </Card>
@@ -137,7 +134,7 @@ export function Scraper() {
       {step === 4 && (
         <Card>
           <div className="flex flex-col gap-3">
-            <p className="font-semibold">Ready to search {[...sources].join(' + ')}</p>
+            <p className="font-semibold">Ready to search {source === 'google_places' ? 'Google Places' : 'Companies House'}</p>
             <p className="text-sm text-muted">This runs in the background — you'll be taken to a live results page.</p>
             <div className="flex justify-between">
               <Button variant="secondary" onClick={() => setStep(3)}>Back</Button>
