@@ -179,10 +179,13 @@ vite.config.ts
 ## Current Status (updated 2026-09-02)
 **Working:** Cycle 1-2 (single-tenant foundation, full pipeline, email automation incl. AI-personalised
 composer/sequences/review queue) — see prior status below, all still functional. **Cycle 3 (multi-tenant
-foundation)** Tasks 1-8 done and pushed to `origin/main`: `organizations`/`org_members` schema, `useOrg`
-hook + org switcher, org-scoped `admin-users` edge fn + admin panel, org-level BYO API keys
-(`org_api_settings`, Vault-stored, live-validated), Google Sign-In (invite-only), and RLS cutover on
-`leads`+`lead_notes` (org-scoped policies, controller-verified via live browser pass 2026-08-30).
+foundation), Phase B (RLS cutover) is COMPLETE** — Tasks 1-11 done, controller-verified, and pushed (Task
+11 pending this session's push, see below): `organizations`/`org_members` schema, `useOrg` hook + org
+switcher, org-scoped `admin-users` edge fn + admin panel, org-level BYO API keys (`org_api_settings`,
+Vault-stored, live-validated), Google Sign-In (invite-only), and org-scoped RLS on every table (`leads`,
+`lead_notes`, `email_templates`, `email_sequences`, `sequence_enrollments`, `email_logs`, `scrape_jobs`,
+`raw_leads`, `profiles`) — no legacy global-role code path remains anywhere in the app; `profiles.role` and
+`is_admin()` are gone entirely, superseded by `org_members.role` + `is_org_admin`/`is_org_member`.
 AI_MODEL is `gemini-3.6-flash` (2.5-flash was retired by Google mid-cycle-3, silently broke all AI features
 until caught in Task 5). Four orgs live: **Mr Brush & Co** and **DI Dreamlabs** (Kevin-owned, priority,
 `use_global_api_fallback=true` — fall back to Kevin's global keys if org hasn't configured its own),
@@ -190,44 +193,35 @@ until caught in Task 5). Four orgs live: **Mr Brush & Co** and **DI Dreamlabs** 
 — must configure their own API keys before AI/scraper features activate; this is the actual mechanism
 that guarantees Kevin never pays for their usage). Org names were corrected 2026-09-01 (was "Digital
 Influx"/"Digital Influx Dreamlabs", now "Digital Influx Academy"/"DI Dreamlabs") — renamed directly in the
-DB, no code changes needed since the UI renders org names dynamically.
+DB, no code changes needed since the UI renders org names dynamically. `ai.ts`'s email-drafting prompt no
+longer hardcodes "Digital Influx Dreamlabs" as the sender — takes `orgName` per-org now. Org-level API key
+setup (`OrganizationSettings.tsx`) has a guided, non-technical-friendly flow (get-the-key buttons,
+plain-English framing, numbered mini-guide for Gemini) — Google OAuth consent was explicitly rejected for
+this (researched: needs Google's restricted-scope app verification, weeks of lead time, still requires the
+org to have its own GCP project — no easier for non-technical admins than a good guided key-paste flow).
 
-**Also done, controller-verified, committed locally but NOT YET PUSHED as of 2026-09-02 (awaiting Kevin's
-final review batch):**
-- `0e235bd` — fixed `_shared/ai.ts` hardcoding "Digital Influx Dreamlabs" as the AI email-drafting sender
-  identity regardless of which org is actually sending; `draftEmail()` now takes `orgName`, threaded
-  through from `generate-email`/`check-sequences` via an `organizations` lookup on the lead's `org_id`.
-- `65d2a00` — guided, non-technical-friendly redesign of `OrganizationSettings.tsx`'s API-key setup flow
-  (get-the-key buttons, plain-English one-time-per-org framing, numbered mini-guide for Gemini). Kevin
-  explicitly rejected a Google OAuth consent flow for this after research showed it needs Google's
-  restricted-scope app verification (weeks of lead time) and still requires the org to have its own GCP
-  project — no easier for non-technical admins than a good guided key-paste flow.
-- `7a8c2ae` — Task 9, RLS cutover on `email_templates`+`email_sequences`. Found and fixed a real ordering
-  bug in the plan's own SQL during apply (`is_org_admin_of_any()` was referenced before it was defined —
-  same bug class as Task 1's `org_members`-before-defined issue); rolled back cleanly on the failed first
-  attempt (zero data touched), reapplied successfully after reordering. Controller-verified via live
-  browser pass: created a real custom template through the UI, confirmed its `org_id` via SQL, confirmed
-  the admin-only "Default template" toggle still renders for Kevin, then cleaned up the test row.
-- `24ca75a` — Task 10, RLS cutover on `sequence_enrollments`+`email_logs`+`scrape_jobs`+`raw_leads`, plus
-  redeploying `check-sequences`/`send-email` so their `email_logs` inserts carry `org_id`. No SQL ordering
-  bug this time (reviewed clean before applying). Controller-verified: live browser pass on the dashboard
-  drafts queue, Email Logs tab, and a real composer-saved draft (confirmed its `org_id` via SQL, then
-  cleaned up). Found a harmless pre-existing loading-state flash (dashboard briefly shows 0 drafts before
-  `currentOrg` resolves, self-corrects within ~1s) — logged as backlog item 8 in `docs/CYCLE3-BACKLOG.md`,
-  not a regression from this task, shared by every org-scoped hook since Task 8.
+**Task 11 (`5cfe18b`, 2026-09-02) — the highest-risk task of the cycle**, dropped `profiles.role` and
+`is_admin()` permanently (irreversible without a DB restore, unlike Tasks 8-10's reversible policy swaps).
+Handled with extra care: subagent stopped before touching the live DB at all (not even one apply attempt),
+controller independently re-verified the plan's grep-verify safety check plus an extra check comparing
+`org_members.role` against `profiles.role` for every live user (zero drift, confirmed safe to drop),
+Kevin ran the apply directly, then a full-app browser walkthrough (Dashboard, Pipeline, LeadPanel
+Assignment, Emails hub, Settings, Admin panel) confirmed zero regressions before committing.
 
-**Process note (2026-09-02):** the Claude Code auto-mode classifier blocks destructive live-DB SQL from a
-*subagent's* sandbox even after Kevin approves the equivalent action in the main session — per-session
-permission boundaries mean a subagent's blocked action can't be authorized cross-session. When this
-happens, the fix is: the controller (main session) builds the exact SQL/script, Kevin runs it himself via
-`!`, the controller verifies the result, then resumes the subagent past that step. This applied to the
-Task 9 and Task 10 migration applies and Task 9's JWT-authed verification step (substituted with a
-controller browser pass instead, which is arguably stronger verification anyway). Edge function deploys
-were NOT blocked by the same classifier (Task 10 deployed `check-sequences`/`send-email` without incident).
+**Process notes (2026-09-02):**
+- The Claude Code auto-mode classifier blocks destructive live-DB SQL from a *subagent's* sandbox even
+  after Kevin approves the equivalent action in the main session — per-session permission boundaries mean
+  a subagent's blocked action can't be authorized cross-session. Fix: the controller (main session) builds
+  the exact SQL/script, Kevin runs it himself via `!`, the controller verifies the result, then resumes the
+  subagent (or, for Task 11, does the rest directly). Edge function deploys were NOT blocked by the same
+  classifier (Task 10 deployed `check-sequences`/`send-email` without incident).
+- PowerShell's `ConvertTo-Json` corrupts multi-line SQL strings when piped into `Invoke-RestMethod` (hit
+  during Task 9) — use a small Node script with `JSON.stringify` + the built-in `https` module instead for
+  any future apply scripts; this pattern worked cleanly for Tasks 9, 10, and 11.
 
-**In progress:** Nothing — next up is Task 11 (RLS cutover — `profiles` final, drop legacy `role` column +
-`is_admin()`), not yet started.
-**Not yet started:** Tasks 11-12 (final RLS cutover + full audit/docs), lead scraper, analytics,
+**In progress:** Nothing — Phase B complete. Next up is Task 12 (full multi-tenant RLS audit + docs), not
+yet started.
+**Not yet started:** Task 12 (full multi-tenant RLS audit + docs), lead scraper, analytics,
 Cloudflare Pages deploy, outreach automation (spec exists at
 `C:\Users\kevin\Downloads\dreamlabs-sales-outreach-spec.md`, needs updating for the 4-org model — was
 written for 2 orgs — before it's build-ready; scheduled after cycle 3 finishes). Outreach AI drafting
