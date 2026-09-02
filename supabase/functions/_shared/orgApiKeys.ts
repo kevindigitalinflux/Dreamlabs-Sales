@@ -1,11 +1,18 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
-export type ApiProvider = 'gemini' | 'google_places' | 'companies_house';
+export type ApiProvider = 'gemini' | 'google_places' | 'companies_house' | 'apollo' | 'hunter';
 
 const GLOBAL_ENV_VARS: Record<ApiProvider, string> = {
   gemini: 'GEMINI_API_KEY',
   google_places: 'GOOGLE_PLACES_API_KEY',
   companies_house: 'COMPANIES_HOUSE_API_KEY',
+  // apollo/hunter map to env vars that are never configured as secrets on
+  // this project, by design — Deno.env.get() returns undefined for them no
+  // matter what, so resolveOrgApiKey() below always returns null for these
+  // two unless the org has its own key, regardless of use_global_api_fallback.
+  // Paid providers must never fall back to Kevin's account.
+  apollo: 'APOLLO_API_KEY',
+  hunter: 'HUNTER_API_KEY',
 };
 
 /**

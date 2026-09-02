@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 
-type Provider = 'gemini' | 'google_places' | 'companies_house';
+type Provider = 'gemini' | 'google_places' | 'companies_house' | 'apollo' | 'hunter';
 
 async function validateKey(provider: Provider, key: string): Promise<string | null> {
   try {
@@ -19,11 +19,22 @@ async function validateKey(provider: Provider, key: string): Promise<string | nu
       const data = await res.json() as { status?: string };
       return data.status === 'REQUEST_DENIED' || data.status === 'INVALID_REQUEST' ? `Google rejected the key (${data.status})` : null;
     }
-    // companies_house — HTTP Basic auth, API key as username, empty password
-    const res = await fetch('https://api.company-information.service.gov.uk/search/companies?q=test', {
-      headers: { Authorization: 'Basic ' + btoa(`${key}:`) },
-    });
-    return res.ok ? null : `Companies House rejected the key (HTTP ${res.status})`;
+    if (provider === 'companies_house') {
+      const res = await fetch('https://api.company-information.service.gov.uk/search/companies?q=test', {
+        headers: { Authorization: 'Basic ' + btoa(`${key}:`) },
+      });
+      return res.ok ? null : `Companies House rejected the key (HTTP ${res.status})`;
+    }
+    if (provider === 'apollo') {
+      // Free health-check endpoint — does not consume Apollo credits.
+      const res = await fetch('https://api.apollo.io/api/v1/auth/health', {
+        headers: { 'X-Api-Key': key, 'Content-Type': 'application/json' },
+      });
+      return res.ok ? null : `Apollo rejected the key (HTTP ${res.status})`;
+    }
+    // hunter — /v2/account is Hunter's free account-info call, used purely to verify the key.
+    const res = await fetch(`https://api.hunter.io/v2/account?api_key=${key}`);
+    return res.ok ? null : `Hunter rejected the key (HTTP ${res.status})`;
   } catch (e) {
     return 'Could not reach the provider to validate the key: ' + (e instanceof Error ? e.message : String(e));
   }
@@ -66,7 +77,7 @@ Deno.serve(async (req) => {
   if (body.action === 'save') {
     const provider = String(body.provider ?? '') as Provider;
     const apiKey = String(body.api_key ?? '').trim();
-    if (!['gemini', 'google_places', 'companies_house'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
+    if (!['gemini', 'google_places', 'companies_house', 'apollo', 'hunter'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
     if (!apiKey) return json({ error: 'api_key is required' }, 400, headers);
 
     const validationError = await validateKey(provider, apiKey);
