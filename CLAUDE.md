@@ -247,7 +247,22 @@ after the controller created two throwaway users directly (see process note abov
 Every RLS boundary cycle 3 was built to enforce is now empirically proven, not just individually
 spot-checked per-task. Cycle 3 is fully complete — Phase A, Phase B, and this final audit all done.
 
-**Not yet started:** lead scraper (cycle 4), analytics,
+**Cycle 4 (lead scraper) — design approved, implementation plan next (2026-09-02).** Design doc at
+`docs/superpowers/specs/2026-09-02-cycle4-lead-scraper-design.md`. Scope: Google Places (UK **and**
+US discovery — it's a global API, no separate US source needed), Companies House (UK-only registry
+supplement, source checkbox auto-disables for non-UK ICPs), plus Apollo/Hunter as optional **paid**
+BYO-key per-lead enrichment buttons in the review table (never covered by Kevin's global-fallback —
+that stays Gemini/Places/Companies-House only). Researched and ruled out a free US-equivalent-to-
+Companies-House source: Apollo/Hunter free tiers have no API access at all; OpenCorporates' free key
+is restricted to non-commercial use; SAM.gov is free+commercial-legal but only covers federal
+contractors, not general SMEs — no free option adds real discovery value for this ICP. Execution
+model: background processing via Deno `EdgeRuntime.waitUntil()`, verified against Supabase's current
+150s Free-plan background-task wall-clock limit (this project's plan) — concurrency-bounded website
+email-discovery fetches sized to clear 60 results well inside that ceiling. Building for Mr Brush &
+Co + DI Dreamlabs first; architecture is fully org-scoped so UX Tree/DI Academy work as soon as they
+configure their own keys via the existing guided settings UI.
+
+**Not yet started:** analytics,
 Cloudflare Pages deploy, outreach automation (spec exists at
 `C:\Users\kevin\Downloads\dreamlabs-sales-outreach-spec.md`, needs updating for the 4-org model — was
 written for 2 orgs — before it's build-ready; scheduled after cycle 3 finishes). Outreach AI drafting
