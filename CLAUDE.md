@@ -179,9 +179,9 @@ vite.config.ts
 ## Current Status (updated 2026-09-02)
 **Working:** Cycle 1-2 (single-tenant foundation, full pipeline, email automation incl. AI-personalised
 composer/sequences/review queue) — see prior status below, all still functional. **Cycle 3 (multi-tenant
-foundation), Phase B (RLS cutover) is COMPLETE** — Tasks 1-11 done, controller-verified, and pushed (Task
-11 pending this session's push, see below): `organizations`/`org_members` schema, `useOrg` hook + org
-switcher, org-scoped `admin-users` edge fn + admin panel, org-level BYO API keys (`org_api_settings`,
+foundation) is FULLY COMPLETE** — Tasks 1-12 done, controller-verified, and pushed:
+`organizations`/`org_members` schema, `useOrg` hook + org switcher, org-scoped `admin-users` edge fn +
+admin panel, org-level BYO API keys (`org_api_settings`,
 Vault-stored, live-validated), Google Sign-In (invite-only), and org-scoped RLS on every table (`leads`,
 `lead_notes`, `email_templates`, `email_sequences`, `sequence_enrollments`, `email_logs`, `scrape_jobs`,
 `raw_leads`, `profiles`) — no legacy global-role code path remains anywhere in the app; `profiles.role` and
@@ -218,10 +218,36 @@ Assignment, Emails hub, Settings, Admin panel) confirmed zero regressions before
 - PowerShell's `ConvertTo-Json` corrupts multi-line SQL strings when piped into `Invoke-RestMethod` (hit
   during Task 9) — use a small Node script with `JSON.stringify` + the built-in `https` module instead for
   any future apply scripts; this pattern worked cleanly for Tasks 9, 10, and 11.
+- Subagent sandboxes additionally block *any* query against `auth.users` (not just destructive SQL) and
+  revealing the service-role key — so a subagent cannot create a Supabase auth user by any route found.
+  The controller's own session (properly authenticated against the `kevindigitalinflux@gmail.com` Supabase
+  account via the Supabase MCP plugin, reconnected mid-Task-12 with `/mcp`) does NOT have this restriction
+  — `execute_sql` against `auth.users`/`auth.identities` works fine from the controller. So: any future
+  task needing a throwaway login should have the controller create it directly (see the raw-SQL pattern
+  used for Task 12 below — insert into `auth.users` + `auth.identities` with `pgcrypto`'s `crypt()`, then
+  a follow-up `UPDATE` setting every `''`-defaulted token column from `NULL` to `''`, or GoTrue's
+  password-grant fails with a generic "Database error querying schema" — a known gotcha, not obvious from
+  the error text), not delegated to a subagent.
 
-**In progress:** Nothing — Phase B complete. Next up is Task 12 (full multi-tenant RLS audit + docs), not
-yet started.
-**Not yet started:** Task 12 (full multi-tenant RLS audit + docs), lead scraper, analytics,
+**Task 12 (2026-09-02) — full multi-tenant RLS audit + docs, COMPLETE.** `npx vitest run && npx tsc
+--noEmit && npm run build` all green (48/48 tests, clean typecheck, production build — same pre-existing
+500 kB chunk warning as before, not a regression). The live multi-org RLS audit (Step 2) ran to completion
+after the controller created two throwaway users directly (see process note above) — full PASS/FAIL:
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Cross-org read isolation (leads/notes/templates/sequences/logs/enrollments) | **PASS** — 0 rows on all 6 tables |
+| 2 | Cross-org admin-users management rejection (`list_org_members`/`set_org_role`/`invite`) | **PASS** — 403 "Admin only" on all 3 |
+| 3 | Non-platform-admin `create_org` rejection | **PASS** — 403 "Platform admin only" |
+| 4 | Cross-org API-key secret isolation (direct REST + `org-api-settings` edge fn) | **PASS** — 0 rows / 403 |
+| 5 | Global API-key fallback never applies to a non-Kevin org | **PASS** — `generate-email` returned `ai_used:false` for an Org-B lead despite `GEMINI_API_KEY` existing globally |
+| 6 | Kevin's platform-admin cross-org visibility retained | **PASS** — `list_orgs` showed all 6 orgs incl. both throwaway ones; `list_org_members` worked for both without being a member of either |
+| 7 | Full cleanup | **PASS** — both throwaway orgs, all their `public`-schema rows, the Vault secret, `org_members`, `auth.identities`, `profiles`, and `auth.users` rows all deleted; verified 0 remnants and real prod counts (4 orgs/3 leads/3 profiles/3 auth users) unchanged before/after |
+
+Every RLS boundary cycle 3 was built to enforce is now empirically proven, not just individually
+spot-checked per-task. Cycle 3 is fully complete — Phase A, Phase B, and this final audit all done.
+
+**Not yet started:** lead scraper (cycle 4), analytics,
 Cloudflare Pages deploy, outreach automation (spec exists at
 `C:\Users\kevin\Downloads\dreamlabs-sales-outreach-spec.md`, needs updating for the 4-org model — was
 written for 2 orgs — before it's build-ready; scheduled after cycle 3 finishes). Outreach AI drafting
@@ -233,7 +259,10 @@ swappable interface in cycle 2 specifically to allow this later.
 are limited to the 5 default templates (custom templates can't be steps yet). check-sequences insert+advance
 is not transactional (worst case: a duplicate draft appears in the review queue after a mid-run crash —
 self-healing since nothing auto-sends). Kanban within-column reordering deferred. Production bundle exceeds
-Vite's 500 kB chunk warning — consider route-level code-splitting. Full triage list in
+Vite's 500 kB chunk warning — consider route-level code-splitting. `email_templates`/`email_sequences` rows
+with `org_id = NULL` (the platform default templates/sequences) can only be edited by an admin of *any* org
+(`is_org_admin_of_any()`), not scoped per-org — acceptable for now since there's only one shared default
+set across all 4 orgs; worth revisiting if orgs ever need their own default sets. Full triage list in
 `docs/CYCLE3-BACKLOG.md`.
 
 ---
