@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router';
 import { BarChart3, KanbanSquare, LayoutDashboard, Mail, Radar, Settings, Shield } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useAuth } from '../../hooks/useAuth';
+import { useOrg } from '../../hooks/useOrg';
 
 interface NavItem {
   to: string;
@@ -27,7 +27,7 @@ function navClass({ isActive }: { isActive: boolean }): string {
 
 /** Desktop sidebar navigation. Hidden below md; MobileNav takes over there. */
 export function Sidebar() {
-  const { profile } = useAuth();
+  const { currentOrg } = useOrg();
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r border-line bg-navy/40 p-4 md:flex">
       <p className="mb-8 px-2 font-heading text-lg font-extrabold">
@@ -40,7 +40,7 @@ export function Sidebar() {
             {label}
           </NavLink>
         ))}
-        {profile?.role === 'admin' && (
+        {currentOrg?.role === 'admin' && (
           <NavLink to="/admin" className={navClass}>
             <Shield className="h-5 w-5" aria-hidden />
             Admin

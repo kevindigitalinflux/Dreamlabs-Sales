@@ -23,7 +23,6 @@ export interface Profile {
   id: string;
   email: string;
   full_name: string | null;
-  role: Role;
   platform_role: PlatformRole;
   avatar_url: string | null;
   created_at: string;

@@ -1,22 +1,31 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import type { Profile } from '../types';
+import { useOrg } from './useOrg';
+import type { Profile, Role } from '../types';
 
-/** All profiles visible to the current user (RLS: admins see everyone, contractors see themselves). */
+export type OrgProfile = Profile & { role: Role };
+
+interface MembershipRow { role: Role; profiles: Profile }
+
+/** Members of the current org, each annotated with their role WITHIN that org. */
 export function useProfiles() {
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const { currentOrg } = useOrg();
+  const [profiles, setProfiles] = useState<OrgProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const { data, error: err } = await supabase.from('profiles').select('*').order('created_at');
+    if (!currentOrg) { setProfiles([]); setLoading(false); return; }
+    const { data, error: err } = await supabase
+      .from('org_members').select('role, profiles(*)').eq('org_id', currentOrg.id);
     if (err) setError(err.message);
     else {
-      setProfiles(data as Profile[]);
+      const rows = (data as unknown as MembershipRow[]) ?? [];
+      setProfiles(rows.map((r) => ({ ...r.profiles, role: r.role })));
       setError(null);
     }
     setLoading(false);
-  }, []);
+  }, [currentOrg]);
 
   useEffect(() => {
     void refresh();

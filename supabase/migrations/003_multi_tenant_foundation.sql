@@ -257,3 +257,21 @@ CREATE POLICY "raw_leads_own_in_org" ON raw_leads FOR ALL USING (
     WHERE id = raw_leads.scrape_job_id AND is_org_member(scrape_jobs.org_id) AND scrape_jobs.created_by = auth.uid()
   )
 );
+
+-- ─────────────────────────────────────────
+-- CYCLE 3 PART C (Task 11, final): profiles RLS cutover + drop legacy
+-- global role column and is_admin()
+-- ─────────────────────────────────────────
+
+DROP POLICY "profiles_admin_read" ON profiles;
+CREATE POLICY "profiles_org_admin_read" ON profiles FOR SELECT USING (
+  EXISTS (
+    SELECT 1 FROM org_members om1 JOIN org_members om2 ON om1.org_id = om2.org_id
+    WHERE om1.user_id = auth.uid() AND om1.role = 'admin' AND om2.user_id = profiles.id
+  )
+);
+-- profiles_self_read and profiles_self_update are unaffected — left as-is.
+
+-- Drop the old global admin() function and (only once nothing references it any more) the column.
+DROP FUNCTION is_admin();
+ALTER TABLE profiles DROP COLUMN role;

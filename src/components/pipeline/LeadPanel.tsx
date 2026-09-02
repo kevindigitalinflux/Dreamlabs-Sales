@@ -5,7 +5,8 @@ import type { LeadPatch } from '../../lib/leadUpdates';
 import { STAGES } from '../../lib/utils';
 import { useLeadNotes } from '../../hooks/useLeadNotes';
 import { useOrg } from '../../hooks/useOrg';
-import type { Lead, Profile, Stage } from '../../types';
+import type { OrgProfile } from '../../hooks/useProfiles';
+import type { Lead, Stage } from '../../types';
 import { Button } from '../ui/Button';
 import { SelectField } from '../ui/Input';
 import { StageBadge } from './StageBadge';
@@ -17,7 +18,7 @@ import { EnrollmentControl } from '../emails/EnrollmentControl';
 
 interface LeadPanelProps {
   lead: Lead | null;
-  profiles: Profile[];
+  profiles: OrgProfile[];
   onClose: () => void;
   onUpdate: (id: string, patch: LeadPatch) => Promise<string | null>;
 }
