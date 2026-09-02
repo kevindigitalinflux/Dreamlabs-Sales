@@ -62,3 +62,20 @@ cycle 3's headline feature; schedule these around it.
    (self-corrects, no data loss, confirmed via network-log trace) but could read as a bug to a
    user glancing at the dashboard during that window. Fix: track "org not yet resolved" as its
    own loading state distinct from "resolved, zero results" across all the org-scoped hooks.
+9. **[Cycle 4] Scraper job-history page** — there's no `/scraper/jobs` list; a scrape job is only
+   reachable via the immediate post-trigger redirect or a saved/bookmarked URL. Small addition:
+   a page listing an org's past `scrape_jobs` (status, date, results/approved counts) linking into
+   each `/scraper/jobs/:id`. Noted as explicitly out of scope during cycle 4 planning, not a bug.
+10. **[Cycle 4] `enrich-apollo` never writes back an updated `owner_name`** — it selects
+    `raw_leads.owner_name` but the update only touches `raw_data.enrichment.apollo`; a minor
+    inconsistency between the design intent (implied by early planning prose) and the shipped
+    code, which was itself confirmed correct by review. Low value — Apollo's org-enrichment
+    endpoint doesn't return a person name anyway, so this may not be fixable without switching to
+    a different Apollo endpoint.
+11. **[Cycle 4] Review-table CSV export includes all lead statuses**, not just the pending/duplicate
+    rows the table displays — a user could reasonably expect the export to match what's on screen.
+    Arguably intended (a full-fidelity export of everything scraped), but worth a deliberate call
+    rather than leaving it as an implementation accident.
+12. **[Cycle 4] `scrape_jobs.approved_count` is a dead field** — written as `0` at insert, never
+    incremented by `approve()`, never displayed anywhere. Either wire it up (increment on approve,
+    show it next to `results_count` in the review table header) or drop the column.
