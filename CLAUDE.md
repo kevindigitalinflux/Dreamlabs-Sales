@@ -247,7 +247,8 @@ after the controller created two throwaway users directly (see process note abov
 Every RLS boundary cycle 3 was built to enforce is now empirically proven, not just individually
 spot-checked per-task. Cycle 3 is fully complete — Phase A, Phase B, and this final audit all done.
 
-**Cycle 4 (lead scraper) — design approved, implementation plan next (2026-09-02).** Design doc at
+**Cycle 4 (lead scraper) — design + implementation plan both done, execution next (2026-09-02).**
+Plan doc: `docs/superpowers/plans/2026-09-02-cycle4-lead-scraper.md` (10 tasks). Design doc at
 `docs/superpowers/specs/2026-09-02-cycle4-lead-scraper-design.md`. Scope: Google Places (UK **and**
 US discovery — it's a global API, no separate US source needed), Companies House (UK-only registry
 supplement, source checkbox auto-disables for non-UK ICPs), plus Apollo/Hunter as optional **paid**
