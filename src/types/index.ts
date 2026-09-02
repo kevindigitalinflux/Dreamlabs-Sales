@@ -157,3 +157,59 @@ export interface LeadSuggestion {
   pain_point?: string;
   rationale: string;
 }
+
+export type ScrapeJobStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type ScrapeSource = 'google_places' | 'companies_house';
+
+export interface ScrapeJob {
+  id: string;
+  icp_raw_input: string | null;
+  icp_params: IcpParams | null;
+  sources: ScrapeSource[];
+  status: ScrapeJobStatus;
+  results_count: number;
+  approved_count: number;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export type RawLeadStatus = 'pending' | 'approved' | 'rejected' | 'duplicate';
+
+export interface RawLead {
+  id: string;
+  scrape_job_id: string;
+  business_name: string;
+  owner_name: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  address: string | null;
+  city: string | null;
+  postcode: string | null;
+  google_rating: number | null;
+  review_count: number | null;
+  vertical: string | null;
+  source: 'google_places' | 'companies_house';
+  source_id: string | null;
+  raw_data: Record<string, unknown> | null;
+  status: RawLeadStatus;
+  duplicate_of: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+}
+
+/** Structured output of parse-icp — country drives the Companies House checkbox gate. */
+export interface IcpParams {
+  industry: string | null;
+  location: string | null;
+  city: string | null;
+  country: 'GB' | 'US' | 'other';
+  min_staff: number | null;
+  min_rating: number | null;
+  max_rating: number | null;
+  max_reviews: number | null;
+  keywords: string[];
+}
