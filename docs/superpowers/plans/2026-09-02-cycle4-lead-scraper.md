@@ -872,6 +872,13 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
+  // Caller must belong to the org they're asking to scrape into — found missing
+  // in Task 5's review (Critical: cross-tenant scrape + API-spend theft), fixed
+  // here proactively before this code was ever transcribed.
+  const { data: membership } = await service.from('org_members')
+    .select('role').eq('org_id', orgId).eq('user_id', userData.user.id).maybeSingle();
+  if (!membership) return json({ error: 'Not a member of this organization' }, 403, headers);
+
   const apiKey = await resolveOrgApiKey(service, orgId, 'companies_house');
   if (!apiKey) return json({ error: 'No Companies House API key configured for this organization' }, 400, headers);
 
@@ -966,20 +973,31 @@ Deno.serve(async (req) => {
   const { data: userData } = await client.auth.getUser();
   if (!userData?.user) return json({ error: 'Not signed in' }, 401, headers);
 
-  const body = (await req.json()) as { raw_lead_id?: string; org_id?: string };
+  const body = (await req.json()) as { raw_lead_id?: string };
   const rawLeadId = String(body.raw_lead_id ?? '');
-  const orgId = String(body.org_id ?? '');
-  if (!rawLeadId || !orgId) return json({ error: 'raw_lead_id and org_id are required' }, 400, headers);
+  if (!rawLeadId) return json({ error: 'raw_lead_id is required' }, 400, headers);
 
   const service = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
-  // RLS-scoped read via the caller's own client — confirms the caller can actually see this lead
-  // (i.e. it belongs to an org they're a member of) before we do anything with the service client.
-  const { data: rawLead, error: readErr } = await client.from('raw_leads').select('id, website, email, owner_name, raw_data').eq('id', rawLeadId).single();
+  // Derive org_id from the lead itself via a service-role join — never trust a
+  // client-supplied org_id here. (Found in Task 5's review: a caller who owns
+  // a lead in Org A could otherwise pass org_id=OrgB in the body and steal
+  // Org B's Apollo credits to enrich Org A's lead. Deriving org_id from the
+  // lead's own scrape_job closes this off entirely — there's no org_id
+  // parameter left to spoof.)
+  const { data: rawLead, error: readErr } = await service
+    .from('raw_leads')
+    .select('id, website, email, owner_name, raw_data, scrape_jobs!inner(org_id)')
+    .eq('id', rawLeadId).single();
   if (readErr || !rawLead) return json({ error: 'Lead not found' }, 404, headers);
+  const orgId = (rawLead.scrape_jobs as unknown as { org_id: string }).org_id;
+
+  const { data: membership } = await service.from('org_members')
+    .select('role').eq('org_id', orgId).eq('user_id', userData.user.id).maybeSingle();
+  if (!membership) return json({ error: 'Not a member of this organization' }, 403, headers);
 
   const apiKey = await resolveOrgApiKey(service, orgId, 'apollo');
   if (!apiKey) return json({ error: 'No Apollo API key configured for this organization' }, 400, headers);
@@ -1031,18 +1049,27 @@ Deno.serve(async (req) => {
   const { data: userData } = await client.auth.getUser();
   if (!userData?.user) return json({ error: 'Not signed in' }, 401, headers);
 
-  const body = (await req.json()) as { raw_lead_id?: string; org_id?: string };
+  const body = (await req.json()) as { raw_lead_id?: string };
   const rawLeadId = String(body.raw_lead_id ?? '');
-  const orgId = String(body.org_id ?? '');
-  if (!rawLeadId || !orgId) return json({ error: 'raw_lead_id and org_id are required' }, 400, headers);
+  if (!rawLeadId) return json({ error: 'raw_lead_id is required' }, 400, headers);
 
   const service = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
-  const { data: rawLead, error: readErr } = await client.from('raw_leads').select('id, website, email, raw_data').eq('id', rawLeadId).single();
+  // Derive org_id from the lead itself via a service-role join — never trust a
+  // client-supplied org_id here. Same fix as enrich-apollo, see its comment.
+  const { data: rawLead, error: readErr } = await service
+    .from('raw_leads')
+    .select('id, website, email, raw_data, scrape_jobs!inner(org_id)')
+    .eq('id', rawLeadId).single();
   if (readErr || !rawLead) return json({ error: 'Lead not found' }, 404, headers);
+  const orgId = (rawLead.scrape_jobs as unknown as { org_id: string }).org_id;
+
+  const { data: membership } = await service.from('org_members')
+    .select('role').eq('org_id', orgId).eq('user_id', userData.user.id).maybeSingle();
+  if (!membership) return json({ error: 'Not a member of this organization' }, 403, headers);
 
   const apiKey = await resolveOrgApiKey(service, orgId, 'hunter');
   if (!apiKey) return json({ error: 'No Hunter API key configured for this organization' }, 400, headers);
@@ -1192,22 +1219,22 @@ export function useRawLeadActions() {
   }, []);
 
   const enrichWithApollo = useCallback(async (lead: RawLead): Promise<string | null> => {
-    if (!currentOrg) return 'No organization selected';
+    // No org_id sent — enrich-apollo derives it authoritatively from the lead
+    // itself server-side (see Task 7), so there's nothing here to spoof.
     const { data, error } = await supabase.functions.invoke('enrich-apollo', {
-      body: { raw_lead_id: lead.id, org_id: currentOrg.id },
+      body: { raw_lead_id: lead.id },
     });
     if (error) return error.message;
     return (data as { error?: string }).error ?? null;
-  }, [currentOrg]);
+  }, []);
 
   const enrichWithHunter = useCallback(async (lead: RawLead): Promise<string | null> => {
-    if (!currentOrg) return 'No organization selected';
     const { data, error } = await supabase.functions.invoke('enrich-hunter', {
-      body: { raw_lead_id: lead.id, org_id: currentOrg.id },
+      body: { raw_lead_id: lead.id },
     });
     if (error) return error.message;
     return (data as { error?: string }).error ?? null;
-  }, [currentOrg]);
+  }, []);
 
   return { approve, reject, skip, enrichWithApollo, enrichWithHunter };
 }
