@@ -15,6 +15,21 @@ interface CHCompany {
   address_snippet?: string;
 }
 
+/**
+ * Companies House returns officer names as "SURNAME, Forename Middlename".
+ * Reformat to "Forename Middlename SURNAME" so downstream consumers (e.g.
+ * templateVars.ts's `owner_name?.split(' ')[0]` for {{first_name}}) get a
+ * real first name instead of "SURNAME," with a trailing comma. Falls back to
+ * the raw value unchanged if it isn't in the comma-separated format.
+ */
+function normalizeOfficerName(rawName: string): string {
+  const commaIndex = rawName.indexOf(', ');
+  if (commaIndex === -1) return rawName;
+  const surname = rawName.slice(0, commaIndex);
+  const forenames = rawName.slice(commaIndex + 2);
+  return `${forenames} ${surname}`;
+}
+
 async function fetchFirstOfficer(companyNumber: string, apiKey: string): Promise<string | null> {
   try {
     const res = await fetch(`https://api.company-information.service.gov.uk/company/${companyNumber}/officers`, {
@@ -22,7 +37,8 @@ async function fetchFirstOfficer(companyNumber: string, apiKey: string): Promise
     });
     if (!res.ok) return null;
     const data = await res.json() as { items?: { name?: string }[] };
-    return data.items?.[0]?.name ?? null;
+    const rawName = data.items?.[0]?.name;
+    return rawName ? normalizeOfficerName(rawName) : null;
   } catch {
     return null;
   }
@@ -55,6 +71,7 @@ async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: strin
       business_name: c.title,
       owner_name: owners[i],
       address: c.address_snippet ?? null,
+      city: icp.city ?? null,
       vertical: icp.industry,
       source: 'companies_house',
       source_id: c.company_number,
@@ -117,8 +134,11 @@ Deno.serve(async (req) => {
   }).select('id').single();
   if (jobErr || !job) return json({ error: jobErr?.message ?? 'Could not create job' }, 500, headers);
 
-  // deno-lint-ignore no-explicit-any
-  (globalThis as any).EdgeRuntime?.waitUntil(runScrapeJob(service, job.id, orgId, body.icp_params, apiKey));
+  // Construct the promise outside the optional chain — `a?.b(c())` short-circuits
+  // the entire call including argument evaluation when `a` is nullish, so
+  // hoisting this out ensures runScrapeJob always actually runs.
+  const task = runScrapeJob(service, job.id, orgId, body.icp_params, apiKey);
+  (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime?.waitUntil(task);
 
   return json({ job_id: job.id }, 200, headers);
 });
