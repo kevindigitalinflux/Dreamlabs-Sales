@@ -25,7 +25,7 @@ function statusBadge(job: { status: string } | null) {
 export function ScraperJob() {
   const { id } = useParams<{ id: string }>();
   const { job, rawLeads, loading, refresh } = useScrapeJob(id!);
-  const { approve, reject, skip, enrichWithApollo, enrichWithHunter } = useRawLeadActions();
+  const { approve, reject, skip, enrichWithApollo, enrichWithHunter } = useRawLeadActions(job?.org_id);
   const { settings } = useOrgApiSettings();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null);

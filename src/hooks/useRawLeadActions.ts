@@ -1,21 +1,19 @@
 import { useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { useOrg } from './useOrg';
 import { useAuth } from './useAuth';
 import type { RawLead } from '../types';
 
 /** Approve/reject/skip a raw_leads row, plus the two paid enrichment actions. */
-export function useRawLeadActions() {
-  const { currentOrg } = useOrg();
+export function useRawLeadActions(jobOrgId?: string) {
   const { session } = useAuth();
 
   const approve = useCallback(async (lead: RawLead): Promise<string | null> => {
-    if (!currentOrg) return 'No organization selected';
+    if (!jobOrgId) return 'Could not determine the organization for this lead';
     const { error: insertErr } = await supabase.from('leads').insert({
       business_name: lead.business_name, owner_name: lead.owner_name, phone: lead.phone,
       email: lead.email, website: lead.website, address: lead.address, city: lead.city,
       postcode: lead.postcode, google_rating: lead.google_rating, review_count: lead.review_count,
-      vertical: lead.vertical, stage: 'new_lead', org_id: currentOrg.id,
+      vertical: lead.vertical, stage: 'new_lead', org_id: jobOrgId,
       created_by: session?.user.id, raw_lead_id: lead.id,
     });
     if (insertErr) return insertErr.message;
@@ -23,7 +21,7 @@ export function useRawLeadActions() {
       status: 'approved', approved_by: session?.user.id, approved_at: new Date().toISOString(),
     }).eq('id', lead.id);
     return updateErr ? updateErr.message : null;
-  }, [currentOrg, session]);
+  }, [jobOrgId, session]);
 
   const reject = useCallback(async (lead: RawLead): Promise<string | null> => {
     const { error } = await supabase.from('raw_leads').update({ status: 'rejected' }).eq('id', lead.id);

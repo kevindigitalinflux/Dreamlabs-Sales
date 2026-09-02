@@ -71,8 +71,9 @@ Deno.serve(async (req) => {
   const { data: membership } = await service
     .from('org_members').select('role').eq('org_id', orgId).eq('user_id', userData.user.id).maybeSingle();
   const { data: profile } = await service.from('profiles').select('platform_role').eq('id', userData.user.id).single();
+  const isMember = !!membership || profile?.platform_role === 'platform_admin';
   const canManage = membership?.role === 'admin' || profile?.platform_role === 'platform_admin';
-  if (!canManage) return json({ error: 'Org admin only' }, 403, headers);
+  if (!isMember) return json({ error: 'Not a member of this organization' }, 403, headers);
 
   if (body.action === 'get') {
     const { data, error } = await service.from('org_api_settings').select('provider, is_configured').eq('org_id', orgId);
@@ -81,6 +82,7 @@ Deno.serve(async (req) => {
   }
 
   if (body.action === 'save') {
+    if (!canManage) return json({ error: 'Org admin only' }, 403, headers);
     const provider = String(body.provider ?? '') as Provider;
     const apiKey = String(body.api_key ?? '').trim();
     if (!['gemini', 'google_places', 'companies_house', 'apollo', 'hunter'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);

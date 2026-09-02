@@ -163,6 +163,7 @@ export type ScrapeSource = 'google_places' | 'companies_house';
 
 export interface ScrapeJob {
   id: string;
+  org_id: string;
   icp_raw_input: string | null;
   icp_params: IcpParams | null;
   sources: ScrapeSource[];

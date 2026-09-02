@@ -29,6 +29,10 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
+  const { data: membership } = await service.from('org_members')
+    .select('role').eq('org_id', orgId).eq('user_id', userData.user.id).maybeSingle();
+  if (!membership) return json({ error: 'Not a member of this organization' }, 403, headers);
+
   const apiKey = await resolveOrgApiKey(service, orgId, 'gemini');
   if (!apiKey) return json({ error: 'No Gemini API key configured for this organization' }, 400, headers);
 
