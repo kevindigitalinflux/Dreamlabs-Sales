@@ -21,6 +21,8 @@ import { EmailConfig } from './pages/EmailConfig';
 import { EmailsHub } from './pages/EmailsHub';
 import { Admin } from './pages/Admin';
 import { LinkedinOutreach } from './pages/LinkedinOutreach';
+import { AutopilotSetup } from './pages/AutopilotSetup';
+import { AutopilotStatus } from './pages/AutopilotStatus';
 
 /** App root: full SPEC.md §13 route tree (later-cycle modules render ComingSoon). */
 export function App() {
@@ -45,6 +47,8 @@ export function App() {
               <Route path="/emails" element={<EmailsHub />} />
               <Route path="/emails/*" element={<EmailsHub />} />
               <Route path="/outreach/linkedin" element={<LinkedinOutreach />} />
+              <Route path="/outreach/autopilot" element={<AutopilotStatus />} />
+              <Route path="/outreach/autopilot/new" element={<AutopilotSetup />} />
               <Route path="/analytics" element={<ComingSoon module="Analytics" />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/settings/email" element={<EmailConfig />} />
