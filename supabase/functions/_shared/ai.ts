@@ -53,7 +53,8 @@ async function claudeJson(prompt: string, model: ClaudeModel, apiKey: string, ma
     `${prompt}\n\nRespond with ONLY valid JSON, no other text, no markdown code fences.`,
     model, apiKey, maxTokens,
   );
-  return JSON.parse(text);
+  const cleaned = text.trim().replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+  return JSON.parse(cleaned);
 }
 
 /** Personalises an already-variable-substituted draft using lead context + notes. Throws on failure. */
