@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useOrg } from './useOrg';
 
 export interface OrgApiSetting {
-  provider: 'gemini' | 'google_places' | 'companies_house' | 'apollo' | 'hunter';
+  provider: 'gemini' | 'google_places' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic';
   is_configured: boolean;
 }
 

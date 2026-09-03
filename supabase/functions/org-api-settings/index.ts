@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 
-type Provider = 'gemini' | 'google_places' | 'companies_house' | 'apollo' | 'hunter';
+type Provider = 'gemini' | 'google_places' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic';
 
 async function validateKey(provider: Provider, key: string): Promise<string | null> {
   try {
@@ -37,6 +37,17 @@ async function validateKey(provider: Provider, key: string): Promise<string | nu
       if (!res.ok) return `Apollo rejected the key (HTTP ${res.status})`;
       const data = await res.json() as { is_logged_in?: boolean };
       return data.is_logged_in ? null : 'Apollo rejected the key (invalid API key)';
+    }
+    if (provider === 'anthropic') {
+      // A trivial 1-token request is the standard way to validate a Claude
+      // key — there's no dedicated health-check endpoint. Cheapest possible
+      // real call: Haiku, max_tokens 1.
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 1, messages: [{ role: 'user', content: 'Hi' }] }),
+      });
+      return res.ok ? null : `Anthropic rejected the key (HTTP ${res.status})`;
     }
     // hunter — /v2/account is Hunter's free account-info call, used purely to verify the key.
     const res = await fetch(`https://api.hunter.io/v2/account?api_key=${key}`);
@@ -85,7 +96,7 @@ Deno.serve(async (req) => {
     if (!canManage) return json({ error: 'Org admin only' }, 403, headers);
     const provider = String(body.provider ?? '') as Provider;
     const apiKey = String(body.api_key ?? '').trim();
-    if (!['gemini', 'google_places', 'companies_house', 'apollo', 'hunter'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
+    if (!['gemini', 'google_places', 'companies_house', 'apollo', 'hunter', 'anthropic'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
     if (!apiKey) return json({ error: 'api_key is required' }, 400, headers);
 
     const validationError = await validateKey(provider, apiKey);

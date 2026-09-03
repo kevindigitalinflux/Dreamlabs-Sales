@@ -57,6 +57,13 @@ const PROVIDERS: {
     ctaLabel: 'Get your Hunter API key →',
     freeText: "Hunter's free plan includes some monthly credits but API access requires a paid plan. Usage bills to your own Hunter account, never Kevin's. Entirely optional: only appears as a \"Find email with Hunter\" button on individual leads if configured.",
   },
+  {
+    key: 'anthropic',
+    label: 'Anthropic Claude (outreach AI)',
+    url: 'https://console.anthropic.com/settings/keys',
+    ctaLabel: 'Get your Anthropic API key →',
+    freeText: "Powers cold-email/JV-pitch/LinkedIn drafting for this org. Trivially cheap at real volume (a few dollars a month even sending hundreds of messages). Mr Brush & Co and DI Dreamlabs fall back to Kevin's key automatically if this isn't configured, matching how Gemini already works — other orgs need their own key before outreach automation activates.",
+  },
 ];
 
 function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configured, onSave }: {
