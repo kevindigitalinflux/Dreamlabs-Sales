@@ -39,10 +39,22 @@ Deno.serve(async (req) => {
   }
   if (!orgId && !body.log_id) return json({ error: 'lead_id is required to send a new email' }, 400, headers);
 
-  // If updating an existing draft, make sure it belongs to the caller.
+  // If updating an existing draft, make sure it belongs to the caller — except
+  // for system-generated drafts (sent_by = null, e.g. autopilot's auto-enrolled
+  // outreach and check-replies' auto-drafted responses, both of which have no
+  // individual owner by design), which any member of the draft's own org may
+  // claim and send. A human-created draft (sent_by set) is still strictly
+  // owner-only.
   if (body.log_id) {
-    const { data: log } = await service.from('email_logs').select('sent_by').eq('id', body.log_id).single();
-    if (!log || log.sent_by !== user.id) return json({ error: 'Draft not found' }, 404, headers);
+    const { data: log } = await service.from('email_logs').select('sent_by, org_id').eq('id', body.log_id).single();
+    if (!log) return json({ error: 'Draft not found' }, 404, headers);
+    if (log.sent_by !== null && log.sent_by !== user.id) {
+      return json({ error: 'Draft not found' }, 404, headers);
+    }
+    if (log.sent_by === null) {
+      const { data: membership } = await service.from('org_members').select('role').eq('org_id', log.org_id).eq('user_id', user.id).maybeSingle();
+      if (!membership) return json({ error: 'Draft not found' }, 404, headers);
+    }
   }
 
   let status = 'sent';
@@ -68,7 +80,12 @@ Deno.serve(async (req) => {
   let logId = body.log_id ?? null;
   let logFailed = false;
   if (logId) {
-    const { error: logErr } = await service.from('email_logs').update(row).eq('id', logId).eq('sent_by', user.id);
+    // Matches the ownership check above: a claimed system-generated draft's
+    // existing row still has sent_by = null at this point (row.sent_by above
+    // is the NEW value being written), so an `.eq('sent_by', user.id)` filter
+    // here would match zero rows and silently no-op the update — the email
+    // would send but the log would stay stuck on 'draft' forever.
+    const { error: logErr } = await service.from('email_logs').update(row).eq('id', logId).or(`sent_by.is.null,sent_by.eq.${user.id}`);
     if (logErr) {
       console.error('email_logs update failed:', logErr.message);
       logFailed = true;
