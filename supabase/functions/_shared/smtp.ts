@@ -8,11 +8,16 @@ export interface SmtpConfig {
   fromName: string | null;
 }
 
-/** Sends one plain-text email. Port 465 = implicit TLS; anything else attempts STARTTLS. */
+/**
+ * Sends one plain-text email. Port 465 = implicit TLS; anything else attempts
+ * STARTTLS. Generates and sets an explicit Message-ID (denomailer doesn't
+ * expose one from its send result) and returns it, so the caller can store
+ * it for later reply-matching via In-Reply-To/References headers.
+ */
 export async function sendMail(
   cfg: SmtpConfig,
   msg: { to: string; subject: string; body: string },
-): Promise<void> {
+): Promise<{ messageId: string }> {
   const client = new SMTPClient({
     connection: {
       hostname: cfg.host,
@@ -21,6 +26,8 @@ export async function sendMail(
       auth: { username: cfg.user, password: cfg.pass },
     },
   });
+  const domain = cfg.user.split('@')[1] ?? 'dreamlabs-sales.app';
+  const messageId = `<${crypto.randomUUID()}@${domain}>`;
   // strip CR/LF — SMTP header injection guard
   const fromName = cfg.fromName ? cfg.fromName.replace(/[\r\n]+/g, ' ').trim() : cfg.fromName;
   const to = msg.to.replace(/[\r\n]+/g, ' ').trim();
@@ -31,6 +38,7 @@ export async function sendMail(
       to,
       subject,
       content: msg.body,
+      headers: { 'Message-ID': messageId },
     });
   } finally {
     try {
@@ -39,4 +47,5 @@ export async function sendMail(
       // ignore close errors — the send result above is what matters
     }
   }
+  return { messageId };
 }

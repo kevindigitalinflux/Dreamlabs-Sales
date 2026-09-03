@@ -47,11 +47,13 @@ Deno.serve(async (req) => {
 
   let status = 'sent';
   let errorMessage: string | null = null;
+  let messageId: string | null = null;
   try {
-    await sendMail(
+    const result = await sendMail(
       { host: settings.smtp_host, port: settings.smtp_port, user: settings.smtp_user, pass: pass as string, fromName: settings.from_name },
       { to: body.to_email, subject: body.subject, body: body.body },
     );
+    messageId = result.messageId;
   } catch (e) {
     status = 'failed';
     errorMessage = e instanceof Error ? e.message : String(e);
@@ -60,7 +62,7 @@ Deno.serve(async (req) => {
   const row: Record<string, unknown> = {
     lead_id: body.lead_id ?? null, sent_by: user.id, to_email: body.to_email,
     subject: body.subject, body: body.body, status, error_message: errorMessage,
-    sent_at: new Date().toISOString(),
+    message_id: messageId, sent_at: new Date().toISOString(),
   };
   if (orgId) row.org_id = orgId; // omitted on update-only calls where org_id is already set on the existing row
   let logId = body.log_id ?? null;
