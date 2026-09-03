@@ -305,13 +305,82 @@ not just the pending/duplicate rows the table displays — arguably intended, wo
 `/scraper/jobs` history page exists yet — a job is only reachable via the immediate post-trigger redirect
 or its raw URL; flagged as a fast-follow, not in this cycle's scope.
 
-**Not yet started:** analytics,
-Cloudflare Pages deploy, outreach automation (spec exists at
-`C:\Users\kevin\Downloads\dreamlabs-sales-outreach-spec.md`, needs updating for the 4-org model — was
-written for 2 orgs — before it's build-ready; scheduled after cycle 3 finishes). Outreach AI drafting
-model split (Gemini for internal/background AI, a smarter model — Sonnet or Haiku, undecided — for
-outreach content specifically) is agreed in principle but not implemented; `draftEmail()` was built as a
-swappable interface in cycle 2 specifically to allow this later.
+**Cycle 5 (outreach automation) — FULLY COMPLETE (2026-09-03).** All 18 tasks implemented, individually
+reviewed (several needed fix rounds for real bugs — see below), plus a final whole-branch review that
+caught 6 more cross-task issues, all fixed and re-verified clean including a live database check. Design
+doc: `docs/superpowers/specs/2026-09-03-outreach-automation-design.md`. Plan:
+`docs/superpowers/plans/2026-09-03-outreach-automation.md`. Scope: cold email + JV pitch (extends the
+existing sequence engine with new templates/sequences and an auto-enrollment cron, not new infrastructure),
+LinkedIn DM (new `linkedin_contacts`/`linkedin_drafts` tables + queue UI, manual send per LinkedIn's ToS),
+IMAP-based reply detection (`npm:imapflow`, matches replies via `Message-ID`/`In-Reply-To`, auto-pauses the
+sequence, optionally auto-drafts a response), and a cron-driven "autopilot mode" (scrape → auto-approve →
+enroll → draft, unattended, within user-set daily volume/duration/spend guardrails). AI model split:
+Sonnet writes a short, reusable set of personalization notes once per qualifying lead ("notes-then-draft"),
+Haiku always writes the actual email using those notes — keeps Sonnet's cost to its cheap short output
+while every send still benefits from Sonnet-quality thinking. A dash/em-dash punctuation guardrail
+(`stripAiPunctuation()`) applies to every AI-drafted email across the whole app, not just this cycle's new
+paths. Google Places is currently the only usable autopilot source — Companies House returns no contact
+details so no lead from it can ever pass the email-required approval guardrail; the setup UI makes that
+option unconditionally unselectable and the backend auto-cancels any run that somehow gets it anyway.
+
+**New tables/functions this cycle:** `email_replies`, `linkedin_contacts`, `linkedin_drafts`,
+`autopilot_runs`, `outreach_blocklist` (migration `006_outreach_automation.sql`, org-scoped RLS), plus
+follow-up migrations `007` (seeded-template variable fix), `008` (IMAP UID watermark), `009` (RLS relaxed
+to also allow org members to read/act on `null`-owned system-generated rows — see finding 1 below). 4 new
+edge functions (`auto-enroll-cold-outreach`, `check-replies`, `draft-linkedin-message`, `run-autopilot`);
+`check-sequences`, `send-email`, both scrapers, `org-api-settings` all extended. 2 new hooks
+(`useLinkedinOutreach`, `useAutopilot`), 3 new pages (`/outreach/linkedin`, `/outreach/autopilot`,
+`/outreach/autopilot/new`).
+
+**Real bugs found and fixed during per-task review (not exhaustive, see the deleted SDD ledger's git
+history for full detail):** a spend-accounting bug that made the autopilot spend-cap guardrail inert (wrote
+the same stale number instead of accumulating); a daily-send-cap count that wasn't actually scoped to
+outreach sequences (any email volume could silently exhaust the day's allowance); IMAP's date-only `SINCE`
+semantics causing a ~6-hour daily reprocessing window (fixed with a real UID watermark); a genuine
+cross-tenant reply-forgery vulnerability (`In-Reply-To` is an unauthenticated header — fixed by scoping to
+the mailbox owner's own sends and validating the sender against the lead's real email); `send-email`
+rejecting every system-generated (`sent_by: null`) draft, which would have made the entire outreach
+pipeline's drafts permanently unsendable; the scrapers authenticating via a real-user JWT, which 401s on
+the service-role JWT `run-autopilot` calls them with — autopilot's daily scrape would have silently failed
+forever without a cron-secret bypass path (verified not to weaken the existing org-membership security
+guarantee for real users).
+
+**Final whole-branch review (2026-09-03) caught 6 more cross-task bugs, all fixed same-day and re-verified
+including a live `pg_policies` check:**
+1. Non-admin org members couldn't read anything the automation pipeline produces — cycle 3's RLS policies
+   gate non-admin access on `auth.uid() = <owner column>`, which never matches `NULL`, colliding with this
+   cycle's whole system-generated-row convention. Latent today (all 3 live users are org admins) but
+   load-bearing the moment a contractor is onboarded. Fixed via migration `009` relaxing 5 tables' policies
+   to also allow the null-owner case, with org-membership gating and command scope otherwise unchanged.
+2. `auto-enroll-cold-outreach` re-enrolled the same lead into the same sequence forever once it completed
+   (nothing in this app ever advances a lead's stage off `new_lead` automatically) — fixed to check for
+   ANY prior enrollment in that specific sequence, not just active/paused ones, without blocking deliberate
+   manual re-enrollment into a *different* sequence.
+3. Every auto-enrolled outreach email drafted with the sender name "The" (`enrolled_by: null` → an
+   invalid-uuid profile lookup → a fallback string mangled by `.split(' ')[0]`) — same bug class already
+   fixed once in `check-replies`, found here in `check-sequences` and `draft-linkedin-message` too.
+4. The spend-cap guardrail never actually cancelled the run (only skipped individual drafts) — `run-autopilot`
+   kept scraping/approving every day after the cap was hit. Now cancels the run itself once reached.
+5. `outreach_sent_total` was never incremented by anything — permanently showed 0 in the live progress view.
+6. LinkedIn's "Mark as sent" button could never be reached — the drafts query only showed `status='draft'`
+   rows, so an approved draft vanished before that action could render. Now shows both statuses.
+
+**Known issues / pending human steps (cycle 5):** `ANTHROPIC_API_KEY` not yet set as a live Supabase secret
+— outreach AI drafting will skip (not fall back to Gemini) until Kevin runs
+`npx supabase secrets set ANTHROPIC_API_KEY=<key> --project-ref wgomksxelyfkzepbnkdd`. No live IMAP mailbox
+connection has been tested (needs a real external mailbox with real credentials, not available in this
+environment) — `npm:imapflow`'s import/bundle success and real API shape were independently verified twice
+against the library's actual source, only the live socket-level connection remains untested. Verified
+mailboxes saved *before* this cycle have `imap_host = NULL` and are skipped by `check-replies` until
+re-saved (re-saving also resets `is_verified`, requiring a fresh test-email send). Cost-estimate constants
+shown at autopilot setup (Haiku/Sonnet blended rate) disagree with the actual flat per-draft accounting by
+roughly 2–4x — fails safe (conservative estimate, real spend tracks lower), not fixed this cycle.
+`email_replies` has no UI surface yet — a detected reply with `auto_draft_on_reply=false` is currently
+invisible to the user (design's "needs your attention" dashboard item was never assigned to a task). No new
+unit tests were added this cycle for the functions the design doc specifically named as testable
+(`stripAiPunctuation`, the compatible-lead gate, `tight_icp_fit` boundaries, classify-then-draft routing).
+
+**Not yet started:** analytics, Cloudflare Pages deploy.
 **Known issues / pending human steps:** Kevin's SMTP credentials not yet entered for the DI Dreamlabs org
 (/settings/email → save + test; until then sends return a friendly settings-gate error). Sequence steps
 are limited to the 5 default templates (custom templates can't be steps yet). check-sequences insert+advance
