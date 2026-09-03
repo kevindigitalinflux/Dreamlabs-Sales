@@ -5,10 +5,17 @@ import { nextSendAtForDeno } from '../_shared/sequenceMathDeno.ts';
 const HEADERS = { 'Content-Type': 'application/json' };
 
 /**
- * Cron target: auto-enrolls newly-approved new_lead-stage leads (no existing
- * active/paused enrollment — the schema enforces at most one, so this can
- * never conflict with a manual enrollment) into their org's default
- * cold-outreach sequence. Same shared-secret auth as check-sequences.
+ * Cron target: auto-enrolls newly-approved new_lead-stage leads into their
+ * org's default cold-outreach sequence. Nothing in this app advances a
+ * lead's `stage` off `new_lead` automatically, so a lead can still show as
+ * `new_lead` long after its cold-outreach sequence has completed — the
+ * existing-enrollment check below is therefore scoped to "has EVER had an
+ * enrollment in this exact sequence, regardless of status" (not just
+ * active/paused), so a completed sequence is never restarted from step 1.
+ * This only blocks re-enrollment into this same sequence by this same
+ * automatic path — a human can still manually enroll the lead into a
+ * different sequence (e.g. JV pitch) later. Same shared-secret auth as
+ * check-sequences.
  */
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, HEADERS);
@@ -32,7 +39,7 @@ Deno.serve(async (req) => {
       .eq('org_id', sequence.org_id).eq('stage', 'new_lead');
     for (const lead of candidates ?? []) {
       const { data: existing } = await service.from('sequence_enrollments')
-        .select('id').eq('lead_id', (lead as { id: string }).id).in('status', ['active', 'paused']).maybeSingle();
+        .select('id').eq('lead_id', (lead as { id: string }).id).eq('sequence_id', sequence.id).maybeSingle();
       if (existing) continue;
       const { error } = await service.from('sequence_enrollments').insert({
         lead_id: (lead as { id: string }).id, sequence_id: sequence.id, current_step: 1,
