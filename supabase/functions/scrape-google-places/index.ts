@@ -164,33 +164,52 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
 
-  const authHeader = req.headers.get('Authorization') ?? '';
-  const client = createClient(
-    Deno.env.get('SUPABASE_URL')!,
-    Deno.env.get('SUPABASE_ANON_KEY')!,
-    { global: { headers: { Authorization: authHeader } } },
-  );
-  const { data: userData } = await client.auth.getUser();
-  if (!userData?.user) return json({ error: 'Not signed in' }, 401, headers);
-
-  const body = (await req.json()) as { org_id?: string; icp_raw_input?: string; icp_params?: IcpParams; max_results?: number };
-  const orgId = String(body.org_id ?? '');
-  if (!orgId || !body.icp_params) return json({ error: 'org_id and icp_params are required' }, 400, headers);
-
   const service = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
-  const { data: membership } = await service.from('org_members')
-    .select('role').eq('org_id', orgId).eq('user_id', userData.user.id).maybeSingle();
-  if (!membership) return json({ error: 'Not a member of this organization' }, 403, headers);
+  // Trusted service-to-service trigger (run-autopilot cron) — same shared-secret
+  // pattern as check-sequences/auto-enroll-cold-outreach/check-replies. A
+  // service-role key is a valid JWT for the platform gateway's verify_jwt check,
+  // but it carries no `sub` claim, so auth.getUser() below can never resolve it
+  // to a user — this bypass is the only way for a cron job to reuse this
+  // endpoint without duplicating the scrape logic.
+  const cronSecret = Deno.env.get('CRON_SECRET');
+  const isCronCall = !!cronSecret && req.headers.get('x-cron-secret') === cronSecret;
+
+  let callerId: string | null = null;
+  if (!isCronCall) {
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const client = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: userData } = await client.auth.getUser();
+    if (!userData?.user) return json({ error: 'Not signed in' }, 401, headers);
+    callerId = userData.user.id;
+  }
+
+  const body = (await req.json()) as { org_id?: string; icp_raw_input?: string; icp_params?: IcpParams; max_results?: number };
+  const orgId = String(body.org_id ?? '');
+  if (!orgId || !body.icp_params) return json({ error: 'org_id and icp_params are required' }, 400, headers);
+
+  // A cron-triggered call is inherently org-scoped by the caller (run-autopilot
+  // only ever passes the org_id of an autopilot_runs row it already fetched via
+  // service role) — the membership check exists to stop a signed-in browser
+  // user from scraping into an org they don't belong to, which doesn't apply.
+  if (!isCronCall) {
+    const { data: membership } = await service.from('org_members')
+      .select('role').eq('org_id', orgId).eq('user_id', callerId!).maybeSingle();
+    if (!membership) return json({ error: 'Not a member of this organization' }, 403, headers);
+  }
 
   const apiKey = await resolveOrgApiKey(service, orgId, 'google_places');
   if (!apiKey) return json({ error: 'No Google Places API key configured for this organization' }, 400, headers);
 
   const { data: job, error: jobErr } = await service.from('scrape_jobs').insert({
-    org_id: orgId, created_by: userData.user.id, icp_raw_input: body.icp_raw_input ?? null,
+    org_id: orgId, created_by: callerId, icp_raw_input: body.icp_raw_input ?? null,
     icp_params: body.icp_params, sources: ['google_places'], status: 'pending',
   }).select('id').single();
   if (jobErr || !job) return json({ error: jobErr?.message ?? 'Could not create job' }, 500, headers);
