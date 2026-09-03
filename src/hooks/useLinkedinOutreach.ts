@@ -18,7 +18,10 @@ export function useLinkedinOutreach() {
     if (!currentOrg) return;
     const [contactsRes, draftsRes] = await Promise.all([
       supabase.from('linkedin_contacts').select('*').eq('org_id', currentOrg.id).order('created_at', { ascending: false }),
-      supabase.from('linkedin_drafts').select('*, contact:linkedin_contacts(*)').eq('org_id', currentOrg.id).in('status', ['draft']).order('created_at', { ascending: false }),
+      // Include 'approved' so a draft stays visible (with its "Mark as
+      // sent" action available) after approval — otherwise it drops out of
+      // this query the moment it's approved and its button can never render.
+      supabase.from('linkedin_drafts').select('*, contact:linkedin_contacts(*)').eq('org_id', currentOrg.id).in('status', ['draft', 'approved']).order('created_at', { ascending: false }),
     ]);
     setContacts((contactsRes.data as LinkedinContact[] | null) ?? []);
     setDrafts((draftsRes.data as DraftWithContact[] | null) ?? []);

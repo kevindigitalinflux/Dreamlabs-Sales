@@ -35,6 +35,16 @@ Deno.serve(async (req) => {
     .select('role').eq('org_id', contact.org_id).eq('user_id', userData.user.id).maybeSingle();
   if (!membership) return json({ error: 'Not a member of this organization' }, 403, headers);
 
+  // Resolve the calling user's own name (same pattern as check-replies/index.ts)
+  // instead of the hardcoded 'there' placeholder, which read badly in a real
+  // drafted message to a real prospect. Fall back to a complete phrase with
+  // no further processing if no profile is found, so it can't be mangled by
+  // .split(' ')[0].
+  const { data: callerProfile } = await service
+    .from('profiles').select('full_name, email').eq('id', userData.user.id).maybeSingle();
+  const resolvedCallerName = callerProfile?.full_name ?? callerProfile?.email;
+  const contractorName = resolvedCallerName ? resolvedCallerName.split(' ')[0]! : 'the team';
+
   const apiKey = await resolveOrgApiKey(service, contact.org_id, 'anthropic');
   if (!apiKey) return json({ error: 'No Anthropic API key configured for this organization' }, 400, headers);
 
@@ -54,7 +64,7 @@ Deno.serve(async (req) => {
     const draft = await draftEmailClaude({
       subject: 'LinkedIn DM', body: templateText,
       lead: { full_name: contact.full_name, context_signal: contact.context_signal },
-      notes: [], contractorName: 'there', orgName: org?.name ?? 'our team',
+      notes: [], contractorName, orgName: org?.name ?? 'our team',
       apiKey, model: 'claude-sonnet-5',
     });
 
