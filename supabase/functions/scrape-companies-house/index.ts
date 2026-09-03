@@ -44,17 +44,17 @@ async function fetchFirstOfficer(companyNumber: string, apiKey: string): Promise
   }
 }
 
-async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: string, icp: IcpParams, apiKey: string) {
+async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: string, icp: IcpParams, apiKey: string, cap: number) {
   try {
     await service.from('scrape_jobs').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', jobId);
 
     const query = [icp.industry, icp.city ?? icp.location, ...icp.keywords].filter(Boolean).join(' ');
-    const res = await fetch(`https://api.company-information.service.gov.uk/search/companies?q=${encodeURIComponent(query)}&items_per_page=30`, {
+    const res = await fetch(`https://api.company-information.service.gov.uk/search/companies?q=${encodeURIComponent(query)}&items_per_page=${cap}`, {
       headers: { Authorization: 'Basic ' + btoa(`${apiKey}:`) },
     });
     if (!res.ok) throw new Error(`Companies House HTTP ${res.status}`);
     const data = await res.json() as { items?: CHCompany[] };
-    const companies = (data.items ?? []).slice(0, 30);
+    const companies = (data.items ?? []).slice(0, cap);
 
     const { data: existingLeads } = await service.from('leads').select('business_name, city').eq('org_id', orgId);
     const { data: existingRaw } = await service.from('raw_leads')
@@ -108,7 +108,7 @@ Deno.serve(async (req) => {
   const { data: userData } = await client.auth.getUser();
   if (!userData?.user) return json({ error: 'Not signed in' }, 401, headers);
 
-  const body = (await req.json()) as { org_id?: string; icp_raw_input?: string; icp_params?: IcpParams };
+  const body = (await req.json()) as { org_id?: string; icp_raw_input?: string; icp_params?: IcpParams; max_results?: number };
   const orgId = String(body.org_id ?? '');
   if (!orgId || !body.icp_params) return json({ error: 'org_id and icp_params are required' }, 400, headers);
   if (body.icp_params.country !== 'GB') return json({ error: 'Companies House only covers UK companies' }, 400, headers);
@@ -137,7 +137,8 @@ Deno.serve(async (req) => {
   // Construct the promise outside the optional chain — `a?.b(c())` short-circuits
   // the entire call including argument evaluation when `a` is nullish, so
   // hoisting this out ensures runScrapeJob always actually runs.
-  const task = runScrapeJob(service, job.id, orgId, body.icp_params, apiKey);
+  const cap = Math.min(30, body.max_results ?? 30);
+  const task = runScrapeJob(service, job.id, orgId, body.icp_params, apiKey, cap);
   (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime?.waitUntil(task);
 
   return json({ job_id: job.id }, 200, headers);

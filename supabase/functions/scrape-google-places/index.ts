@@ -61,14 +61,14 @@ function buildQuery(icp: IcpParams): string {
   return parts.join(' ');
 }
 
-async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: string, icp: IcpParams, apiKey: string) {
+async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: string, icp: IcpParams, apiKey: string, cap: number) {
   try {
     await service.from('scrape_jobs').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', jobId);
 
     const query = buildQuery(icp);
     const allPlaces: PlaceResult[] = [];
     let pageToken: string | undefined;
-    for (let page = 0; page < 3 && allPlaces.length < 60; page++) {
+    for (let page = 0; page < 3 && allPlaces.length < cap; page++) {
       const url = pageToken
         ? `https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken=${pageToken}&key=${apiKey}`
         : `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${apiKey}`;
@@ -93,7 +93,7 @@ async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: strin
     // them. min_staff has no Google Places equivalent and is intentionally left
     // unfiltered. Places missing rating/review data are kept (can't disprove a
     // filter against data Google didn't return).
-    const places = allPlaces.slice(0, 60).filter((place) => {
+    const places = allPlaces.slice(0, cap).filter((place) => {
       if (icp.min_rating != null && place.rating != null && place.rating < icp.min_rating) return false;
       if (icp.max_rating != null && place.rating != null && place.rating > icp.max_rating) return false;
       if (icp.max_reviews != null && place.user_ratings_total != null && place.user_ratings_total > icp.max_reviews) return false;
@@ -173,7 +173,7 @@ Deno.serve(async (req) => {
   const { data: userData } = await client.auth.getUser();
   if (!userData?.user) return json({ error: 'Not signed in' }, 401, headers);
 
-  const body = (await req.json()) as { org_id?: string; icp_raw_input?: string; icp_params?: IcpParams };
+  const body = (await req.json()) as { org_id?: string; icp_raw_input?: string; icp_params?: IcpParams; max_results?: number };
   const orgId = String(body.org_id ?? '');
   if (!orgId || !body.icp_params) return json({ error: 'org_id and icp_params are required' }, 400, headers);
 
@@ -198,7 +198,8 @@ Deno.serve(async (req) => {
   // Construct the promise outside the optional chain — `a?.b(c())` short-circuits
   // the entire call including argument evaluation when `a` is nullish, so
   // hoisting this out ensures runScrapeJob always actually runs.
-  const task = runScrapeJob(service, job.id, orgId, body.icp_params, apiKey);
+  const cap = Math.min(60, body.max_results ?? 60);
+  const task = runScrapeJob(service, job.id, orgId, body.icp_params, apiKey, cap);
   (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime?.waitUntil(task);
 
   return json({ job_id: job.id }, 200, headers);
