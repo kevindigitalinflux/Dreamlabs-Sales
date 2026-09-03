@@ -12,7 +12,7 @@ function makeLead(overrides: Partial<Lead>): Lead {
     google_rating: null, review_count: null, vertical: null,
     stage: 'new_lead', package_tier: null, deal_value: null,
     assigned_to: null, created_by: null, raw_lead_id: null,
-    next_action_date: null, next_action_note: null,
+    next_action_date: null, next_action_note: null, is_priority: false,
     call_count: 0, last_contacted_at: null, kanban_position: 0,
     created_at: '2026-07-01T00:00:00Z', updated_at: '2026-07-01T00:00:00Z',
     ...overrides,

@@ -50,6 +50,7 @@ export interface Lead {
   raw_lead_id: string | null;
   next_action_date: string | null;
   next_action_note: string | null;
+  is_priority: boolean;
   call_count: number;
   last_contacted_at: string | null;
   kanban_position: number;
@@ -94,6 +95,7 @@ export interface EmailSequence {
   description: string | null;
   steps: SequenceStep[];
   is_default: boolean;
+  auto_draft_on_reply: boolean;
   created_by: string | null;
   created_at: string;
 }
@@ -123,6 +125,7 @@ export interface EmailLog {
   body: string;
   status: EmailLogStatus;
   error_message: string | null;
+  message_id: string | null;
   sent_at: string;
 }
 
@@ -216,4 +219,79 @@ export interface IcpParams {
   max_rating: number | null;
   max_reviews: number | null;
   keywords: string[];
+}
+
+export interface EmailReply {
+  id: string;
+  email_log_id: string;
+  lead_id: string;
+  org_id: string;
+  from_email: string;
+  subject: string | null;
+  body: string;
+  received_at: string;
+}
+
+export type LinkedinContactStatus = 'pending' | 'drafted' | 'approved' | 'sent' | 'skipped';
+
+export interface LinkedinContact {
+  id: string;
+  org_id: string;
+  full_name: string;
+  linkedin_url: string | null;
+  context_signal: string | null;
+  status: LinkedinContactStatus;
+  created_by: string | null;
+  created_at: string;
+}
+
+export type LinkedinDraftStatus = 'draft' | 'approved' | 'sent' | 'skipped';
+
+export interface LinkedinDraft {
+  id: string;
+  contact_id: string;
+  org_id: string;
+  message: string;
+  template_variant: 'achievement' | 'life_update' | 'general';
+  status: LinkedinDraftStatus;
+  approved_by: string | null;
+  approved_at: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
+export type AutopilotRunStatus = 'active' | 'completed' | 'cancelled';
+
+export interface AutopilotRun {
+  id: string;
+  org_id: string;
+  created_by: string;
+  icp_raw_input: string;
+  icp_params: IcpParams;
+  source: ScrapeSource;
+  daily_lead_target: number;
+  daily_outreach_target: number;
+  duration_days: number;
+  ramp_up_enabled: boolean;
+  max_total_spend_cents: number | null;
+  started_at: string;
+  ends_at: string;
+  status: AutopilotRunStatus;
+  cancel_reason: string | null;
+  estimated_cost_low_cents: number;
+  estimated_cost_high_cents: number;
+  leads_scraped_total: number;
+  outreach_sent_total: number;
+  actual_ai_cost_cents: number;
+  bounce_count: number;
+  created_at: string;
+}
+
+export interface OutreachBlocklistEntry {
+  id: string;
+  org_id: string;
+  value: string;
+  reason: string | null;
+  created_by: string | null;
+  created_at: string;
 }
