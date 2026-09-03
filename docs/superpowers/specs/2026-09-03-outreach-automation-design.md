@@ -29,6 +29,8 @@ content and is carried forward unchanged.
 | Auto-enrollment trigger | A lead newly approved into the pipeline (`stage = 'new_lead'`) with no existing active/paused `sequence_enrollments` row gets auto-enrolled into its org's default cold-outreach sequence. The schema already enforces max one active/paused enrollment per lead, so this can't conflict with a manual enrollment — a contractor manually enrolling a lead into a different sequence simply supersedes the automated one (same `enroll()` call already in `useEnrollments.ts`, no new conflict-handling needed). |
 | JV pitch scope | Mr Brush & Co only, matching the original doc — the audience (local commercial real-estate/facilities contacts) isn't sourced via the scraper's ICP flow (different business type from cleaning-service prospects), so JV contacts are added manually, not auto-enrolled. |
 | Rollout order | Mr Brush & Co + DI Dreamlabs first (Kevin's own two orgs). UX Tree / DI Academy's sequence copy, ICP, and channel mix still need a session with Valentina/Suj respectively before their workspaces go live — unchanged from the original doc, not part of this build. |
+| AI-tell punctuation guardrail | Every AI-drafted email this app sends (outreach *and* the existing cycle-2 follow-up drafts) gets a deterministic post-processing pass replacing em-dashes/spaced-hyphens with commas, plus a prompt instruction to avoid the pattern in the first place. Applies regardless of model (Gemini or Claude). |
+| Autopilot mode | A user-configurable, cron-driven campaign: fixed duration (1 day / 1 week / 2 weeks / 3 weeks / 1 month), a daily lead-scrape target and a daily cold-outreach-send target (independent dials), a cost estimate shown before confirming, and a live-progress view with a manual stop control while it runs. Scraped leads are **auto-approved** straight into the outreach pipeline while autopilot is active (no human review step) — the whole point is hands-off operation. ICP is described fresh at setup (reusing the existing AI-parse step), not picked from a saved list. |
 
 ---
 
@@ -147,6 +149,25 @@ these two channels' approval step.
 This applies to cold email and JV pitch (both run through `sequence_enrollments`); LinkedIn's reply
 handling stays manual, per §2d — there's no inbox to poll for a DM sent outside this app.
 
+### 1f. AI-tell punctuation guardrail (new — applies to every AI-drafted email, not just outreach)
+
+Dash-heavy prose (em-dashes, spaced hyphens used as clause connectors) is now a widely-recognized
+"this was written by AI" signal, which is a real deliverability/credibility risk for cold outreach
+specifically and worth fixing everywhere this app drafts email content, including the existing
+cycle-2 Gemini-drafted follow-ups.
+
+Two layers, since a prompt instruction alone isn't a guardrail (models don't reliably follow style
+instructions under all conditions):
+1. **Prompt-level**: every drafting prompt (`draftEmail` for Gemini, its new Claude sibling, the
+   LinkedIn drafter, and the reply auto-drafter) gets an explicit line: *"Never use em-dashes or
+   hyphens as sentence punctuation — use commas or periods instead."*
+2. **Deterministic post-processing**: a new shared function `_shared/textGuardrails.ts` →
+   `stripAiPunctuation(text: string): string`, applied to every draft's subject **and** body right
+   before it's stored (in `check-sequences`, `check-replies`'s auto-draft path, and
+   `draft-linkedin-message`), replacing `" — "` / `" – "` / `" - "` (space-dash-space, any dash
+   variant) with `", "`. This is a blunt, reliable regex pass, not an AI call — it guarantees the
+   rule holds even when the model ignores the prompt instruction.
+
 ---
 
 ## 2. LinkedIn DM — new, minimal build
@@ -214,7 +235,101 @@ speculative fields now.
 
 ---
 
-## 3. Shared: Content-mining hook
+## 3. Autopilot Mode — new, cron-driven, fully hands-off
+
+A user-triggered campaign that runs the scrape → approve → enroll → draft → send loop
+unattended for a fixed window, at a rate the user sets in advance, with an upfront cost estimate
+and a live progress view. One active autopilot run per org at a time.
+
+### 4a. Data model (new migration)
+
+```sql
+CREATE TABLE autopilot_runs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id uuid NOT NULL REFERENCES organizations(id),
+  created_by uuid NOT NULL REFERENCES profiles(id),
+  icp_raw_input text NOT NULL,
+  icp_params jsonb NOT NULL,
+  source text NOT NULL CHECK (source IN ('google_places','companies_house')),
+  daily_lead_target integer NOT NULL CHECK (daily_lead_target BETWEEN 1 AND 60),
+  daily_outreach_target integer NOT NULL CHECK (daily_outreach_target BETWEEN 1 AND 100),
+  duration_days integer NOT NULL CHECK (duration_days IN (1, 7, 14, 21, 30)),
+  started_at timestamptz NOT NULL DEFAULT now(),
+  ends_at timestamptz NOT NULL,                 -- started_at + duration_days, computed at insert
+  status text NOT NULL DEFAULT 'active' CHECK (status IN ('active','completed','cancelled')),
+  estimated_cost_low_cents integer NOT NULL,     -- shown at setup, kept for reference
+  estimated_cost_high_cents integer NOT NULL,
+  leads_scraped_total integer NOT NULL DEFAULT 0,
+  outreach_sent_total integer NOT NULL DEFAULT 0,
+  actual_ai_cost_cents integer NOT NULL DEFAULT 0,  -- running total, computed from real draft counts
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+-- RLS: org-scoped, same pattern as scrape_jobs (is_org_member read, is_org_admin or the
+-- creating contractor for writes). Partial unique index enforces one active run per org:
+CREATE UNIQUE INDEX autopilot_runs_one_active_per_org
+  ON autopilot_runs(org_id) WHERE status = 'active';
+```
+
+`source` is single-select, matching the scraper wizard's existing one-source-per-job constraint —
+autopilot doesn't introduce a new multi-source capability the backend doesn't otherwise support.
+
+### 4b. Setup flow
+
+New page, e.g. `/outreach/autopilot/new`: ICP description (same textarea + `parse-icp` AI-parse
+step as the manual scraper wizard, not a separate concept), source picker (same gating logic as
+the wizard — disabled/hint if the org's key isn't configured, Companies House disabled for
+non-GB), duration (5 fixed options, not freeform), two numeric inputs (daily lead target, daily
+outreach target — independent, no cross-validation between them; the outreach dial draws from the
+whole pipeline, not just today's scrape). As soon as both numbers + duration are set, a **live
+cost estimate** renders: `daily_outreach_target × duration_days` drafts, priced as a range
+between all-Haiku and all-Sonnet (Claude drafting is the only real variable cost here — Google
+Places/Companies House usage stays within their own free-tier/quota structure and isn't estimated
+as a line item, since this app doesn't have visibility into an org's broader Google Cloud/CH
+billing). Example copy: *"Estimated Claude API cost for this run: $4–$9, billed to your own
+Anthropic key."* Confirming creates the `autopilot_runs` row.
+
+### 4c. Daily execution — new edge function `run-autopilot`
+
+Cron-triggered on the same daily schedule as `check-sequences`/`check-replies`/
+`auto-enroll-cold-outreach` (one more function on the existing cron event). For each `active` run
+whose `ends_at` hasn't passed:
+
+1. **Scrape**: trigger the run's `source` scraper (`scrape-google-places`/
+   `scrape-companies-house`) with the saved `icp_params`, capped to
+   `min(60, daily_lead_target)` results — both scraper functions gain an optional
+   `max_results` parameter for this (currently hardcoded to the existing ~60 ceiling; autopilot is
+   the first caller that needs a smaller cap).
+2. **Auto-approve**: once that scrape job completes, every resulting `raw_leads` row with
+   `status = 'pending'` (never `'duplicate'` — a known duplicate is never worth auto-contacting)
+   is approved into `leads` using the exact same write shape as the existing manual `approve()`
+   action, service-role, `created_by = null` (system-approved, same visible-null-means-automated
+   convention as `enrolled_by` in §1b).
+3. **Enroll**: no new logic needed here — `auto-enroll-cold-outreach` (§1b) picks up these
+   newly-approved `new_lead`-stage leads on its own next pass, since it's on the same schedule.
+4. **Throttle sends**: `check-sequences` gains an optional daily cap check — before drafting a due
+   step for a lead whose org has an `active` `autopilot_runs` row, count that org's `email_logs`
+   rows created today with a `cold_outreach_*`/`jv_pitch_*` template; if already at
+   `daily_outreach_target`, skip this enrollment for today (its `next_send_at` is untouched, so
+   it's simply picked up on a later run — same self-healing backpressure this app already uses
+   elsewhere, no data loss).
+5. **Track**: increment `leads_scraped_total`/`outreach_sent_total`, add this run's actual drafted
+   count × the real per-model price to `actual_ai_cost_cents`.
+6. **End**: once `ends_at` passes, set `status = 'completed'`. No auto-renewal — the duration is a
+   hard boundary, matching "for how long" being something the user explicitly set, not a default
+   that silently continues.
+
+### 4d. Transparency — live progress view
+
+A widget on `/outreach/autopilot` (or a Dashboard card while a run is active) showing: day X of Y,
+leads scraped so far vs. total target for the run, outreach sent so far vs. total target, actual
+AI spend so far vs. the original estimate range, and a **Stop autopilot** button
+(`status = 'cancelled'`) — cancelling halts all future `run-autopilot` action for that org
+immediately; nothing already scraped/approved/sent is undone, matching this app's
+non-destructive-by-default convention throughout.
+
+---
+
+## 4. Shared: Content-mining hook
 
 The original doc's §6 "flag any reply, win, or interesting workflow run for future content" is a
 manual habit (Kevin/contractors noting good outcomes), not something this build automates — no
@@ -242,11 +357,25 @@ the requirement set, but it's explicitly deferred, not built.
   mailbox configured — same accepted pattern as cycle 4's Google Places/Companies House gap: ship
   with every rejection/skip/no-match path fully verified, flag the success paths as pending human
   steps once Kevin sets `ANTHROPIC_API_KEY` and re-verifies IMAP against his own real mailbox.
+- `stripAiPunctuation()` is a pure function — straightforward unit tests for em-dash, en-dash, and
+  spaced-hyphen inputs, plus a check that a hyphenated compound word (`"well-known"`, no
+  surrounding spaces) is correctly left alone (the regex targets space-dash-space specifically, not
+  every hyphen character).
+- Live verification for autopilot (controller-performed, throwaway org): create a run with a small
+  `daily_lead_target`/`daily_outreach_target`, confirm `run-autopilot` scrapes, auto-approves
+  (skipping a manually-seeded `'duplicate'` row), and that `check-sequences`' throttle correctly
+  stops drafting once the daily cap is hit even with more due enrollments waiting; confirm
+  cancelling a run stops all further action; full cleanup verified after, matching this project's
+  established throwaway-data discipline.
 
 ## Out of Scope (this build)
 
 - LinkedIn reply tracking — fully manual, no field for it yet (no inbox API exists to poll for a
   DM sent outside this app, unlike email's IMAP path).
+- Autopilot for LinkedIn — the manual-send requirement makes "fully hands-off" impossible for that
+  channel by definition; autopilot only covers cold email + JV pitch (the two sequence-engine
+  channels).
+- Autopilot for UX Tree / DI Academy — same rollout-order gate as the rest of this spec.
 - Automated content-mining from replies/wins.
 - UX Tree / DI Academy's own copy, ICP, and channel mix — needs a session with Valentina/Suj first,
   unrelated to whether the underlying plumbing (this spec) supports them (it will, once they
