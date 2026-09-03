@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowRight, X } from 'lucide-react';
+import { ArrowRight, Star, X } from 'lucide-react';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import { STAGES } from '../../lib/utils';
 import { useLeadNotes } from '../../hooks/useLeadNotes';
@@ -53,7 +53,18 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
           <div>
             <h2 className="text-[22px] font-bold">{lead.business_name}</h2>
             {lead.owner_name && <p className="text-sm text-muted">{lead.owner_name}</p>}
-            <div className="mt-2"><StageBadge stage={lead.stage} /></div>
+            <div className="mt-2 flex items-center gap-2">
+              <StageBadge stage={lead.stage} />
+              <button
+                type="button"
+                onClick={() => void onUpdate(lead.id, { is_priority: !lead.is_priority })}
+                aria-pressed={lead.is_priority}
+                aria-label={lead.is_priority ? 'Unmark as priority' : 'Mark as priority'}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg ${lead.is_priority ? 'text-amber-400' : 'text-muted hover:text-amber-400'}`}
+              >
+                <Star className="h-4 w-4" aria-hidden fill={lead.is_priority ? 'currentColor' : 'none'} />
+              </button>
+            </div>
           </div>
           <button type="button" onClick={onClose} aria-label="Close panel" className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted hover:bg-surface">
             <X className="h-5 w-5" aria-hidden />
