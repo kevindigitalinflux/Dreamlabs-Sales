@@ -1,6 +1,6 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
-export type ApiProvider = 'gemini' | 'google_places' | 'companies_house' | 'apollo' | 'hunter';
+export type ApiProvider = 'gemini' | 'google_places' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic';
 
 const GLOBAL_ENV_VARS: Record<ApiProvider, string> = {
   gemini: 'GEMINI_API_KEY',
@@ -13,6 +13,11 @@ const GLOBAL_ENV_VARS: Record<ApiProvider, string> = {
   // Paid providers must never fall back to Kevin's account.
   apollo: 'APOLLO_API_KEY',
   hunter: 'HUNTER_API_KEY',
+  // anthropic follows the Gemini/Places/Companies-House tier instead — it's a
+  // real, configured global secret, so Mr Brush & Co / DI Dreamlabs (the two
+  // orgs with use_global_api_fallback=true) get outreach AI without setting
+  // up their own key, matching how Gemini already works for them.
+  anthropic: 'ANTHROPIC_API_KEY',
 };
 
 /**
