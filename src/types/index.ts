@@ -137,6 +137,9 @@ export interface UserEmailSettings {
   smtp_user: string | null;
   from_name: string | null;
   is_verified: boolean;
+  imap_host: string | null;
+  imap_port: number | null;
+  last_imap_check_at: string | null;
   created_at: string;
   updated_at: string;
 }

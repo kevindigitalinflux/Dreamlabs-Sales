@@ -30,7 +30,7 @@ const OUTLOOK_STEPS = [
 /** SMTP config wizard (SPEC.md §7 Email Config) — non-technical, provider-guided. */
 export function EmailConfig() {
   const { settings, loading, error, save, sendTest } = useEmailSettings();
-  const [form, setForm] = useState<SaveInput>({ provider: 'gmail', smtp_host: PRESETS.gmail.host, smtp_port: PRESETS.gmail.port, smtp_user: '', from_name: '', password: '' });
+  const [form, setForm] = useState<SaveInput>({ provider: 'gmail', smtp_host: PRESETS.gmail.host, smtp_port: PRESETS.gmail.port, smtp_user: '', from_name: '', password: '', imap_host: '', imap_port: 993 });
   const [busy, setBusy] = useState<'save' | 'test' | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
@@ -107,10 +107,16 @@ export function EmailConfig() {
           <Input label="From name (how recipients see you)" value={form.from_name} onChange={(e) => setForm((f) => ({ ...f, from_name: e.target.value }))} placeholder="e.g. Kevin at Dreamlabs" />
 
           {form.provider === 'smtp' && (
-            <div className="flex gap-2">
-              <Input label="SMTP host" value={form.smtp_host} onChange={(e) => setForm((f) => ({ ...f, smtp_host: e.target.value }))} />
-              <Input label="Port" type="number" value={String(form.smtp_port)} onChange={(e) => setForm((f) => ({ ...f, smtp_port: Number(e.target.value) || 587 }))} />
-            </div>
+            <>
+              <div className="flex gap-2">
+                <Input label="SMTP host" value={form.smtp_host} onChange={(e) => setForm((f) => ({ ...f, smtp_host: e.target.value }))} />
+                <Input label="SMTP port" type="number" value={String(form.smtp_port)} onChange={(e) => setForm((f) => ({ ...f, smtp_port: Number(e.target.value) || 587 }))} />
+              </div>
+              <div className="flex gap-2">
+                <Input label="IMAP host (for reply detection)" value={form.imap_host ?? ''} onChange={(e) => setForm((f) => ({ ...f, imap_host: e.target.value }))} />
+                <Input label="IMAP port" type="number" value={String(form.imap_port ?? 993)} onChange={(e) => setForm((f) => ({ ...f, imap_port: Number(e.target.value) || 993 }))} />
+              </div>
+            </>
           )}
 
           {msg && <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-red-400' : 'text-emerald-400'}`}>{msg.text}</p>}

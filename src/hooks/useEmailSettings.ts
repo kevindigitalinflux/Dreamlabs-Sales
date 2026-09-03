@@ -9,6 +9,8 @@ export interface SaveInput {
   smtp_user: string;
   from_name: string;
   password: string;
+  imap_host?: string;
+  imap_port?: number;
 }
 
 /** SMTP settings via the email-settings edge function (credentials never touch the client DB API). */

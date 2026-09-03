@@ -2,6 +2,12 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { sendMail } from '../_shared/smtp.ts';
 
+const IMAP_PRESETS: Record<string, { host: string; port: number }> = {
+  gmail: { host: 'imap.gmail.com', port: 993 },
+  outlook: { host: 'outlook.office365.com', port: 993 },
+  yahoo: { host: 'imap.mail.yahoo.com', port: 993 },
+};
+
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
@@ -38,8 +44,12 @@ Deno.serve(async (req) => {
     const password = body.password ? String(body.password) : null;
     if (!smtpHost || !smtpUser) return json({ error: 'smtp_host and smtp_user are required' }, 400, headers);
 
+    const preset = IMAP_PRESETS[provider];
+    const imapHost = preset ? preset.host : (body.imap_host ? String(body.imap_host) : null);
+    const imapPort = preset ? preset.port : (body.imap_port ? Number(body.imap_port) : null);
+
     const { error: upsertErr } = await service.from('user_email_settings').upsert(
-      { user_id: user.id, provider, smtp_host: smtpHost, smtp_port: smtpPort, smtp_user: smtpUser, from_name: fromName, is_verified: false, updated_at: new Date().toISOString() },
+      { user_id: user.id, provider, smtp_host: smtpHost, smtp_port: smtpPort, smtp_user: smtpUser, from_name: fromName, imap_host: imapHost, imap_port: imapPort, is_verified: false, updated_at: new Date().toISOString() },
       { onConflict: 'user_id' },
     );
     if (upsertErr) return json({ error: upsertErr.message }, 400, headers);
