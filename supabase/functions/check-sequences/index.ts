@@ -19,6 +19,7 @@ const OUTREACH_PREFIXES = ['cold_outreach_', 'jv_pitch_'];
 function isOutreachTemplate(templateType: string): boolean {
   return OUTREACH_PREFIXES.some((p) => templateType.startsWith(p));
 }
+const OUTREACH_SEQUENCE_NAMES = ['Cold outreach default', 'JV pitch default'];
 
 /** ramp-up: day 1-4 of an active autopilot run scale the daily send cap. */
 function rampedCap(dailyTarget: number, dayNumber: number): number {
@@ -52,6 +53,7 @@ Deno.serve(async (req) => {
   // Autopilot throttle state, computed once per org as it's needed.
   const autopilotByOrg = new Map<string, { dailyOutreachTarget: number; dayNumber: number; rampUp: boolean; maxSpendCents: number | null; actualSpendCents: number; runId: string } | null>();
   const sentTodayByOrg = new Map<string, number>();
+  const outreachSeqIdsByOrg = new Map<string, string[]>();
 
   let drafted = 0;
   const skipped: { id: string; reason: string }[] = [];
@@ -95,10 +97,21 @@ Deno.serve(async (req) => {
         }
         const cap = autopilot.rampUp ? rampedCap(autopilot.dailyOutreachTarget, autopilot.dayNumber) : autopilot.dailyOutreachTarget;
         if (!sentTodayByOrg.has(orgId)) {
+          // Scope "sent today" to outreach-sequence enrollments only — otherwise a
+          // contractor's manual sends, cycle-2's own non-outreach drafting, or even
+          // approving yesterday's outreach draft today would all silently eat into
+          // today's autopilot allowance.
+          if (!outreachSeqIdsByOrg.has(orgId)) {
+            const { data: outreachSeqs } = await service.from('email_sequences')
+              .select('id').eq('org_id', orgId).in('name', OUTREACH_SEQUENCE_NAMES);
+            outreachSeqIdsByOrg.set(orgId, (outreachSeqs ?? []).map((s) => (s as { id: string }).id));
+          }
+          const outreachSeqIds = outreachSeqIdsByOrg.get(orgId)!;
           const startOfDay = new Date(); startOfDay.setUTCHours(0, 0, 0, 0);
           const { count } = await service.from('email_logs')
-            .select('id', { count: 'exact', head: true })
-            .eq('org_id', orgId).gte('sent_at', startOfDay.toISOString());
+            .select('id, sequence_enrollments!inner(sequence_id)', { count: 'exact', head: true })
+            .eq('org_id', orgId).gte('sent_at', startOfDay.toISOString())
+            .in('sequence_enrollments.sequence_id', outreachSeqIds);
           sentTodayByOrg.set(orgId, count ?? 0);
         }
         const sentToday = sentTodayByOrg.get(orgId)!;
@@ -106,21 +119,25 @@ Deno.serve(async (req) => {
       }
     }
 
-    const { data: template } = await service
+    // Org-scoped template first (the new cold_outreach_*/jv_pitch_* templates are
+    // seeded per-org), falling back to the global org_id=null default that every
+    // pre-existing cycle-2 template type still uses exclusively.
+    const { data: templates } = await service
       .from('email_templates').select('*')
       .eq('template_type', step.template_type).eq('is_default', true)
-      .limit(1).maybeSingle();
+      .or(`org_id.eq.${orgId},org_id.is.null`);
+    const template = (templates ?? []).find((t) => (t as { org_id: string | null }).org_id === orgId)
+      ?? (templates ?? []).find((t) => (t as { org_id: string | null }).org_id === null)
+      ?? null;
     if (!template) { skipped.push({ id: enrollment.id, reason: `no default template ${step.template_type}` }); continue; }
 
     const { data: enroller } = await service
       .from('profiles').select('full_name, email').eq('id', enrollment.enrolled_by ?? '').maybeSingle();
     const contractorName = (enroller?.full_name ?? enroller?.email ?? 'The Dreamlabs team').split(' ')[0]!;
     const { data: notesRows } = await service
-      .from('lead_notes').select('content, note_type').eq('lead_id', lead.id as string)
+      .from('lead_notes').select('content').eq('lead_id', lead.id as string)
       .order('created_at', { ascending: false }).limit(5);
     const noteTexts = (notesRows ?? []).map((n) => (n as { content: string }).content);
-    const hasHumanNote = (notesRows ?? []).some((n) => (n as { note_type: string }).note_type !== 'ai_summary');
-    const hasAiSummary = (notesRows ?? []).some((n) => (n as { note_type: string }).note_type === 'ai_summary');
 
     const vars = buildTemplateVars(lead, contractorName, noteTexts);
     const subject = substituteVariables((step.subject_override ?? template.subject) as string, vars);
@@ -132,6 +149,20 @@ Deno.serve(async (req) => {
     if (outreach) {
       const apiKey = await resolveOrgApiKey(service, orgId, 'anthropic');
       if (!apiKey) { skipped.push({ id: enrollment.id, reason: 'no anthropic key configured' }); continue; }
+
+      // Real existence checks, not a derivation from the 5-row recency-window
+      // fetch above — a lead can easily accumulate 5+ notes newer than its
+      // ai_summary (stage-change auto-logging, reply detection), and a recency
+      // window would then miss the old ai_summary row and fire a second,
+      // unbudgeted Sonnet notes pass for the same lead.
+      const { count: aiSummaryCount } = await service.from('lead_notes')
+        .select('id', { count: 'exact', head: true })
+        .eq('lead_id', lead.id as string).eq('note_type', 'ai_summary');
+      const hasAiSummary = (aiSummaryCount ?? 0) > 0;
+      const { count: humanNoteCount } = await service.from('lead_notes')
+        .select('id', { count: 'exact', head: true })
+        .eq('lead_id', lead.id as string).neq('note_type', 'ai_summary');
+      const hasHumanNote = (humanNoteCount ?? 0) > 0;
 
       // Compatible-lead gate for the notes pass: priority flag, OR tight ICP
       // fit (JV pitch has no scrape_job to check against — always qualifies),
@@ -175,9 +206,11 @@ Deno.serve(async (req) => {
         const orgName = org?.name ?? 'our team';
         const ai = await draftEmailClaude({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts, contractorName, orgName, apiKey, model });
         finalSubject = ai.subject; finalBody = ai.body;
-        if (autopilotByOrg.get(orgId)) {
+        const ap = autopilotByOrg.get(orgId);
+        if (ap) {
           const costCents = 1; // rough per-draft accounting, see run-autopilot's estimate math
-          await service.from('autopilot_runs').update({ actual_ai_cost_cents: (autopilotByOrg.get(orgId)!.actualSpendCents + costCents) }).eq('org_id', orgId).eq('status', 'active');
+          ap.actualSpendCents += costCents;
+          await service.from('autopilot_runs').update({ actual_ai_cost_cents: ap.actualSpendCents }).eq('id', ap.runId);
         }
       } catch (e) {
         console.error(`Claude draft failed for enrollment ${enrollment.id}, using plain template:`, e);
@@ -188,7 +221,9 @@ Deno.serve(async (req) => {
         try {
           const { data: org } = await service.from('organizations').select('name').eq('id', orgId).maybeSingle();
           const orgName = org?.name ?? 'our team';
-          const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts, contractorName, orgName, apiKey });
+          // Only the first 3 (of up to 5 fetched) — preserves the exact original
+          // note-count this path saw before the outreach gates needed a wider window.
+          const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts.slice(0, 3), contractorName, orgName, apiKey });
           finalSubject = ai.subject; finalBody = ai.body;
         } catch (e) {
           console.error(`AI draft failed for enrollment ${enrollment.id}, using plain template:`, e);
