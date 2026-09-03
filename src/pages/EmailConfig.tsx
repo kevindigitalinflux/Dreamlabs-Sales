@@ -36,7 +36,7 @@ export function EmailConfig() {
 
   useEffect(() => {
     if (settings) {
-      setForm((f) => ({ ...f, provider: settings.provider, smtp_host: settings.smtp_host ?? '', smtp_port: settings.smtp_port, smtp_user: settings.smtp_user ?? '', from_name: settings.from_name ?? '' }));
+      setForm((f) => ({ ...f, provider: settings.provider, smtp_host: settings.smtp_host ?? '', smtp_port: settings.smtp_port, smtp_user: settings.smtp_user ?? '', from_name: settings.from_name ?? '', imap_host: settings.imap_host ?? '', imap_port: settings.imap_port ?? 993 }));
     }
   }, [settings]);
 
