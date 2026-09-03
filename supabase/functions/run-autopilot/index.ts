@@ -25,15 +25,23 @@ function tightIcpFit(lead: Record<string, unknown>, icp: Record<string, unknown>
 }
 
 /**
- * Auto-approves every pending raw_lead for one org through four sequential
- * guardrails — data completeness, blocklist, re-dedup, ICP fit. Each
- * candidate either fails a guardrail (`continue`, skipping only that
+ * Auto-approves pending raw_leads from this run's own scrape job (only —
+ * never the org's wider pending backlog, see jobId below) through four
+ * sequential guardrails — data completeness, blocklist, re-dedup, ICP fit.
+ * Each candidate either fails a guardrail (`continue`, skipping only that
  * candidate) or falls through every guardrail and gets approved; there is no
  * path that approves a candidate without passing all four.
  */
-async function autoApprove(service: SupabaseClient, run: AutopilotRun): Promise<number> {
+async function autoApprove(service: SupabaseClient, run: AutopilotRun, jobId: string): Promise<number> {
+  // Scoped to this run's own scrape_job_id, not every status='pending' row
+  // for the org — otherwise autopilot would silently bulldoze rows a human
+  // deliberately left pending via the review table's "Skip" action, and
+  // daily_lead_target would only ever be honoured on the scrape *request*,
+  // not on what actually gets approved. scrape_jobs!inner(org_id) is kept as
+  // defense-in-depth even though scrape_job_id alone already implies the org
+  // (this job was created moments ago by the fetch below, for run.org_id).
   const { data: rawLeads } = await service.from('raw_leads')
-    .select('*, scrape_jobs!inner(org_id)').eq('scrape_jobs.org_id', run.org_id).eq('status', 'pending');
+    .select('*, scrape_jobs!inner(org_id)').eq('scrape_job_id', jobId).eq('scrape_jobs.org_id', run.org_id).eq('status', 'pending');
   if (!rawLeads || rawLeads.length === 0) return 0;
 
   const { data: blocklist } = await service.from('outreach_blocklist').select('value').eq('org_id', run.org_id);
@@ -86,11 +94,12 @@ async function autoApprove(service: SupabaseClient, run: AutopilotRun): Promise<
 
 /**
  * Cron target for `run-autopilot-daily` (migration 006): for every active
- * autopilot_runs row, triggers that org's scraper (Google Places or Companies
- * House, capped via max_results per Task 8), gives the background scrape job
- * a moment to land results, then auto-approves whatever's now pending through
- * the four guardrails above and tracks progress counters. Auth is a shared
- * secret header (no user JWT — pg_cron has none), same pattern as
+ * autopilot_runs row, triggers that org's Google Places scrape (capped via
+ * max_results per Task 8; Companies House runs are cancelled outright — see
+ * below), gives the background scrape job a moment to land results, then
+ * auto-approves only that job's own pending raw_leads through the four
+ * guardrails above and tracks progress counters. Auth is a shared secret
+ * header (no user JWT — pg_cron has none), same pattern as
  * check-sequences/auto-enroll-cold-outreach/check-replies.
  */
 Deno.serve(async (req) => {
@@ -111,13 +120,32 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    const scraperFn = r.source === 'google_places' ? 'scrape-google-places' : 'scrape-companies-house';
-    // Each scraper enforces its own hard ceiling internally (60 Places / 30
-    // Companies House per Task 8) regardless of what's sent here — this cap
-    // only avoids asking for more than the run's own daily target.
+    // Companies House raw_leads carry no email/phone/website columns at all
+    // (CH's API returns no contact details — those only ever arrive via the
+    // manual Apollo/Hunter enrichment buttons, which autopilot never calls).
+    // Every CH candidate would fail autoApprove's Guardrail 1 (email
+    // required) forever, so a CH autopilot run would otherwise silently burn
+    // API calls and days with leads_scraped_total stuck at 0 and no error
+    // anywhere to explain why. Cancel it outright instead. (Defensive net —
+    // the autopilot setup UI's source picker should stop offering this
+    // option entirely; this is the backend backstop in case a row is ever
+    // created with that source some other way.)
+    if (r.source === 'companies_house') {
+      await service.from('autopilot_runs').update({
+        status: 'cancelled',
+        cancel_reason: 'Companies House is not yet supported for autopilot — it returns no contact details, so no lead can ever pass the email-required guardrail. Use Google Places instead.',
+      }).eq('id', r.id);
+      processed++;
+      continue;
+    }
+
+    // Only google_places reaches here now (companies_house is cancelled above).
+    // Each scraper enforces its own hard ceiling internally (60 Places per
+    // Task 8) regardless of what's sent here — this cap only avoids asking
+    // for more than the run's own daily target.
     const cap = Math.min(60, r.daily_lead_target);
     try {
-      const scrapeRes = await fetch(`${SUPABASE_URL}/functions/v1/${scraperFn}`, {
+      const scrapeRes = await fetch(`${SUPABASE_URL}/functions/v1/scrape-google-places`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -135,28 +163,39 @@ Deno.serve(async (req) => {
       if (!scrapeRes.ok) {
         console.error(`autopilot ${r.id}: scrape trigger failed`, await scrapeRes.text());
       } else {
-        // Give the background scrape job a moment before approving — it runs
-        // via EdgeRuntime.waitUntil in the scraper function and typically
-        // completes well within this window for a small daily_lead_target.
-        await new Promise((res) => setTimeout(res, 15000));
+        // job_id from the scraper's response is what scopes autoApprove to
+        // *this run's own* scrape results — without it, autoApprove would
+        // have to fall back to the org's whole pending backlog (wrong: would
+        // bulldoze rows a human deliberately left pending via the review
+        // table's "Skip" action, and ignore daily_lead_target entirely on
+        // the approval side).
+        const scrapeData = await scrapeRes.json() as { job_id?: string };
+        const jobId = scrapeData.job_id;
+        if (jobId) {
+          // Give the background scrape job a moment before approving — it
+          // runs via EdgeRuntime.waitUntil in the scraper function and
+          // typically completes well within this window for a small
+          // daily_lead_target. autoApprove only ever touches rows already
+          // status='pending' for this exact job_id, so if the job is still
+          // `running` when this checks (the 15s wait is a rough estimate,
+          // not a guarantee), its results simply get picked up on
+          // tomorrow's run instead of being lost.
+          await new Promise((res) => setTimeout(res, 15000));
+          const approvedCount = await autoApprove(service, r, jobId);
+          // r.leads_scraped_total is this invocation's own fresh read of the
+          // row (from the `select('*')` above) and each run is processed
+          // exactly once per invocation (autopilot_runs_one_active_per_org
+          // guarantees at most one active row per org), so this is a correct
+          // increment — not the stale-cached-counter bug class
+          // check-sequences had for actual_ai_cost_cents.
+          await service.from('autopilot_runs').update({
+            leads_scraped_total: r.leads_scraped_total + approvedCount,
+          }).eq('id', r.id);
+        }
       }
     } catch (e) {
       console.error(`autopilot ${r.id}: scrape trigger error`, e);
     }
-
-    // autoApprove only ever touches rows already status='pending', so if
-    // today's scrape job is still `running` when this checks raw_leads (the
-    // 15s wait is a rough estimate, not a guarantee), its results simply get
-    // picked up on tomorrow's run instead of being lost.
-    const approvedCount = await autoApprove(service, r);
-    // r.leads_scraped_total is this invocation's own fresh read of the row
-    // (from the `select('*')` above) and each run is processed exactly once
-    // per invocation (autopilot_runs_one_active_per_org guarantees at most
-    // one active row per org), so this is a correct increment — not the
-    // stale-cached-counter bug class check-sequences had for actual_ai_cost_cents.
-    await service.from('autopilot_runs').update({
-      leads_scraped_total: r.leads_scraped_total + approvedCount,
-    }).eq('id', r.id);
     processed++;
   }
 

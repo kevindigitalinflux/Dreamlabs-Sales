@@ -2,3 +2,12 @@ project_id = "wgomksxelyfkzepbnkdd"
 
 [functions.check-sequences]
 verify_jwt = false
+
+[functions.run-autopilot]
+verify_jwt = false
+
+[functions.auto-enroll-cold-outreach]
+verify_jwt = false
+
+[functions.check-replies]
+verify_jwt = false
