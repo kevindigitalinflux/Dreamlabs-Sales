@@ -11,6 +11,7 @@ const BOUNCE_SUBJECT_PATTERN = /undeliverable|delivery status notification|failu
 interface VerifiedUser {
   user_id: string; imap_host: string | null; imap_port: number | null;
   smtp_user: string | null; last_imap_check_at: string | null;
+  last_imap_check_uid: number | null;
 }
 
 /**
@@ -35,7 +36,7 @@ Deno.serve(async (req) => {
 
   const { data: users } = await service
     .from('user_email_settings')
-    .select('user_id, imap_host, imap_port, smtp_user, last_imap_check_at')
+    .select('user_id, imap_host, imap_port, smtp_user, last_imap_check_at, last_imap_check_uid')
     .eq('is_verified', true).not('imap_host', 'is', null);
 
   let matched = 0; let bounces = 0;
@@ -45,6 +46,17 @@ Deno.serve(async (req) => {
     if (!u.imap_host || !u.imap_port || !u.smtp_user) continue;
     const { data: pass } = await service.rpc('app_get_smtp_secret', { uid: u.user_id });
     if (!pass) continue;
+
+    // Resolved once per mailbox, not per message: the real contractor name
+    // for drafted sign-offs (replaces a hardcoded 'there' placeholder), and
+    // this mailbox owner's org, used to scope which autopilot run a bounce
+    // seen in their inbox is allowed to charge. A user with no org
+    // membership just can't have bounces attributed anywhere (skipped
+    // below, never crashes the run).
+    const { data: profile } = await service.from('profiles').select('full_name, email').eq('id', u.user_id).maybeSingle();
+    const contractorName = (profile?.full_name ?? profile?.email ?? 'The Dreamlabs team').split(' ')[0]!;
+    const { data: membership } = await service.from('org_members').select('org_id').eq('user_id', u.user_id).limit(1).maybeSingle();
+    const userOrgId = membership?.org_id ?? null;
 
     // Constructing ImapFlow itself does no I/O, but keeping it inside the
     // try (rather than before it, as first drafted) means a bad per-user
@@ -59,35 +71,58 @@ Deno.serve(async (req) => {
 
       await client.connect();
       const lock = await client.getMailboxLock('INBOX');
+      // IMAP's SINCE search key (and imapflow's own formatDate()) is date-only —
+      // the time component is discarded server-side — so `since` below is only
+      // ever a coarse net that can re-match messages already handled on a prior
+      // run within the same day. `highestUid` tracks the real dedup watermark:
+      // every UID seen this scan is skipped if it's <= the last persisted
+      // watermark, and the new high-water mark is persisted at the end
+      // regardless of whether anything matched, so the next run's net only
+      // needs to cover truly-new messages.
+      let highestUid = u.last_imap_check_uid ?? 0;
       try {
         const since = u.last_imap_check_at ? new Date(u.last_imap_check_at) : new Date(Date.now() - 24 * 60 * 60 * 1000);
-        for await (const msg of client.fetch({ since }, { envelope: true, source: true })) {
+        for await (const msg of client.fetch({ since }, { envelope: true, source: { maxLength: 20000 } })) {
+          if (msg.uid > highestUid) highestUid = msg.uid;
+          if (u.last_imap_check_uid != null && msg.uid <= u.last_imap_check_uid) continue; // already processed on a prior run
+
           const inReplyTo = msg.envelope?.inReplyTo ?? null;
           const fromAddr = msg.envelope?.from?.[0]?.address ?? '';
           const subject = msg.envelope?.subject ?? '';
 
           if (BOUNCE_PATTERN.test(fromAddr) || BOUNCE_SUBJECT_PATTERN.test(subject)) {
-            const { data: activeRun } = await service.from('autopilot_runs')
-              .select('id, bounce_count').eq('status', 'active').limit(1).maybeSingle();
-            // Best-effort: a bounce isn't reliably attributable to one specific
-            // org from IMAP alone, so this increments whichever run is active
-            // for the org this mailbox's user belongs to, found via org_members.
-            if (activeRun) {
-              await service.from('autopilot_runs').update({ bounce_count: activeRun.bounce_count + 1 }).eq('id', activeRun.id);
-              bounces++;
-              const { data: run } = await service.from('autopilot_runs').select('bounce_count').eq('id', activeRun.id).single();
-              if (run && run.bounce_count >= 10) {
-                await service.from('autopilot_runs').update({ status: 'cancelled', cancel_reason: 'bounce threshold reached' }).eq('id', activeRun.id);
+            if (userOrgId) {
+              const { data: activeRun } = await service.from('autopilot_runs')
+                .select('id, bounce_count').eq('status', 'active').eq('org_id', userOrgId).maybeSingle();
+              if (activeRun) {
+                await service.from('autopilot_runs').update({ bounce_count: activeRun.bounce_count + 1 }).eq('id', activeRun.id);
+                bounces++;
+                const { data: run } = await service.from('autopilot_runs').select('bounce_count').eq('id', activeRun.id).single();
+                if (run && run.bounce_count >= 10) {
+                  await service.from('autopilot_runs').update({ status: 'cancelled', cancel_reason: 'bounce threshold reached' }).eq('id', activeRun.id);
+                }
               }
             }
             continue;
           }
 
           if (!inReplyTo) continue;
+          // Scoped to this mailbox's own sends: In-Reply-To is an unauthenticated
+          // header anyone can forge, so without this a message crafted to
+          // reference some OTHER org's real Message-ID could pause that org's
+          // enrollment and spend that org's Anthropic key from this mailbox.
           const { data: sentLog } = await service.from('email_logs')
             .select('id, lead_id, sequence_enrollment_id, org_id')
-            .eq('message_id', inReplyTo).eq('status', 'sent').maybeSingle();
+            .eq('message_id', inReplyTo).eq('status', 'sent').eq('sent_by', u.user_id).maybeSingle();
           if (!sentLog || !sentLog.sequence_enrollment_id || !sentLog.lead_id) continue;
+
+          // Second half of the forgery guard: even with a real Message-ID match,
+          // require the reply's actual From address to match the lead it claims
+          // to be replying on behalf of before acting on it at all. A forged
+          // In-Reply-To against this mailbox's own genuine Message-IDs (e.g. a
+          // reused/leaked one) still can't hijack a real lead's thread this way.
+          const { data: lead } = await service.from('leads').select('*').eq('id', sentLog.lead_id).single();
+          if (!lead?.email || lead.email.toLowerCase() !== fromAddr.toLowerCase()) continue;
 
           const bodyText = msg.source ? new TextDecoder().decode(msg.source).slice(0, 5000) : '';
 
@@ -105,8 +140,6 @@ Deno.serve(async (req) => {
 
           const apiKey = await resolveOrgApiKey(service, sentLog.org_id, 'anthropic');
           if (!apiKey) continue;
-          const { data: lead } = await service.from('leads').select('*').eq('id', sentLog.lead_id).single();
-          if (!lead) continue;
           const { data: notesRows } = await service.from('lead_notes')
             .select('content').eq('lead_id', sentLog.lead_id).order('created_at', { ascending: false }).limit(5);
           const noteTexts = (notesRows ?? []).map((n) => (n as { content: string }).content);
@@ -116,12 +149,15 @@ Deno.serve(async (req) => {
             const { data: org } = await service.from('organizations').select('name').eq('id', sentLog.org_id).maybeSingle();
             const draft = await draftEmailClaude({
               subject: `Re: ${subject}`, body: `They replied:\n\n${bodyText}\n\nDraft a helpful response.`,
-              lead, notes: noteTexts, contractorName: 'there', orgName: org?.name ?? 'our team',
+              lead, notes: noteTexts, contractorName, orgName: org?.name ?? 'our team',
               apiKey, model: complexity === 'complex' ? 'claude-sonnet-5' : 'claude-haiku-4-5',
             });
             await service.from('email_logs').insert({
+              // to_email is the verified lead.email, never fromAddr — fromAddr comes
+              // straight off an unauthenticated header and must never be used as a
+              // send target, even after the match/sender validation above.
               lead_id: sentLog.lead_id, sequence_enrollment_id: sentLog.sequence_enrollment_id,
-              sent_by: null, to_email: fromAddr, subject: draft.subject, body: draft.body,
+              sent_by: null, to_email: lead.email, subject: draft.subject, body: draft.body,
               status: 'draft', org_id: sentLog.org_id,
             });
           } catch (e) {
@@ -132,7 +168,9 @@ Deno.serve(async (req) => {
         lock.release();
       }
       await client.logout();
-      await service.from('user_email_settings').update({ last_imap_check_at: new Date().toISOString() }).eq('user_id', u.user_id);
+      await service.from('user_email_settings')
+        .update({ last_imap_check_at: new Date().toISOString(), last_imap_check_uid: highestUid })
+        .eq('user_id', u.user_id);
     } catch (e) {
       errors.push({ user_id: u.user_id, error: e instanceof Error ? e.message : String(e) });
       try { await client?.logout(); } catch { /* already disconnected */ }

@@ -1,0 +1,18 @@
+-- supabase/migrations/008_check_replies_uid_watermark.sql
+-- IMAP's SINCE search key (and imapflow's formatDate()) is date-only — the
+-- time component is discarded, so `since = <yesterday's-run-timestamp>`
+-- compiles to `SINCE <yesterday's-date>`, which re-matches every message
+-- from yesterday 00:00 onward on every subsequent daily run, not just the
+-- genuinely-new ones since the last check. check-replies (Task 11) had no
+-- idempotency guard for this, so every message in the ~6-hour daily overlap
+-- window got reprocessed: inflated bounce_count (risking a false-early
+-- autopilot cancel well before the real 10-bounce threshold), duplicate
+-- paid Anthropic classify+draft calls, and duplicate email_replies rows /
+-- review-queue drafts for the same human reply. Found in Task 11's
+-- post-deploy deep review (2026-09-03).
+--
+-- Fix: track the highest-seen IMAP UID per mailbox as the real dedup key.
+-- `last_imap_check_at` is kept (still used as the coarse net for the SINCE
+-- query, and as the pre-existing fallback for a mailbox's very first run
+-- where no watermark exists yet) but is no longer the sole gate.
+ALTER TABLE user_email_settings ADD COLUMN last_imap_check_uid integer;
