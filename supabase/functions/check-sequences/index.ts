@@ -51,9 +51,12 @@ Deno.serve(async (req) => {
     .lte('next_send_at', new Date().toISOString());
 
   // Autopilot throttle state, computed once per org as it's needed.
-  const autopilotByOrg = new Map<string, { dailyOutreachTarget: number; dayNumber: number; rampUp: boolean; maxSpendCents: number | null; actualSpendCents: number; runId: string } | null>();
+  const autopilotByOrg = new Map<string, { dailyOutreachTarget: number; dayNumber: number; rampUp: boolean; maxSpendCents: number | null; actualSpendCents: number; outreachSentTotal: number; runId: string } | null>();
   const sentTodayByOrg = new Map<string, number>();
   const outreachSeqIdsByOrg = new Map<string, string[]>();
+  // Guards against redundant cancel writes if multiple enrollments in the
+  // same org hit the spend cap within one invocation.
+  const cancelledRunsThisInvocation = new Set<string>();
 
   let drafted = 0;
   const skipped: { id: string; reason: string }[] = [];
@@ -77,13 +80,14 @@ Deno.serve(async (req) => {
     if (outreach) {
       if (!autopilotByOrg.has(orgId)) {
         const { data: run } = await service.from('autopilot_runs')
-          .select('id, daily_outreach_target, ramp_up_enabled, started_at, max_total_spend_cents, actual_ai_cost_cents')
+          .select('id, daily_outreach_target, ramp_up_enabled, started_at, max_total_spend_cents, actual_ai_cost_cents, outreach_sent_total')
           .eq('org_id', orgId).eq('status', 'active').maybeSingle();
         if (run) {
           const dayNumber = Math.max(1, Math.floor((Date.now() - new Date(run.started_at).getTime()) / 86_400_000) + 1);
           autopilotByOrg.set(orgId, {
             dailyOutreachTarget: run.daily_outreach_target, dayNumber, rampUp: run.ramp_up_enabled,
-            maxSpendCents: run.max_total_spend_cents, actualSpendCents: run.actual_ai_cost_cents, runId: run.id,
+            maxSpendCents: run.max_total_spend_cents, actualSpendCents: run.actual_ai_cost_cents,
+            outreachSentTotal: run.outreach_sent_total, runId: run.id,
           });
         } else {
           autopilotByOrg.set(orgId, null);
@@ -93,6 +97,15 @@ Deno.serve(async (req) => {
       if (autopilot) {
         if (autopilot.maxSpendCents != null && autopilot.actualSpendCents >= autopilot.maxSpendCents) {
           skipped.push({ id: enrollment.id, reason: 'autopilot spend cap reached' });
+          // Close both halves of the guardrail: stop drafting this
+          // enrollment AND cancel the run itself, so run-autopilot stops
+          // scraping/approving for it too. Once per run per invocation.
+          if (!cancelledRunsThisInvocation.has(autopilot.runId)) {
+            cancelledRunsThisInvocation.add(autopilot.runId);
+            await service.from('autopilot_runs')
+              .update({ status: 'cancelled', cancel_reason: 'total spend cap reached' })
+              .eq('id', autopilot.runId);
+          }
           continue;
         }
         const cap = autopilot.rampUp ? rampedCap(autopilot.dailyOutreachTarget, autopilot.dayNumber) : autopilot.dailyOutreachTarget;
@@ -131,9 +144,19 @@ Deno.serve(async (req) => {
       ?? null;
     if (!template) { skipped.push({ id: enrollment.id, reason: `no default template ${step.template_type}` }); continue; }
 
-    const { data: enroller } = await service
-      .from('profiles').select('full_name, email').eq('id', enrollment.enrolled_by ?? '').maybeSingle();
-    const contractorName = (enroller?.full_name ?? enroller?.email ?? 'The Dreamlabs team').split(' ')[0]!;
+    // enrolled_by is null for every auto-enrolled outreach lead (the
+    // system-generated convention this cycle establishes) — only look up a
+    // profile when there's an actual human to resolve, and only ever run
+    // .split(' ')[0] on a real resolved name/email. The system fallback is
+    // a complete phrase with no further processing, so it can never be
+    // truncated into something broken like "Best, The".
+    let contractorName = 'the team';
+    if (enrollment.enrolled_by) {
+      const { data: enroller } = await service
+        .from('profiles').select('full_name, email').eq('id', enrollment.enrolled_by).maybeSingle();
+      const resolvedName = enroller?.full_name ?? enroller?.email;
+      if (resolvedName) contractorName = resolvedName.split(' ')[0]!;
+    }
     const { data: notesRows } = await service
       .from('lead_notes').select('content').eq('lead_id', lead.id as string)
       .order('created_at', { ascending: false }).limit(5);
@@ -247,6 +270,17 @@ Deno.serve(async (req) => {
     drafted++;
     if (outreach) {
       sentTodayByOrg.set(orgId, (sentTodayByOrg.get(orgId) ?? 0) + 1);
+      // outreach_sent_total tracks *drafted* outreach emails (this pipeline
+      // never auto-sends — a human approval step is always required — so
+      // "drafted" is the closest meaningful signal this function can
+      // actually produce, matching the same loose-terminology convention
+      // already used by leads_scraped_total tracking approved, not scraped).
+      const ap = autopilotByOrg.get(orgId);
+      if (ap) {
+        ap.outreachSentTotal += 1;
+        await service.from('autopilot_runs')
+          .update({ outreach_sent_total: ap.outreachSentTotal }).eq('id', ap.runId);
+      }
     } else {
       // Unchanged from the pre-outreach version: stay under Gemini free-tier 10 RPM.
       // Claude/outreach drafts never hit this — Anthropic's limits are far higher and
