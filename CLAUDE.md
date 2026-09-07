@@ -380,12 +380,34 @@ row referencing the lead's actual data, Haiku's draft correctly used those notes
 and rejected Workload Identity Federation as an alternative to a static key — doesn't fit this app's
 BYO-key-per-org design (non-technical org admins need to paste a key in a few clicks, not set up OIDC trust)
 and the security benefit is marginal given the key never touches any client and lives only in Supabase's
-server-side secrets. No live IMAP mailbox
-connection has been tested (needs a real external mailbox with real credentials, not available in this
-environment) — `npm:imapflow`'s import/bundle success and real API shape were independently verified twice
-against the library's actual source, only the live socket-level connection remains untested. Verified
-mailboxes saved *before* this cycle have `imap_host = NULL` and are skipped by `check-replies` until
-re-saved (re-saving also resets `is_verified`, requiring a fresh test-email send). Cost-estimate constants
+server-side secrets.
+
+**Live IMAP reply detection verified working end-to-end (2026-09-07).** Real mailbox connected
+(`kevin@didreamlabs.com`, Google Workspace), real test email sent through the app, a real reply sent back
+and correctly matched by `check-replies` — confirmed via a genuine round-trip, not just code review. Two
+real gotchas hit during setup, both now fixed in code or documented: (1) a mailbox connected *before* this
+cycle shipped has `imap_host = NULL` until re-saved through `/settings/email` (the auto-derive logic only
+runs on save, not retroactively) — simply re-saving (no need to re-enter the password) fixes it; (2) Gmail's
+own reply-address auto-fill can default to the wrong recipient when replying to a message where sender and
+recipient are unusually close to each other (e.g. testing with your own two mailboxes) — a Gmail UI quirk
+unrelated to this app's `Reply-To` handling (which never sets a `Reply-To` header at all), and not expected
+to matter for real outreach where sender/recipient are always genuinely distinct people.
+
+**One-click unsubscribe/opt-out shipped (2026-09-07).** `leads.opted_out` (migration `010`), a new public
+*unauthenticated* edge function `unsubscribe` (the app's first-ever public data-mutating endpoint — no
+auth/membership check by design, since a prospect clicking an email link is never logged in), a public
+frontend route `/unsubscribe/:leadId` with a genuine two-step confirm (loads inert, only mutates on an
+explicit button click — protects against mail-client/security-scanner link-prefetching accidentally
+triggering an opt-out), a new `{{unsubscribe_url}}` template variable (both the Deno and frontend copies of
+`templateVars.ts`, kept in sync per this repo's existing convention), `auto-enroll-cold-outreach` and
+`check-sequences` both updated to skip/cancel opted-out leads (migration `011` also appended the
+unsubscribe line to all 8 already-live seeded outreach templates), and — found during review — a small,
+reusable, database-backed rate-limiter (`_shared/rateLimit.ts` + `rate_limit_log` table, migration `012`)
+added specifically because this is the app's first public endpoint and had none; live-tested for real (21
+rapid requests, confirmed the 21st gets a 429). No other endpoint in this app has rate limiting yet — this
+was the first to need it, not a broader retrofit.
+
+Cost-estimate constants
 shown at autopilot setup (Haiku/Sonnet blended rate) disagree with the actual flat per-draft accounting by
 roughly 2–4x — fails safe (conservative estimate, real spend tracks lower), not fixed this cycle.
 `email_replies` has no UI surface yet — a detected reply with `auto_draft_on_reply=false` is currently
