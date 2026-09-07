@@ -56,6 +56,7 @@ export function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/settings/email" element={<EmailConfig />} />
               <Route path="/settings/dialer" element={<DialerConfig />} />
+              <Route path="/dialer" element={<ComingSoon module="Power Dialer" />} />
               <Route path="/settings/organization" element={<OrganizationSettings />} />
               <Route element={<AdminRoute />}>
                 <Route path="/admin" element={<Admin />} />
