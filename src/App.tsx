@@ -19,6 +19,7 @@ import { ScraperJob } from './pages/ScraperJob';
 import { Settings } from './pages/Settings';
 import { OrganizationSettings } from './pages/OrganizationSettings';
 import { EmailConfig } from './pages/EmailConfig';
+import { DialerConfig } from './pages/DialerConfig';
 import { EmailsHub } from './pages/EmailsHub';
 import { Admin } from './pages/Admin';
 import { LinkedinOutreach } from './pages/LinkedinOutreach';
@@ -54,6 +55,7 @@ export function App() {
               <Route path="/analytics" element={<ComingSoon module="Analytics" />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/settings/email" element={<EmailConfig />} />
+              <Route path="/settings/dialer" element={<DialerConfig />} />
               <Route path="/settings/organization" element={<OrganizationSettings />} />
               <Route element={<AdminRoute />}>
                 <Route path="/admin" element={<Admin />} />

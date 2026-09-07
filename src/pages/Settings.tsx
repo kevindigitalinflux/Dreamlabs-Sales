@@ -47,6 +47,10 @@ export function Settings() {
         <h2 className="text-[18px] font-bold">Email sending</h2>
         <p className="text-sm text-muted">Connect your Gmail/Outlook so Dreamlabs Sales can send from your address.</p>
       </Link>
+      <Link to="/settings/dialer" className="block rounded-xl border border-line bg-card p-5 hover:bg-surface/50">
+        <h2 className="text-[18px] font-bold">Power dialer</h2>
+        <p className="text-sm text-muted">Connect your JustCall/Kixie/Aircall account so calls log automatically.</p>
+      </Link>
       {currentOrg?.role === 'admin' && (
         <Link to="/settings/organization" className="block rounded-xl border border-line bg-card p-5 hover:bg-surface/50">
           <h2 className="text-[18px] font-bold">Organization API keys</h2>
