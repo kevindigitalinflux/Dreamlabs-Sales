@@ -147,6 +147,36 @@ export interface UserEmailSettings {
   updated_at: string;
 }
 
+export type DialerProvider = 'justcall' | 'kixie' | 'aircall';
+
+export interface UserDialerSettings {
+  id: string;
+  user_id: string;
+  provider: DialerProvider;
+  phone_number: string | null;
+  is_verified: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CallOutcome = 'answered' | 'voicemail' | 'no_answer' | 'busy' | 'failed';
+
+export interface Call {
+  id: string;
+  lead_id: string;
+  user_id: string | null;
+  org_id: string;
+  provider: string;
+  external_call_id: string;
+  direction: 'outbound' | 'inbound';
+  outcome: CallOutcome | null;
+  duration_seconds: number | null;
+  recording_url: string | null;
+  transcript: string | null;
+  lead_note_id: string | null;
+  created_at: string;
+}
+
 export interface OrgMemberRow {
   role: Role;
   created_at: string;
