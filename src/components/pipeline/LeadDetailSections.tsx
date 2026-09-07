@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { History, Mail, Repeat } from 'lucide-react';
+import { History, Mail, Phone, Repeat } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { formatShortDate } from '../../lib/utils';
-import type { LeadNote } from '../../types';
+import type { CallOutcome, LeadNote } from '../../types';
 import { EmptyState } from '../ui/EmptyState';
 import { Skeleton } from '../ui/Skeleton';
 
@@ -32,6 +32,67 @@ export function EmailLogSection({ leadId }: { leadId: string }) {
         <li key={r.id} className="flex items-center justify-between rounded-lg bg-surface/50 p-3 text-sm">
           <span className="truncate font-semibold">{r.subject}</span>
           <span className="shrink-0 text-xs text-muted">{r.status} · {formatShortDate(r.sent_at)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+interface CallRow {
+  id: string;
+  provider: string;
+  direction: 'outbound' | 'inbound';
+  outcome: CallOutcome | null;
+  duration_seconds: number | null;
+  recording_url: string | null;
+  created_at: string;
+}
+
+const OUTCOME_LABELS: Record<CallOutcome, string> = {
+  answered: 'Answered',
+  voicemail: 'Voicemail',
+  no_answer: 'No answer',
+  busy: 'Busy',
+  failed: 'Failed',
+};
+
+function formatDuration(seconds: number | null): string {
+  if (!seconds) return '';
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/** Calls logged for this lead via a connected power dialer (empty until a provider is connected and wired up). */
+export function CallHistorySection({ leadId }: { leadId: string }) {
+  const [rows, setRows] = useState<CallRow[] | null>(null);
+  useEffect(() => {
+    void supabase
+      .from('calls').select('id, provider, direction, outcome, duration_seconds, recording_url, created_at').eq('lead_id', leadId).order('created_at', { ascending: false })
+      .then(({ data }) => setRows((data as CallRow[] | null) ?? []));
+  }, [leadId]);
+
+  if (rows === null) return <Skeleton className="h-16 w-full" />;
+  if (rows.length === 0) {
+    return <EmptyState icon={Phone} title="No calls yet" hint="Calls made through a connected power dialer will appear here automatically." />;
+  }
+  return (
+    <ul className="flex flex-col gap-2">
+      {rows.map((r) => (
+        <li key={r.id} className="flex items-center justify-between rounded-lg bg-surface/50 p-3 text-sm">
+          <span className="truncate font-semibold">
+            {r.direction === 'outbound' ? 'Outbound call' : 'Inbound call'}
+            {r.outcome && ` · ${OUTCOME_LABELS[r.outcome]}`}
+          </span>
+          <span className="shrink-0 text-xs text-muted">
+            {formatDuration(r.duration_seconds)} {formatShortDate(r.created_at)}
+            {r.recording_url && (
+              <>
+                {' · '}
+                <a href={r.recording_url} target="_blank" rel="noreferrer" className="underline">Recording</a>
+              </>
+            )}
+          </span>
         </li>
       ))}
     </ul>

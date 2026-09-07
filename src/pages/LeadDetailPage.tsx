@@ -16,7 +16,7 @@ import { NextActionEditor } from '../components/pipeline/NextActionEditor';
 import { ContactInfo, PipelineInfo } from '../components/pipeline/LeadPanelSections';
 import { NotesTimeline } from '../components/pipeline/NotesTimeline';
 import { NoteComposer } from '../components/pipeline/NoteComposer';
-import { ActivityHistory, EmailLogSection } from '../components/pipeline/LeadDetailSections';
+import { ActivityHistory, CallHistorySection, EmailLogSection } from '../components/pipeline/LeadDetailSections';
 import { EmailComposer } from '../components/emails/EmailComposer';
 import { EnrollmentControl } from '../components/emails/EnrollmentControl';
 
@@ -93,6 +93,11 @@ export function LeadDetailPage() {
       <Card>
         <h2 className="mb-2 text-[18px] font-bold">Emails</h2>
         <EmailLogSection leadId={lead.id} />
+      </Card>
+
+      <Card>
+        <h2 className="mb-2 text-[18px] font-bold">Calls</h2>
+        <CallHistorySection leadId={lead.id} />
       </Card>
 
       <Card>
