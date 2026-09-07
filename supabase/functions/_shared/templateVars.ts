@@ -70,5 +70,6 @@ export function buildTemplateVars(
     contractor_name: contractorName,
     pain_point: painPoint,
     cal_link: null,
+    unsubscribe_url: `${(Deno.env.get('APP_ORIGINS') ?? 'http://localhost:5173').split(',')[0]}/unsubscribe/${lead.id as string}`,
   };
 }

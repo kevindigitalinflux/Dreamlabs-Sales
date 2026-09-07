@@ -8,6 +8,7 @@ import { ComingSoon } from './components/layout/ComingSoon';
 import { Login } from './pages/Login';
 import { AuthCallback } from './pages/AuthCallback';
 import { Welcome } from './pages/Welcome';
+import { Unsubscribe } from './pages/Unsubscribe';
 import { Dashboard } from './pages/Dashboard';
 import { PipelineRedirect } from './pages/PipelineRedirect';
 import { PipelineKanban } from './pages/PipelineKanban';
@@ -35,6 +36,7 @@ export function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/welcome" element={<Welcome />} />
+          <Route path="/unsubscribe/:leadId" element={<Unsubscribe />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route path="/" element={<Dashboard />} />

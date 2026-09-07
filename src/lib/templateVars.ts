@@ -12,6 +12,7 @@ export const TEMPLATE_VARIABLES: { key: string; label: string }[] = [
   { key: 'contractor_name', label: 'Your name' },
   { key: 'pain_point', label: 'Pain point' },
   { key: 'cal_link', label: 'Booking link' },
+  { key: 'unsubscribe_url', label: 'Unsubscribe link' },
 ];
 
 /** Replaces {{key}} with values; empty/unknown keys blank out and are reported in `missing`. */
@@ -50,5 +51,6 @@ export function buildTemplateVars(
     contractor_name: contractorName,
     pain_point: painPoint,
     cal_link: null,
+    unsubscribe_url: `${import.meta.env.VITE_APP_URL ?? ''}/unsubscribe/${lead.id}`,
   };
 }
