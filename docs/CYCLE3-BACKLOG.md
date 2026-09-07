@@ -79,3 +79,12 @@ cycle 3's headline feature; schedule these around it.
 12. **[Cycle 4] `scrape_jobs.approved_count` is a dead field** — written as `0` at insert, never
     incremented by `approve()`, never displayed anywhere. Either wire it up (increment on approve,
     show it next to `results_count` in the review table header) or drop the column.
+13. **[Cycle 5] Google Postmaster Tools setup** (postmaster.google.com) — free, gives real
+    Gmail-side deliverability visibility (spam rate, domain reputation, auth pass rates) once
+    real outreach volume starts. Deliberately deferred until the sales outreach process actually
+    begins — verification is a DNS TXT record (same mechanism already used for Workspace), a
+    "you" task since it needs Kevin's own domain-ownership login, not something to do speculatively
+    ahead of time. Revisit alongside Microsoft SNDS/Outlook Postmaster if Outlook-domain bounce
+    rates ever become a visible problem (lower priority — this app sends via Google Workspace's
+    shared IP pool, so a dedicated-IP tool like SNDS isn't directly actionable the way it would be
+    for a dedicated-IP sender).
