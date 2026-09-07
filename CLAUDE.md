@@ -176,7 +176,7 @@ vite.config.ts
 
 ---
 
-## Current Status (updated 2026-09-03)
+## Current Status (updated 2026-09-07)
 **Working:** Cycle 1-2 (single-tenant foundation, full pipeline, email automation incl. AI-personalised
 composer/sequences/review queue) — see prior status below, all still functional. **Cycle 3 (multi-tenant
 foundation) is FULLY COMPLETE** — Tasks 1-12 done, controller-verified, and pushed:
@@ -365,9 +365,22 @@ including a live `pg_policies` check:**
 6. LinkedIn's "Mark as sent" button could never be reached — the drafts query only showed `status='draft'`
    rows, so an approved draft vanished before that action could render. Now shows both statuses.
 
-**Known issues / pending human steps (cycle 5):** `ANTHROPIC_API_KEY` not yet set as a live Supabase secret
-— outreach AI drafting will skip (not fall back to Gemini) until Kevin runs
-`npx supabase secrets set ANTHROPIC_API_KEY=<key> --project-ref wgomksxelyfkzepbnkdd`. No live IMAP mailbox
+**`ANTHROPIC_API_KEY` is live and verified working (2026-09-07).** Set via
+`npx supabase secrets set ANTHROPIC_API_KEY=<key> --project-ref wgomksxelyfkzepbnkdd`. One real gotcha hit
+during setup: Anthropic rejects requests from an API key that isn't scoped to a specific Console workspace
+(`"This API key is not scoped to a workspace..."`, HTTP 400) — the key must be created *while inside* a
+specific workspace in the Anthropic Console (Kevin's is named "DI Dreamlabs"), not at the org/all-workspaces
+level, or every Claude call silently fails and falls back to the plain (unpersonalized) email template with
+no error surfaced anywhere except `draft-linkedin-message`'s direct error response (every other Claude
+caller in this app swallows the error by design, matching the existing Gemini-failure fallback pattern —
+worth remembering if this ever needs debugging again). Live-verified end-to-end via `check-sequences`
+against a real throwaway lead: the Sonnet notes pass correctly generated a genuine `ai_summary` lead_notes
+row referencing the lead's actual data, Haiku's draft correctly used those notes for real personalization
+(not just merge-field substitution), and the dash/em-dash guardrail correctly held throughout. Considered
+and rejected Workload Identity Federation as an alternative to a static key — doesn't fit this app's
+BYO-key-per-org design (non-technical org admins need to paste a key in a few clicks, not set up OIDC trust)
+and the security benefit is marginal given the key never touches any client and lives only in Supabase's
+server-side secrets. No live IMAP mailbox
 connection has been tested (needs a real external mailbox with real credentials, not available in this
 environment) — `npm:imapflow`'s import/bundle success and real API shape were independently verified twice
 against the library's actual source, only the live socket-level connection remains untested. Verified
