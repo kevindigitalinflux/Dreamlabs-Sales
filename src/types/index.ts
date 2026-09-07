@@ -163,7 +163,7 @@ export type CallOutcome = 'answered' | 'voicemail' | 'no_answer' | 'busy' | 'fai
 
 export interface Call {
   id: string;
-  lead_id: string;
+  lead_id: string | null;
   user_id: string | null;
   org_id: string;
   provider: string;

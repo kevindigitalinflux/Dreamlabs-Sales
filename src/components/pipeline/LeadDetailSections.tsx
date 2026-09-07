@@ -56,6 +56,19 @@ const OUTCOME_LABELS: Record<CallOutcome, string> = {
   failed: 'Failed',
 };
 
+// calls.provider is free text (not constrained to DialerProvider like
+// user_dialer_settings.provider), so known providers get DialerConfig's
+// display casing and anything else falls back to a simple capitalize.
+const KNOWN_PROVIDER_LABELS: Record<string, string> = {
+  justcall: 'JustCall',
+  kixie: 'Kixie',
+  aircall: 'Aircall',
+};
+
+function providerLabel(provider: string): string {
+  return KNOWN_PROVIDER_LABELS[provider] ?? (provider.charAt(0).toUpperCase() + provider.slice(1));
+}
+
 function formatDuration(seconds: number | null): string {
   if (!seconds) return '';
   const m = Math.floor(seconds / 60);
@@ -83,6 +96,7 @@ export function CallHistorySection({ leadId }: { leadId: string }) {
           <span className="truncate font-semibold">
             {r.direction === 'outbound' ? 'Outbound call' : 'Inbound call'}
             {r.outcome && ` · ${OUTCOME_LABELS[r.outcome]}`}
+            {` · via ${providerLabel(r.provider)}`}
           </span>
           <span className="shrink-0 text-xs text-muted">
             {formatDuration(r.duration_seconds)} {formatShortDate(r.created_at)}

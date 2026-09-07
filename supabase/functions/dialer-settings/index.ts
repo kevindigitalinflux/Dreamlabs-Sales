@@ -30,6 +30,10 @@ Deno.serve(async (req) => {
     return json({ error: 'Invalid JSON body' }, 400, headers);
   }
 
+  if (typeof body !== 'object' || body === null) {
+    return json({ error: 'Invalid JSON body' }, 400, headers);
+  }
+
   if (body.action === 'get') {
     const { data } = await service
       .from('user_dialer_settings').select('*').eq('user_id', user.id).maybeSingle();
