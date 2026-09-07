@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
     const sequence = seq as { id: string; org_id: string; steps: { delay_days: number }[] };
     const { data: candidates } = await service
       .from('leads').select('id')
-      .eq('org_id', sequence.org_id).eq('stage', 'new_lead');
+      .eq('org_id', sequence.org_id).eq('stage', 'new_lead').eq('opted_out', false);
     for (const lead of candidates ?? []) {
       const { data: existing } = await service.from('sequence_enrollments')
         .select('id').eq('lead_id', (lead as { id: string }).id).eq('sequence_id', sequence.id).maybeSingle();

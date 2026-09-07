@@ -72,6 +72,11 @@ Deno.serve(async (req) => {
     const lead = enrollment.lead;
     if (!step || !lead) { skipped.push({ id: enrollment.id, reason: 'missing step or lead' }); continue; }
     if (!lead.email) { skipped.push({ id: enrollment.id, reason: 'lead has no email' }); continue; }
+    if (lead.opted_out) {
+      skipped.push({ id: enrollment.id, reason: 'lead opted out' });
+      await service.from('sequence_enrollments').update({ status: 'cancelled' }).eq('id', enrollment.id);
+      continue;
+    }
 
     const orgId = lead.org_id as string;
     const outreach = isOutreachTemplate(step.template_type);
