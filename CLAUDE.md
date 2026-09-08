@@ -423,14 +423,23 @@ deliberately backlogged until Kevin has hands-on tested a provider's voice quali
 new `user_dialer_settings` table (per-contractor, no `org_id` — mirrors `user_email_settings` exactly) and a
 new `calls` table (org-scoped, matching the established two-policy RLS pattern), a `dialer-settings` edge
 function with `get`/`save` actions only, a `/settings/dialer` connection page, a read-only "Calls" history
-section on the lead detail page, and a real `/dialer` Sidebar nav entry rendering the existing generic
-`ComingSoon` placeholder (same convention as `/analytics`) rather than any functional dialing UI. The
-specific provider (JustCall/Kixie/Aircall) is still undecided — Kevin explicitly said "not ready to pick
-yet" — so `dialer-settings`'s `test`/live-key-validation action, `dialer-push-queue` (pushing a lead list
-into the provider's dialer queue), `dialer-webhook` (receiving call-outcome callbacks), and the actual
-functional Power Dialer screen are all deliberately deferred to a follow-up plan once a provider is chosen.
+section on the lead detail page, and a `/dialer` Power Dialer page. The specific provider (JustCall/Kixie/
+Aircall) is still undecided — Kevin explicitly said "not ready to pick yet" — so `dialer-settings`'s
+`test`/live-key-validation action, `dialer-push-queue` (pushing a lead list into the provider's dialer
+queue), and `dialer-webhook` (receiving call-outcome callbacks) are all deliberately deferred to a
+follow-up plan once a provider is chosen — tracked as backlog item 14 in `docs/CYCLE3-BACKLOG.md`.
 The dialer API key is Vault-stored via a new `app_set_dialer_secret`/`app_get_dialer_secret` RPC pair,
 identical in structure to the existing SMTP-password pattern — never a plain column.
+
+**`/dialer` built out as a real filter/count screen (2026-09-08), not left as a placeholder.** Kevin asked
+for the actual UI rather than the `ComingSoon` stub the plan above originally shipped. New
+`src/lib/dialerFilters.ts` (`filterDialableLeads` — leads must have a phone number, plus stage/
+last-contacted/assigned-to-me filters) and `src/pages/PowerDialer.tsx`: a stage multi-select (defaults to
+everything except Won/Lost), a "not called in the last 7/14/30 days / any time" dropdown, an "assigned to
+me only" toggle (on by default), and a live count of matching leads reusing the existing `useLeads` hook —
+all genuinely functional today, live-verified against real org data (DI Dreamlabs' 3 leads). "Start dialing
+session" stays permanently disabled with a link to `/settings/dialer` — there's nothing to push a session
+to until `dialer-push-queue` exists, so the button doesn't pretend otherwise.
 
 The final whole-branch review (opus) found the implementation matched the plan exactly with zero scope
 creep (no test action, no functional dialing UI, no provider-specific logic anywhere — verified via a
@@ -459,7 +468,8 @@ should be validated as `https:` before storage (nothing writes a real one yet), 
 `false` until that same follow-up ships the `test` action.
 
 **Not yet started:** analytics, Cloudflare Pages deploy, Power Dialer Phase 1's provider-specific wiring
-(`test` action, `dialer-push-queue`, `dialer-webhook`, the actual dialing screen), Phase 2 (AI voice agent).
+(`test` action, `dialer-push-queue`, `dialer-webhook` — the filter/count screen itself is built and enabling
+"Start dialing session" is the last step once these land), Phase 2 (AI voice agent).
 **Known issues / pending human steps:** Kevin's SMTP credentials not yet entered for the DI Dreamlabs org
 (/settings/email → save + test; until then sends return a friendly settings-gate error). Sequence steps
 are limited to the 5 default templates (custom templates can't be steps yet). check-sequences insert+advance

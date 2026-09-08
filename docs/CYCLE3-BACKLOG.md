@@ -88,3 +88,18 @@ cycle 3's headline feature; schedule these around it.
     rates ever become a visible problem (lower priority — this app sends via Google Workspace's
     shared IP pool, so a dedicated-IP tool like SNDS isn't directly actionable the way it would be
     for a dedicated-IP sender).
+14. **[HIGH — Kevin-flagged, blocked on his own decision] Power Dialer — provider-specific wiring.**
+    Phase 1 (schema, `/settings/dialer` connection page, "Calls" history section, and the
+    `/dialer` filter/count screen) is fully built and live. What's blocked: Kevin hasn't picked a
+    provider yet (evaluating JustCall, Kixie, Aircall). Once he does, this unlocks in one focused
+    plan: `dialer-settings`'s `test` action (live key validation against that provider's API),
+    `dialer-push-queue` (pushing the `/dialer` page's filtered lead list into the provider's own
+    dialer queue), `dialer-webhook` (receiving call-outcome callbacks — provider-specific signature
+    verification is a real security requirement here, not optional), and finally enabling the
+    `/dialer` page's "Start dialing session" button (currently, correctly, always disabled — there's
+    nothing to push a session to yet). Design spec:
+    `docs/superpowers/specs/2026-09-07-calling-integration-design.md` — its Out of Scope section
+    carries 3 implementation notes for that future plan (resolve a real `org_id` before inserting a
+    call row, `https:`-only `recording_url`, don't gate on `is_verified` until `test` ships).
+    Phase 2 (fully autonomous AI voice agent — Vapi/Retell AI/Bland AI) stays further out, backlogged
+    until Kevin has hands-on tested a provider's voice quality directly.
