@@ -20,6 +20,7 @@ import { Settings } from './pages/Settings';
 import { OrganizationSettings } from './pages/OrganizationSettings';
 import { EmailConfig } from './pages/EmailConfig';
 import { DialerConfig } from './pages/DialerConfig';
+import { PowerDialer } from './pages/PowerDialer';
 import { EmailsHub } from './pages/EmailsHub';
 import { Admin } from './pages/Admin';
 import { LinkedinOutreach } from './pages/LinkedinOutreach';
@@ -56,7 +57,7 @@ export function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/settings/email" element={<EmailConfig />} />
               <Route path="/settings/dialer" element={<DialerConfig />} />
-              <Route path="/dialer" element={<ComingSoon module="Power Dialer" />} />
+              <Route path="/dialer" element={<PowerDialer />} />
               <Route path="/settings/organization" element={<OrganizationSettings />} />
               <Route element={<AdminRoute />}>
                 <Route path="/admin" element={<Admin />} />
