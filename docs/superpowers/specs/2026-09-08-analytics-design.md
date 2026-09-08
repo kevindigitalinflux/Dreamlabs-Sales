@@ -130,9 +130,9 @@ export function useAnalytics(period: AnalyticsPeriod): { data: AnalyticsData | n
 ```
 
 The hook fetches per-org (via `useOrg().currentOrg`), and for `leadsByContractor` additionally checks
-`currentOrg.role === 'admin'` before querying/returning anything (contractors never even receive other
-contractors' `assigned_to` breakdown — not just UI-hidden, actually not fetched separately beyond what the
-existing `leads` RLS already returns them).
+`currentOrg.role === 'admin'` before querying/returning anything — see §3 for why (a non-admin's own
+`leads` query is already restricted to their own leads by RLS, making a contractor breakdown of it
+meaningless, not just something to hide in the UI).
 
 `src/lib/analytics.ts` exports one pure function per metric (e.g. `computeLeadsByStage(leads)`,
 `computeFunnel(leads, notesByLead)`, `computeWonDeals(leads, notesByLead, period)`,
@@ -143,19 +143,36 @@ way `leadFilters.ts`'s functions already are.
 
 ## 3. Visibility / Role Gating
 
-Matches the existing `FilterBar`'s admin-only "Assigned to" multi-select convention
-(`currentOrg?.role === 'admin'`) exactly:
+This is exactly the locked decision from brainstorming ("contractors see their own leads/sends only, admins
+see the whole org") — this section works out precisely how, since it turned out to need checking real RLS
+policy text, not assuming. The app's RLS is inconsistent by table for pre-existing reasons that predate this
+feature — some tables already restrict non-admins to their own rows, others already grant any member
+org-wide read:
 
-- Pipeline section: every metric except "Leads by contractor" renders for any org member. "Leads by
-  contractor" only renders (and is only fetched/computed) for admins.
-- Outreach section: fully visible to any org member — outreach metrics are already org-level facts (total
-  emails sent by the org, total autopilot spend), not per-contractor, so there's no natural per-contractor
-  narrowing to apply here the way the pipeline section's lead ownership provides one.
+| Table | Non-admin RLS | Effect on this page |
+|---|---|---|
+| `leads` | **own rows only** (`leads_own_in_org` requires `created_by = auth.uid() OR assigned_to = auth.uid()`, or `created_by IS NULL`) | Every Pipeline metric naturally shows a non-admin **their own leads**, not the org's — same restriction `useLeads`/the Dashboard already live under today |
+| `lead_notes` | scoped via the `leads` join, same effective restriction | No separate handling needed — a non-admin can already read notes for every lead their own `leads` query returned |
+| `email_logs` | **own rows only** (`sent_by = auth.uid()`) | Non-admins see only emails **they personally sent** |
+| `sequence_enrollments` | **own rows only** (`enrolled_by = auth.uid()`) | Non-admins see only sequences **they personally enrolled** |
+| `scrape_jobs` | **own rows only** (`created_by = auth.uid()`) | Non-admins see only scrape jobs **they personally ran** |
+| `email_replies` | org-wide read | Always org-wide, any member — no per-user ownership concept exists on this table |
+| `linkedin_drafts` | org-wide | Always org-wide, any member |
+| `autopilot_runs` | org-wide | Always org-wide, any member |
 
-No RLS changes needed — every underlying query already returns only the calling user's own org's rows
-(and, for `leads` specifically, RLS already returns every lead in the org regardless of `assigned_to`,
-since `leads_org_admin`/`leads_own_in_org` grant org-wide read to any member — the contractor-vs-admin
-distinction here is a *product* choice about what this page chooses to display, not an RLS boundary).
+So both sections follow the same real rule, and it requires **zero RLS changes**: query results are
+whatever RLS already returns for the caller — a non-admin naturally gets their own contribution, an admin
+naturally gets the whole org, because `leads_org_admin`/`logs_org_admin`/`enrollments_org_admin`/
+`scrape_jobs_org_admin` all grant full org read via `is_org_admin(org_id)`. Both section headers carry one
+small caption, shown only to non-admins: *"Showing your own activity. Admins see the whole org."*
+`email_replies`/`linkedin_drafts`/`autopilot_runs` have no per-user split to caption — they're already
+org-wide facts for everyone, admin or not.
+
+**"Leads by contractor" stays its own explicit admin-only gate** (not rendered at all for non-admins),
+matching the existing `FilterBar`'s admin-only "Assigned to" multi-select convention (`currentOrg?.role ===
+'admin'`). This isn't an RLS limitation — a non-admin's own `leads` query already only contains leads they
+own, so a "by contractor" breakdown of that set would be a degenerate single-bar chart, not a limitation to
+work around but a view that's simply not useful for that role.
 
 ## 4. UI
 
