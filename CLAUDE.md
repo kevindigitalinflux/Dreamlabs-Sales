@@ -415,7 +415,51 @@ invisible to the user (design's "needs your attention" dashboard item was never 
 unit tests were added this cycle for the functions the design doc specifically named as testable
 (`stripAiPunctuation`, the compatible-lead gate, `tight_icp_fit` boundaries, classify-then-draft routing).
 
-**Not yet started:** analytics, Cloudflare Pages deploy.
+**Power Dialer (Phase 1 of calling integration) — provider-agnostic parts shipped (2026-09-08).** Design
+doc: `docs/superpowers/specs/2026-09-07-calling-integration-design.md`. Plan:
+`docs/superpowers/plans/2026-09-07-power-dialer.md`. This is Phase 1 of two — a human-in-the-loop power
+dialer, built now; a fully autonomous AI voice agent (Vapi/Retell AI/Bland AI, still evaluating) is Phase 2,
+deliberately backlogged until Kevin has hands-on tested a provider's voice quality. Scope of this build: a
+new `user_dialer_settings` table (per-contractor, no `org_id` — mirrors `user_email_settings` exactly) and a
+new `calls` table (org-scoped, matching the established two-policy RLS pattern), a `dialer-settings` edge
+function with `get`/`save` actions only, a `/settings/dialer` connection page, a read-only "Calls" history
+section on the lead detail page, and a real `/dialer` Sidebar nav entry rendering the existing generic
+`ComingSoon` placeholder (same convention as `/analytics`) rather than any functional dialing UI. The
+specific provider (JustCall/Kixie/Aircall) is still undecided — Kevin explicitly said "not ready to pick
+yet" — so `dialer-settings`'s `test`/live-key-validation action, `dialer-push-queue` (pushing a lead list
+into the provider's dialer queue), `dialer-webhook` (receiving call-outcome callbacks), and the actual
+functional Power Dialer screen are all deliberately deferred to a follow-up plan once a provider is chosen.
+The dialer API key is Vault-stored via a new `app_set_dialer_secret`/`app_get_dialer_secret` RPC pair,
+identical in structure to the existing SMTP-password pattern — never a plain column.
+
+The final whole-branch review (opus) found the implementation matched the plan exactly with zero scope
+creep (no test action, no functional dialing UI, no provider-specific logic anywhere — verified via a
+repo-wide grep) and specifically confirmed the `calls_own_in_org` RLS policy proactively shipped with the
+null-owner allowance (`auth.uid() = user_id OR user_id IS NULL`) from day one — the exact fix cycle 5 had to
+retrofit onto five tables after the fact. It did catch 2 real Important findings, both fixed same-day:
+1. `calls.org_id` was nullable in the original migration, but a NULL `org_id` makes a row invisible under
+   RLS to *every* user (both RLS policies require a real org match) — and only a service-role insert
+   (bypassing RLS) could ever create one. This is the same failure shape as two earlier real bugs in this
+   project (cycle 4's wrong-tenant `org_id` write, cycle 5's null-owner RLS gap). Fixed via migration `014`
+   (`calls_org_id_not_null.sql`): `org_id` is now `NOT NULL` (free while the table was still empty), plus
+   an `idx_calls_lead` index added in the same migration. `calls.lead_id` stays nullable on purpose (a
+   legitimate future case: an inbound call from a number matching no lead) — the `Call` TypeScript type was
+   corrected to `lead_id: string | null` to match.
+2. `dialer-settings` returned an unhandled 500 on a literal `null` JSON body (`JSON.parse('null')` succeeds,
+   so the existing try/catch didn't catch it). Fixed with an explicit `typeof body !== 'object' || body ===
+   null` guard; redeployed and live-verified (`curl -d 'null'` now returns a clean 400, not a 500).
+
+Every task in this plan — including both fix-wave items above — was live-verified by the controller against
+the real deployed Supabase project and a real browser session (throwaway auth users created directly via
+SQL, minted sessions, exercised end-to-end, then fully cleaned up), not just code-reviewed. Three notes for
+whoever picks up the provider-specific follow-up plan are recorded in the design spec's Out of Scope section:
+`dialer-webhook` must always resolve a real `org_id` before inserting (now structurally enforced by the
+`NOT NULL` constraint, but the webhook code itself still needs to actually resolve one), `recording_url`
+should be validated as `https:` before storage (nothing writes a real one yet), and `is_verified` stays
+`false` until that same follow-up ships the `test` action.
+
+**Not yet started:** analytics, Cloudflare Pages deploy, Power Dialer Phase 1's provider-specific wiring
+(`test` action, `dialer-push-queue`, `dialer-webhook`, the actual dialing screen), Phase 2 (AI voice agent).
 **Known issues / pending human steps:** Kevin's SMTP credentials not yet entered for the DI Dreamlabs org
 (/settings/email → save + test; until then sends return a friendly settings-gate error). Sequence steps
 are limited to the 5 default templates (custom templates can't be steps yet). check-sequences insert+advance

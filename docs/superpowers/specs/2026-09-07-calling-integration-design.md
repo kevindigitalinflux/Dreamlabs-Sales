@@ -155,7 +155,15 @@ real Phase 2 section written the same way Phase 1 got one here, not before.
 ## Out of Scope (this spec)
 
 - Any actual provider integration code (`dialer-push-queue`'s and `dialer-webhook`'s real API/auth
-  logic) — blocked on Kevin's provider choice, by design, not an oversight.
+  logic) — blocked on Kevin's provider choice, by design, not an oversight. When that task is
+  planned, carry forward three implementation notes surfaced by the Phase 1 build's final review:
+  (1) `calls.org_id` is `NOT NULL` (added in migration 014) — the webhook must always resolve a
+  real org before inserting, since a service-role insert bypasses RLS and could otherwise write an
+  unreadable row; (2) validate `recording_url` is `https:` before storing it (server-side, at
+  insert) — the lead-detail "Calls" section renders it directly into an `<a href>`, and today
+  nothing but a service-role insert can populate it, so this check has never been exercised for
+  real; (3) `user_dialer_settings.is_verified` stays `false` until this task also ships a `test`
+  action — don't gate webhook processing on it being `true`.
 - Phase 2's full design — deliberately deferred, see §4.
 - The specific human-in-the-loop mechanism for Phase 2's AI voice agent — a real design decision
   for when that phase is scoped, not guessed at here.
