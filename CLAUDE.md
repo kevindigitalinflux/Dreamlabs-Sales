@@ -467,15 +467,56 @@ whoever picks up the provider-specific follow-up plan are recorded in the design
 should be validated as `https:` before storage (nothing writes a real one yet), and `is_verified` stays
 `false` until that same follow-up ships the `test` action.
 
-**Not yet started:** analytics, Cloudflare Pages deploy, Power Dialer Phase 1's provider-specific wiring
-(`test` action, `dialer-push-queue`, `dialer-webhook` — the filter/count screen itself is built and enabling
-"Start dialing session" is the last step once these land), Phase 2 (AI voice agent).
+**Analytics dashboard shipped (2026-09-08).** `/analytics` replaces the `ComingSoon` placeholder with real
+pipeline + outreach reporting. Design doc: `docs/superpowers/specs/2026-09-08-analytics-design.md`. Plan:
+`docs/superpowers/plans/2026-09-08-analytics.md`. `recharts` is the app's first charting library (bar +
+donut only, per the design spec). Pure aggregation lives in `src/lib/analytics.ts` (22 unit tests) — leads
+by stage/vertical/contractor (admin-only breakdown), a conversion funnel parsed from existing "Stage
+changed: X → Y" notes, won-deals period scoping, email send/reply-rate stats, sequence-enrollment status,
+LinkedIn sends, scraper yield, and autopilot spend. Three fixed time-range presets (This month/Last 30
+days/All time) — the funnel and "leads by X" breakdowns are always snapshots regardless of period, everything
+else is period-filtered. `src/hooks/useAnalytics.ts` fetches once per org and recomputes via `useMemo` on
+period change, no re-fetch. Zero new database tables/views/RPCs/RLS — every query reads exactly what each
+table's *existing* RLS already returns for the caller.
+
+**This surfaced a real, pre-existing app-wide inconsistency worth remembering:** `leads`/`email_logs`/
+`sequence_enrollments`/`scrape_jobs` restrict non-admin reads to the caller's own rows (broadened by
+migration 009 to also include `NULL`-owned/automation rows), while `email_replies`/`linkedin_drafts`/
+`autopilot_runs` are already org-wide-readable by any member — not a bug, just an artifact of when each
+table's RLS was written across cycles 1-5. Both this page's section captions and its hook code account for
+this per-table split explicitly rather than assuming a single uniform visibility rule.
+
+**Final whole-branch review caught 4 real Important bugs, all fixed same-day and two live-verified against
+the real database:**
+1. `emailStats.replyRate` divided an org-wide numerator (`email_replies`) by a per-user denominator
+   (`email_logs`) for non-admins — could exceed 100% and contradicted the section's own "your own activity"
+   caption. Fixed by joining `email_replies` through `email_logs!inner(id)` so the same RLS governs both
+   sides. Live-verified: a real non-admin session went from a 200% reply rate to a correct 100%.
+2. The conversion funnel's "reached a stage" logic was non-monotone — a lead could count as reaching a
+   later stage (e.g. `proposal_sent`, reachable by skipping stages via an ordinary Kanban drag, not just a
+   direct database write as the spec had wrongly assumed) without its earlier stages counting, producing
+   conversion rates over 100% and a funnel chart that visibly widened. Fixed by computing each lead's
+   highest-reached funnel-stage index first, making every stage at or below it count — ratios are now ≤100%
+   by construction.
+3. `useAnalytics` fetched `lead_notes` via the codebase's only ID-list `.in(<uuid array>)` call — a real
+   risk of URL-length limits or silent PostgREST row-cap truncation at the lead volumes autopilot is
+   designed to reach, which would have made the funnel/won-deals numbers quietly under-count with no error
+   shown. Fixed via the same `leads!inner(org_id)` join pattern already used for `sequence_enrollments`.
+   Live-verified: old and new query shapes return byte-identical note sets for a real org.
+4. The Outreach section's empty-state check only looked at 3 of 6 real signals, so an org with sequence or
+   autopilot activity but no emails/LinkedIn/scrapes would have incorrectly shown "No outreach activity yet".
+
+**Not yet started:** Cloudflare Pages deploy, Power Dialer Phase 1's provider-specific wiring (`test`
+action, `dialer-push-queue`, `dialer-webhook` — the filter/count screen itself is built and enabling "Start
+dialing session" is the last step once these land), Phase 2 (AI voice agent).
 **Known issues / pending human steps:** Kevin's SMTP credentials not yet entered for the DI Dreamlabs org
 (/settings/email → save + test; until then sends return a friendly settings-gate error). Sequence steps
 are limited to the 5 default templates (custom templates can't be steps yet). check-sequences insert+advance
 is not transactional (worst case: a duplicate draft appears in the review queue after a mid-run crash —
 self-healing since nothing auto-sends). Kanban within-column reordering deferred. Production bundle exceeds
-Vite's 500 kB chunk warning — consider route-level code-splitting. `email_templates`/`email_sequences` rows
+Vite's 500 kB chunk warning (now ~1 MB / ~298 kB gzip since `recharts` was added — a route-level `React.lazy`
+on `/analytics` would confine the whole chart stack to the one page that uses it) — consider route-level
+code-splitting. `email_templates`/`email_sequences` rows
 with `org_id = NULL` (the platform default templates/sequences) can only be edited by an admin of *any* org
 (`is_org_admin_of_any()`), not scoped per-org — acceptable for now since there's only one shared default
 set across all 4 orgs; worth revisiting if orgs ever need their own default sets. Full triage list in
