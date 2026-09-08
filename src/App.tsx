@@ -21,6 +21,7 @@ import { OrganizationSettings } from './pages/OrganizationSettings';
 import { EmailConfig } from './pages/EmailConfig';
 import { DialerConfig } from './pages/DialerConfig';
 import { PowerDialer } from './pages/PowerDialer';
+import { Analytics } from './pages/Analytics';
 import { EmailsHub } from './pages/EmailsHub';
 import { Admin } from './pages/Admin';
 import { LinkedinOutreach } from './pages/LinkedinOutreach';
@@ -53,7 +54,7 @@ export function App() {
               <Route path="/outreach/linkedin" element={<LinkedinOutreach />} />
               <Route path="/outreach/autopilot" element={<AutopilotStatus />} />
               <Route path="/outreach/autopilot/new" element={<AutopilotSetup />} />
-              <Route path="/analytics" element={<ComingSoon module="Analytics" />} />
+              <Route path="/analytics" element={<Analytics />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/settings/email" element={<EmailConfig />} />
               <Route path="/settings/dialer" element={<DialerConfig />} />
