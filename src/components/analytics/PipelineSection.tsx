@@ -15,7 +15,7 @@ export function PipelineSection({ data, isAdmin }: { data: AnalyticsData; isAdmi
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-[20px] font-bold">Pipeline</h2>
-        {!isAdmin && <span className="text-xs text-muted">Showing your own activity. Admins see the whole org.</span>}
+        {!isAdmin && <span className="text-xs text-muted">Showing your own and automated activity. Admins see the whole org.</span>}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

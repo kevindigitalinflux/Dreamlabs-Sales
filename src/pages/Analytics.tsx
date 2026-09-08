@@ -26,7 +26,7 @@ export function Analytics() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[28px] font-extrabold">Analytics</h1>
-        <div className="flex items-center gap-1 rounded-lg border border-line p-1">
+        <div role="group" aria-label="Time period" className="flex items-center gap-1 rounded-lg border border-line p-1">
           {(Object.keys(PERIOD_LABELS) as AnalyticsPeriod[]).map((p) => (
             <button
               key={p}
@@ -62,7 +62,9 @@ export function Analytics() {
             <PipelineSection data={data} isAdmin={isAdmin} />
           )}
 
-          {data.emailStats.sent === 0 && data.linkedinSent === 0 && data.scraperYield.found === 0 ? (
+          {data.emailStats.sent === 0 && data.emailStats.replies === 0 && data.linkedinSent === 0 &&
+           data.scraperYield.found === 0 && data.autopilotSpendCents === 0 &&
+           data.sequenceStatusBreakdown.every((s) => s.count === 0) ? (
             <EmptyState icon={BarChart3} title="No outreach activity yet" hint="Outreach analytics will appear here once you've sent emails, LinkedIn messages, or run a scrape." />
           ) : (
             <OutreachSection data={data} isAdmin={isAdmin} />

@@ -8,10 +8,10 @@ import {
   computeSequenceStatusBreakdown, computeWonDeals,
 } from '../lib/analytics';
 import type {
-  AnalyticsPeriod, ContractorCount, EmailStats, FunnelStep, ScraperYield,
-  SequenceStatusCount, StageCount, VerticalCount, WonDeals,
+  AnalyticsLead, AnalyticsLeadNote, AnalyticsPeriod, ContractorCount, EmailStats, FunnelStep,
+  ScraperYield, SequenceStatusCount, StageCount, VerticalCount, WonDeals,
 } from '../lib/analytics';
-import type { EnrollmentStatus, Lead, LeadNote } from '../types';
+import type { EnrollmentStatus } from '../types';
 
 export interface AnalyticsData {
   leadsByStage: StageCount[];
@@ -27,8 +27,8 @@ export interface AnalyticsData {
 }
 
 interface RawData {
-  leads: Lead[];
-  notesByLead: Map<string, LeadNote[]>;
+  leads: AnalyticsLead[];
+  notesByLead: Map<string, AnalyticsLeadNote[]>;
   emailLogs: { status: string; sent_at: string }[];
   emailReplies: { received_at: string }[];
   enrollments: { status: EnrollmentStatus }[];
@@ -40,10 +40,12 @@ interface RawData {
 /**
  * Org-scoped analytics for the selected period. Fetches raw rows once per org (not per period —
  * every query already reads exactly what each table's RLS returns for the caller: org-wide for
- * admins, own-rows-only for non-admins on leads/email_logs/sequence_enrollments/scrape_jobs;
- * already org-wide for everyone on email_replies/linkedin_drafts/autopilot_runs — see
- * docs/superpowers/specs/2026-09-08-analytics-design.md §3), then recomputes via useMemo whenever
- * the period changes, with no additional network round-trip.
+ * admins, own-rows-only for non-admins on leads/email_logs/sequence_enrollments/scrape_jobs/lead_notes
+ * (scoped via its parent `leads` row, same as sequence_enrollments); already org-wide for everyone on
+ * linkedin_drafts/autopilot_runs; email_replies is joined through email_logs (`email_logs!inner(id)`)
+ * so it inherits email_logs' own-rows-only-for-non-admins visibility too, matching the population
+ * `emailStats.sent` is drawn from — see docs/superpowers/specs/2026-09-08-analytics-design.md §3),
+ * then recomputes via useMemo whenever the period changes, with no additional network round-trip.
  */
 export function useAnalytics(period: AnalyticsPeriod) {
   const { currentOrg } = useOrg();
@@ -58,39 +60,31 @@ export function useAnalytics(period: AnalyticsPeriod) {
     setLoading(true);
 
     void (async () => {
-      const [leadsRes, logsRes, repliesRes, enrollmentsRes, draftsRes, jobsRes, runsRes] = await Promise.all([
-        supabase.from('leads').select('*').eq('org_id', currentOrg.id),
+      const [leadsRes, notesRes, logsRes, repliesRes, enrollmentsRes, draftsRes, jobsRes, runsRes] = await Promise.all([
+        supabase.from('leads').select('id, stage, vertical, assigned_to, deal_value').eq('org_id', currentOrg.id),
+        supabase.from('lead_notes').select('lead_id, note_type, content, created_at, leads!inner(org_id)').eq('leads.org_id', currentOrg.id),
         supabase.from('email_logs').select('status, sent_at').eq('org_id', currentOrg.id),
-        supabase.from('email_replies').select('received_at').eq('org_id', currentOrg.id),
+        supabase.from('email_replies').select('received_at, email_logs!inner(id)').eq('org_id', currentOrg.id),
         supabase.from('sequence_enrollments').select('status, leads!inner(org_id)').eq('leads.org_id', currentOrg.id),
         supabase.from('linkedin_drafts').select('status, sent_at').eq('org_id', currentOrg.id),
         supabase.from('scrape_jobs').select('results_count, approved_count, created_at').eq('org_id', currentOrg.id),
         supabase.from('autopilot_runs').select('actual_ai_cost_cents, started_at').eq('org_id', currentOrg.id),
       ]);
 
-      const firstError = leadsRes.error ?? logsRes.error ?? repliesRes.error ?? enrollmentsRes.error
-        ?? draftsRes.error ?? jobsRes.error ?? runsRes.error;
+      const firstError = leadsRes.error ?? notesRes.error ?? logsRes.error ?? repliesRes.error
+        ?? enrollmentsRes.error ?? draftsRes.error ?? jobsRes.error ?? runsRes.error;
       if (firstError) {
         if (!cancelled) { setError(firstError.message); setLoading(false); }
         return;
       }
 
-      const leads = (leadsRes.data ?? []) as Lead[];
-      const leadIds = leads.map((l) => l.id);
-      let notesByLead = new Map<string, LeadNote[]>();
-      if (leadIds.length > 0) {
-        const notesRes = await supabase
-          .from('lead_notes').select('*').in('lead_id', leadIds);
-        if (notesRes.error) {
-          if (!cancelled) { setError(notesRes.error.message); setLoading(false); }
-          return;
-        }
-        notesByLead = new Map();
-        for (const note of (notesRes.data ?? []) as LeadNote[]) {
-          const existing = notesByLead.get(note.lead_id) ?? [];
-          existing.push(note);
-          notesByLead.set(note.lead_id, existing);
-        }
+      const leads = (leadsRes.data ?? []) as AnalyticsLead[];
+
+      const notesByLead = new Map<string, AnalyticsLeadNote[]>();
+      for (const note of (notesRes.data ?? []) as AnalyticsLeadNote[]) {
+        const existing = notesByLead.get(note.lead_id) ?? [];
+        existing.push(note);
+        notesByLead.set(note.lead_id, existing);
       }
 
       if (cancelled) return;
@@ -98,7 +92,7 @@ export function useAnalytics(period: AnalyticsPeriod) {
         leads,
         notesByLead,
         emailLogs: (logsRes.data ?? []) as { status: string; sent_at: string }[],
-        emailReplies: (repliesRes.data ?? []) as { received_at: string }[],
+        emailReplies: ((repliesRes.data ?? []) as { received_at: string }[]).map((r) => ({ received_at: r.received_at })),
         enrollments: (enrollmentsRes.data ?? []) as { status: EnrollmentStatus }[],
         linkedinDrafts: (draftsRes.data ?? []) as { status: string; sent_at: string | null }[],
         scrapeJobs: (jobsRes.data ?? []) as { results_count: number; approved_count: number; created_at: string }[],

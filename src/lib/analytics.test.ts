@@ -134,6 +134,34 @@ describe('computeFunnel', () => {
     expect(funnel.find((f) => f.stage === 'contacted')!.count).toBe(2);
     expect(funnel.find((f) => f.stage === 'won')!.conversionFromPrevious).toBe(0.5); // 1 of 2 that reached proposal_sent won
   });
+
+  it('is monotone: a lead that skipped stages via an ordinary drag still counts at every earlier funnel stage, so no conversion rate exceeds 100%', () => {
+    // Reproduces the pre-fix counterexample: A only reached contacted, B only reached audit_booked,
+    // C and D skipped straight to proposal_sent from new_lead (an ordinary Kanban drag or dropdown
+    // change, not a DB bypass) with no intermediate stage-change notes.
+    const leads = [
+      makeLead({ id: 'a', stage: 'contacted' }),
+      makeLead({ id: 'b', stage: 'audit_booked' }),
+      makeLead({ id: 'c', stage: 'proposal_sent' }),
+      makeLead({ id: 'd', stage: 'proposal_sent' }),
+    ];
+    const funnel = computeFunnel(leads, new Map());
+
+    // Pre-fix (non-monotone) behaviour gave counts [1, 1, 2, 0] — proposal_sent (2) divided by
+    // audit_booked (1) produced a 200% conversion rate. Monotone semantics mean reaching
+    // proposal_sent (C, D) also counts those leads at every earlier stage, so contacted rises from
+    // 1 to 4 and every stage's count is now non-increasing down the funnel.
+    expect(funnel.find((f) => f.stage === 'contacted')!.count).toBe(4);
+    expect(funnel.find((f) => f.stage === 'audit_booked')!.count).toBe(3);
+    expect(funnel.find((f) => f.stage === 'proposal_sent')!.count).toBe(2);
+    expect(funnel.find((f) => f.stage === 'won')!.count).toBe(0);
+
+    for (const step of funnel) {
+      if (step.conversionFromPrevious !== null) {
+        expect(step.conversionFromPrevious).toBeLessThanOrEqual(1);
+      }
+    }
+  });
 });
 
 describe('computeWonDeals', () => {

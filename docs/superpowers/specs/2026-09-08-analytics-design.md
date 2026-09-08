@@ -49,11 +49,13 @@ current `stage === S`, or any of its stage-change notes has a `toLabel` matching
 counts leads that later moved past `S` (e.g. reached `proposal_sent` then moved to `won`) *and* leads that
 regressed after reaching `S` (e.g. reached `proposal_sent` then got moved to `lost`) — both still "reached"
 `proposal_sent`. It deliberately does not use `STAGES`' array order as a rank, since `lost`/`not_now_nurture`
-are off-ramps, not "further along" than `won`. Known edge case, not worth engineering around: a lead could
-theoretically reach `proposal_sent` (current stage, or a note into it) without ever having a note for
-`contacted`/`audit_booked` — every UI path that changes stage (kanban drag, the stage dropdown) always logs
-the note, so this only happens via a direct database write bypassing the app, which doesn't occur in normal
-use.
+are off-ramps, not "further along" than `won`. A lead can reach `proposal_sent` (current stage, or a note
+into it) without ever having a note for `contacted`/`audit_booked` — this is an ordinary, one-click Kanban
+drag or a stage-dropdown change straight past intermediate stages, not a direct database write bypassing the
+app; it happens in normal use. `computeFunnel` handles this by construction: it computes each lead's highest
+reached funnel-stage index and counts that lead at every stage at or below it, so reaching a later stage
+always implies every earlier stage was also reached (standard, monotone funnel semantics) and conversion
+rates never exceed 100%.
 
 Funnel stages, in order: `contacted → audit_booked → proposal_sent → won`. Each stage's bar shows the count
 of leads that reached it; the label under each bar shows the conversion rate from the previous stage

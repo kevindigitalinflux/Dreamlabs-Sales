@@ -1,6 +1,14 @@
 import { STAGES, stageInfo } from './utils';
 import type { EnrollmentStatus, Lead, LeadNote, Stage } from '../types';
 
+/** Narrow shape of a lead as consumed by this module's compute functions — matches the columns
+ *  `useAnalytics` actually selects (not a full `Lead` fetch; see useAnalytics.ts). */
+export type AnalyticsLead = Pick<Lead, 'id' | 'stage' | 'vertical' | 'assigned_to' | 'deal_value'>;
+
+/** Narrow shape of a lead note as consumed by this module's compute functions — matches the columns
+ *  `useAnalytics` actually selects (not a full `LeadNote` fetch; see useAnalytics.ts). */
+export type AnalyticsLeadNote = Pick<LeadNote, 'lead_id' | 'note_type' | 'content' | 'created_at'>;
+
 export type AnalyticsPeriod = 'this_month' | 'last_30_days' | 'all_time';
 
 /** Start of the given period, or null for 'all_time' (no lower bound). */
@@ -21,14 +29,14 @@ export function inPeriod(dateISO: string, period: AnalyticsPeriod, now: Date = n
 export interface StageCount { stage: Stage; count: number; }
 
 /** Snapshot count of leads currently in each pipeline stage, in pipeline order, all 8 always present. */
-export function computeLeadsByStage(leads: Lead[]): StageCount[] {
+export function computeLeadsByStage(leads: AnalyticsLead[]): StageCount[] {
   return STAGES.map((s) => ({ stage: s.value, count: leads.filter((l) => l.stage === s.value).length }));
 }
 
 export interface VerticalCount { vertical: string; count: number; }
 
 /** Snapshot count of leads by vertical; null groups under "Unspecified"; sorted highest count first. */
-export function computeLeadsByVertical(leads: Lead[]): VerticalCount[] {
+export function computeLeadsByVertical(leads: AnalyticsLead[]): VerticalCount[] {
   const counts = new Map<string, number>();
   for (const lead of leads) {
     const key = lead.vertical ?? 'Unspecified';
@@ -40,7 +48,7 @@ export function computeLeadsByVertical(leads: Lead[]): VerticalCount[] {
 export interface ContractorCount { contractorId: string; contractorName: string; count: number; }
 
 /** Snapshot count of leads by assignee; unassigned leads group under contractorId 'unassigned'. */
-export function computeLeadsByContractor(leads: Lead[], nameFor: (id: string) => string): ContractorCount[] {
+export function computeLeadsByContractor(leads: AnalyticsLead[], nameFor: (id: string) => string): ContractorCount[] {
   const counts = new Map<string, number>();
   for (const lead of leads) {
     const key = lead.assigned_to ?? 'unassigned';
@@ -61,7 +69,7 @@ const STAGE_CHANGE_PREFIX = 'Stage changed: ';
 interface StageChange { toLabel: string; createdAt: string; }
 
 /** Parses "Stage changed: {from} → {to}" general notes (src/lib/leadUpdates.ts) into their target label + timestamp. */
-export function parseStageChanges(notes: LeadNote[]): StageChange[] {
+export function parseStageChanges(notes: AnalyticsLeadNote[]): StageChange[] {
   return notes
     .filter((n) => n.note_type === 'general' && n.content.startsWith(STAGE_CHANGE_PREFIX))
     .map((n) => {
@@ -71,7 +79,7 @@ export function parseStageChanges(notes: LeadNote[]): StageChange[] {
     });
 }
 
-function reachedStage(lead: Lead, stage: Stage, changes: StageChange[]): boolean {
+function reachedStage(lead: AnalyticsLead, stage: Stage, changes: StageChange[]): boolean {
   if (lead.stage === stage) return true;
   const label = stageInfo(stage).label;
   return changes.some((c) => c.toLabel === label);
@@ -79,11 +87,22 @@ function reachedStage(lead: Lead, stage: Stage, changes: StageChange[]): boolean
 
 export interface FunnelStep { stage: Stage; count: number; conversionFromPrevious: number | null; }
 
-/** Conversion funnel contacted -> audit_booked -> proposal_sent -> won. Snapshot, not period-scoped (see spec). */
-export function computeFunnel(leads: Lead[], notesByLead: Map<string, LeadNote[]>): FunnelStep[] {
-  const counts = FUNNEL_STAGES.map((stage) => ({
+/** Conversion funnel contacted -> audit_booked -> proposal_sent -> won. Snapshot, not period-scoped (see spec).
+ *  Monotone by construction: reaching a later funnel stage implies every earlier funnel stage was also reached
+ *  (standard funnel semantics), so conversion ratios are always <= 1 even though leads can skip stages via an
+ *  ordinary Kanban drag or the stage dropdown (not just a direct database write). */
+export function computeFunnel(leads: AnalyticsLead[], notesByLead: Map<string, AnalyticsLeadNote[]>): FunnelStep[] {
+  const highestReachedIndex = leads.map((lead) => {
+    const changes = parseStageChanges(notesByLead.get(lead.id) ?? []);
+    let highest = -1;
+    FUNNEL_STAGES.forEach((stage, i) => {
+      if (reachedStage(lead, stage, changes)) highest = Math.max(highest, i);
+    });
+    return highest;
+  });
+  const counts = FUNNEL_STAGES.map((stage, i) => ({
     stage,
-    count: leads.filter((lead) => reachedStage(lead, stage, parseStageChanges(notesByLead.get(lead.id) ?? []))).length,
+    count: highestReachedIndex.filter((h) => h >= i).length,
   }));
   return counts.map((c, i) => ({
     ...c,
@@ -95,8 +114,8 @@ export interface WonDeals { count: number; totalValue: number; }
 
 /** Leads that transitioned to 'won' within the given period — not leads merely currently 'won' (see spec). */
 export function computeWonDeals(
-  leads: Lead[],
-  notesByLead: Map<string, LeadNote[]>,
+  leads: AnalyticsLead[],
+  notesByLead: Map<string, AnalyticsLeadNote[]>,
   period: AnalyticsPeriod,
   now: Date = new Date(),
 ): WonDeals {
