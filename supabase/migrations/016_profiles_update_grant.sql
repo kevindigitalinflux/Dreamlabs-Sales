@@ -1,0 +1,11 @@
+-- profiles.UPDATE was never granted to the authenticated role — only to service_role.
+-- RLS's profiles_self_update policy (auth.uid() = id) already correctly restricts
+-- WHICH rows a user can update; this grant is the missing table-level permission that
+-- must exist before RLS is even evaluated. Discovered live-verifying the light/dark
+-- theme feature (2026-09-09): profiles.theme_preference updates were silently failing
+-- with 42501 "permission denied for table profiles" — and the same root cause means
+-- Settings.tsx's pre-existing "save full name" feature has likely been silently
+-- broken since it was built, predating this fix entirely. anon is deliberately NOT
+-- granted UPDATE here — unauthenticated users have no legitimate reason to update
+-- any profile row, and RLS's own policy only ever matches a real auth.uid() anyway.
+GRANT UPDATE ON public.profiles TO authenticated;
