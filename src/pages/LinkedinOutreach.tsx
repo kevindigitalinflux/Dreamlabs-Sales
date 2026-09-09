@@ -33,7 +33,7 @@ export function LinkedinOutreach() {
         <LinkedinIcon className="h-6 w-6 text-cyan" aria-hidden />
         <h1 className="text-[28px] font-extrabold">LinkedIn outreach</h1>
       </header>
-      {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
       <Card>
         <div className="flex flex-col gap-3">

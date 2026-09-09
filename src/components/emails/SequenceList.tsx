@@ -20,7 +20,7 @@ export function SequenceList() {
   const canEdit = (s: EmailSequence) => currentOrg?.role === 'admin' || s.created_by === session?.user.id;
 
   if (loading) return <Skeleton className="h-40 w-full" />;
-  if (error) return <p role="alert" className="text-sm text-red-400">{error}</p>;
+  if (error) return <p role="alert" className="text-sm text-danger">{error}</p>;
 
   return (
     <div className="flex flex-col gap-3">
@@ -35,7 +35,7 @@ export function SequenceList() {
               className={`w-full rounded-xl border border-line bg-card p-4 text-left ${canEdit(s) ? 'cursor-pointer hover:bg-surface/50' : 'cursor-default'}`}>
               <div className="flex items-center gap-2">
                 <span className="font-heading text-sm font-bold">{s.name}</span>
-                {s.is_default && <Star className="h-3.5 w-3.5 text-amber-400" aria-label="Default sequence" />}
+                {s.is_default && <Star className="h-3.5 w-3.5 text-warning" aria-label="Default sequence" />}
               </div>
               {s.description && <p className="mt-1 truncate text-sm text-muted">{s.description}</p>}
               <p className="mt-2 text-xs text-muted">{s.steps.length} {s.steps.length === 1 ? 'step' : 'steps'}</p>

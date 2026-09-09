@@ -59,7 +59,7 @@ export function PipelineKanban() {
             <Skeleton className="h-72 w-64" />
           </div>
         )}
-        {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         {!loading && !error && leads.length === 0 && (
           <EmptyState
             icon={Inbox}

@@ -28,7 +28,7 @@ export function EnrollmentControl({ lead }: { lead: Lead }) {
   if (!enrollment) {
     return (
       <div className="flex flex-col gap-2">
-        {!lead.email && <p className="text-xs text-amber-400">Add an email address to this lead first — sequences draft emails.</p>}
+        {!lead.email && <p className="text-xs text-warning">Add an email address to this lead first — sequences draft emails.</p>}
         <div className="flex items-end gap-2">
           <div className="flex-1">
             <SelectField label="Enroll in sequence" value={picked} onChange={(e) => setPicked(e.target.value)}>
@@ -40,7 +40,7 @@ export function EnrollmentControl({ lead }: { lead: Lead }) {
             <Repeat className="h-4 w-4" aria-hidden />Enroll
           </Button>
         </div>
-        {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       </div>
     );
   }
@@ -62,7 +62,7 @@ export function EnrollmentControl({ lead }: { lead: Lead }) {
           : <Button variant="secondary" onClick={() => void run(() => setStatus('active'))} disabled={busy}><Play className="h-4 w-4" aria-hidden />Resume</Button>}
         <Button variant="ghost" onClick={() => void run(() => setStatus('cancelled'))} disabled={busy}><XCircle className="h-4 w-4" aria-hidden />Cancel</Button>
       </div>
-      {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     </div>
   );
 }

@@ -44,7 +44,7 @@ export function Login() {
         <div className="flex flex-col gap-4">
           <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
           <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
-          {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
           <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? 'Signing in…' : 'Sign in'}
           </Button>

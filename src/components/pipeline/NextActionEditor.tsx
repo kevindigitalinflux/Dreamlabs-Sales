@@ -33,7 +33,7 @@ export function NextActionEditor({ lead, onSave }: NextActionEditorProps) {
       <p aria-live="polite" className="min-h-5 text-xs text-muted">
         {status === 'saving' && 'Saving…'}
         {status === 'saved' && 'Saved ✓'}
-        {status === 'error' && <span className="text-red-400">Could not save — check your connection.</span>}
+        {status === 'error' && <span className="text-danger">Could not save — check your connection.</span>}
       </p>
     </div>
   );

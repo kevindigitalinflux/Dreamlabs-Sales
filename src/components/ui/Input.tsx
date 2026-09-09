@@ -16,7 +16,7 @@ export function Input({ label, error, className = '', ...rest }: InputProps) {
     <div className="flex w-full flex-col gap-1.5">
       <label htmlFor={id} className="text-xs font-semibold text-muted">{label}</label>
       <input id={id} className={`min-h-11 ${FIELD_CLASSES} ${className}`} {...rest} />
-      {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     </div>
   );
 }
@@ -36,7 +36,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
     <div className="flex w-full flex-col gap-1.5">
       <label htmlFor={id} className="text-xs font-semibold text-muted">{label}</label>
       <textarea ref={ref} id={id} className={`min-h-28 py-2 text-[18px] ${FIELD_CLASSES} ${className}`} {...rest} />
-      {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     </div>
   );
 });

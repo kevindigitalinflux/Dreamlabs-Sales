@@ -96,7 +96,7 @@ export function SuggestionDiff({ lead, suggestion, onApply, onDismiss }: Suggest
             <span className="w-36 text-xs font-semibold text-muted">{r.label}</span>
             <span className="text-muted line-through">{r.from}</span>
             <ArrowRight className="h-3.5 w-3.5 text-muted" aria-hidden />
-            <span className="font-semibold text-emerald-400">{r.to}</span>
+            <span className="font-semibold text-success">{r.to}</span>
           </li>
         ))}
       </ul>

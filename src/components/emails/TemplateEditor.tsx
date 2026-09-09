@@ -82,7 +82,7 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
           <p className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Preview (sample lead)</p>
           <p className="whitespace-pre-wrap text-sm">{preview}</p>
         </div>
-        {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <div className="flex items-center justify-between">
           {template && !template.is_default ? (
             <Button variant="ghost" onClick={() => void handleDelete()} disabled={busy}>Delete</Button>

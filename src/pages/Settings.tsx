@@ -39,7 +39,7 @@ export function Settings() {
               {status === 'saving' ? 'Saving…' : 'Save'}
             </Button>
             {status === 'saved' && <span className="text-sm text-green-400">Saved ✓</span>}
-            {status === 'error' && <span role="alert" className="text-sm text-red-400">Could not save — try again.</span>}
+            {status === 'error' && <span role="alert" className="text-sm text-danger">Could not save — try again.</span>}
           </div>
         </form>
       </Card>

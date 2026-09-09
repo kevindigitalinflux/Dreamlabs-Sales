@@ -30,7 +30,7 @@ export function Unsubscribe() {
         <div className="flex flex-col items-center gap-4 p-2">
           {state === 'done' ? (
             <>
-              <CheckCircle2 className="h-10 w-10 text-emerald-400" aria-hidden />
+              <CheckCircle2 className="h-10 w-10 text-success" aria-hidden />
               <p className="text-lg font-bold">You've been unsubscribed</p>
               <p className="text-sm text-muted">
                 {businessName ? `You won't hear from ${businessName} again.` : "You won't receive further emails from us."}
@@ -41,7 +41,7 @@ export function Unsubscribe() {
               <MailX className="h-10 w-10 text-cyan" aria-hidden />
               <p className="text-lg font-bold">Stop future emails?</p>
               <p className="text-sm text-muted">Confirm below and we'll remove you from any further outreach.</p>
-              {state === 'error' && <p role="alert" className="text-sm text-red-400">{error}</p>}
+              {state === 'error' && <p role="alert" className="text-sm text-danger">{error}</p>}
               <Button onClick={() => void handleConfirm()} disabled={state === 'busy'}>
                 {state === 'busy' ? 'Unsubscribing…' : 'Confirm — stop future emails'}
               </Button>

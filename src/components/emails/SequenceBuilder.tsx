@@ -41,7 +41,7 @@ function StepCard({ index, step, templates, onChange, onRemove }: {
           {templates.map((t) => <option key={t.template_type} value={t.template_type}>{t.name}</option>)}
         </SelectField>
       </div>
-      <button type="button" onClick={onRemove} aria-label="Remove step" className="mb-1 flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-muted hover:text-red-400"><Trash2 className="h-4 w-4" aria-hidden /></button>
+      <button type="button" onClick={onRemove} aria-label="Remove step" className="mb-1 flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-muted hover:text-danger"><Trash2 className="h-4 w-4" aria-hidden /></button>
     </li>
   );
 }
@@ -104,7 +104,7 @@ export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }
             Default sequence (visible to all contractors)
           </label>
         )}
-        {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <div className="flex items-center justify-between">
           {sequence && !sequence.is_default ? <Button variant="ghost" onClick={() => { setBusy(true); void onDelete(sequence.id).then((err) => { setBusy(false); if (err) setError(err); else onClose(); }); }} disabled={busy}>Delete</Button> : <span />}
           <Button onClick={() => void handleSave()} disabled={busy}>{busy ? 'Saving…' : 'Save sequence'}</Button>

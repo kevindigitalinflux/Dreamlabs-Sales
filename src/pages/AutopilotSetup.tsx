@@ -73,7 +73,7 @@ export function AutopilotSetup() {
         <h1 className="text-[28px] font-extrabold">Start autopilot</h1>
       </header>
       <StepProgress step={step} total={3} />
-      {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
       {step === 1 && (
         <Card>
@@ -123,7 +123,7 @@ export function AutopilotSetup() {
             </label>
             <Input label="Optional total spend cap ($)" type="number" value={spendCap} onChange={(e) => setSpendCap(e.target.value)} placeholder="No cap" />
             {dailyOutreachTarget > 30 && (
-              <p role="alert" className="text-sm text-amber-400">
+              <p role="alert" className="text-sm text-warning">
                 {dailyOutreachTarget}/day is above the recommended safe ceiling (~30/day) for a mailbox's sender reputation. You can still proceed.
               </p>
             )}

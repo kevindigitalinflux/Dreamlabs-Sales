@@ -69,7 +69,7 @@ export function Scraper() {
         <h1 className="text-[28px] font-extrabold">Find leads</h1>
       </header>
       <StepProgress step={step} total={TOTAL_STEPS} />
-      {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
       {step === 1 && (
         <Card>

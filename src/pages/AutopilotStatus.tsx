@@ -26,7 +26,7 @@ export function AutopilotStatus() {
         <Rocket className="h-6 w-6 text-cyan" aria-hidden />
         <h1 className="text-[28px] font-extrabold">Autopilot</h1>
       </header>
-      {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
       {!run && (
         <EmptyState
@@ -79,7 +79,7 @@ export function AutopilotStatus() {
           {blocklist.map((b) => (
             <div key={b.id} className="flex items-center justify-between rounded-lg bg-surface/50 p-2 text-sm">
               <span>{b.value}{b.reason && ` — ${b.reason}`}</span>
-              <button type="button" onClick={() => void removeBlocklistEntry(b.id)} className="text-red-400" aria-label={`Remove ${b.value}`}>
+              <button type="button" onClick={() => void removeBlocklistEntry(b.id)} className="text-danger" aria-label={`Remove ${b.value}`}>
                 <XCircle className="h-4 w-4" aria-hidden />
               </button>
             </div>

@@ -64,7 +64,7 @@ export function PipelineList() {
       <FilterBar filters={filters} onChange={setFilters} profiles={profiles.filter((p) => p.role === 'contractor')} />
 
       {loading && <Skeleton className="h-64 w-full" />}
-      {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {!loading && !error && visible.length === 0 && (
         <EmptyState
           icon={Inbox}

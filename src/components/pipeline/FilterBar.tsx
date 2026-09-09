@@ -46,7 +46,7 @@ export function FilterBar({ filters, onChange, profiles }: FilterBarProps) {
         type="button"
         onClick={() => onChange({ ...filters, overdueOnly: !filters.overdueOnly })}
         aria-pressed={filters.overdueOnly}
-        className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm font-semibold ${filters.overdueOnly ? 'border-red-400 text-red-400' : 'border-line text-muted'}`}
+        className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm font-semibold ${filters.overdueOnly ? 'border-red-400 text-danger' : 'border-line text-muted'}`}
       >
         <AlertCircle className="h-4 w-4" aria-hidden />
         Overdue only

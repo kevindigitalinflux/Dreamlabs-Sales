@@ -89,7 +89,7 @@ function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configur
       <div className="flex items-center gap-2">
         <p className="font-semibold">{label}</p>
         {configured && (
-          <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-400">
+          <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-success">
             <CheckCircle2 className="h-3 w-3" aria-hidden /> Configured
           </span>
         )}
@@ -101,7 +101,7 @@ function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configur
         </div>
         <Button variant="secondary" onClick={() => void handleSave()} disabled={busy}>{busy ? 'Verifying…' : 'Save'}</Button>
       </div>
-      {msg && <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-red-400' : 'text-emerald-400'}`}>{msg.text}</p>}
+      {msg && <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : 'text-success'}`}>{msg.text}</p>}
     </div>
   );
 }

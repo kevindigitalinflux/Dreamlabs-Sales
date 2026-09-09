@@ -15,8 +15,8 @@ function statusBadge(job: { status: string } | null) {
   const classes: Record<string, string> = {
     pending: 'bg-slate-500/15 text-slate-300',
     running: 'bg-cyan/15 text-cyan',
-    completed: 'bg-emerald-500/15 text-emerald-400',
-    failed: 'bg-red-500/15 text-red-400',
+    completed: 'bg-emerald-500/15 text-success',
+    failed: 'bg-red-500/15 text-danger',
   };
   return <Badge className={classes[job.status] ?? classes.pending}>{job.status}</Badge>;
 }
@@ -55,7 +55,7 @@ export function ScraperJob() {
   }
 
   if (loading) return <Skeleton className="h-96 w-full" />;
-  if (!job) return <p role="alert" className="text-sm text-red-400">Job not found.</p>;
+  if (!job) return <p role="alert" className="text-sm text-danger">Job not found.</p>;
 
   const pending = rawLeads.filter((l) => l.status === 'pending' || l.status === 'duplicate');
 
@@ -68,7 +68,7 @@ export function ScraperJob() {
         </div>
         <Button variant="secondary" onClick={exportCsv} disabled={rawLeads.length === 0}>Download CSV</Button>
       </header>
-      {job.status === 'failed' && <p role="alert" className="text-sm text-red-400">{job.error_message}</p>}
+      {job.status === 'failed' && <p role="alert" className="text-sm text-danger">{job.error_message}</p>}
       {job.status !== 'completed' && job.status !== 'failed' && (
         <p className="text-sm text-muted">{job.results_count} found so far — still running…</p>
       )}
@@ -91,7 +91,7 @@ export function ScraperJob() {
               <tr key={lead.id} className={`border-b border-line ${lead.status === 'duplicate' ? 'bg-amber-500/10' : ''}`}>
                 <td className="p-3 font-semibold">
                   {lead.business_name}
-                  {lead.status === 'duplicate' && <Badge className="ml-2 bg-amber-500/20 text-amber-400">Possible duplicate</Badge>}
+                  {lead.status === 'duplicate' && <Badge className="ml-2 bg-amber-500/20 text-warning">Possible duplicate</Badge>}
                 </td>
                 <td className="p-3">{lead.phone ?? '—'}</td>
                 <td className="p-3">{lead.email ?? '—'}</td>
@@ -120,7 +120,7 @@ export function ScraperJob() {
                       </Button>
                     )}
                   </div>
-                  {rowError?.id === lead.id && <p role="alert" className="mt-1 text-xs text-red-400">{rowError.text}</p>}
+                  {rowError?.id === lead.id && <p role="alert" className="mt-1 text-xs text-danger">{rowError.text}</p>}
                 </td>
               </tr>
             ))}

@@ -30,7 +30,7 @@ export function UserTable({ members, orgId, onChanged }: UserTableProps) {
 
   return (
     <div className="overflow-x-auto">
-      {error && <p role="alert" className="mb-2 text-sm text-red-400">{error}</p>}
+      {error && <p role="alert" className="mb-2 text-sm text-danger">{error}</p>}
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-line text-xs font-semibold text-muted">

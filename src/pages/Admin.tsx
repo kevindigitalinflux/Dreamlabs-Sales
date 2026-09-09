@@ -83,7 +83,7 @@ export function Admin() {
         </div>
       </div>
 
-      {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
       <Card>
         <div className="mb-3 flex items-center justify-between">

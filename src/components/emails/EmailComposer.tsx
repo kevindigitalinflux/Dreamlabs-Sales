@@ -129,7 +129,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
   return (
     <Modal open={open} onClose={onClose} title={`Email — ${lead.business_name}`}>
       <div className="flex flex-col gap-4">
-        {!lead.email && <p role="alert" className="text-sm text-red-400">This lead has no email address.</p>}
+        {!lead.email && <p role="alert" className="text-sm text-danger">This lead has no email address.</p>}
         <SelectField label="Template" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
           <option value="">Choose…</option>
           {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -141,21 +141,21 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
           </Button>
         </div>
         {missing.length > 0 && (
-          <p className="text-xs text-amber-400">No value for: {missing.map((m) => `{{${m}}}`).join(', ')} — those spots are blank, check the draft reads well.</p>
+          <p className="text-xs text-warning">No value for: {missing.map((m) => `{{${m}}}`).join(', ')} — those spots are blank, check the draft reads well.</p>
         )}
         <Input label="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
         {diff && (
           <div className="max-h-48 overflow-y-auto rounded-lg bg-surface/60 p-3 text-xs">
             <p className="mb-1 flex items-center gap-1 font-bold uppercase tracking-wide text-muted"><WandSparkles className="h-3.5 w-3.5" aria-hidden />Template → AI changes</p>
             {diff.map((l, i) => (
-              <p key={i} className={`whitespace-pre-wrap ${l.kind === 'added' ? 'text-emerald-400' : l.kind === 'removed' ? 'text-red-400/70 line-through' : 'text-muted/60'}`}>{l.text || ' '}</p>
+              <p key={i} className={`whitespace-pre-wrap ${l.kind === 'added' ? 'text-success' : l.kind === 'removed' ? 'text-danger/70 line-through' : 'text-muted/60'}`}>{l.text || ' '}</p>
             ))}
             <button type="button" onClick={() => setShowDiff(false)} className="mt-1 flex min-h-11 cursor-pointer items-center text-cyan">Hide diff</button>
           </div>
         )}
         <Textarea label="Body (plain text — lands in inboxes better)" rows={10} value={body} onChange={(e) => setBody(e.target.value)} />
         {msg && (
-          <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-red-400' : msg.kind === 'warn' ? 'text-amber-400' : 'text-emerald-400'}`}>
+          <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : msg.kind === 'warn' ? 'text-warning' : 'text-success'}`}>
             {msg.text}
           </p>
         )}

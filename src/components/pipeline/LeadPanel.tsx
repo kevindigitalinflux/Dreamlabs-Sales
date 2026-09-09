@@ -60,7 +60,7 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
                 onClick={() => void onUpdate(lead.id, { is_priority: !lead.is_priority })}
                 aria-pressed={lead.is_priority}
                 aria-label={lead.is_priority ? 'Unmark as priority' : 'Mark as priority'}
-                className={`flex h-8 w-8 items-center justify-center rounded-lg ${lead.is_priority ? 'text-amber-400' : 'text-muted hover:text-amber-400'}`}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg ${lead.is_priority ? 'text-warning' : 'text-muted hover:text-warning'}`}
               >
                 <Star className="h-4 w-4" aria-hidden fill={lead.is_priority ? 'currentColor' : 'none'} />
               </button>

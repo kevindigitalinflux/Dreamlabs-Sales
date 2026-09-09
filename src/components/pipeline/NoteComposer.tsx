@@ -126,7 +126,7 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
                 <option value="meeting">Meeting</option>
                 <option value="general">General</option>
               </SelectField>
-              {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+              {error && <p role="alert" className="text-sm text-danger">{error}</p>}
               <Button onClick={() => void saveFreeText()} disabled={busy}>{busy ? 'Saving…' : 'Save note'}</Button>
             </div>
           )}
@@ -136,7 +136,7 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
           <p className="text-sm text-muted">Note saved ✓ — before you close, when should you touch this lead next?</p>
           <Input label="Next action date" type="date" value={nextDate} onChange={(e) => setNextDate(e.target.value)} />
           <Input label="Next action note" value={nextNote} onChange={(e) => setNextNote(e.target.value)} placeholder="e.g. Chase by phone" />
-          {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
           <div className="flex items-center justify-between">
             <Button variant="ghost" onClick={reset}>Skip</Button>
             <Button onClick={() => void saveNextAction()} disabled={busy}>{busy ? 'Saving…' : 'Save next action'}</Button>

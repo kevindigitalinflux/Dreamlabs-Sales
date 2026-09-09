@@ -56,7 +56,7 @@ export function Dashboard() {
       <Card>
         <h2 className="mb-3 text-[18px] font-bold">Today's follow-ups</h2>
         {loading && <Skeleton className="h-24 w-full" />}
-        {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         {!loading && !error && <TodaysFocus leads={leads} onOpen={setSelected} />}
       </Card>
 

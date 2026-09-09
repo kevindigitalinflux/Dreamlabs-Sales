@@ -33,7 +33,7 @@ export function TodaysFocus({ leads, onOpen }: TodaysFocusProps) {
             >
               <span className="font-heading text-sm font-bold">{lead.business_name}</span>
               <StageBadge stage={lead.stage} />
-              <span className={`text-xs font-semibold ${overdue ? 'text-red-400' : 'text-cyan'}`}>
+              <span className={`text-xs font-semibold ${overdue ? 'text-danger' : 'text-cyan'}`}>
                 {dueLabel(lead.next_action_date!)}
               </span>
               {lead.next_action_note && <span className="w-full text-sm text-muted sm:w-auto sm:flex-1">{lead.next_action_note}</span>}

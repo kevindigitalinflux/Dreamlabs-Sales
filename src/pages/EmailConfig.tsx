@@ -65,7 +65,7 @@ export function EmailConfig() {
       <div className="mx-auto flex max-w-2xl flex-col gap-4">
         <h1 className="text-[28px] font-extrabold">Email sending</h1>
         <Card>
-          <p role="alert" className="text-sm text-red-400">Could not load your email settings — {error}</p>
+          <p role="alert" className="text-sm text-danger">Could not load your email settings — {error}</p>
         </Card>
       </div>
     );
@@ -78,7 +78,7 @@ export function EmailConfig() {
       <header className="flex items-center gap-3">
         <h1 className="text-[28px] font-extrabold">Email sending</h1>
         {settings?.is_verified && (
-          <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-emerald-400">
+          <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-success">
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Verified
           </span>
         )}
@@ -119,7 +119,7 @@ export function EmailConfig() {
             </>
           )}
 
-          {msg && <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-red-400' : 'text-emerald-400'}`}>{msg.text}</p>}
+          {msg && <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : 'text-success'}`}>{msg.text}</p>}
 
           <div className="flex items-center justify-between">
             <Button onClick={() => void handleSave()} disabled={busy !== null}>{busy === 'save' ? 'Saving…' : 'Save settings'}</Button>

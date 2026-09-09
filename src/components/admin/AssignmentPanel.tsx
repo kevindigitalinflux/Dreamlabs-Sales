@@ -51,7 +51,7 @@ export function AssignmentPanel({ contractors }: { contractors: { id: string; fu
   }
 
   if (loading) return <Skeleton className="h-40 w-full" />;
-  if (error) return <p role="alert" className="text-sm text-red-400">{error}</p>;
+  if (error) return <p role="alert" className="text-sm text-danger">{error}</p>;
   if (unassigned.length === 0) {
     return <EmptyState icon={UserCheck} title="No unassigned leads" hint="Every lead in the pipeline has an owner." />;
   }

@@ -95,7 +95,7 @@ export function AddLeadWizard({ open, onClose, onCreate }: AddLeadWizardProps) {
           </div>
         )}
 
-        {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
         <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={() => (step === 1 ? close() : setStep(step - 1))}>

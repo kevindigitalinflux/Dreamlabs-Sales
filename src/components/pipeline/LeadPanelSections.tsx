@@ -34,7 +34,7 @@ function StatusLine({ status }: { status: SaveStatus }) {
     <p aria-live="polite" className="min-h-5 text-xs text-muted">
       {status === 'saving' && 'Saving…'}
       {status === 'saved' && 'Saved ✓'}
-      {status === 'error' && <span className="text-red-400">Could not save — check your connection.</span>}
+      {status === 'error' && <span className="text-danger">Could not save — check your connection.</span>}
     </p>
   );
 }
@@ -156,7 +156,7 @@ export function PipelineInfo({ lead, onSave }: EditableSectionProps) {
       </div>
       {lead.google_rating !== null && (
         <p className="flex items-center gap-1 text-xs text-muted">
-          <Star className="h-3.5 w-3.5 text-amber-400" aria-hidden />
+          <Star className="h-3.5 w-3.5 text-warning" aria-hidden />
           {lead.google_rating} ({lead.review_count ?? 0} reviews)
         </p>
       )}

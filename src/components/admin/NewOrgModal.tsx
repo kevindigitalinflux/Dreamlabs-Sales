@@ -35,7 +35,7 @@ export function NewOrgModal({ open, onClose, onCreated }: NewOrgModalProps) {
     <Modal open={open} onClose={onClose} title="New organization">
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input label="Organization name" value={name} onChange={(e) => setName(e.target.value)} required />
-        {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <Button type="submit" disabled={submitting}>{submitting ? 'Creating…' : 'Create organization'}</Button>
       </form>
     </Modal>

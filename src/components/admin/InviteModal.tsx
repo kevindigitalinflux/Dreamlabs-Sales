@@ -53,7 +53,7 @@ export function InviteModal({ open, onClose, orgId, onInvited }: InviteModalProp
           <option value="contractor">Contractor</option>
           <option value="admin">Admin</option>
         </SelectField>
-        {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <Button type="submit" disabled={submitting}>
           {submitting ? 'Sending…' : 'Send invite'}
         </Button>
