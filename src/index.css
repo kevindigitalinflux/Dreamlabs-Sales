@@ -1,19 +1,51 @@
 @import "tailwindcss";
 
 @theme {
+  /* Accent colors — identical in both themes (this is also what keeps the sidebar's
+     bg-navy background correct in both themes, with no special handling needed). */
   --color-navy: #040F49;
   --color-violet: #8B32FF;
   --color-purple: #64378B;
   --color-magenta: #F0386B;
   --color-cyan: #00DFDF;
+
+  /* Page-content neutrals. LIGHT values are the base/default here — light is this
+     app's default theme, and unauthenticated pages (which never mount ThemeProvider)
+     must render correctly with no [data-theme] attribute present at all. Dark mode
+     is the override, defined below under [data-theme="dark"] — this is an intentional
+     inversion of the pre-theming file's dark-as-base structure, not an oversight.
+     Brand-palette-only: offwhite/navy are the app's existing documented brand
+     tokens, swapping which role they play; #FFFFFF is the one agreed non-brand
+     addition, used only for card surfaces so they read as distinct from the page
+     background. */
+  --color-offwhite: #040F49;
+  --color-bg: #F4F4F8;
+  --color-card: #FFFFFF;
+  --color-surface: rgba(4, 15, 73, 0.04);
+  --color-muted: rgba(4, 15, 73, 0.55);
+  --color-line: rgba(4, 15, 73, 0.10);
+
+  /* Nav chrome (Sidebar, MobileNav): permanently dark regardless of theme, locked to
+     this app's original dark-mode neutral values. Never redefined under
+     [data-theme="dark"] below — these four are the same in both themes, always. */
+  --color-nav-text: #F4F4F8;
+  --color-nav-muted: rgba(244, 244, 248, 0.55);
+  --color-nav-line: rgba(255, 255, 255, 0.08);
+  --color-nav-hover: #1A2575;
+
+  --font-heading: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Dark mode override — only the page-content neutrals change; accents and nav-*
+   tokens above are untouched here. */
+:root[data-theme="dark"] {
   --color-offwhite: #F4F4F8;
   --color-bg: #09102E;
   --color-card: #111C6A;
   --color-surface: #1A2575;
   --color-muted: rgba(244, 244, 248, 0.55);
   --color-line: rgba(255, 255, 255, 0.08);
-  --font-heading: "Montserrat", ui-sans-serif, system-ui, sans-serif;
-  --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer base {
