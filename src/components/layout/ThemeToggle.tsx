@@ -11,7 +11,7 @@ export function ThemeToggle() {
         onClick={() => theme !== 'light' && toggle()}
         aria-pressed={theme === 'light'}
         aria-label="Light mode"
-        className={`flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-md ${theme === 'light' ? 'bg-violet text-offwhite' : 'text-muted hover:text-offwhite'}`}
+        className={`flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-md ${theme === 'light' ? 'bg-violet text-on-accent' : 'text-muted hover:text-offwhite'}`}
       >
         <Sun className="h-4 w-4" aria-hidden />
       </button>
@@ -20,7 +20,7 @@ export function ThemeToggle() {
         onClick={() => theme !== 'dark' && toggle()}
         aria-pressed={theme === 'dark'}
         aria-label="Dark mode"
-        className={`flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-md ${theme === 'dark' ? 'bg-violet text-offwhite' : 'text-muted hover:text-offwhite'}`}
+        className={`flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-md ${theme === 'dark' ? 'bg-violet text-on-accent' : 'text-muted hover:text-offwhite'}`}
       >
         <Moon className="h-4 w-4" aria-hidden />
       </button>

@@ -33,7 +33,7 @@ export function Analytics() {
               type="button"
               onClick={() => setPeriod(p)}
               aria-pressed={period === p}
-              className={`min-h-9 cursor-pointer rounded-md px-3 text-sm font-semibold ${period === p ? 'bg-violet text-offwhite' : 'text-muted hover:text-offwhite'}`}
+              className={`min-h-9 cursor-pointer rounded-md px-3 text-sm font-semibold ${period === p ? 'bg-violet text-on-accent' : 'text-muted hover:text-offwhite'}`}
             >
               {PERIOD_LABELS[p]}
             </button>
@@ -50,7 +50,7 @@ export function Analytics() {
 
       {!loading && error && (
         <Card>
-          <p role="alert" className="text-sm text-red-400">Could not load analytics — {error}</p>
+          <p role="alert" className="text-sm text-danger">Could not load analytics — {error}</p>
         </Card>
       )}
 

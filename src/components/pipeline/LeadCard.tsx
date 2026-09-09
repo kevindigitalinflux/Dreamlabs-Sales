@@ -39,7 +39,7 @@ export function LeadCard({ lead, assigneeName, onOpen }: LeadCardProps) {
       <div className="flex items-start justify-between gap-2">
         <p className="font-heading text-sm font-bold">{lead.business_name}</p>
         {assigneeName && (
-          <span aria-label={`Assigned to ${assigneeName}`} title={assigneeName} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-purple text-[10px] font-bold">
+          <span aria-label={`Assigned to ${assigneeName}`} title={assigneeName} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-purple text-[10px] font-bold text-on-accent">
             {initials(assigneeName)}
           </span>
         )}
@@ -57,7 +57,7 @@ export function LeadCard({ lead, assigneeName, onOpen }: LeadCardProps) {
         </button>
       )}
       {due && lead.next_action_date && (
-        <p className={`flex items-center gap-1.5 text-xs font-semibold ${isOverdue(lead.next_action_date) ? 'text-red-400' : 'text-cyan'}`}>
+        <p className={`flex items-center gap-1.5 text-xs font-semibold ${isOverdue(lead.next_action_date) ? 'text-danger' : 'text-cyan'}`}>
           <AlertCircle className="h-3.5 w-3.5" aria-hidden />
           {dueLabel(lead.next_action_date)}
         </p>

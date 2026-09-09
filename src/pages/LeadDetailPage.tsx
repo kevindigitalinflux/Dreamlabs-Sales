@@ -47,7 +47,7 @@ export function LeadDetailPage() {
         <h1 className="text-[28px] font-extrabold">{lead.business_name}</h1>
         <StageBadge stage={lead.stage} />
         {assignedProfile && (
-          <span title={assignedProfile.full_name ?? assignedProfile.email} className="flex h-8 w-8 items-center justify-center rounded-full bg-purple text-xs font-bold">
+          <span title={assignedProfile.full_name ?? assignedProfile.email} className="flex h-8 w-8 items-center justify-center rounded-full bg-purple text-xs font-bold text-on-accent">
             {initials(assignedProfile.full_name ?? assignedProfile.email)}
           </span>
         )}
@@ -114,7 +114,7 @@ export function LeadDetailPage() {
         type="button"
         onClick={() => setNoteOpen(true)}
         aria-label="Add note"
-        className="fixed bottom-20 right-4 z-40 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-violet shadow-lg md:hidden"
+        className="fixed bottom-20 right-4 z-40 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-violet text-on-accent shadow-lg md:hidden"
       >
         <Plus className="h-6 w-6" aria-hidden />
       </button>
