@@ -47,17 +47,19 @@
   /* Stage badge + status text colours. Unlike the accents above, these DO need a
      different value per theme — the original hex values (now the dark-mode override
      below) were tuned for a dark background and fall under WCAG AA (~1.7-3:1) once a
-     real light background renders; these light-mode values are the same hue family,
-     darkened to clear 4.5:1 against white/off-white cards (verified via WCAG contrast
-     calculation, not eyeballed). */
-  --color-stage-new-lead: #637794;
-  --color-stage-contacted: #9544FF;
-  --color-stage-audit-booked: #008383;
-  --color-stage-proposal-sent: #A16807;
-  --color-stage-negotiating: #C25405;
-  --color-stage-won: #178841;
-  --color-stage-lost: #EB1414;
-  --color-stage-nurture: #9854D3;
+     real light background renders. These light-mode values are darkened to clear
+     4.5:1 against the SAME colour's own translucent badge tint (bg-stage-x/15, or
+     /25 for nurture) — not against plain white — since bg and text share this one
+     token and darkening it shifts both simultaneously; solved via iterative
+     self-consistent contrast calculation, not eyeballed or checked against white. */
+  --color-stage-new-lead: #566781;
+  --color-stage-contacted: #7E1CFF;
+  --color-stage-audit-booked: #007474;
+  --color-stage-proposal-sent: #8A5906;
+  --color-stage-negotiating: #AB4A04;
+  --color-stage-won: #147739;
+  --color-stage-lost: #C21111;
+  --color-stage-nurture: #762FB5;
   --color-danger: #EC0B0B;
   --color-success: #1D8660;
   --color-warning: #986E03;

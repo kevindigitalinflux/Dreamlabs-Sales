@@ -13,7 +13,7 @@ export function MobileNav() {
   return (
     <nav
       aria-label="Mobile"
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-nav-line bg-nav-bg backdrop-blur md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-nav-line bg-nav-bg md:hidden"
     >
       {ITEMS.map(({ to, label, icon: Icon, end }) => (
         <NavLink
