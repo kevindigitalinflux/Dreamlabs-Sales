@@ -506,9 +506,63 @@ the real database:**
 4. The Outreach section's empty-state check only looked at 3 of 6 real signals, so an org with sequence or
    autopilot activity but no emails/LinkedIn/scrapes would have incorrectly shown "No outreach activity yet".
 
-**Not yet started:** Cloudflare Pages deploy, Power Dialer Phase 1's provider-specific wiring (`test`
-action, `dialer-push-queue`, `dialer-webhook` — the filter/count screen itself is built and enabling "Start
-dialing session" is the last step once these land), Phase 2 (AI voice agent).
+**Logo added to sidebar (2026-09-09).** DI Dreamlabs logo icon now renders above the "Dreamlabs Sales"
+wordmark in `Sidebar.tsx`.
+
+**Light/dark theme shipped (2026-09-09).** Light is now the default theme app-wide (previously dark-only);
+a Sun/Moon segmented toggle sits in the top bar (`ThemeToggle.tsx`), preference persists per-account via
+`profiles.theme_preference` (seeded from localStorage first for instant load, reconciled with the account's
+value once it loads). Design doc: `docs/superpowers/specs/2026-09-09-light-dark-theme-design.md`. Plan:
+`docs/superpowers/plans/2026-09-09-light-dark-theme.md`. Sidebar/MobileNav are deliberately excluded from
+theming (permanently dark, per explicit requirement) via 5 locked `nav-*` tokens including `--color-nav-bg`
+(nav chrome needed one opaque non-compositing colour once the page background it used to translucently sit
+over started flipping per-theme). CSS uses "light as base, dark as override" (`:root[data-theme="dark"]`,
+deliberately unlayered so it outranks Tailwind's `@theme`-generated rules regardless of cascade layer) —
+required because unauthenticated routes (Login/Welcome) never mount `ThemeProvider` (scoped inside
+`AppShell.tsx` only) and must render correctly with zero `[data-theme]` attribute present. Analytics charts
+(`BarChart`/`DonutChart`) are theme-aware via `chartColors.ts`.
+
+**Real production bug found and fixed during this build: `profiles` table had a privilege-escalation hole
+live for an unknown period.** `authenticated` had table-level `UPDATE` on `profiles` (migration 016,
+initially thought to be *fixing* a permission gap for the theme toggle) — which implicitly included
+`platform_role`, the column `admin-users`/`org-api-settings` edge functions use to gate cross-org admin
+access. Any signed-in user could have granted themselves `platform_admin`. Root cause: migration 001 had
+correctly scoped `UPDATE` to specific safe columns only (`full_name, avatar_url, updated_at`); Postgres
+reports a missing *column* privilege with the same generic error as a missing *table* privilege, which is
+what caused the initial misdiagnosis. Fixed via migration 017 (`REVOKE` + column-scoped `GRANT` adding
+`theme_preference` to the safe list), applied live and independently re-verified against
+`information_schema.column_privileges` — `authenticated` now holds `UPDATE` on exactly
+`avatar_url, full_name, theme_preference, updated_at`. Live data checked before and after: 3 profiles, no
+signs of tampering.
+
+**Two rounds of whole-branch + scoped re-review caught real UI bugs the per-task reviews couldn't see** (both
+now fixed, `eb441e9`..`0aa8741`): the light background never rendered anywhere outside white cards (an old
+`index.html` inline style outranked the CSS token — the first fix attempt swapped which theme broke instead
+of removing the override, caught by the re-review and fixed properly the second time); Sidebar/MobileNav's
+translucent `bg-navy/40` composited light once the real background rendered; two sticky table headers
+(Pipeline List, Email Logs) were invisible in light mode; theme toggle didn't clear on sign-out; the profile
+write had zero error handling; text sitting on solid accent fills (primary buttons, avatar-initial badges)
+lost contrast; the 8 stage-badge colours needed a second, self-consistent contrast pass (they're checked
+against the badge's own translucent tint, not plain white, since bg and text share one token); ~41 files'
+error/success/warning text was under AA in light mode.
+
+**Known deferred follow-up (confirmed real, explicitly out of scope for the theme plan):** `text-cyan`
+(the `#00DFDF` accent, used as literal text in ~27 files — active nav-link states, links, badges) measures
+~1.52:1 against the light background, the same contrast-failure class as the stage/status colours just
+fixed. Not touched this session because it's a large, pre-existing, cross-cutting pattern, and fixing it
+means either making `cyan` theme-aware (contradicting the design spec's explicit "accents identical in both
+themes" decision) or introducing a new link/accent-text token — a real design call, not a mechanical fix.
+Also noted: the base `--color-muted` token measures 4.15:1 in light mode, just under AA — the app's
+universal secondary-text colour (table headers, field labels, hints), predates this plan entirely.
+
+**Not yet started:** the `text-cyan`/`--color-muted` follow-up above, Cloudflare Pages deploy, Power Dialer
+Phase 1's provider-specific wiring (`test` action, `dialer-push-queue`, `dialer-webhook` — the filter/count
+screen itself is built and enabling "Start dialing session" is the last step once these land), Phase 2 (AI
+voice agent), and the user's broader still-pending requests: multi-pipeline support (leads become
+pipeline-scoped, shareable between org members), a "Sales Assistant" page (text/voice note capture →
+Gemini-driven cross-platform updates, CSV upload → AI-assisted lead creation with pipeline selection), and
+an autopilot "existing pipeline vs. new scrape" choice — all explicitly deferred behind multi-pipeline
+support existing first.
 **Known issues / pending human steps:** Kevin's SMTP credentials not yet entered for the DI Dreamlabs org
 (/settings/email → save + test; until then sends return a friendly settings-gate error). Sequence steps
 are limited to the 5 default templates (custom templates can't be steps yet). check-sequences insert+advance
