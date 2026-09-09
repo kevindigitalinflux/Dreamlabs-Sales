@@ -25,6 +25,7 @@ export interface Profile {
   full_name: string | null;
   platform_role: PlatformRole;
   avatar_url: string | null;
+  theme_preference: 'light' | 'dark';
   created_at: string;
   updated_at: string;
 }
