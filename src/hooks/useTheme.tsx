@@ -23,27 +23,52 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const { profile } = useAuth();
-  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') === 'dark' ? 'dark' : 'light'));
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      return localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
+  });
 
   useEffect(() => {
     const pref = profile?.theme_preference;
     if (!pref) return;
     setTheme((current) => {
       if (pref === current) return current;
-      localStorage.setItem('theme', pref);
+      try {
+        localStorage.setItem('theme', pref);
+      } catch {
+        // Storage unavailable (blocked/partitioned) — theme still applies for this session.
+      }
       return pref;
     });
   }, [profile?.theme_preference]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    return () => {
+      delete document.documentElement.dataset.theme;
+    };
   }, [theme]);
 
   const toggle = useCallback(() => {
     setTheme((prev) => {
       const next: Theme = prev === 'light' ? 'dark' : 'light';
-      localStorage.setItem('theme', next);
-      if (profile) void supabase.from('profiles').update({ theme_preference: next }).eq('id', profile.id);
+      try {
+        localStorage.setItem('theme', next);
+      } catch {
+        // Storage unavailable (blocked/partitioned) — theme still applies for this session.
+      }
+      if (profile) {
+        void supabase
+          .from('profiles')
+          .update({ theme_preference: next })
+          .eq('id', profile.id)
+          .then(({ error }) => {
+            if (error) console.error('Failed to save theme preference', error);
+          });
+      }
       return next;
     });
   }, [profile]);
