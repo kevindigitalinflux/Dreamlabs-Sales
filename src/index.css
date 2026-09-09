@@ -27,11 +27,40 @@
 
   /* Nav chrome (Sidebar, MobileNav): permanently dark regardless of theme, locked to
      this app's original dark-mode neutral values. Never redefined under
-     [data-theme="dark"] below — these four are the same in both themes, always. */
+     [data-theme="dark"] below — these five are the same in both themes, always.
+     --color-nav-bg is the opaque equivalent of the old bg-navy/40 composited over the
+     app's original (dark) page background — translucent navy over a background that
+     now flips per-theme would go light-slate-blue in light mode and break nav
+     legibility, so nav chrome gets one flat, non-compositing colour instead. */
   --color-nav-text: #F4F4F8;
   --color-nav-muted: rgba(244, 244, 248, 0.55);
   --color-nav-line: rgba(255, 255, 255, 0.08);
   --color-nav-hover: #1A2575;
+  --color-nav-bg: #071039;
+
+  /* Text colour for content sitting on a solid/near-solid accent fill (primary
+     buttons, the active theme-toggle segment, avatar initials). Locked the same way
+     as nav-*: accent fills (violet/purple) are dark enough in both themes that they
+     always need light text, so this never flips under [data-theme="dark"] below. */
+  --color-on-accent: #F4F4F8;
+
+  /* Stage badge + status text colours. Unlike the accents above, these DO need a
+     different value per theme — the original hex values (now the dark-mode override
+     below) were tuned for a dark background and fall under WCAG AA (~1.7-3:1) once a
+     real light background renders; these light-mode values are the same hue family,
+     darkened to clear 4.5:1 against white/off-white cards (verified via WCAG contrast
+     calculation, not eyeballed). */
+  --color-stage-new-lead: #637794;
+  --color-stage-contacted: #9544FF;
+  --color-stage-audit-booked: #008383;
+  --color-stage-proposal-sent: #A16807;
+  --color-stage-negotiating: #C25405;
+  --color-stage-won: #178841;
+  --color-stage-lost: #EB1414;
+  --color-stage-nurture: #9854D3;
+  --color-danger: #EC0B0B;
+  --color-success: #1D8660;
+  --color-warning: #986E03;
 
   --font-heading: "Montserrat", ui-sans-serif, system-ui, sans-serif;
   --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
@@ -46,6 +75,19 @@
   --color-surface: #1A2575;
   --color-muted: rgba(244, 244, 248, 0.55);
   --color-line: rgba(255, 255, 255, 0.08);
+
+  /* Original dark-mode stage/status hues, unchanged from before this theme feature. */
+  --color-stage-new-lead: #94A3B8;
+  --color-stage-contacted: #B57BFF;
+  --color-stage-audit-booked: #00DFDF;
+  --color-stage-proposal-sent: #F59E0B;
+  --color-stage-negotiating: #F97316;
+  --color-stage-won: #22C55E;
+  --color-stage-lost: #EF4444;
+  --color-stage-nurture: #C9A6E8;
+  --color-danger: #F87171;
+  --color-success: #34D399;
+  --color-warning: #FBBF24;
 }
 
 @layer base {

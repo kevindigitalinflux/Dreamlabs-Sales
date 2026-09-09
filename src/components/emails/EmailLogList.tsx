@@ -23,8 +23,8 @@ const EMPTY_FILTERS: LogFilters = { search: '', contractorId: '', from: '', to: 
 
 const STATUS_CLASSES: Record<EmailLogStatus, string> = {
   draft: 'bg-surface text-muted',
-  sent: 'bg-emerald-500/15 text-emerald-400',
-  failed: 'bg-red-500/15 text-red-400',
+  sent: 'bg-emerald-500/15 text-success',
+  failed: 'bg-red-500/15 text-danger',
 };
 
 function exportCsv(rows: EmailLog[], companyOf: (id: string | null) => string) {
@@ -124,7 +124,7 @@ export function EmailLogList() {
   }, [logs, filters, leadNames]);
 
   if (loading) return <Skeleton className="h-40 w-full" />;
-  if (error) return <p role="alert" className="text-sm text-red-400">{error}</p>;
+  if (error) return <p role="alert" className="text-sm text-danger">{error}</p>;
   if (logs.length === 0) return <EmptyState icon={Mail} title="No emails yet" hint="Emails you send appear here." />;
 
   return (
@@ -138,7 +138,7 @@ export function EmailLogList() {
       />
       <div className="overflow-x-auto rounded-xl border border-line">
         <table className="w-full text-left text-sm">
-          <thead className="sticky top-0 bg-navy">
+          <thead className="sticky top-0 bg-card">
             <tr className="border-b border-line text-xs font-semibold text-muted">
               <th className="px-3 py-2">Date</th>
               <th className="px-3 py-2">Company</th>
@@ -158,7 +158,7 @@ export function EmailLogList() {
                     <td className="px-3 py-3 font-semibold">{companyOf(log.lead_id)}</td>
                     <td className="max-w-xs truncate px-3 py-3">{log.subject}</td>
                     <td className="px-3 py-3">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-purple text-[10px] font-bold">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-purple text-[10px] font-bold text-on-accent">
                         {senderOf(log.sent_by)}
                       </span>
                     </td>

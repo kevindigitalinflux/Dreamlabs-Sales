@@ -33,7 +33,7 @@ export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen }:
   return (
     <div className="overflow-x-auto rounded-xl border border-line">
       <table className="w-full text-left text-sm">
-        <thead className="sticky top-0 bg-navy">
+        <thead className="sticky top-0 bg-card">
           <tr className="border-b border-line text-xs font-semibold text-muted">
             {COLUMNS.map((col) => (
               <th key={col.key} aria-sort={sortKey === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
@@ -54,12 +54,12 @@ export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen }:
               <td className="px-3 py-3"><StageBadge stage={lead.stage} /></td>
               <td className="px-3 py-3 text-muted">{packageLabel(lead.package_tier)}</td>
               <td className="px-3 py-3">{lead.deal_value !== null ? formatCurrency(lead.deal_value) : '—'}</td>
-              <td className={`px-3 py-3 ${isOverdue(lead.next_action_date) ? 'font-semibold text-red-400' : 'text-muted'}`}>
+              <td className={`px-3 py-3 ${isOverdue(lead.next_action_date) ? 'font-semibold text-danger' : 'text-muted'}`}>
                 {lead.next_action_date ? dueLabel(lead.next_action_date) : '—'}
               </td>
               <td className="px-3 py-3 text-muted">{lead.last_contacted_at ? formatShortDate(lead.last_contacted_at) : 'Never'}</td>
               <td className="px-3 py-3">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-purple text-[10px] font-bold">{assignee(lead)}</span>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-purple text-[10px] font-bold text-on-accent">{assignee(lead)}</span>
               </td>
             </tr>
           ))}
