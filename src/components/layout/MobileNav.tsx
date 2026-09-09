@@ -13,7 +13,7 @@ export function MobileNav() {
   return (
     <nav
       aria-label="Mobile"
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-line bg-navy/95 backdrop-blur md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-nav-line bg-navy/95 backdrop-blur md:hidden"
     >
       {ITEMS.map(({ to, label, icon: Icon, end }) => (
         <NavLink
@@ -22,7 +22,7 @@ export function MobileNav() {
           end={end}
           className={({ isActive }) =>
             `flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-semibold ${
-              isActive ? 'text-cyan' : 'text-muted'
+              isActive ? 'text-cyan' : 'text-nav-muted'
             }`
           }
         >
