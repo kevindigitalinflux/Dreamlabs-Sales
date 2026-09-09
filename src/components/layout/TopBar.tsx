@@ -3,6 +3,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useFocusMode } from '../../hooks/useFocusMode';
 import { initials } from '../../lib/utils';
 import { OrgSwitcher } from './OrgSwitcher';
+import { ThemeToggle } from './ThemeToggle';
 
 /** Top bar: focus-mode toggle + user identity + sign out. */
 export function TopBar() {
@@ -19,6 +20,7 @@ export function TopBar() {
         <Focus className="h-4 w-4" aria-hidden />
         {focusMode ? 'Exit focus' : 'Focus'}
       </button>
+      <ThemeToggle />
       <OrgSwitcher />
       <span
         aria-hidden
