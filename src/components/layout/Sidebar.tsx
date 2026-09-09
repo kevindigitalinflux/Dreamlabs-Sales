@@ -34,7 +34,7 @@ export function Sidebar() {
   const { currentOrg } = useOrg();
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r border-nav-line bg-nav-bg p-4 md:flex">
-      <img src={logoIcon} alt="" className="mb-2 h-9 px-2" />
+      <img src={logoIcon} alt="" className="mb-2 h-9 w-auto self-start px-2" />
       <p className="mb-8 px-2 font-heading text-lg font-extrabold text-nav-text">
         Dreamlabs<span className="text-cyan">Sales</span>
       </p>
