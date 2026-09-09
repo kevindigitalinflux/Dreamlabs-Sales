@@ -2,6 +2,7 @@ import { NavLink } from 'react-router';
 import { BarChart3, Contact, KanbanSquare, LayoutDashboard, Mail, Phone, Radar, Rocket, Settings, Shield } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useOrg } from '../../hooks/useOrg';
+import logoIcon from '../../assets/logo/logo-icon.png';
 
 interface NavItem {
   to: string;
@@ -33,6 +34,7 @@ export function Sidebar() {
   const { currentOrg } = useOrg();
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r border-line bg-navy/40 p-4 md:flex">
+      <img src={logoIcon} alt="" className="mb-2 h-9 px-2" />
       <p className="mb-8 px-2 font-heading text-lg font-extrabold">
         Dreamlabs<span className="text-cyan">Sales</span>
       </p>
