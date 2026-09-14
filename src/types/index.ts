@@ -49,6 +49,8 @@ export interface Lead {
   assigned_to: string | null;
   created_by: string | null;
   raw_lead_id: string | null;
+  pipeline_id: string;
+  forked_from_lead_id: string | null;
   next_action_date: string | null;
   next_action_note: string | null;
   is_priority: boolean;
@@ -57,6 +59,26 @@ export interface Lead {
   kanban_position: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface Pipeline {
+  id: string;
+  org_id: string;
+  name: string;
+  is_default: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
+export type PipelinePermission = 'view' | 'edit';
+
+export interface PipelineShare {
+  id: string;
+  pipeline_id: string;
+  shared_with_user_id: string;
+  permission: PipelinePermission;
+  shared_by: string | null;
+  created_at: string;
 }
 
 export interface LeadNote {
