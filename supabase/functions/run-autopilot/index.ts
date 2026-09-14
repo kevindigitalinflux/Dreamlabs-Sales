@@ -33,6 +33,18 @@ function tightIcpFit(lead: Record<string, unknown>, icp: Record<string, unknown>
  * path that approves a candidate without passing all four.
  */
 async function autoApprove(service: SupabaseClient, run: AutopilotRun, jobId: string): Promise<number> {
+  // leads.pipeline_id is NOT NULL as of migration 018 — autopilot always
+  // targets the org's Default Pipeline, deliberately preserving today's
+  // behavior (every org's leads already live there); the real "existing
+  // pipeline vs. new scrape" choice is explicitly deferred to a future plan
+  // behind multi-pipeline support.
+  const { data: defaultPipeline } = await service
+    .from('pipelines').select('id').eq('org_id', run.org_id).eq('is_default', true).maybeSingle();
+  if (!defaultPipeline) {
+    console.error(`autoApprove: no default pipeline found for org ${run.org_id}`);
+    return 0;
+  }
+
   // Scoped to this run's own scrape_job_id, not every status='pending' row
   // for the org — otherwise autopilot would silently bulldoze rows a human
   // deliberately left pending via the review table's "Skip" action, and
@@ -79,10 +91,10 @@ async function autoApprove(service: SupabaseClient, run: AutopilotRun, jobId: st
       business_name: lead.business_name, owner_name: lead.owner_name ?? null, phone: lead.phone,
       email: lead.email, website: lead.website, address: lead.address ?? null, city: lead.city,
       postcode: lead.postcode ?? null, google_rating: lead.google_rating ?? null, review_count: lead.review_count ?? null,
-      vertical: lead.vertical ?? null, stage: 'new_lead', org_id: run.org_id,
+      vertical: lead.vertical ?? null, stage: 'new_lead', org_id: run.org_id, pipeline_id: defaultPipeline.id,
       created_by: null, raw_lead_id: lead.id,
     });
-    if (insertErr) continue;
+    if (insertErr) { console.error(`autoApprove: failed to insert lead for raw_lead ${lead.id}`, insertErr.message); continue; }
     await service.from('raw_leads').update({ status: 'approved', approved_by: null, approved_at: new Date().toISOString() }).eq('id', lead.id);
     // Extend `seen` in-memory so a later duplicate within this same batch
     // (e.g. two raw_leads that both matched the same business) is also caught.
