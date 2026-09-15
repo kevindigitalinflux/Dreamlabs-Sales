@@ -768,7 +768,7 @@ git commit -m "feat: add parse-session-notes edge function (multi-lead note pars
 **Interfaces:**
 - Consumes: `resolveOrgApiKey`, `corsHeaders`/`json` (existing).
 - Produces: deployed edge function `parse-csv-leads` accepting `{ org_id: string,
-  pipeline_id: string, pipeline_is_new: boolean, pipeline_name: string, headers:
+  pipeline_id: string, pipeline_is_new: boolean, pipeline_name: string, csv_headers:
   string[], rows: string[][] }` and returning `{ job_id: string, mapped_count:
   number, duplicate_count: number, unmapped_count: number } | { error: string }`.
   `pipeline_id` is required when `pipeline_is_new` is `false`; when `true`, the
@@ -1596,18 +1596,60 @@ git commit -m "feat: add Dream Agent to the nav and route tree"
 
 ---
 
-### Task 12: `ScraperJob.tsx` bulk "select all + approve" action
+### Task 12: `ScraperJob.tsx` — default to the resolved pipeline, bulk "select all + approve"
 
 **Files:**
 - Modify: `src/pages/ScraperJob.tsx`
 
 **Interfaces:**
-- Consumes: `approve` from `useRawLeadActions` (existing, unchanged signature).
-- Produces: no new exports — a UI-only addition to the existing page, needed by both
-  a real scrape's results (many rows) and CSV imports (Task 7's `parse-csv-leads`
-  lands here) so a large batch doesn't require approving one row at a time.
+- Consumes: `approve` from `useRawLeadActions` (existing, unchanged signature);
+  `job.pipeline_id` (Task 3's new column, already returned by the existing
+  `useScrapeJob` hook's `select('*')` query — no hook change needed).
+- Produces: no new exports — two UI/behavior additions to the existing page: the
+  pipeline picker now defaults to whatever pipeline was resolved when the job was
+  created (a real scrape's wizard choice, Task 13; a CSV import's choice, Task 7),
+  instead of always falling back to the org's default pipeline; and a bulk
+  "select all + approve" action, needed by both a real scrape's results (many rows)
+  and CSV imports so a large batch doesn't require approving one row at a time.
 
-- [ ] **Step 1: Add selection state and a bulk-approve handler**
+- [ ] **Step 1: Prefer `job.pipeline_id` as the picker's default**
+
+This page already has a `useEffect` (from the earlier multi-pipeline plan) that
+resolves `pipelineId`'s default once `job` loads — today it only ever falls back to
+the org's default pipeline, never considering the specific pipeline the job itself
+was created against. Change:
+
+```tsx
+  useEffect(() => {
+    if (!job) return;
+    setPipelineId((current) => {
+      const stillValid = pipelines.find((p) => p.id === current && p.org_id === job.org_id);
+      if (stillValid) return current;
+      const orgDefault = pipelines.find((p) => p.org_id === job.org_id && p.is_default);
+      return orgDefault?.id ?? '';
+    });
+  }, [job, pipelines]);
+```
+
+to:
+
+```tsx
+  useEffect(() => {
+    if (!job) return;
+    setPipelineId((current) => {
+      const stillValid = pipelines.find((p) => p.id === current && p.org_id === job.org_id);
+      if (stillValid) return current;
+      const resolved = job.pipeline_id && pipelines.some((p) => p.id === job.pipeline_id) ? job.pipeline_id : null;
+      const orgDefault = pipelines.find((p) => p.org_id === job.org_id && p.is_default);
+      return resolved ?? orgDefault?.id ?? '';
+    });
+  }, [job, pipelines]);
+```
+
+The user can still change the selection via the existing dropdown either way — this
+only changes which pipeline is pre-selected.
+
+- [ ] **Step 2: Add selection state and a bulk-approve handler**
 
 In `src/pages/ScraperJob.tsx`, add `useState` for the selected-row set — change:
 
@@ -1653,7 +1695,7 @@ Add a bulk-approve function alongside the existing `runAction`:
   }
 ```
 
-- [ ] **Step 2: Add the "select all" checkbox and "Approve selected" button to the header**
+- [ ] **Step 3: Add the "select all" checkbox and "Approve selected" button to the header**
 
 Change:
 
@@ -1696,7 +1738,7 @@ via `const pending = rawLeads.filter((l) => l.status === 'pending' || l.status =
 that now references it in the header. No line needs to move; this reuses that
 existing variable as-is.
 
-- [ ] **Step 3: Add the header checkbox and per-row checkboxes to the table**
+- [ ] **Step 4: Add the header checkbox and per-row checkboxes to the table**
 
 Change the table header:
 
@@ -1732,16 +1774,16 @@ and change to:
                 <td className="p-3 font-semibold">
 ```
 
-- [ ] **Step 4: Run the type-checker and test suite**
+- [ ] **Step 5: Run the type-checker and test suite**
 
 Run: `npx tsc --noEmit && npx vitest run --pool=threads`
 Expected: both clean.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add src/pages/ScraperJob.tsx
-git commit -m "feat: add bulk select+approve to the scrape review table"
+git commit -m "feat: default the review pipeline to job.pipeline_id, add bulk select+approve"
 ```
 
 ---
