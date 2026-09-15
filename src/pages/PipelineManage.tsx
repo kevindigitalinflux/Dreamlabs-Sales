@@ -46,7 +46,7 @@ export function PipelineManage() {
 
   async function handleCreate() {
     setError(null);
-    const err = await createPipeline(newName);
+    const { error: err } = await createPipeline(newName);
     if (err) setError(err);
     else setNewName('');
   }

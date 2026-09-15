@@ -12,15 +12,15 @@ export function usePipelineActions() {
   const { currentOrg } = useOrg();
   const { refresh } = usePipeline();
 
-  const createPipeline = useCallback(async (name: string): Promise<string | null> => {
-    if (!currentOrg) return 'No organization selected';
-    if (!name.trim()) return 'Name is required';
-    const { error } = await supabase.from('pipelines').insert({
-      org_id: currentOrg.id, name: name.trim(), created_by: session?.user.id,
-    });
-    if (error) return error.message;
+  const createPipeline = useCallback(async (name: string): Promise<{ error: string | null; pipeline: Pipeline | null }> => {
+    if (!currentOrg) return { error: 'No organization selected', pipeline: null };
+    if (!name.trim()) return { error: 'Name is required', pipeline: null };
+    const { data, error } = await supabase.from('pipelines')
+      .insert({ org_id: currentOrg.id, name: name.trim(), created_by: session?.user.id })
+      .select('*').single();
+    if (error) return { error: error.message, pipeline: null };
     await refresh();
-    return null;
+    return { error: null, pipeline: data as Pipeline };
   }, [currentOrg, session, refresh]);
 
   const renamePipeline = useCallback(async (pipelineId: string, name: string): Promise<string | null> => {
