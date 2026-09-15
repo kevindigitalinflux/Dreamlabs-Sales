@@ -13,6 +13,7 @@ import { AddLeadWizard } from '../components/pipeline/AddLeadWizard';
 import { FilterBar } from '../components/pipeline/FilterBar';
 import { ListTable } from '../components/pipeline/ListTable';
 import { LeadPanel } from '../components/pipeline/LeadPanel';
+import { SharedPipelineBanner } from '../components/pipeline/SharedPipelineBanner';
 import { ViewToggle } from '../components/pipeline/ViewToggle';
 import type { Lead, Stage } from '../types';
 
@@ -50,6 +51,7 @@ export function PipelineList() {
 
   return (
     <div className="flex flex-col gap-4">
+      <SharedPipelineBanner />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[28px] font-extrabold">Pipeline</h1>
         <div className="flex items-center gap-3">
