@@ -28,6 +28,7 @@ import { Admin } from './pages/Admin';
 import { LinkedinOutreach } from './pages/LinkedinOutreach';
 import { AutopilotSetup } from './pages/AutopilotSetup';
 import { AutopilotStatus } from './pages/AutopilotStatus';
+import { PipelineManage } from './pages/PipelineManage';
 
 /** App root: full SPEC.md §13 route tree (later-cycle modules render ComingSoon). */
 export function App() {
@@ -49,6 +50,7 @@ export function App() {
               <Route path="/pipeline/kanban" element={<PipelineKanban />} />
               <Route path="/pipeline/list" element={<PipelineList />} />
               <Route path="/pipeline/leads/:id" element={<LeadDetailPage />} />
+              <Route path="/pipeline/manage" element={<PipelineManage />} />
               <Route path="/scraper" element={<Scraper />} />
               <Route path="/scraper/jobs/:id" element={<ScraperJob />} />
               <Route path="/emails" element={<EmailsHub />} />
