@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { CheckCircle2, XCircle, SkipForward, Sparkles, Mail } from 'lucide-react';
 import { useScrapeJob } from '../hooks/useScrapeJob';
@@ -27,12 +27,22 @@ function statusBadge(job: { status: string } | null) {
 export function ScraperJob() {
   const { id } = useParams<{ id: string }>();
   const { job, rawLeads, loading, refresh } = useScrapeJob(id!);
-  const { pipelines, currentPipeline } = usePipeline();
-  const [pipelineId, setPipelineId] = useState(currentPipeline?.id ?? '');
+  const { pipelines } = usePipeline();
+  const [pipelineId, setPipelineId] = useState('');
   const { approve, reject, skip, enrichWithApollo, enrichWithHunter } = useRawLeadActions(job?.org_id, pipelineId);
   const { settings } = useOrgApiSettings();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null);
+
+  useEffect(() => {
+    if (!job) return;
+    setPipelineId((current) => {
+      const stillValid = pipelines.find((p) => p.id === current && p.org_id === job.org_id);
+      if (stillValid) return current;
+      const orgDefault = pipelines.find((p) => p.org_id === job.org_id && p.is_default);
+      return orgDefault?.id ?? '';
+    });
+  }, [job, pipelines]);
 
   const apolloConfigured = settings.find((s) => s.provider === 'apollo')?.is_configured ?? false;
   const hunterConfigured = settings.find((s) => s.provider === 'hunter')?.is_configured ?? false;
