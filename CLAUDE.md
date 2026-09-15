@@ -555,14 +555,55 @@ themes" decision) or introducing a new link/accent-text token — a real design 
 Also noted: the base `--color-muted` token measures 4.15:1 in light mode, just under AA — the app's
 universal secondary-text colour (table headers, field labels, hints), predates this plan entirely.
 
-**Not yet started:** the `text-cyan`/`--color-muted` follow-up above, Cloudflare Pages deploy, Power Dialer
-Phase 1's provider-specific wiring (`test` action, `dialer-push-queue`, `dialer-webhook` — the filter/count
-screen itself is built and enabling "Start dialing session" is the last step once these land), Phase 2 (AI
-voice agent), and the user's broader still-pending requests: multi-pipeline support (leads become
-pipeline-scoped, shareable between org members), a "Sales Assistant" page (text/voice note capture →
-Gemini-driven cross-platform updates, CSV upload → AI-assisted lead creation with pipeline selection), and
-an autopilot "existing pipeline vs. new scrape" choice — all explicitly deferred behind multi-pipeline
-support existing first.
+**Multi-pipeline support shipped (2026-09-15).** Leads are now pipeline-scoped, not just org-scoped — a new
+`pipelines` table (org-owned, named) and `pipeline_shares` table (per-user grants, `view`/`edit`) sit
+alongside `leads`, which gained `pipeline_id` (`NOT NULL`) and `forked_from_lead_id`. Design doc:
+`docs/superpowers/specs/2026-09-14-multi-pipeline-design.md`. Plan:
+`docs/superpowers/plans/2026-09-14-multi-pipeline.md` (11 tasks, subagent-driven-development, one final
+whole-branch review + one fix wave). Every existing org got one auto-created "Default Pipeline" with every
+existing lead backfilled into it, RLS-carved-out to behave exactly like the pre-plan app (per-lead
+`created_by`/`assigned_to` visibility for every member) — nothing changed for any existing user on day one.
+Named pipelines are private until explicitly shared: within-org sharing is a direct client action (any
+teammate); cross-org sharing is admin-to-admin only, by email, via a new `pipeline-shares` edge function,
+with a deliberately generic "no matching admin found" error so a non-admin can't enumerate real accounts.
+"Edit" permission on a shared pipeline never grants a live cross-org write — it only unlocks an on-demand
+"Make my own copy" fork, which snapshots the pipeline's leads into a brand-new pipeline fully owned by the
+forker's own org (this is what keeps AI/autopilot costs isolated per-org with zero cross-org write path at
+all). New UI: a pipeline switcher in the top bar (mirrors the org switcher), `/pipeline/manage`
+(create/rename/delete/share/revoke/fork), a persistent "shared pipeline" banner with the fork CTA on
+Kanban/List. The scraper's approval flow and `run-autopilot`'s auto-approve path both now require/resolve a
+target pipeline before creating a lead.
+
+**Two real, previously-undetected production bugs found and fixed during this build** (both live-verified,
+not just code-reviewed): (1) the RLS migration's first draft would have removed real non-admin contractors'
+visibility into system-generated (`created_by = NULL`) leads — caught by tracing against a real live lead
+before it ever shipped. (2) A genuine cross-org isolation bypass in `pipelines_update` — any plain pipeline
+owner could reassign their pipeline's `org_id` to a different org and retain full access to it and every
+lead inside it, completely bypassing the admin-to-admin sharing edge function. Proven live in a rolled-back
+transaction, closed via migration `019` (a `BEFORE UPDATE` trigger making `org_id`/`is_default` immutable
+after creation, plus a unique partial index enforcing one default pipeline per org). A third, lower-stakes
+functional gap (sharing a Default Pipeline produced a pipeline visible in the recipient's switcher with zero
+visible leads — not a security hole, just a dead end) was caught by the final whole-branch review and closed
+at all three layers (RLS, the edge function, and the UI) in migration `020`. The final review also caught
+that `Dashboard.tsx`/`PowerDialer.tsx` had silently gone from org-wide to single-active-pipeline-scoped as a
+side effect of `useLeads()`'s pipeline-scoping change — invisible on day one, would have broken the moment
+anyone created a second pipeline — fixed via a new `useOrgLeads.ts` hook restoring org-wide scope for those
+two specific pages only.
+
+**Known deferred follow-ups (all Minor, none blocking):** `pipelines_prevent_org_move()`'s trigger function
+isn't pinned with `search_path = public` like its siblings (low risk, not `SECURITY DEFINER`); no DB-level
+constraint ties `leads.org_id` to its `pipeline_id`'s own `org_id` (client-side is correct and sufficient
+today, this would just be defense-in-depth); `admin-users`'s `create_org` doesn't provision a default
+pipeline for a brand-new org (rare, platform-admin-only action); a handful of small UX polish items in
+`/pipeline/manage` and the scraper's pipeline picker (no busy-guards on a few buttons, share picker doesn't
+exclude the current user, manually clearing the scraper's pipeline dropdown gets silently re-populated).
+
+**Not yet started:** Cloudflare Pages deploy, Power Dialer Phase 1's provider-specific wiring (`test`
+action, `dialer-push-queue`, `dialer-webhook`), Phase 2 (AI voice agent), the `text-cyan`/`--color-muted`
+light-mode contrast follow-up, and the user's remaining broader requests — now unblocked by multi-pipeline
+support existing: a "Sales Assistant" page (text/voice note capture → Gemini-driven cross-platform updates,
+CSV upload → AI-assisted lead creation with pipeline selection) and an autopilot "existing pipeline vs. new
+scrape" choice.
 **Known issues / pending human steps:** Kevin's SMTP credentials not yet entered for the DI Dreamlabs org
 (/settings/email → save + test; until then sends return a friendly settings-gate error). Sequence steps
 are limited to the 5 default templates (custom templates can't be steps yet). check-sequences insert+advance
