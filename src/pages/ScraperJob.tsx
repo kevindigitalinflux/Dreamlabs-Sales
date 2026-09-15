@@ -33,14 +33,17 @@ export function ScraperJob() {
   const { settings } = useOrgApiSettings();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
     if (!job) return;
     setPipelineId((current) => {
       const stillValid = pipelines.find((p) => p.id === current && p.org_id === job.org_id);
       if (stillValid) return current;
+      const resolved = job.pipeline_id && pipelines.some((p) => p.id === job.pipeline_id) ? job.pipeline_id : null;
       const orgDefault = pipelines.find((p) => p.org_id === job.org_id && p.is_default);
-      return orgDefault?.id ?? '';
+      return resolved ?? orgDefault?.id ?? '';
     });
   }, [job, pipelines]);
 
@@ -53,6 +56,30 @@ export function ScraperJob() {
     setBusyId(null);
     if (err) setRowError({ id: lead.id, text: err });
     else void refresh();
+  }
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll(ids: string[]) {
+    setSelected((prev) => (prev.size === ids.length ? new Set() : new Set(ids)));
+  }
+
+  async function approveSelected(leads: RawLead[]) {
+    setBulkBusy(true);
+    for (const lead of leads) {
+      if (!selected.has(lead.id)) continue;
+      const err = await approve(lead);
+      if (err) setRowError({ id: lead.id, text: err });
+    }
+    setBulkBusy(false);
+    setSelected(new Set());
+    void refresh();
   }
 
   function exportCsv() {
@@ -87,6 +114,11 @@ export function ScraperJob() {
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </SelectField>
+          {selected.size > 0 && (
+            <Button onClick={() => void approveSelected(pending)} disabled={bulkBusy || !pipelineId}>
+              {bulkBusy ? 'Approving…' : `Approve selected (${selected.size})`}
+            </Button>
+          )}
           <Button variant="secondary" onClick={exportCsv} disabled={rawLeads.length === 0}>Download CSV</Button>
         </div>
       </header>
@@ -99,6 +131,9 @@ export function ScraperJob() {
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-line text-xs text-muted">
+              <th className="p-3">
+                <input type="checkbox" checked={selected.size > 0 && selected.size === pending.length} onChange={() => toggleSelectAll(pending.map((l) => l.id))} className="h-4 w-4 accent-violet-500" aria-label="Select all" />
+              </th>
               <th className="p-3">Business</th>
               <th className="p-3">Phone</th>
               <th className="p-3">Email</th>
@@ -111,6 +146,9 @@ export function ScraperJob() {
           <tbody>
             {pending.map((lead) => (
               <tr key={lead.id} className={`border-b border-line ${lead.status === 'duplicate' ? 'bg-amber-500/10' : ''}`}>
+                <td className="p-3">
+                  <input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelected(lead.id)} className="h-4 w-4 accent-violet-500" aria-label={`Select ${lead.business_name}`} />
+                </td>
                 <td className="p-3 font-semibold">
                   {lead.business_name}
                   {lead.status === 'duplicate' && <Badge className="ml-2 bg-amber-500/20 text-warning">Possible duplicate</Badge>}
