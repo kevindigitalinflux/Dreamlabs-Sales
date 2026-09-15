@@ -7,6 +7,7 @@ import { usePipelineActions } from '../hooks/usePipelineActions';
 import { usePipelineShares } from '../hooks/usePipelineShares';
 import { useProfiles } from '../hooks/useProfiles';
 import { useOrg } from '../hooks/useOrg';
+import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
@@ -40,6 +41,7 @@ export function PipelineManage() {
   const [error, setError] = useState<string | null>(null);
   const [shareTarget, setShareTarget] = useState<Record<string, string>>({});
   const [sharePermission, setSharePermission] = useState<Record<string, PipelinePermission>>({});
+  const [crossOrgEmail, setCrossOrgEmail] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function handleCreate() {
@@ -70,6 +72,20 @@ export function PipelineManage() {
     const err = await shareWithinOrg(pipeline.id, userId, permission);
     if (err) setError(err);
     else await refreshShares();
+  }
+
+  async function handleShareCrossOrg(pipeline: Pipeline) {
+    const email = crossOrgEmail[pipeline.id];
+    const permission = sharePermission[pipeline.id] ?? 'view';
+    if (!email) return;
+    const { data, error: invokeErr } = await supabase.functions.invoke('pipeline-shares', {
+      body: { action: 'share_cross_org', pipeline_id: pipeline.id, email, permission },
+    });
+    if (invokeErr) { setError(invokeErr.message); return; }
+    const result = data as { error?: string };
+    if (result.error) { setError(result.error); return; }
+    setCrossOrgEmail((prev) => ({ ...prev, [pipeline.id]: '' }));
+    await refreshShares();
   }
 
   async function handleRevoke(shareId: string) {
@@ -113,12 +129,15 @@ export function PipelineManage() {
               profiles={profiles}
               shareTarget={shareTarget[pipeline.id] ?? ''}
               sharePermission={sharePermission[pipeline.id] ?? 'view'}
+              crossOrgEmail={crossOrgEmail[pipeline.id] ?? ''}
               busy={busyId === pipeline.id}
               onShareTargetChange={(userId) => setShareTarget((prev) => ({ ...prev, [pipeline.id]: userId }))}
               onSharePermissionChange={(permission) => setSharePermission((prev) => ({ ...prev, [pipeline.id]: permission }))}
+              onCrossOrgEmailChange={(email) => setCrossOrgEmail((prev) => ({ ...prev, [pipeline.id]: email }))}
               onRename={() => void handleRename(pipeline)}
               onDelete={() => void handleDelete(pipeline)}
               onShare={() => void handleShare(pipeline)}
+              onShareCrossOrg={() => void handleShareCrossOrg(pipeline)}
               onRevoke={(shareId) => void handleRevoke(shareId)}
             />
           ))}

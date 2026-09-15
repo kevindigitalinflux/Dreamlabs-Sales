@@ -1,6 +1,6 @@
 import { Share2, Trash2, X } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { SelectField } from '../ui/Input';
+import { Input, SelectField } from '../ui/Input';
 import type { OutgoingShare } from '../../hooks/usePipelineShares';
 import type { OrgProfile } from '../../hooks/useProfiles';
 import type { Pipeline, PipelinePermission } from '../../types';
@@ -11,29 +11,36 @@ interface PipelineCardProps {
   profiles: OrgProfile[];
   shareTarget: string;
   sharePermission: PipelinePermission;
+  crossOrgEmail: string;
   busy: boolean;
   onShareTargetChange: (userId: string) => void;
   onSharePermissionChange: (permission: PipelinePermission) => void;
+  onCrossOrgEmailChange: (email: string) => void;
   onRename: () => void;
   onDelete: () => void;
   onShare: () => void;
+  onShareCrossOrg: () => void;
   onRevoke: (shareId: string) => void;
 }
 
-/** One manageable pipeline: name/rename/delete header, its outgoing shares, and the
- * within-org share form. Rename/delete are hidden for the default pipeline. */
+/** One manageable pipeline: name/rename/delete header, its outgoing shares, the
+ * within-org share form, and the cross-org (admin-to-admin, by email) share form.
+ * Rename/delete are hidden for the default pipeline. */
 export function PipelineCard({
   pipeline,
   shares,
   profiles,
   shareTarget,
   sharePermission,
+  crossOrgEmail,
   busy,
   onShareTargetChange,
   onSharePermissionChange,
+  onCrossOrgEmailChange,
   onRename,
   onDelete,
   onShare,
+  onShareCrossOrg,
   onRevoke,
 }: PipelineCardProps) {
   return (
@@ -82,6 +89,18 @@ export function PipelineCard({
           <option value="edit">Edit (can fork)</option>
         </SelectField>
         <Button variant="secondary" onClick={onShare}>
+          <Share2 className="h-4 w-4" aria-hidden />
+          Share
+        </Button>
+      </div>
+      <div className="mt-2 flex items-end gap-2">
+        <Input
+          label="Or share with an admin in another org (by email)"
+          type="email"
+          value={crossOrgEmail}
+          onChange={(e) => onCrossOrgEmailChange(e.target.value)}
+        />
+        <Button variant="secondary" onClick={onShareCrossOrg}>
           <Share2 className="h-4 w-4" aria-hidden />
           Share
         </Button>
