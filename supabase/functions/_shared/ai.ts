@@ -146,6 +146,28 @@ ${JSON.stringify(input.messages)}`,
 }
 
 /**
+ * Infers a CSV column → lead-field mapping from headers + a few sample rows. This
+ * is the ONLY AI call in the CSV flow — per-row extraction and duplicate detection
+ * are deterministic (see parse-csv-leads/index.ts), so this stays cheap regardless
+ * of how many rows the file actually has. Throws on failure.
+ */
+export async function mapCsvColumns(input: { headers: string[]; sampleRows: string[][]; apiKey: string }): Promise<unknown> {
+  return await geminiJson(
+`Map these CSV column headers to CRM lead fields. Valid target fields:
+business_name (required — the company/organisation name), owner_name, phone, email,
+website, address, city, postcode, vertical (industry/sector). A header maps to at
+most one field; a field may be left unmapped if no header fits. Use the sample rows
+to judge intent when a header name alone is ambiguous (e.g. a column of email
+addresses maps to "email" even if its header is just "Contact"). Return JSON:
+{"mapping":{<header string>:<one of the field names above, or null if unmapped>}}.
+
+HEADERS: ${JSON.stringify(input.headers)}
+SAMPLE ROWS: ${JSON.stringify(input.sampleRows)}`,
+    input.apiKey,
+  );
+}
+
+/**
  * Sonnet-only: 2-4 short bullet-style personalization talking points for a
  * lead, generated once and reused across every subsequent touch (the caller
  * is responsible for only invoking this when no `ai_summary` note exists
