@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { Phone } from 'lucide-react';
-import { useLeads } from '../hooks/useLeads';
+import { useOrgLeads } from '../hooks/useOrgLeads';
 import { useAuth } from '../hooks/useAuth';
 import { useDialerSettings } from '../hooks/useDialerSettings';
 import { filterDialableLeads } from '../lib/dialerFilters';
@@ -22,7 +22,7 @@ const DEFAULT_STAGES: Stage[] = STAGES.map((s) => s.value).filter((s) => s !== '
  * docs/superpowers/specs/2026-09-07-calling-integration-design.md.
  */
 export function PowerDialer() {
-  const { leads, loading } = useLeads();
+  const { leads, loading } = useOrgLeads();
   const { session } = useAuth();
   const { settings, loading: settingsLoading } = useDialerSettings();
 

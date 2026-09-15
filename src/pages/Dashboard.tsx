@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useLeads } from '../hooks/useLeads';
+import { useOrgLeads } from '../hooks/useOrgLeads';
 import { useProfiles } from '../hooks/useProfiles';
 import { useAuth } from '../hooks/useAuth';
 import { useDashboardStats } from '../hooks/useDashboardStats';
@@ -27,7 +27,7 @@ function greeting(now: Date = new Date()): string {
 /** Today's Focus dashboard (SPEC.md §8) — chunked, scannable, low cognitive load. */
 export function Dashboard() {
   const { profile } = useAuth();
-  const { leads, loading, error, updateLead } = useLeads();
+  const { leads, loading, error, updateLead } = useOrgLeads();
   const { profiles } = useProfiles();
   const { callsThisWeek } = useDashboardStats();
   const { drafts, loading: draftsLoading, refresh: refreshDrafts } = useDrafts();
