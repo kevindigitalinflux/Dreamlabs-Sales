@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { Mic, Send, Sparkles } from 'lucide-react';
+import { parseCsv } from '../lib/csv';
 import { useDreamAgentSession } from '../hooks/useDreamAgentSession';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { usePipeline } from '../hooks/usePipeline';
@@ -16,6 +18,14 @@ export function DreamAgent() {
   const { currentOrg } = useOrg();
   const { currentPipeline, pipelines } = usePipeline();
   const { messages, actions, resolutions, loading, error, sendMessage, resolveAction, confirmAll } = useDreamAgentSession();
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<'notes' | 'csv'>('notes');
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvPipelineChoice, setCsvPipelineChoice] = useState<'existing' | 'new'>('existing');
+  const [csvPipelineId, setCsvPipelineId] = useState('');
+  const [csvNewPipelineName, setCsvNewPipelineName] = useState('');
+  const [csvBusy, setCsvBusy] = useState(false);
+  const [csvError, setCsvError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [matchScope, setMatchScope] = useState<string>(currentPipeline?.id ?? '');
   const [leadsById, setLeadsById] = useState<Record<string, Lead>>({});
@@ -40,6 +50,29 @@ export function DreamAgent() {
     setLeadsById(byId);
   }
 
+  async function handleCsvUpload() {
+    if (!csvFile || !currentOrg) return;
+    setCsvBusy(true); setCsvError(null);
+    const text = await csvFile.text();
+    const rows = parseCsv(text);
+    if (rows.length < 2) { setCsvBusy(false); setCsvError('This file has no data rows.'); return; }
+    const [csvHeaders, ...dataRows] = rows;
+    const { data, error: invokeErr } = await supabase.functions.invoke('parse-csv-leads', {
+      body: {
+        org_id: currentOrg.id,
+        pipeline_id: csvPipelineChoice === 'existing' ? csvPipelineId : undefined,
+        pipeline_is_new: csvPipelineChoice === 'new',
+        pipeline_name: csvPipelineChoice === 'new' ? csvNewPipelineName : undefined,
+        csv_headers: csvHeaders, rows: dataRows,
+      },
+    });
+    setCsvBusy(false);
+    if (invokeErr) { setCsvError(invokeErr.message); return; }
+    const result = data as { job_id?: string; error?: string };
+    if (result.error) { setCsvError(result.error); return; }
+    if (result.job_id) navigate(`/scraper/jobs/${result.job_id}`);
+  }
+
   const anyConfirmed = Object.values(resolutions).some((r) => r.status.startsWith('confirmed_'));
 
   return (
@@ -48,6 +81,48 @@ export function DreamAgent() {
         <Sparkles className="h-6 w-6 text-cyan" aria-hidden />
         <h1 className="text-[28px] font-extrabold">Dream Agent</h1>
       </header>
+
+      <div className="flex overflow-hidden rounded-lg border border-line" role="tablist">
+        <button type="button" role="tab" aria-selected={tab === 'notes'} onClick={() => setTab('notes')} className={`min-h-11 flex-1 cursor-pointer text-sm font-semibold ${tab === 'notes' ? 'bg-violet/25' : 'text-muted'}`}>
+          Session notes
+        </button>
+        <button type="button" role="tab" aria-selected={tab === 'csv'} onClick={() => setTab('csv')} className={`min-h-11 flex-1 cursor-pointer text-sm font-semibold ${tab === 'csv' ? 'bg-violet/25' : 'text-muted'}`}>
+          Upload CSV
+        </button>
+      </div>
+
+      {tab === 'csv' && (
+        <div className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4">
+          <label className="flex min-h-11 items-center gap-2">
+            <input type="radio" name="csv-pipeline-choice" checked={csvPipelineChoice === 'existing'} onChange={() => setCsvPipelineChoice('existing')} className="h-4 w-4 accent-violet-500" />
+            Add to an existing pipeline
+          </label>
+          {csvPipelineChoice === 'existing' && (
+            <SelectField label="Pipeline" value={csvPipelineId} onChange={(e) => setCsvPipelineId(e.target.value)}>
+              <option value="">Choose pipeline…</option>
+              {orgPipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </SelectField>
+          )}
+          <label className="flex min-h-11 items-center gap-2">
+            <input type="radio" name="csv-pipeline-choice" checked={csvPipelineChoice === 'new'} onChange={() => setCsvPipelineChoice('new')} className="h-4 w-4 accent-violet-500" />
+            Create a new pipeline
+          </label>
+          {csvPipelineChoice === 'new' && (
+            <input type="text" placeholder="New pipeline name" value={csvNewPipelineName} onChange={(e) => setCsvNewPipelineName(e.target.value)} className="min-h-11 rounded-lg border border-line bg-surface px-3 text-base outline-none focus:border-cyan" />
+          )}
+          <input type="file" accept=".csv" onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)} className="text-sm" />
+          {csvError && <p role="alert" className="text-sm text-danger">{csvError}</p>}
+          <Button
+            onClick={() => void handleCsvUpload()}
+            disabled={csvBusy || !csvFile || (csvPipelineChoice === 'existing' && !csvPipelineId) || (csvPipelineChoice === 'new' && !csvNewPipelineName.trim())}
+          >
+            {csvBusy ? 'Uploading…' : 'Upload and review'}
+          </Button>
+        </div>
+      )}
+
+      {tab === 'notes' && (
+      <>
 
       <div className="flex flex-col gap-4">
         {messages.map((m, i) => (
@@ -100,6 +175,8 @@ export function DreamAgent() {
           </Button>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

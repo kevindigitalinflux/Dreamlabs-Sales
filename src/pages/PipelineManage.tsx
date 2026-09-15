@@ -117,7 +117,13 @@ export function PipelineManage() {
           <Input label="New pipeline name" value={newName} onChange={(e) => setNewName(e.target.value)} />
           <Button onClick={() => void handleCreate()}>
             <Plus className="h-4 w-4" aria-hidden />
-            Create
+            Create empty
+          </Button>
+          <Button variant="secondary" onClick={() => navigate('/dream-agent')}>
+            Create via CSV upload
+          </Button>
+          <Button variant="secondary" onClick={() => navigate('/scraper')}>
+            Create via scrape
           </Button>
         </div>
         <ul className="flex flex-col gap-3">
