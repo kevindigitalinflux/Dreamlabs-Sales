@@ -217,14 +217,38 @@ export interface LeadSuggestion {
   rationale: string;
 }
 
+/** Same shape as LeadSuggestion's field-update keys, minus the top-level
+ * `rationale` string — Dream Agent carries excerpt/rationale on the action itself
+ * (DreamAgentAction below), not nested inside the patch. `pain_point` stays
+ * display-only, same as it already is for LeadSuggestion/SuggestionDiff — there's
+ * no Lead column for it, so it's shown in the diff but never written anywhere. */
+export interface DreamAgentUpdatePatch {
+  stage?: Stage;
+  deal_value?: number;
+  package_tier?: PackageTier;
+  next_action_date?: string;
+  next_action_note?: string;
+  pain_point?: string;
+}
+
+/** One proposed change from parse-session-notes. `lead_id`/`candidate_lead_ids`
+ * always reference ids from the lead index the caller sent — never trust these
+ * without validating against that same set client-side (see sanitizeDreamAgentActions
+ * in src/lib/dreamAgentActions.ts). */
+export type DreamAgentAction =
+  | { type: 'update'; lead_id: string; business_name: string; patch: DreamAgentUpdatePatch; excerpt: string; rationale: string }
+  | { type: 'create'; extracted: { business_name: string; owner_name: string | null; phone: string | null; email: string | null; website: string | null; city: string | null; vertical: string | null }; excerpt: string; rationale: string }
+  | { type: 'ambiguous'; mentioned_text: string; candidate_lead_ids: string[]; excerpt: string };
+
 export type ScrapeJobStatus = 'pending' | 'running' | 'completed' | 'failed';
-export type ScrapeSource = 'google_places' | 'companies_house';
+export type ScrapeSource = 'google_places' | 'companies_house' | 'csv_upload';
 
 export interface ScrapeJob {
   id: string;
   org_id: string;
   icp_raw_input: string | null;
   icp_params: IcpParams | null;
+  pipeline_id: string | null;
   sources: ScrapeSource[];
   status: ScrapeJobStatus;
   results_count: number;
@@ -251,7 +275,7 @@ export interface RawLead {
   google_rating: number | null;
   review_count: number | null;
   vertical: string | null;
-  source: 'google_places' | 'companies_house';
+  source: 'google_places' | 'companies_house' | 'csv_upload';
   source_id: string | null;
   raw_data: Record<string, unknown> | null;
   status: RawLeadStatus;
