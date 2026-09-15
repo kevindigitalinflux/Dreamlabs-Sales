@@ -45,8 +45,9 @@ Deno.serve(async (req) => {
   if (!email) return json({ error: 'email is required' }, 400, headers);
   if (permission !== 'view' && permission !== 'edit') return json({ error: 'Invalid permission' }, 400, headers);
 
-  const { data: pipeline } = await service.from('pipelines').select('id, org_id').eq('id', pipelineId).maybeSingle();
+  const { data: pipeline } = await service.from('pipelines').select('id, org_id, is_default').eq('id', pipelineId).maybeSingle();
   if (!pipeline) return json({ error: 'Pipeline not found' }, 404, headers);
+  if (pipeline.is_default) return json({ error: 'The default pipeline cannot be shared outside the org' }, 400, headers);
 
   const { data: callerMembership } = await service
     .from('org_members').select('role').eq('org_id', pipeline.org_id).eq('user_id', caller.id).maybeSingle();

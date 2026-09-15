@@ -69,42 +69,46 @@ export function PipelineCard({
           </li>
         ))}
       </ul>
-      <div className="mt-3 flex items-end gap-2">
-        <SelectField
-          label="Share with"
-          value={shareTarget}
-          onChange={(e) => onShareTargetChange(e.target.value)}
-        >
-          <option value="">Choose teammate…</option>
-          {profiles.map((p) => (
-            <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>
-          ))}
-        </SelectField>
-        <SelectField
-          label="Permission"
-          value={sharePermission}
-          onChange={(e) => onSharePermissionChange(e.target.value as PipelinePermission)}
-        >
-          <option value="view">View</option>
-          <option value="edit">Edit (can fork)</option>
-        </SelectField>
-        <Button variant="secondary" onClick={onShare}>
-          <Share2 className="h-4 w-4" aria-hidden />
-          Share
-        </Button>
-      </div>
-      <div className="mt-2 flex items-end gap-2">
-        <Input
-          label="Or share with an admin in another org (by email)"
-          type="email"
-          value={crossOrgEmail}
-          onChange={(e) => onCrossOrgEmailChange(e.target.value)}
-        />
-        <Button variant="secondary" onClick={onShareCrossOrg}>
-          <Share2 className="h-4 w-4" aria-hidden />
-          Share
-        </Button>
-      </div>
+      {!pipeline.is_default && (
+        <div className="mt-3 flex items-end gap-2">
+          <SelectField
+            label="Share with"
+            value={shareTarget}
+            onChange={(e) => onShareTargetChange(e.target.value)}
+          >
+            <option value="">Choose teammate…</option>
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>
+            ))}
+          </SelectField>
+          <SelectField
+            label="Permission"
+            value={sharePermission}
+            onChange={(e) => onSharePermissionChange(e.target.value as PipelinePermission)}
+          >
+            <option value="view">View</option>
+            <option value="edit">Edit (can fork)</option>
+          </SelectField>
+          <Button variant="secondary" onClick={onShare}>
+            <Share2 className="h-4 w-4" aria-hidden />
+            Share
+          </Button>
+        </div>
+      )}
+      {!pipeline.is_default && (
+        <div className="mt-2 flex items-end gap-2">
+          <Input
+            label="Or share with an admin in another org (by email)"
+            type="email"
+            value={crossOrgEmail}
+            onChange={(e) => onCrossOrgEmailChange(e.target.value)}
+          />
+          <Button variant="secondary" onClick={onShareCrossOrg}>
+            <Share2 className="h-4 w-4" aria-hidden />
+            Share
+          </Button>
+        </div>
+      )}
     </li>
   );
 }
