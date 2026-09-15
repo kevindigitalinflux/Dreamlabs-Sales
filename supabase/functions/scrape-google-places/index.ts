@@ -191,7 +191,7 @@ Deno.serve(async (req) => {
     callerId = userData.user.id;
   }
 
-  const body = (await req.json()) as { org_id?: string; icp_raw_input?: string; icp_params?: IcpParams; max_results?: number };
+  const body = (await req.json()) as { org_id?: string; icp_raw_input?: string; icp_params?: IcpParams; max_results?: number; pipeline_id?: string };
   const orgId = String(body.org_id ?? '');
   if (!orgId || !body.icp_params) return json({ error: 'org_id and icp_params are required' }, 400, headers);
 
@@ -211,6 +211,7 @@ Deno.serve(async (req) => {
   const { data: job, error: jobErr } = await service.from('scrape_jobs').insert({
     org_id: orgId, created_by: callerId, icp_raw_input: body.icp_raw_input ?? null,
     icp_params: body.icp_params, sources: ['google_places'], status: 'pending',
+    pipeline_id: body.pipeline_id ?? null,
   }).select('id').single();
   if (jobErr || !job) return json({ error: jobErr?.message ?? 'Could not create job' }, 500, headers);
 

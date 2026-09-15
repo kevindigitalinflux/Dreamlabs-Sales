@@ -4,8 +4,10 @@ import { Radar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useOrg } from '../hooks/useOrg';
 import { useOrgApiSettings } from '../hooks/useOrgApiSettings';
+import { usePipeline } from '../hooks/usePipeline';
+import { usePipelineActions } from '../hooks/usePipelineActions';
 import { StepProgress } from '../components/ui/StepProgress';
-import { Textarea } from '../components/ui/Input';
+import { Input, SelectField, Textarea } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -18,12 +20,17 @@ export function Scraper() {
   const navigate = useNavigate();
   const { currentOrg } = useOrg();
   const { settings } = useOrgApiSettings();
+  const { pipelines } = usePipeline();
+  const { createPipeline } = usePipelineActions();
   const [step, setStep] = useState(1);
   const [rawInput, setRawInput] = useState('');
   const [icp, setIcp] = useState<IcpParams | null>(null);
   const [source, setSource] = useState<ScrapeSource>('google_places');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pipelineChoice, setPipelineChoice] = useState<'existing' | 'new'>('existing');
+  const [pipelineId, setPipelineId] = useState('');
+  const [newPipelineName, setNewPipelineName] = useState('');
 
   const placesConfigured = settings.find((s) => s.provider === 'google_places')?.is_configured ?? false;
   const chConfigured = settings.find((s) => s.provider === 'companies_house')?.is_configured ?? false;
@@ -48,9 +55,15 @@ export function Scraper() {
   async function runScrape() {
     if (!currentOrg || !icp) return;
     setBusy(true); setError(null);
+    let targetPipelineId = pipelineId;
+    if (pipelineChoice === 'new') {
+      const { error: createErr, pipeline } = await createPipeline(newPipelineName);
+      if (createErr || !pipeline) { setBusy(false); setError(createErr ?? 'Could not create pipeline'); return; }
+      targetPipelineId = pipeline.id;
+    }
     const functionName = source === 'google_places' ? 'scrape-google-places' : 'scrape-companies-house';
     const { data, error: err } = await supabase.functions.invoke(functionName, {
-      body: { org_id: currentOrg.id, icp_raw_input: rawInput, icp_params: icp },
+      body: { org_id: currentOrg.id, icp_raw_input: rawInput, icp_params: icp, pipeline_id: targetPipelineId || null },
     });
     setBusy(false);
     if (err) return setError(err.message);
@@ -136,9 +149,31 @@ export function Scraper() {
           <div className="flex flex-col gap-3">
             <p className="font-semibold">Ready to search {source === 'google_places' ? 'Google Places' : 'Companies House'}</p>
             <p className="text-sm text-muted">This runs in the background — you'll be taken to a live results page.</p>
+            <label className="flex min-h-11 items-center gap-2">
+              <input type="radio" name="pipeline-choice" checked={pipelineChoice === 'existing'} onChange={() => setPipelineChoice('existing')} className="h-4 w-4 accent-violet-500" />
+              Add results to an existing pipeline
+            </label>
+            {pipelineChoice === 'existing' && (
+              <SelectField label="Pipeline" value={pipelineId} onChange={(e) => setPipelineId(e.target.value)}>
+                <option value="">Choose pipeline…</option>
+                {pipelines.filter((p) => p.org_id === currentOrg?.id).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </SelectField>
+            )}
+            <label className="flex min-h-11 items-center gap-2">
+              <input type="radio" name="pipeline-choice" checked={pipelineChoice === 'new'} onChange={() => setPipelineChoice('new')} className="h-4 w-4 accent-violet-500" />
+              Create a new pipeline for these results
+            </label>
+            {pipelineChoice === 'new' && (
+              <Input label="New pipeline name" value={newPipelineName} onChange={(e) => setNewPipelineName(e.target.value)} />
+            )}
             <div className="flex justify-between">
               <Button variant="secondary" onClick={() => setStep(3)}>Back</Button>
-              <Button onClick={() => void runScrape()} disabled={busy}>{busy ? 'Starting…' : 'Find leads'}</Button>
+              <Button
+                onClick={() => void runScrape()}
+                disabled={busy || (pipelineChoice === 'existing' && !pipelineId) || (pipelineChoice === 'new' && !newPipelineName.trim())}
+              >
+                {busy ? 'Starting…' : 'Find leads'}
+              </Button>
             </div>
           </div>
         </Card>
