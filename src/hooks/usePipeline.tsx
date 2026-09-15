@@ -35,10 +35,11 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
     const rows = data as Pipeline[];
     setPipelines(rows);
     setCurrentPipelineId((current) => {
-      if (current && rows.some((p) => p.id === current)) return current;
+      const stillValid = rows.find((p) => p.id === current);
+      if (stillValid && stillValid.org_id === currentOrg.id) return current;
       const saved = localStorage.getItem('current-pipeline');
       const restored = rows.find((p) => p.id === saved && p.org_id === currentOrg.id);
-      const fallback = rows.find((p) => p.org_id === currentOrg.id && p.is_default) ?? rows[0] ?? null;
+      const fallback = rows.find((p) => p.org_id === currentOrg.id) ?? null;
       return (restored ?? fallback)?.id ?? null;
     });
     setLoading(false);
