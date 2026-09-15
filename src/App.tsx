@@ -11,6 +11,7 @@ import { AuthCallback } from './pages/AuthCallback';
 import { Welcome } from './pages/Welcome';
 import { Unsubscribe } from './pages/Unsubscribe';
 import { Dashboard } from './pages/Dashboard';
+import { DreamAgent } from './pages/DreamAgent';
 import { PipelineRedirect } from './pages/PipelineRedirect';
 import { PipelineKanban } from './pages/PipelineKanban';
 import { PipelineList } from './pages/PipelineList';
@@ -46,6 +47,7 @@ export function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/dream-agent" element={<DreamAgent />} />
               <Route path="/pipeline" element={<PipelineRedirect />} />
               <Route path="/pipeline/kanban" element={<PipelineKanban />} />
               <Route path="/pipeline/list" element={<PipelineList />} />

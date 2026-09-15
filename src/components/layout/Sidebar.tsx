@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router';
-import { BarChart3, Contact, KanbanSquare, LayoutDashboard, Mail, Phone, Radar, Rocket, Settings, Shield } from 'lucide-react';
+import { BarChart3, Contact, KanbanSquare, LayoutDashboard, Mail, Phone, Radar, Rocket, Settings, Shield, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useOrg } from '../../hooks/useOrg';
 import logoIcon from '../../assets/logo/logo-icon.png';
@@ -13,6 +13,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/dream-agent', label: 'Dream Agent', icon: Sparkles },
   { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
   { to: '/scraper', label: 'Scraper', icon: Radar },
   { to: '/outreach/linkedin', label: 'LinkedIn', icon: Contact },
