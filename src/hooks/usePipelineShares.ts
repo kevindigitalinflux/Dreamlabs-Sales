@@ -23,6 +23,7 @@ export function usePipelineShares(ownedPipelineIds: string[]) {
   const [outgoing, setOutgoing] = useState<Record<string, OutgoingShare[]>>({});
   const [incoming, setIncoming] = useState<IncomingShare[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const idsKey = ownedPipelineIds.join(',');
 
   const refresh = useCallback(async () => {
@@ -45,6 +46,9 @@ export function usePipelineShares(ownedPipelineIds: string[]) {
       setOutgoing(grouped);
     }
     if (!inRes.error) setIncoming((inRes.data as unknown as IncomingShare[]) ?? []);
+    if (outRes.error) setError(outRes.error.message);
+    else if (inRes.error) setError(inRes.error.message);
+    else setError(null);
     setLoading(false);
   }, [session, idsKey]);
 
@@ -52,5 +56,5 @@ export function usePipelineShares(ownedPipelineIds: string[]) {
     void refresh();
   }, [refresh]);
 
-  return { outgoing, incoming, loading, refresh };
+  return { outgoing, incoming, loading, error, refresh };
 }

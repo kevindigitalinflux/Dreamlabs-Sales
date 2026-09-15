@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Copy, Plus, Share2, Trash2, X } from 'lucide-react';
+import { Copy, Plus } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { usePipeline } from '../hooks/usePipeline';
 import { usePipelineActions } from '../hooks/usePipelineActions';
@@ -8,8 +8,9 @@ import { usePipelineShares } from '../hooks/usePipelineShares';
 import { useProfiles } from '../hooks/useProfiles';
 import { useOrg } from '../hooks/useOrg';
 import { Button } from '../components/ui/Button';
-import { Input, SelectField } from '../components/ui/Input';
+import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
+import { PipelineCard } from '../components/pipeline/PipelineCard';
 import type { Pipeline, PipelinePermission } from '../types';
 
 /** Create/rename/delete pipelines you can manage (your own, or any in your org if
@@ -19,18 +20,21 @@ export function PipelineManage() {
   const { session } = useAuth();
   const { currentOrg } = useOrg();
   const { pipelines, loading: pipelinesLoading, switchPipeline } = usePipeline();
-  const { profiles } = useProfiles();
+  const { profiles, error: profilesError } = useProfiles();
   const { createPipeline, renamePipeline, deletePipeline, shareWithinOrg, revokeShare, forkPipeline } = usePipelineActions();
   const navigate = useNavigate();
 
-  // Mirrors the server-side can_edit_pipeline rule (org admin OR creator OR
-  // default) — a UI convenience only, RLS is still the real gate on every action.
+  // Mirrors the server-side can_edit_pipeline rule (org admin OR creator) — a UI
+  // convenience only, RLS is still the real gate on every action. The default
+  // pipeline (created_by is always NULL) is never manageable by a non-admin here;
+  // they still see/work its leads via Kanban/List, gated by can_view_pipeline
+  // instead, which does carry the is_default carve-out for read visibility.
   const canManage = currentOrg?.role === 'admin'
     ? (p: Pipeline) => p.org_id === currentOrg.id
-    : (p: Pipeline) => p.org_id === currentOrg?.id && (p.is_default || p.created_by === session?.user.id);
+    : (p: Pipeline) => p.org_id === currentOrg?.id && p.created_by === session?.user.id;
   const owned = pipelines.filter(canManage);
   const ownedIds = owned.map((p) => p.id);
-  const { outgoing, incoming, loading: sharesLoading, refresh: refreshShares } = usePipelineShares(ownedIds);
+  const { outgoing, incoming, loading: sharesLoading, error: sharesError, refresh: refreshShares } = usePipelineShares(ownedIds);
 
   const [newName, setNewName] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -84,10 +88,12 @@ export function PipelineManage() {
 
   if (pipelinesLoading || sharesLoading) return <Skeleton className="h-96 w-full" />;
 
+  const bannerError = error || profilesError || sharesError;
+
   return (
     <div className="flex max-w-3xl flex-col gap-8">
       <h1 className="text-[28px] font-extrabold">Manage pipelines</h1>
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      {bannerError && <p role="alert" className="text-sm text-danger">{bannerError}</p>}
 
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-bold">Your pipelines</h2>
@@ -100,56 +106,21 @@ export function PipelineManage() {
         </div>
         <ul className="flex flex-col gap-3">
           {owned.map((pipeline) => (
-            <li key={pipeline.id} className="rounded-xl border border-line bg-card p-4">
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold">
-                  {pipeline.name}
-                  {pipeline.is_default && <span className="ml-2 text-xs text-muted">(default — can't be deleted)</span>}
-                </span>
-                {!pipeline.is_default && (
-                  <div className="flex gap-2">
-                    <Button variant="ghost" onClick={() => void handleRename(pipeline)}>Rename</Button>
-                    <Button variant="danger" onClick={() => void handleDelete(pipeline)} disabled={busyId === pipeline.id}>
-                      <Trash2 className="h-4 w-4" aria-hidden />
-                    </Button>
-                  </div>
-                )}
-              </div>
-              <ul className="mt-3 flex flex-col gap-1">
-                {(outgoing[pipeline.id] ?? []).map((share) => (
-                  <li key={share.id} className="flex items-center justify-between text-sm text-muted">
-                    <span>{share.profiles.full_name ?? share.profiles.email} — {share.permission}</span>
-                    <button type="button" onClick={() => void handleRevoke(share.id)} aria-label="Revoke access" className="cursor-pointer hover:text-danger">
-                      <X className="h-4 w-4" aria-hidden />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-3 flex items-end gap-2">
-                <SelectField
-                  label="Share with"
-                  value={shareTarget[pipeline.id] ?? ''}
-                  onChange={(e) => setShareTarget((prev) => ({ ...prev, [pipeline.id]: e.target.value }))}
-                >
-                  <option value="">Choose teammate…</option>
-                  {profiles.map((p) => (
-                    <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>
-                  ))}
-                </SelectField>
-                <SelectField
-                  label="Permission"
-                  value={sharePermission[pipeline.id] ?? 'view'}
-                  onChange={(e) => setSharePermission((prev) => ({ ...prev, [pipeline.id]: e.target.value as PipelinePermission }))}
-                >
-                  <option value="view">View</option>
-                  <option value="edit">Edit (can fork)</option>
-                </SelectField>
-                <Button variant="secondary" onClick={() => void handleShare(pipeline)}>
-                  <Share2 className="h-4 w-4" aria-hidden />
-                  Share
-                </Button>
-              </div>
-            </li>
+            <PipelineCard
+              key={pipeline.id}
+              pipeline={pipeline}
+              shares={outgoing[pipeline.id] ?? []}
+              profiles={profiles}
+              shareTarget={shareTarget[pipeline.id] ?? ''}
+              sharePermission={sharePermission[pipeline.id] ?? 'view'}
+              busy={busyId === pipeline.id}
+              onShareTargetChange={(userId) => setShareTarget((prev) => ({ ...prev, [pipeline.id]: userId }))}
+              onSharePermissionChange={(permission) => setSharePermission((prev) => ({ ...prev, [pipeline.id]: permission }))}
+              onRename={() => void handleRename(pipeline)}
+              onDelete={() => void handleDelete(pipeline)}
+              onShare={() => void handleShare(pipeline)}
+              onRevoke={(shareId) => void handleRevoke(shareId)}
+            />
           ))}
         </ul>
       </section>
