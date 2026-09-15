@@ -4,6 +4,7 @@ import { applyLeadUpdate } from '../lib/leadUpdates';
 import type { LeadPatch } from '../lib/leadUpdates';
 import { useAuth } from './useAuth';
 import { useOrg } from './useOrg';
+import { usePipeline } from './usePipeline';
 import type { Lead, PackageTier, Stage } from '../types';
 
 export interface LeadInput {
@@ -24,22 +25,23 @@ export interface LeadInput {
   next_action_note?: string | null;
 }
 
-/** All leads visible to the current user, kept fresh via a realtime subscription. */
+/** Leads in the currently active pipeline, kept fresh via a realtime subscription. */
 export function useLeads() {
   const { session } = useAuth();
   const { currentOrg } = useOrg();
+  const { currentPipeline } = usePipeline();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!currentOrg) { setLeads([]); setLoading(false); return; }
+    if (!currentOrg || !currentPipeline) { setLeads([]); setLoading(false); return; }
     const { data, error: err } = await supabase
-      .from('leads').select('*').eq('org_id', currentOrg.id).order('kanban_position').order('created_at');
+      .from('leads').select('*').eq('pipeline_id', currentPipeline.id).order('kanban_position').order('created_at');
     if (err) setError(err.message);
     else { setLeads(data as Lead[]); setError(null); }
     setLoading(false);
-  }, [currentOrg]);
+  }, [currentOrg, currentPipeline]);
 
   useEffect(() => {
     void refresh();
@@ -52,10 +54,13 @@ export function useLeads() {
     };
   }, [refresh]);
 
-  /** Inserts a lead owned by the current user; returns error message or null. */
+  /** Inserts a lead in the active pipeline; returns error message or null. Uses the
+   * pipeline's own org_id, not the org switcher's currently-selected one — the two
+   * can transiently disagree, and a wrong-tenant org_id write is a real bug class
+   * this project has hit before. */
   const createLead = useCallback(
     async (input: LeadInput): Promise<string | null> => {
-      if (!currentOrg) return 'No organization selected';
+      if (!currentPipeline) return 'No pipeline selected';
       const stage = input.stage ?? 'new_lead';
       const maxPos = Math.max(0, ...leads.filter((l) => l.stage === stage).map((l) => l.kanban_position));
       const { error: err } = await supabase.from('leads').insert({
@@ -63,13 +68,14 @@ export function useLeads() {
         stage,
         kanban_position: maxPos + 1,
         created_by: session?.user.id,
-        org_id: currentOrg.id,
+        org_id: currentPipeline.org_id,
+        pipeline_id: currentPipeline.id,
       });
       if (err) return err.message;
       await refresh();
       return null;
     },
-    [leads, session, currentOrg, refresh],
+    [leads, session, currentPipeline, refresh],
   );
 
   /** Patches a lead (stage changes auto-logged); optimistic local update, then refresh. */
