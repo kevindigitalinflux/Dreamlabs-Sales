@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { useOrg } from './useOrg';
 import { usePipeline } from './usePipeline';
-import type { PipelinePermission } from '../types';
+import { buildForkedLeadRows } from '../lib/pipelineFork';
+import type { Lead, Pipeline, PipelinePermission } from '../types';
 
 /** Create/rename/delete a pipeline you own, and manage its within-org shares. */
 export function usePipelineActions() {
@@ -58,5 +59,29 @@ export function usePipelineActions() {
     return error ? error.message : null;
   }, []);
 
-  return { createPipeline, renamePipeline, deletePipeline, shareWithinOrg, revokeShare };
+  /**
+   * Snapshots every lead currently in `source` into a brand-new pipeline owned by
+   * the current org — independent from that moment on, per the design spec. Returns
+   * the new pipeline so the caller can switch the active pipeline to it.
+   */
+  const forkPipeline = useCallback(async (source: Pipeline): Promise<{ error: string | null; pipeline: Pipeline | null }> => {
+    if (!currentOrg || !session) return { error: 'No organization selected', pipeline: null };
+    const { data: sourceLeads, error: leadsErr } = await supabase
+      .from('leads').select('*').eq('pipeline_id', source.id);
+    if (leadsErr) return { error: leadsErr.message, pipeline: null };
+    const { data: newPipeline, error: pipelineErr } = await supabase
+      .from('pipelines')
+      .insert({ org_id: currentOrg.id, name: `${source.name} (copy)`, created_by: session.user.id })
+      .select('*').single();
+    if (pipelineErr) return { error: pipelineErr.message, pipeline: null };
+    const rows = buildForkedLeadRows(sourceLeads as Lead[], newPipeline.id, currentOrg.id, session.user.id);
+    if (rows.length > 0) {
+      const { error: insertErr } = await supabase.from('leads').insert(rows);
+      if (insertErr) return { error: insertErr.message, pipeline: null };
+    }
+    await refresh();
+    return { error: null, pipeline: newPipeline as Pipeline };
+  }, [currentOrg, session, refresh]);
+
+  return { createPipeline, renamePipeline, deletePipeline, shareWithinOrg, revokeShare, forkPipeline };
 }
