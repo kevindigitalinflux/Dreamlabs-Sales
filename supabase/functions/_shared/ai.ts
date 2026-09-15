@@ -96,6 +96,56 @@ ${input.note}`,
 }
 
 /**
+ * Multi-lead note parsing: compares a whole conversation (original note + any
+ * free-text refinements) against a lead index and proposes update/create/ambiguous
+ * actions across however many leads it touches. Unlike parseNotes (one lead, one
+ * patch), this is genuinely one-to-many — stateless like every AI call in this app,
+ * the caller resends the full conversation each round rather than this function
+ * tracking any server-side state. Throws on failure.
+ */
+export async function parseSessionNotes(input: {
+  messages: string[]; leadIndex: { id: string; business_name: string; city: string | null; stage: string }[]; apiKey: string;
+}): Promise<unknown> {
+  return await geminiJson(
+`You extract CRM actions from a sales rep's session notes. The rep may mention
+multiple companies in one note, and may send follow-up messages correcting or
+clarifying an earlier one — always re-read the WHOLE conversation and produce a
+fresh, complete list of actions, not just what changed.
+
+For each company/person mentioned, decide one of three action types:
+1. "update" — confidently matches one of the leads in LEAD INDEX below. Output:
+   {"type":"update","lead_id":<id from LEAD INDEX>,"business_name":<their name>,
+   "patch":{<only fields that should change, keys from: stage (one of new_lead,
+   contacted, audit_booked, proposal_sent, negotiating, won, lost,
+   not_now_nurture), deal_value (number, GBP), package_tier (one of pilot_systems,
+   pilot_ai_app, pilot_full_build, automation_sprint, ai_foundation, full_build,
+   retainer_bronze, retainer_silver, retainer_gold, custom), next_action_date
+   (YYYY-MM-DD), next_action_note (string), pain_point (string)>},
+   "excerpt":<the relevant sentence(s) from the note>,"rationale":<one sentence
+   explaining the match and the changes>}
+2. "create" — mentions someone NOT in LEAD INDEX at all, a genuinely new prospect.
+   Output: {"type":"create","extracted":{"business_name":<string>,
+   "owner_name":<string or null>,"phone":<string or null>,"email":<string or
+   null>,"website":<string or null>,"city":<string or null>,"vertical":<string or
+   null>},"excerpt":<relevant text>,"rationale":<one sentence>}
+3. "ambiguous" — could plausibly match 2+ leads in LEAD INDEX, or the name is too
+   vague to resolve alone. Output: {"type":"ambiguous","mentioned_text":<what was
+   said>,"candidate_lead_ids":[<ids from LEAD INDEX>],"excerpt":<relevant text>}
+
+Only emit an action for something a genuine business update/mention was made about —
+do not invent actions for names that only appear in passing. Today is
+${new Date().toISOString().slice(0, 10)}. Return a JSON array of actions (empty
+array if nothing found).
+
+LEAD INDEX: ${JSON.stringify(input.leadIndex)}
+
+CONVERSATION (each entry is one message from the rep, in order):
+${JSON.stringify(input.messages)}`,
+    input.apiKey,
+  );
+}
+
+/**
  * Sonnet-only: 2-4 short bullet-style personalization talking points for a
  * lead, generated once and reused across every subsequent touch (the caller
  * is responsible for only invoking this when no `ai_summary` note exists
