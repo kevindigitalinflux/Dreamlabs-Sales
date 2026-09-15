@@ -4,16 +4,17 @@ import { useAuth } from './useAuth';
 import type { RawLead } from '../types';
 
 /** Approve/reject/skip a raw_leads row, plus the two paid enrichment actions. */
-export function useRawLeadActions(jobOrgId?: string) {
+export function useRawLeadActions(jobOrgId?: string, pipelineId?: string) {
   const { session } = useAuth();
 
   const approve = useCallback(async (lead: RawLead): Promise<string | null> => {
     if (!jobOrgId) return 'Could not determine the organization for this lead';
+    if (!pipelineId) return 'Choose a pipeline before approving';
     const { error: insertErr } = await supabase.from('leads').insert({
       business_name: lead.business_name, owner_name: lead.owner_name, phone: lead.phone,
       email: lead.email, website: lead.website, address: lead.address, city: lead.city,
       postcode: lead.postcode, google_rating: lead.google_rating, review_count: lead.review_count,
-      vertical: lead.vertical, stage: 'new_lead', org_id: jobOrgId,
+      vertical: lead.vertical, stage: 'new_lead', org_id: jobOrgId, pipeline_id: pipelineId,
       created_by: session?.user.id, raw_lead_id: lead.id,
     });
     if (insertErr) return insertErr.message;
@@ -21,7 +22,7 @@ export function useRawLeadActions(jobOrgId?: string) {
       status: 'approved', approved_by: session?.user.id, approved_at: new Date().toISOString(),
     }).eq('id', lead.id);
     return updateErr ? updateErr.message : null;
-  }, [jobOrgId, session]);
+  }, [jobOrgId, pipelineId, session]);
 
   const reject = useCallback(async (lead: RawLead): Promise<string | null> => {
     const { error } = await supabase.from('raw_leads').update({ status: 'rejected' }).eq('id', lead.id);

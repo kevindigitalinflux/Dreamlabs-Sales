@@ -4,9 +4,11 @@ import { CheckCircle2, XCircle, SkipForward, Sparkles, Mail } from 'lucide-react
 import { useScrapeJob } from '../hooks/useScrapeJob';
 import { useRawLeadActions } from '../hooks/useRawLeadActions';
 import { useOrgApiSettings } from '../hooks/useOrgApiSettings';
+import { usePipeline } from '../hooks/usePipeline';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Skeleton } from '../components/ui/Skeleton';
+import { SelectField } from '../components/ui/Input';
 import { toCsv } from '../lib/csv';
 import type { RawLead } from '../types';
 
@@ -25,7 +27,9 @@ function statusBadge(job: { status: string } | null) {
 export function ScraperJob() {
   const { id } = useParams<{ id: string }>();
   const { job, rawLeads, loading, refresh } = useScrapeJob(id!);
-  const { approve, reject, skip, enrichWithApollo, enrichWithHunter } = useRawLeadActions(job?.org_id);
+  const { pipelines, currentPipeline } = usePipeline();
+  const [pipelineId, setPipelineId] = useState(currentPipeline?.id ?? '');
+  const { approve, reject, skip, enrichWithApollo, enrichWithHunter } = useRawLeadActions(job?.org_id, pipelineId);
   const { settings } = useOrgApiSettings();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null);
@@ -66,7 +70,15 @@ export function ScraperJob() {
           <h1 className="text-[28px] font-extrabold">Scrape results</h1>
           {statusBadge(job)}
         </div>
-        <Button variant="secondary" onClick={exportCsv} disabled={rawLeads.length === 0}>Download CSV</Button>
+        <div className="flex items-center gap-3">
+          <SelectField label="Approve into" value={pipelineId} onChange={(e) => setPipelineId(e.target.value)}>
+            <option value="">Choose pipeline…</option>
+            {pipelines.filter((p) => p.org_id === job.org_id).map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </SelectField>
+          <Button variant="secondary" onClick={exportCsv} disabled={rawLeads.length === 0}>Download CSV</Button>
+        </div>
       </header>
       {job.status === 'failed' && <p role="alert" className="text-sm text-danger">{job.error_message}</p>}
       {job.status !== 'completed' && job.status !== 'failed' && (
@@ -100,7 +112,7 @@ export function ScraperJob() {
                 <td className="p-3">{lead.source}</td>
                 <td className="p-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="secondary" onClick={() => void runAction(lead, approve)} disabled={busyId === lead.id} title="Approve">
+                    <Button variant="secondary" onClick={() => void runAction(lead, approve)} disabled={busyId === lead.id || !pipelineId} title="Approve">
                       <CheckCircle2 className="h-4 w-4" aria-hidden />
                     </Button>
                     <Button variant="danger" onClick={() => void runAction(lead, reject)} disabled={busyId === lead.id} title="Reject">
