@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router';
 import { AuthProvider } from './hooks/useAuth';
 import { FocusModeProvider } from './hooks/useFocusMode';
 import { OrgProvider } from './hooks/useOrg';
+import { PipelineProvider } from './hooks/usePipeline';
 import { AdminRoute, ProtectedRoute } from './components/layout/ProtectedRoute';
 import { AppShell } from './components/layout/AppShell';
 import { ComingSoon } from './components/layout/ComingSoon';
@@ -35,6 +36,7 @@ export function App() {
       <AuthProvider>
         <FocusModeProvider>
         <OrgProvider>
+        <PipelineProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
@@ -67,6 +69,7 @@ export function App() {
             </Route>
           </Route>
         </Routes>
+        </PipelineProvider>
         </OrgProvider>
         </FocusModeProvider>
       </AuthProvider>
