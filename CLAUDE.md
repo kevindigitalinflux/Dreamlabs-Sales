@@ -176,7 +176,7 @@ vite.config.ts
 
 ---
 
-## Current Status (updated 2026-09-07)
+## Current Status (updated 2026-09-16)
 **Working:** Cycle 1-2 (single-tenant foundation, full pipeline, email automation incl. AI-personalised
 composer/sequences/review queue) — see prior status below, all still functional. **Cycle 3 (multi-tenant
 foundation) is FULLY COMPLETE** — Tasks 1-12 done, controller-verified, and pushed:
@@ -598,12 +598,73 @@ pipeline for a brand-new org (rare, platform-admin-only action); a handful of sm
 `/pipeline/manage` and the scraper's pipeline picker (no busy-guards on a few buttons, share picker doesn't
 exclude the current user, manually clearing the scraper's pipeline dropdown gets silently re-populated).
 
+**Dream Agent shipped (2026-09-16).** A new top-level `/dream-agent` page: free-form session notes (typed
+or browser-`SpeechRecognition` voice) get parsed by AI into a confirm-before-apply action list spanning
+however many leads a note touches (update existing / create new / resolve ambiguous matches), plus a
+hybrid free-text refinement loop that re-proposes a fresh, complete action list each round — nothing is
+ever written to the database without an explicit per-row confirm. A second tab on the same page handles
+CSV uploads, reusing the existing scraper's `scrape_jobs`/`raw_leads`/`ScraperJob` review-table
+infrastructure rather than a parallel implementation (`raw_leads.source`/`scrape_jobs.sources` needed only
+a TypeScript type widening to add `'csv_upload'` — both are unconstrained `TEXT` columns, no migration).
+Design doc: `docs/superpowers/specs/2026-09-15-dream-agent-design.md`. Plan:
+`docs/superpowers/plans/2026-09-15-dream-agent.md` (14 tasks, subagent-driven-development, one final
+whole-branch review + one fix wave). This was piece 4 of the user's original 5-part request (piece 3,
+multi-pipeline support, shipped the same week and unblocked this one); piece 5 (autopilot's own
+"existing pipeline vs. new scrape" choice) remains its own deliberately separate future plan.
+
+**New tables/functions this build:** `scrape_jobs.pipeline_id` (migration `021`, nullable, no RLS — a
+client-side convenience default only; the real access gate stays `leads_insert`'s existing
+`can_insert_lead_into` check at actual lead-approval time). Two new edge functions:
+`parse-session-notes` (multi-lead note parsing — takes the full conversation-so-far plus a lead index
+scoped by the caller's own RLS-authenticated client, returns raw `update`/`create`/`ambiguous` actions)
+and `parse-csv-leads` (one cheap AI call to map CSV columns to lead fields; everything else — row
+extraction, org-wide duplicate detection, the `scrape_jobs`/`raw_leads` writes — is deterministic).
+`scrape-google-places`/`scrape-companies-house` both extended to accept an optional `pipeline_id`.
+`src/lib/dreamAgentActions.ts`'s `sanitizeDreamAgentActions` whitelist-validates every AI-returned action
+before it reaches state — critically, any `lead_id`/`candidate_lead_ids` the AI returns is checked against
+the exact set of ids the client itself sent in its lead index, never trusted as the AI's own source of
+truth for which leads exist (mirrors the pre-existing `sanitizeSuggestion` pattern). `ScraperJob.tsx`
+gained bulk "select all + approve" and now defaults its pipeline picker to `job.pipeline_id` when set.
+`PipelineManage.tsx`'s "Create pipeline" section gained a 3-way choice (manual / CSV upload / scrape),
+and `Scraper.tsx`'s wizard gained its own pre-scrape pipeline choice (existing or new).
+
+**The same org-membership-check bug class already fixed once in cycle 4 (`parse-icp`) recurred twice
+during this build, both caught and fixed before shipping:** `parse-session-notes` initially resolved the
+caller's AI API key (service-role client, bypassing RLS) using a client-supplied `org_id` with no check
+the caller actually belongs to that org — fixed with an `org_members` membership check matching
+`parse-icp`'s reference pattern (commit `52c5fed`). The identical gap was then caught pre-emptively in
+`parse-csv-leads` — worse there, since it also would have let any authenticated user in any org learn via
+response shape whether a *different* org's business names/cities/emails already existed (a cross-org data
+oracle) — fixed at dispatch time, before the vulnerable version was ever written (commit `8a5839b`). The
+final whole-branch review exhaustively re-checked every edge function this plan touches or creates and
+confirmed no other instance of this bug class exists in the diff. Worth remembering for any future edge
+function that accepts a client-supplied `org_id`: always check `org_members` before any service-role
+operation scoped by it.
+
+**Final whole-branch review caught 2 more real gaps (both fixed same-day, commit `d7761d4`):**
+`PipelineManage.tsx`'s "Create via CSV upload"/"Create via scrape" hand-off buttons navigated to the right
+pages but landed on the wrong default state (notes tab instead of CSV tab; no pipeline pre-selection at
+all, despite the spec explicitly promising "new pipeline pre-selected") — fixed via React Router
+navigation `state`, read back with a lazy `useState` initializer on each destination page so normal direct
+navigation (e.g. via the Sidebar) is unaffected.
+
+**Known deferred follow-ups (all Minor, none blocking, intentionally left as-is):** cross-org shared
+pipelines are unreachable in every Dream Agent pipeline picker, not just "Whole platform" mode — fails
+closed/safe (never mixes org data), and the spec's own stated workaround (switch active org first) still
+works; widening this is a UX nicety, not a defect. `useDreamAgentSession`'s `sendMessage`/`confirmAll` have
+no internal re-entrancy guard (mitigated at the UI layer only, by disabling the Send/Apply buttons while
+`loading` — confirmed still intact after every later task touched the same file). `confirmAll`'s
+partial-failure handling clears all conversation state uniformly, with no per-action retry. `ScraperJob`'s
+bulk-select state isn't pruned when a row is individually approved/rejected outside the bulk action, and
+has no indeterminate checkbox state. The Scraper wizard's new-pipeline creation is client-side, not atomic
+with the scrape invoke (unlike `parse-csv-leads`'s server-side equivalent) — either path can, on failure
+partway through, leave behind an empty, harmless, manually-deletable orphaned pipeline.
+
 **Not yet started:** Cloudflare Pages deploy, Power Dialer Phase 1's provider-specific wiring (`test`
 action, `dialer-push-queue`, `dialer-webhook`), Phase 2 (AI voice agent), the `text-cyan`/`--color-muted`
-light-mode contrast follow-up, and the user's remaining broader requests — now unblocked by multi-pipeline
-support existing: a "Sales Assistant" page (text/voice note capture → Gemini-driven cross-platform updates,
-CSV upload → AI-assisted lead creation with pipeline selection) and an autopilot "existing pipeline vs. new
-scrape" choice.
+light-mode contrast follow-up, and piece 5 of the user's original 5-part request — an autopilot "existing
+pipeline vs. new scrape" choice — deliberately kept as its own separate future plan throughout both the
+multi-pipeline and Dream Agent builds.
 **Known issues / pending human steps:** Kevin's SMTP credentials not yet entered for the DI Dreamlabs org
 (/settings/email → save + test; until then sends return a friendly settings-gate error). Sequence steps
 are limited to the 5 default templates (custom templates can't be steps yet). check-sequences insert+advance
