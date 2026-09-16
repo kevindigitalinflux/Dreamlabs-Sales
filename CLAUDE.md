@@ -667,21 +667,37 @@ light-mode contrast follow-up, and piece 5 of the user's original 5-part request
 pipeline vs. new scrape" choice — deliberately kept as its own separate future plan throughout both the
 multi-pipeline and Dream Agent builds.
 
-**Queued next (approved 2026-09-16, not yet built):**
-1. **Profile picture upload** — bounded scope: `profiles.avatar_url` already exists as a column (already
-   writable by `authenticated`, migration 001/017) but has no upload UI and isn't displayed anywhere yet.
-   Plan: a new Supabase Storage `avatars` bucket (first Storage usage in this app — Mr Brush's app uses
-   Storage for cleaning photos, this one doesn't yet), write access scoped to each user's own folder,
-   upload control added to Settings → Profile, TopBar's initials-circle swaps to the photo once set.
-2. **Company context for AI drafting** — a real, previously-unaddressed gap: no prompt anywhere in this
-   app (email drafts, LinkedIn drafts, note parsing, autopilot) carries any "who is this company, what do
-   they sell, what tone should we use" context — every AI call is built purely from the individual lead's
-   own data plus the org's bare name string. First version agreed: a free-text "Company context" field on
-   `organizations` (admin-only, a few paragraphs), injected into every AI-calling prompt. Deliberately NOT
-   doing "supply a website and auto-extract" in this first pass — that's a real scraping+summarization
-   pipeline, more engineering than validating whether the plain text box already solves the problem; stays
-   a fast-follow if needed. This is architectural (new org-level data, touches most AI-calling edge
-   functions) — goes through a full design pass before implementation, unlike piece 1 above.
+**Profile picture upload shipped (2026-09-16).** `profiles.avatar_url` already existed as a column
+(already writable by `authenticated`, migration 001/017) but had no upload UI and wasn't displayed
+anywhere. New Supabase Storage `avatars` bucket — the first Storage usage in this app (Mr Brush's app uses
+Storage for cleaning photos, this one didn't yet) — public-read, write scoped to each user's own folder via
+the standard `storage.foldername()` first-segment-matches-`auth.uid()` policy pattern. Settings → Profile
+gained a preview circle, "Upload photo" (client-validated: image/* only, 5MB cap), and "Remove photo".
+`useAuth` gained `refreshProfile()` so every consumer of `profile` (TopBar included) picks up the change
+without a full reload. Live-verified end to end: uploaded a real file, confirmed it rendered in both
+Settings and TopBar, confirmed Remove correctly reverts to initials.
+
+**Company context for AI drafting shipped (2026-09-16), Dream Agent-editable too.** A real,
+previously-unaddressed gap: `draftEmail`/`draftEmailClaude` hardcoded "a UK agency selling automation/AI
+systems to small businesses" into every AI-drafted email/LinkedIn message for every org — wrong for e.g.
+Mr Brush & Co, a cleaning company. Discovering this also surfaced that `generate-email`'s *deployed*
+version was badly stale (missing `orgName` entirely, literally hardcoding "Digital Influx Dreamlabs" for
+every org) — fixed as a side effect of redeploying it. New `organizations.company_context` (free text,
+admin-only via a new RLS policy — `organizations` had no UPDATE policy at all before this, so the grant is
+scoped to this one column only, matching the same REVOKE + column-scoped GRANT pattern already used for
+`profiles`/`pipelines`). Edited on a new card on `/settings/organization`. Injected into every
+outbound-drafting prompt (`generate-email`, `check-sequences`, `check-replies`, `draft-linkedin-message`)
+via a shared `orgDescriptionLine()` helper, falling back to a neutral line with no invented industry claim
+when an org hasn't filled it in yet. Deliberately NOT doing "supply a website and auto-extract" in this
+first pass — stays a fast-follow if the plain text box isn't enough. Dream Agent can also now PROPOSE
+company-context updates from a rep's free-form notes — a new `update_company_context` action type;
+`parse-session-notes` receives the org's current context alongside the lead index and, when a note
+describes the company itself (not a lead), proposes a full coherent merge rather than a blind overwrite,
+shown as an editable textarea. Anyone can have this proposed, but only an org admin can confirm it
+(matching the RLS gate) — a non-admin sees the row with a note to flag it to their admin instead of a
+Confirm button. Live-verified end to end: saved context via settings, confirmed it persisted; sent a Dream
+Agent note describing a new service offering, confirmed the AI proposed a correct merged update (not a
+lead action), confirmed applying it wrote the merged text to `organizations.company_context`.
 
 **Dream Agent follow-up fixes (2026-09-16), found via real user testing after the build above:**
 1. **A real, previously-undetected production bug blocked creating any pipeline or any Dream-Agent-created
@@ -731,6 +747,16 @@ multi-pipeline and Dream Agent builds.
    own bounding rect, so it can no longer affect any ancestor's box model at all. Also flips above the
    trigger when there's insufficient room below in the viewport, and closes on scroll/resize rather than
    tracking every possible scrollable ancestor to reposition live.
+**Known issue, discovered 2026-09-16, not yet fixed:** `draft-linkedin-message`'s three message templates
+(achievement/life_update/general) hardcode Kevin's own personal narrative — "I'm a designer who taught
+myself to build this stuff... my own cleaning company, Mr Brush" — as marketing copy sent to LinkedIn
+prospects, regardless of which org is actually sending. Correct for DI Dreamlabs today; would be wrong (and
+strange, third-person) for any other org that starts using LinkedIn outreach. Bigger scope than the
+company-context fix above — the template *text itself* needs to be org-specific, not just the AI's framing
+of it — and matches the already-known, already-accepted limitation that other orgs' own copy/ICP/sequence
+content isn't ready yet (see "Why the org model matters" in memory). Not fixed now; flagged for whenever
+another org's LinkedIn outreach actually gets scoped.
+
 **Known issues / pending human steps:** Kevin's SMTP credentials not yet entered for the DI Dreamlabs org
 (/settings/email → save + test; until then sends return a friendly settings-gate error). Sequence steps
 are limited to the 5 default templates (custom templates can't be steps yet). check-sequences insert+advance
