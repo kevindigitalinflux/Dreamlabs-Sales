@@ -1,4 +1,5 @@
-import { Children, Fragment, isValidElement, useEffect, useRef, useState } from 'react';
+import { Children, Fragment, isValidElement, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ReactElement, ReactNode } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 
@@ -68,31 +69,74 @@ interface ListboxProps {
  * requires rendering the option list ourselves. Accepts the exact same
  * <option>/<optgroup> children, `value`, and `onChange({target:{value}})`
  * shape a native select does, so every existing caller works unchanged.
+ *
+ * The open panel is portaled to document.body with position:fixed, computed
+ * from the trigger's own bounding rect — never position:absolute inside the
+ * normal document flow. A native select's dropdown renders in its own OS
+ * layer and never affects page layout; an in-flow absolutely-positioned
+ * panel does not extend a flex ancestor's *computed* height (that ignores
+ * absolutely-positioned overflow) but DOES extend the page's real scrollable
+ * height, so opening one near the bottom of a tall page left a gap below the
+ * sidebar (its flex-stretched height no longer matched the now-taller
+ * document). Portaling avoids the mismatch entirely.
  */
 export function Listbox({ value, onChange, children, id, ariaLabel, disabled, className = '', fullWidth = true }: ListboxProps) {
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
+  const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLUListElement>(null);
 
   const parsed = parseChildren(children);
   const flat = flatten(parsed);
   const selected = flat.find((o) => o.value === value);
 
+  useLayoutEffect(() => {
+    if (!open) return;
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    // Flip above the trigger when there's not enough room below in the
+    // viewport (fixed-position content, unlike absolute-in-flow, would
+    // otherwise render partly or fully off-screen with no way to scroll to it).
+    const PANEL_MAX_HEIGHT = 256;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    if (spaceBelow < PANEL_MAX_HEIGHT && spaceAbove > spaceBelow) {
+      setCoords({ bottom: window.innerHeight - rect.top + 4, left: rect.left, width: rect.width });
+    } else {
+      setCoords({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    }
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
-    function handlePointerDown(e: MouseEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    // A scrolled ancestor would leave the portal's fixed-position panel
+    // pinned to the wrong spot on screen — closing is simpler and safer
+    // than tracking every scrollable ancestor to reposition live.
+    function close() {
+      setOpen(false);
     }
+    function handlePointerDown(e: MouseEvent) {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
     document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const idx = flat.findIndex((o) => o.value === value);
     setHighlighted(idx >= 0 ? idx : 0);
-    listRef.current?.focus();
+    panelRef.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -123,14 +167,16 @@ export function Listbox({ value, onChange, children, id, ariaLabel, disabled, cl
     } else if (e.key === 'Escape') {
       e.preventDefault();
       setOpen(false);
+      triggerRef.current?.focus();
     } else if (e.key === 'Tab') {
       setOpen(false);
     }
   }
 
   return (
-    <div ref={rootRef} className={`relative ${fullWidth ? 'w-full' : 'inline-block'}`}>
+    <div className={`relative ${fullWidth ? 'w-full' : 'inline-block'}`}>
       <button
+        ref={triggerRef}
         type="button"
         id={id}
         aria-haspopup="listbox"
@@ -144,14 +190,21 @@ export function Listbox({ value, onChange, children, id, ariaLabel, disabled, cl
         <span className="truncate">{selected?.label ?? ''}</span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-muted transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} aria-hidden />
       </button>
-      {open && (
+      {open && coords && createPortal(
         <ul
-          ref={listRef}
+          ref={panelRef}
           role="listbox"
           aria-label={ariaLabel}
           tabIndex={-1}
           onKeyDown={handleListKeyDown}
-          className={`absolute z-20 mt-1 max-h-64 ${fullWidth ? 'w-full' : 'min-w-full'} overflow-auto rounded-lg border border-line bg-card p-1 shadow-lg outline-none`}
+          style={{
+            top: coords.top,
+            bottom: coords.bottom,
+            left: coords.left,
+            width: fullWidth ? coords.width : undefined,
+            minWidth: fullWidth ? undefined : coords.width,
+          }}
+          className="fixed z-50 max-h-64 overflow-auto rounded-lg border border-line bg-card p-1 shadow-lg outline-none"
         >
           {parsed.map((o, gi) =>
             isGroup(o) ? (
@@ -179,7 +232,8 @@ export function Listbox({ value, onChange, children, id, ariaLabel, disabled, cl
               />
             ),
           )}
-        </ul>
+        </ul>,
+        document.body,
       )}
     </div>
   );
