@@ -665,6 +665,33 @@ action, `dialer-push-queue`, `dialer-webhook`), Phase 2 (AI voice agent), the `t
 light-mode contrast follow-up, and piece 5 of the user's original 5-part request — an autopilot "existing
 pipeline vs. new scrape" choice — deliberately kept as its own separate future plan throughout both the
 multi-pipeline and Dream Agent builds.
+
+**Dream Agent follow-up fixes (2026-09-16), found via real user testing after the build above:**
+1. **A real, previously-undetected production bug blocked creating any pipeline or any Dream-Agent-created
+   lead**, live-reported as "new row violates row-level security policy for table pipelines". Root cause:
+   `pipelines_view`/`leads_view` (and their UPDATE/DELETE counterparts) used `can_view_pipeline(id)`/
+   `can_view_lead(id)`, each of which does a self-referential `SELECT ... FROM <same table> WHERE id =
+   target` — a lookup that can't see a row inserted earlier in the SAME statement, so any `INSERT ...
+   RETURNING` (which supabase-js always does when `.select()` follows `.insert()`) failed, even though the
+   identical check passes moments later as a plain SELECT. Fixed by inlining each policy's boolean logic
+   using the row's own columns instead of a self-lookup (migration `022`). That fix itself then introduced
+   a second bug — unqualified column names inside an `EXISTS` subquery resolved to the wrong (inner) table
+   where both tables shared a column name, silently breaking all pipeline sharing and widening the Default
+   Pipeline's per-lead visibility gate — caught by re-reading the actual stored `pg_policies.qual` after
+   applying the fix, not by trusting rolled-back test transactions alone, and corrected in migration `023`.
+   Both root-caused and verified live via `SET LOCAL ROLE`/`request.jwt.claims` simulation before ever
+   touching production for real, then re-verified end-to-end in the running app. See
+   [[project_dreamlabs_sales]] memory for the full pattern — worth checking on any future self-table-
+   referencing RLS policy.
+2. **Pipeline Manage was unreachable for any org with only its Default Pipeline** — `PipelineSwitcher`
+   hid its own dropdown AND its only "Manage" link whenever `pipelines.length <= 1`, a chicken-and-egg trap
+   (can't create your first extra pipeline because the page for doing that is hidden until you already
+   have one). Fixed: the dropdown still only shows with 2+ pipelines, but the "Manage" link always renders.
+3. **UX feedback acted on**: the pipeline switcher moved from the global top bar (shown on every screen,
+   giving no clue what it did or where its effect was scoped) to sit next to the "Pipeline" heading on the
+   Kanban/List pages themselves. Pipeline Manage's three create-pipeline buttons gained icons (Plus/Upload/
+   Radar, the last matching the Scraper nav item's own icon) and were regrouped into a card, separating the
+   name-input row (only used by "Create empty") from the CSV/scrape options (which navigate elsewhere).
 **Known issues / pending human steps:** Kevin's SMTP credentials not yet entered for the DI Dreamlabs org
 (/settings/email → save + test; until then sends return a friendly settings-gate error). Sequence steps
 are limited to the 5 default templates (custom templates can't be steps yet). check-sequences insert+advance
