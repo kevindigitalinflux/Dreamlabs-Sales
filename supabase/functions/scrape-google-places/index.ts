@@ -3,6 +3,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { runBounded } from '../_shared/concurrency.ts';
+import { scrapeWebsiteContact } from '../_shared/websiteContact.ts';
 
 interface IcpParams {
   industry: string | null; location: string | null; city: string | null;
@@ -14,34 +15,6 @@ interface IcpParams {
 interface PlaceResult {
   place_id: string; name: string; formatted_address?: string;
   rating?: number; user_ratings_total?: number;
-}
-
-// Asset/image extensions that commonly appear as the "TLD" portion of a
-// false-positive plain-text email match (e.g. `logo@2x.png` in a srcset).
-const NON_EMAIL_TLDS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico']);
-
-/** Best-effort: fetch a business website and pull the first plausible contact email from it. */
-async function findEmail(website: string | undefined): Promise<string | null> {
-  if (!website) return null;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(website, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
-    if (!res.ok) return null;
-    const html = await res.text();
-    const mailto = html.match(/mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-    if (mailto) return mailto[1];
-    const plain = html.match(/\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.([a-zA-Z]{2,})\b/);
-    if (!plain) return null;
-    const tld = plain[1].toLowerCase();
-    return NON_EMAIL_TLDS.has(tld) ? null : plain[0];
-  } catch {
-    return null; // timeout, network error, or a hostile/broken site — never fail the job for this
-  } finally {
-    // Keep the abort signal armed through the full res.text() read, not just
-    // the initial fetch() resolution (which only waits for headers).
-    clearTimeout(timeout);
-  }
 }
 
 async function fetchPlaceDetails(placeId: string, apiKey: string): Promise<{ phone: string | null; website: string | null }> {
@@ -119,7 +92,7 @@ async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: strin
     // ~5s worst case per item = ~38s for 60 items).
     const enriched = await runBounded(places, 8, async (place) => {
       const details = await fetchPlaceDetails(place.place_id, apiKey);
-      const email = await findEmail(details.website ?? undefined);
+      const { email } = await scrapeWebsiteContact(details.website);
       return { place, details, email };
     });
 
