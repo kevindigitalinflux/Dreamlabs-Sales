@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 
-type Provider = 'gemini' | 'google_places' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic';
+type Provider = 'gemini' | 'google_places' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates';
 
 async function validateKey(provider: Provider, key: string): Promise<string | null> {
   try {
@@ -48,6 +48,10 @@ async function validateKey(provider: Provider, key: string): Promise<string | nu
         body: JSON.stringify({ model: 'claude-haiku-4-5', max_tokens: 1, messages: [{ role: 'user', content: 'Hi' }] }),
       });
       return res.ok ? null : `Anthropic rejected the key (HTTP ${res.status})`;
+    }
+    if (provider === 'opencorporates') {
+      const res = await fetch(`https://api.opencorporates.com/v0.4/companies/search?q=test&api_token=${key}`);
+      return res.ok ? null : `OpenCorporates rejected the key (HTTP ${res.status})`;
     }
     // hunter — /v2/account is Hunter's free account-info call, used purely to verify the key.
     const res = await fetch(`https://api.hunter.io/v2/account?api_key=${key}`);
@@ -96,7 +100,7 @@ Deno.serve(async (req) => {
     if (!canManage) return json({ error: 'Org admin only' }, 403, headers);
     const provider = String(body.provider ?? '') as Provider;
     const apiKey = String(body.api_key ?? '').trim();
-    if (!['gemini', 'google_places', 'companies_house', 'apollo', 'hunter', 'anthropic'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
+    if (!['gemini', 'google_places', 'companies_house', 'apollo', 'hunter', 'anthropic', 'opencorporates'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
     if (!apiKey) return json({ error: 'api_key is required' }, 400, headers);
 
     const validationError = await validateKey(provider, apiKey);

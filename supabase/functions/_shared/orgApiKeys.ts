@@ -1,6 +1,6 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
-export type ApiProvider = 'gemini' | 'google_places' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic';
+export type ApiProvider = 'gemini' | 'google_places' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates';
 
 const GLOBAL_ENV_VARS: Record<ApiProvider, string> = {
   gemini: 'GEMINI_API_KEY',
@@ -18,6 +18,10 @@ const GLOBAL_ENV_VARS: Record<ApiProvider, string> = {
   // orgs with use_global_api_fallback=true) get outreach AI without setting
   // up their own key, matching how Gemini already works for them.
   anthropic: 'ANTHROPIC_API_KEY',
+  // Free-tier provider, same fallback tier as companies_house/gemini/places
+  // — Kevin's own 2 orgs can use a shared key here if one is ever
+  // configured (unlike apollo/hunter, which never fall back for anyone).
+  opencorporates: 'OPENCORPORATES_API_KEY',
 };
 
 /**

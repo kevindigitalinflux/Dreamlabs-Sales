@@ -44,6 +44,13 @@ const PROVIDERS: {
     freeText: "Free — registration has no cost. One-time setup for the whole organization, done once by whoever administers it.",
   },
   {
+    key: 'opencorporates',
+    label: 'OpenCorporates (owner lookup outside the UK)',
+    url: 'https://opencorporates.com/api_accounts/new',
+    ctaLabel: 'Get your free OpenCorporates API key →',
+    freeText: "Free tier — capped at 200 requests/month and 50/day, registration required. Optional: Companies House alone already covers UK companies for the bulk enrichment feature; this extends owner-name lookup to other countries on a best-effort basis (coverage varies a lot by jurisdiction).",
+  },
+  {
     key: 'apollo',
     label: 'Apollo.io (optional lead enrichment)',
     url: 'https://app.apollo.io/#/settings/integrations/api',
