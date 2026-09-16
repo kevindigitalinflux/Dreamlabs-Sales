@@ -238,7 +238,8 @@ export interface DreamAgentUpdatePatch {
 export type DreamAgentAction =
   | { type: 'update'; lead_id: string; business_name: string; patch: DreamAgentUpdatePatch; excerpt: string; rationale: string }
   | { type: 'create'; extracted: { business_name: string; owner_name: string | null; phone: string | null; email: string | null; website: string | null; city: string | null; vertical: string | null }; excerpt: string; rationale: string }
-  | { type: 'ambiguous'; mentioned_text: string; candidate_lead_ids: string[]; excerpt: string };
+  | { type: 'ambiguous'; mentioned_text: string; candidate_lead_ids: string[]; excerpt: string }
+  | { type: 'update_company_context'; proposed_context: string; excerpt: string; rationale: string };
 
 export type ScrapeJobStatus = 'pending' | 'running' | 'completed' | 'failed';
 export type ScrapeSource = 'google_places' | 'companies_house' | 'csv_upload';

@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight, Building2, Sparkles } from 'lucide-react';
 import { formatCurrency, packageLabel, stageInfo } from '../../lib/utils';
 import { Button } from '../ui/Button';
-import { SelectField } from '../ui/Input';
+import { SelectField, Textarea } from '../ui/Input';
 import type { ActionResolution } from '../../hooks/useDreamAgentSession';
 import type { DreamAgentAction, Lead, Pipeline } from '../../types';
 
@@ -18,6 +18,10 @@ interface ActionRowProps {
    * wrong place. */
   scopedPipelineId: string | null;
   needsPipelinePicker: boolean;
+  /** update_company_context can only be CONFIRMED by an org admin (matching the
+   * RLS gate on organizations.company_context) — any rep can still have it
+   * proposed and see it, since useful context can come from anyone. */
+  isOrgAdmin: boolean;
   onResolve: (resolution: ActionResolution) => void;
 }
 
@@ -25,9 +29,45 @@ interface ActionRowProps {
  * confirmed. `update` renders a from/to diff (matching SuggestionDiff's pattern);
  * `create` shows extracted fields + a pipeline picker if needed; `ambiguous` shows
  * a candidate picker plus "this is someone new", which itself becomes a create-like
- * picker step rather than guessing a pipeline. */
-export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipelineId, needsPipelinePicker, onResolve }: ActionRowProps) {
+ * picker step rather than guessing a pipeline; `update_company_context` shows an
+ * editable textarea pre-filled with the AI's proposed merge. */
+export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipelineId, needsPipelinePicker, isOrgAdmin, onResolve }: ActionRowProps) {
   const [promotedToNew, setPromotedToNew] = useState(false);
+  const [editedContext, setEditedContext] = useState(
+    action.type === 'update_company_context' ? action.proposed_context : '',
+  );
+
+  if (action.type === 'update_company_context') {
+    const confirmed = resolution.status === 'confirmed_update_company_context';
+    return (
+      <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4">
+        <p className="flex items-center gap-2 text-sm font-semibold"><Building2 className="h-4 w-4 text-cyan" aria-hidden />Update company context</p>
+        <p className="text-xs text-muted">{action.rationale}</p>
+        <Textarea
+          label="Updated company context"
+          value={editedContext}
+          onChange={(e) => setEditedContext(e.target.value)}
+          rows={6}
+          disabled={!isOrgAdmin}
+        />
+        {!isOrgAdmin && (
+          <p className="text-xs text-muted">Only an org admin can apply this — flag it to your admin, or dismiss it.</p>
+        )}
+        <div className="flex items-center justify-between">
+          <Button variant="ghost" onClick={() => onResolve({ status: 'dismissed' })}>Dismiss</Button>
+          {isOrgAdmin && (
+            <Button
+              variant={confirmed ? 'secondary' : 'primary'}
+              disabled={!editedContext.trim()}
+              onClick={() => onResolve({ status: 'confirmed_update_company_context', edited_context: editedContext })}
+            >
+              {confirmed ? 'Confirmed ✓' : 'Confirm'}
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (action.type === 'update') {
     const lead = leadsById[action.lead_id];

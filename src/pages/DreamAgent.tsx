@@ -138,6 +138,7 @@ export function DreamAgent() {
             pipelines={orgPipelines}
             scopedPipelineId={matchPipelineId}
             needsPipelinePicker={!matchPipelineId}
+            isOrgAdmin={currentOrg?.role === 'admin'}
             onResolve={(resolution) => resolveAction(i, resolution)}
           />
         ))}

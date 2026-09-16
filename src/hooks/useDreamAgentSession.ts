@@ -13,7 +13,8 @@ export type ActionResolution =
   | { status: 'confirmed_update' }
   | { status: 'confirmed_create'; pipeline_id: string }
   | { status: 'confirmed_ambiguous_as_lead'; lead_id: string }
-  | { status: 'confirmed_ambiguous_as_new'; business_name: string; pipeline_id: string };
+  | { status: 'confirmed_ambiguous_as_new'; business_name: string; pipeline_id: string }
+  | { status: 'confirmed_update_company_context'; edited_context: string };
 
 /**
  * Owns one Dream Agent conversation: the growing list of user messages (the
@@ -123,6 +124,16 @@ export function useDreamAgentSession() {
           lead_id: newLead.id, created_by: session.user.id, note_type: 'ai_summary',
           content: `Dream Agent: ${action.excerpt}`,
         });
+      }
+
+      // RLS (organizations_admin_update_context) is the real gate here — only an
+      // org admin can actually write this column. A non-admin's row is never
+      // offered a way to reach this resolution status in the first place (see
+      // ActionRow), but the write would cleanly fail via RLS either way.
+      if (action.type === 'update_company_context' && resolution.status === 'confirmed_update_company_context') {
+        const { error: updateErr } = await supabase.from('organizations')
+          .update({ company_context: resolution.edited_context.trim() || null }).eq('id', currentOrg.id);
+        if (updateErr) { setError(updateErr.message); continue; }
       }
     }
     setLoading(false);

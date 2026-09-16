@@ -11,6 +11,9 @@ const PACKAGE_TIER_VALUES = new Set<PackageTier>([
 ]);
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_TEXT_LEN = 500;
+// company_context is meant to hold a few paragraphs (see OrganizationSettings'
+// own copy) — much longer than any other free-text field this sanitizer handles.
+const MAX_COMPANY_CONTEXT_LEN = 4000;
 
 function isValidDateOnly(value: string): boolean {
   if (!DATE_ONLY.test(value)) return false;
@@ -92,6 +95,15 @@ export function sanitizeDreamAgentActions(raw: unknown, validLeadIds: Set<string
       if (candidateIds.length === 0) continue;
       const excerpt = sanitizedString(r.excerpt) ?? '';
       actions.push({ type: 'ambiguous', mentioned_text: mentionedText, candidate_lead_ids: candidateIds, excerpt });
+      continue;
+    }
+
+    if (r.type === 'update_company_context') {
+      const proposedContext = typeof r.proposed_context === 'string' ? r.proposed_context.trim().slice(0, MAX_COMPANY_CONTEXT_LEN) : undefined;
+      if (!proposedContext) continue;
+      const excerpt = sanitizedString(r.excerpt) ?? '';
+      const rationale = sanitizedString(r.rationale) ?? '';
+      actions.push({ type: 'update_company_context', proposed_context: proposedContext, excerpt, rationale });
       continue;
     }
   }

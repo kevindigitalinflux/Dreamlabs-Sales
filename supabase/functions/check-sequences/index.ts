@@ -230,9 +230,9 @@ Deno.serve(async (req) => {
 
       const model: ClaudeModel = 'claude-haiku-4-5';
       try {
-        const { data: org } = await service.from('organizations').select('name').eq('id', orgId).maybeSingle();
+        const { data: org } = await service.from('organizations').select('name, company_context').eq('id', orgId).maybeSingle();
         const orgName = org?.name ?? 'our team';
-        const ai = await draftEmailClaude({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts, contractorName, orgName, apiKey, model });
+        const ai = await draftEmailClaude({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, apiKey, model });
         finalSubject = ai.subject; finalBody = ai.body;
         const ap = autopilotByOrg.get(orgId);
         if (ap) {
@@ -247,11 +247,11 @@ Deno.serve(async (req) => {
       const apiKey = await resolveOrgApiKey(service, orgId, 'gemini');
       if (apiKey) {
         try {
-          const { data: org } = await service.from('organizations').select('name').eq('id', orgId).maybeSingle();
+          const { data: org } = await service.from('organizations').select('name, company_context').eq('id', orgId).maybeSingle();
           const orgName = org?.name ?? 'our team';
           // Only the first 3 (of up to 5 fetched) — preserves the exact original
           // note-count this path saw before the outreach gates needed a wider window.
-          const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts.slice(0, 3), contractorName, orgName, apiKey });
+          const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts.slice(0, 3), contractorName, orgName, companyContext: org?.company_context, apiKey });
           finalSubject = ai.subject; finalBody = ai.body;
         } catch (e) {
           console.error(`AI draft failed for enrollment ${enrollment.id}, using plain template:`, e);

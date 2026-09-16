@@ -12,6 +12,21 @@ export type ClaudeModel = 'claude-sonnet-5' | 'claude-haiku-4-5';
 const DASH_GUARDRAIL_LINE =
   'Never use em-dashes or hyphens as sentence punctuation — use commas or periods instead.';
 
+/**
+ * Describes the sending org to the AI for outreach drafting. Previously this
+ * was a single hardcoded sentence ("a UK agency selling automation/AI
+ * systems to small businesses") applied to every org regardless of what that
+ * org actually does — wrong for e.g. Mr Brush & Co, a cleaning company, not
+ * an automation agency. Falls back to a neutral line with no invented
+ * industry claim when an org hasn't filled in its own context yet, rather
+ * than guessing.
+ */
+function orgDescriptionLine(orgName: string, companyContext: string | null | undefined): string {
+  return companyContext?.trim()
+    ? `You are a sales assistant for ${orgName}. About ${orgName}: ${companyContext.trim()}`
+    : `You are a sales assistant for ${orgName}.`;
+}
+
 async function geminiJson(prompt: string, apiKey: string): Promise<unknown> {
   const res = await fetch(`${GEMINI_URL}/${AI_MODEL}:generateContent?key=${apiKey}`, {
     method: 'POST',
@@ -59,10 +74,10 @@ async function claudeJson(prompt: string, model: ClaudeModel, apiKey: string, ma
 
 /** Personalises an already-variable-substituted draft using lead context + notes. Throws on failure. */
 export async function draftEmail(input: {
-  subject: string; body: string; lead: Record<string, unknown>; notes: string[]; contractorName: string; orgName: string; apiKey: string;
+  subject: string; body: string; lead: Record<string, unknown>; notes: string[]; contractorName: string; orgName: string; companyContext?: string | null; apiKey: string;
 }): Promise<{ subject: string; body: string }> {
   const result = await geminiJson(
-`You are a sales assistant for ${input.orgName}, a UK agency selling automation/AI systems to small businesses.
+`${orgDescriptionLine(input.orgName, input.companyContext)}
 Personalise this follow-up email using the lead data and call notes. Keep it plain text, warm, brief, UK English.
 Do not invent facts not present in the data. Keep any URLs intact. ${DASH_GUARDRAIL_LINE} Return JSON: {"subject": string, "body": string}.
 
@@ -97,14 +112,16 @@ ${input.note}`,
 
 /**
  * Multi-lead note parsing: compares a whole conversation (original note + any
- * free-text refinements) against a lead index and proposes update/create/ambiguous
- * actions across however many leads it touches. Unlike parseNotes (one lead, one
- * patch), this is genuinely one-to-many — stateless like every AI call in this app,
- * the caller resends the full conversation each round rather than this function
- * tracking any server-side state. Throws on failure.
+ * free-text refinements) against a lead index and proposes update/create/ambiguous/
+ * update_company_context actions across however many leads (or the org itself) it
+ * touches. Unlike parseNotes (one lead, one patch), this is genuinely one-to-many —
+ * stateless like every AI call in this app, the caller resends the full conversation
+ * each round rather than this function tracking any server-side state. Throws on
+ * failure.
  */
 export async function parseSessionNotes(input: {
-  messages: string[]; leadIndex: { id: string; business_name: string; city: string | null; stage: string }[]; apiKey: string;
+  messages: string[]; leadIndex: { id: string; business_name: string; city: string | null; stage: string }[];
+  currentCompanyContext: string | null; apiKey: string;
 }): Promise<unknown> {
   return await geminiJson(
 `You extract CRM actions from a sales rep's session notes. The rep may mention
@@ -112,7 +129,7 @@ multiple companies in one note, and may send follow-up messages correcting or
 clarifying an earlier one — always re-read the WHOLE conversation and produce a
 fresh, complete list of actions, not just what changed.
 
-For each company/person mentioned, decide one of three action types:
+For each company/person mentioned, decide one of four action types:
 1. "update" — confidently matches one of the leads in LEAD INDEX below. Output:
    {"type":"update","lead_id":<id from LEAD INDEX>,"business_name":<their name>,
    "patch":{<only fields that should change, keys from: stage (one of new_lead,
@@ -131,6 +148,16 @@ For each company/person mentioned, decide one of three action types:
 3. "ambiguous" — could plausibly match 2+ leads in LEAD INDEX, or the name is too
    vague to resolve alone. Output: {"type":"ambiguous","mentioned_text":<what was
    said>,"candidate_lead_ids":[<ids from LEAD INDEX>],"excerpt":<relevant text>}
+4. "update_company_context" — the rep is describing something about OUR OWN
+   company (a new service now offered, a changed value proposition, updated tone
+   guidance for outreach, who we now target) — NOT a lead or prospect. This is
+   rare; only use it for a genuine statement about the sending org itself, never
+   for a lead's business. Output: {"type":"update_company_context",
+   "proposed_context":<the FULL updated company-context text, written to REPLACE
+   CURRENT COMPANY CONTEXT below in its entirety — merge the new information into
+   it coherently rather than just appending, but keep everything from the current
+   text that's still accurate>,"excerpt":<the relevant sentence(s) from the
+   note>,"rationale":<one sentence explaining what changed>}
 
 Only emit an action for something a genuine business update/mention was made about —
 do not invent actions for names that only appear in passing. Today is
@@ -138,6 +165,8 @@ ${new Date().toISOString().slice(0, 10)}. Return a JSON array of actions (empty
 array if nothing found).
 
 LEAD INDEX: ${JSON.stringify(input.leadIndex)}
+
+CURRENT COMPANY CONTEXT (empty if nothing set yet): ${input.currentCompanyContext ?? '(none set)'}
 
 CONVERSATION (each entry is one message from the rep, in order):
 ${JSON.stringify(input.messages)}`,
@@ -197,10 +226,10 @@ ICP: ${JSON.stringify(input.icpParams)}`,
  */
 export async function draftEmailClaude(input: {
   subject: string; body: string; lead: Record<string, unknown>; notes: string[];
-  contractorName: string; orgName: string; apiKey: string; model: ClaudeModel;
+  contractorName: string; orgName: string; companyContext?: string | null; apiKey: string; model: ClaudeModel;
 }): Promise<{ subject: string; body: string }> {
   const result = await claudeJson(
-`You are a sales assistant for ${input.orgName}, a UK agency selling automation/AI systems to small businesses.
+`${orgDescriptionLine(input.orgName, input.companyContext)}
 Personalise this outreach email using the lead data and any notes (which may include AI-generated
 personalization talking points from an earlier research pass — use them as real context, not as
 text to quote verbatim). Keep it plain text, warm, brief, UK English. Do not invent facts not

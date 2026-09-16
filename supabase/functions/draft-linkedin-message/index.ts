@@ -60,11 +60,11 @@ Deno.serve(async (req) => {
   const templateText = templates[variant].replace('{{first_name}}', contact.full_name.split(' ')[0] ?? contact.full_name);
 
   try {
-    const { data: org } = await service.from('organizations').select('name').eq('id', contact.org_id).maybeSingle();
+    const { data: org } = await service.from('organizations').select('name, company_context').eq('id', contact.org_id).maybeSingle();
     const draft = await draftEmailClaude({
       subject: 'LinkedIn DM', body: templateText,
       lead: { full_name: contact.full_name, context_signal: contact.context_signal },
-      notes: [], contractorName, orgName: org?.name ?? 'our team',
+      notes: [], contractorName, orgName: org?.name ?? 'our team', companyContext: org?.company_context,
       apiKey, model: 'claude-sonnet-5',
     });
 

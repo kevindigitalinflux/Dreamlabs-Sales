@@ -146,10 +146,10 @@ Deno.serve(async (req) => {
 
           try {
             const complexity = await classifyReply({ replyBody: bodyText, apiKey });
-            const { data: org } = await service.from('organizations').select('name').eq('id', sentLog.org_id).maybeSingle();
+            const { data: org } = await service.from('organizations').select('name, company_context').eq('id', sentLog.org_id).maybeSingle();
             const draft = await draftEmailClaude({
               subject: `Re: ${subject}`, body: `They replied:\n\n${bodyText}\n\nDraft a helpful response.`,
-              lead, notes: noteTexts, contractorName, orgName: org?.name ?? 'our team',
+              lead, notes: noteTexts, contractorName, orgName: org?.name ?? 'our team', companyContext: org?.company_context,
               apiKey, model: complexity === 'complex' ? 'claude-sonnet-5' : 'claude-haiku-4-5',
             });
             await service.from('email_logs').insert({

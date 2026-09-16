@@ -32,6 +32,12 @@ Deno.serve(async (req) => {
   if (leadsErr) return json({ actions: [], error: leadsErr.message }, 400, headers);
   const leadIndex = (leads ?? []).map((l) => ({ id: l.id as string, business_name: l.business_name as string, city: l.city as string | null, stage: l.stage as string }));
 
+  // Same RLS-scoped client as the lead index above — any org member can read
+  // this via organizations_member_read, needed so the AI can propose a coherent
+  // merge rather than a blind overwrite when a note describes the org itself.
+  const { data: org } = await client.from('organizations').select('company_context').eq('id', orgId).maybeSingle();
+  const currentCompanyContext = (org?.company_context as string | null) ?? null;
+
   const service = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -44,7 +50,7 @@ Deno.serve(async (req) => {
   if (!apiKey) return json({ actions: [], error: 'AI unavailable' }, 200, headers);
 
   try {
-    const actions = await parseSessionNotes({ messages, leadIndex, apiKey });
+    const actions = await parseSessionNotes({ messages, leadIndex, currentCompanyContext, apiKey });
     return json({ actions }, 200, headers);
   } catch (e) {
     console.error('parse-session-notes failed:', e);

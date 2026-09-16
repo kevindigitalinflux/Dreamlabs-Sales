@@ -1,13 +1,71 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle2, KeyRound } from 'lucide-react';
 import { useOrgApiSettings } from '../hooks/useOrgApiSettings';
 import type { OrgApiSetting } from '../hooks/useOrgApiSettings';
 import { useOrg } from '../hooks/useOrg';
+import { supabase } from '../lib/supabase';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
+import { Input, Textarea } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { ProviderGuide } from '../components/settings/ProviderGuide';
+
+/**
+ * Free-text "who we are" context injected into every AI-drafted email/LinkedIn
+ * message for this org — without it, drafting prompts fall back to a neutral
+ * line with no industry claim, matching the guardrail of never inventing facts.
+ */
+function CompanyContextCard({ orgId, orgName }: { orgId: string; orgName: string }) {
+  const [value, setValue] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void supabase.from('organizations').select('company_context').eq('id', orgId).maybeSingle().then(({ data }) => {
+      if (cancelled) return;
+      setValue((data as { company_context: string | null } | null)?.company_context ?? '');
+      setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [orgId]);
+
+  async function handleSave() {
+    setStatus('saving');
+    const { error } = await supabase.from('organizations').update({ company_context: value.trim() || null }).eq('id', orgId);
+    setStatus(error ? 'error' : 'saved');
+  }
+
+  if (loading) return <Skeleton className="h-48 w-full max-w-2xl" />;
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-3">
+        <h2 className="text-[18px] font-bold">Company context</h2>
+        <p className="text-sm text-muted">
+          What does {orgName} actually do, who do you sell to, what tone should outreach use? This gets
+          included in every AI-drafted email and LinkedIn message for this org — without it, drafts won't
+          make any claim about what {orgName} does at all, since the AI never invents facts it wasn't given.
+        </p>
+        <Textarea
+          label="About your company"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          rows={6}
+          placeholder="e.g. We're a commercial cleaning company serving offices and retail units across London. We focus on flexible contracts and same-week onboarding. Keep outreach friendly and practical, not corporate."
+        />
+        <div className="flex items-center gap-3">
+          <Button onClick={() => void handleSave()} disabled={status === 'saving'}>
+            {status === 'saving' ? 'Saving…' : 'Save'}
+          </Button>
+          {status === 'saved' && <span className="text-sm text-success">Saved ✓</span>}
+          {status === 'error' && <span role="alert" className="text-sm text-danger">Could not save — try again.</span>}
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 const PROVIDERS: {
   key: OrgApiSetting['provider'];
@@ -123,6 +181,7 @@ export function OrganizationSettings() {
         These keys power AI drafting and the lead scraper for this organization. Usage bills to
         whichever key is configured here — never to Kevin's account.
       </p>
+      {currentOrg && <CompanyContextCard orgId={currentOrg.id} orgName={currentOrg.name} />}
       <Card>
         <div className="flex flex-col gap-3">
           {PROVIDERS.map((p) => (
