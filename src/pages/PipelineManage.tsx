@@ -119,10 +119,10 @@ export function PipelineManage() {
             <Plus className="h-4 w-4" aria-hidden />
             Create empty
           </Button>
-          <Button variant="secondary" onClick={() => navigate('/dream-agent')}>
+          <Button variant="secondary" onClick={() => navigate('/dream-agent', { state: { tab: 'csv' } })}>
             Create via CSV upload
           </Button>
-          <Button variant="secondary" onClick={() => navigate('/scraper')}>
+          <Button variant="secondary" onClick={() => navigate('/scraper', { state: { newPipeline: true } })}>
             Create via scrape
           </Button>
         </div>

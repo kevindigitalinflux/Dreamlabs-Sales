@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { Mic, Send, Sparkles } from 'lucide-react';
 import { parseCsv } from '../lib/csv';
 import { useDreamAgentSession } from '../hooks/useDreamAgentSession';
@@ -19,7 +19,8 @@ export function DreamAgent() {
   const { currentPipeline, pipelines } = usePipeline();
   const { messages, actions, resolutions, loading, error, sendMessage, resolveAction, confirmAll } = useDreamAgentSession();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<'notes' | 'csv'>('notes');
+  const location = useLocation();
+  const [tab, setTab] = useState<'notes' | 'csv'>(() => ((location.state as { tab?: 'notes' | 'csv' } | null)?.tab === 'csv' ? 'csv' : 'notes'));
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvPipelineChoice, setCsvPipelineChoice] = useState<'existing' | 'new'>('existing');
   const [csvPipelineId, setCsvPipelineId] = useState('');

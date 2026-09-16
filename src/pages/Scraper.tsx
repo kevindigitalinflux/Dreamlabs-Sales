@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { Radar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useOrg } from '../hooks/useOrg';
@@ -18,6 +18,7 @@ const TOTAL_STEPS = 4;
 /** 4-step lead-scraper wizard: ICP text -> AI parse -> pick sources -> confirm+scrape (SPEC.md §5). */
 export function Scraper() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentOrg } = useOrg();
   const { settings } = useOrgApiSettings();
   const { pipelines } = usePipeline();
@@ -28,7 +29,7 @@ export function Scraper() {
   const [source, setSource] = useState<ScrapeSource>('google_places');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pipelineChoice, setPipelineChoice] = useState<'existing' | 'new'>('existing');
+  const [pipelineChoice, setPipelineChoice] = useState<'existing' | 'new'>(() => ((location.state as { newPipeline?: boolean } | null)?.newPipeline ? 'new' : 'existing'));
   const [pipelineId, setPipelineId] = useState('');
   const [newPipelineName, setNewPipelineName] = useState('');
 
