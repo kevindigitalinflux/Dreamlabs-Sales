@@ -667,6 +667,22 @@ light-mode contrast follow-up, and piece 5 of the user's original 5-part request
 pipeline vs. new scrape" choice — deliberately kept as its own separate future plan throughout both the
 multi-pipeline and Dream Agent builds.
 
+**Queued next (approved 2026-09-16, not yet built):**
+1. **Profile picture upload** — bounded scope: `profiles.avatar_url` already exists as a column (already
+   writable by `authenticated`, migration 001/017) but has no upload UI and isn't displayed anywhere yet.
+   Plan: a new Supabase Storage `avatars` bucket (first Storage usage in this app — Mr Brush's app uses
+   Storage for cleaning photos, this one doesn't yet), write access scoped to each user's own folder,
+   upload control added to Settings → Profile, TopBar's initials-circle swaps to the photo once set.
+2. **Company context for AI drafting** — a real, previously-unaddressed gap: no prompt anywhere in this
+   app (email drafts, LinkedIn drafts, note parsing, autopilot) carries any "who is this company, what do
+   they sell, what tone should we use" context — every AI call is built purely from the individual lead's
+   own data plus the org's bare name string. First version agreed: a free-text "Company context" field on
+   `organizations` (admin-only, a few paragraphs), injected into every AI-calling prompt. Deliberately NOT
+   doing "supply a website and auto-extract" in this first pass — that's a real scraping+summarization
+   pipeline, more engineering than validating whether the plain text box already solves the problem; stays
+   a fast-follow if needed. This is architectural (new org-level data, touches most AI-calling edge
+   functions) — goes through a full design pass before implementation, unlike piece 1 above.
+
 **Dream Agent follow-up fixes (2026-09-16), found via real user testing after the build above:**
 1. **A real, previously-undetected production bug blocked creating any pipeline or any Dream-Agent-created
    lead**, live-reported as "new row violates row-level security policy for table pipelines". Root cause:
@@ -704,6 +720,17 @@ multi-pipeline and Dream Agent builds.
    which renders its own option list with violet hover/selected/checkmark styling, full keyboard nav, and
    click-outside-to-close — while keeping the exact same `<option>`/`<optgroup>` children, `value`, and
    `onChange({target:{value}})` shape a native select accepts, so no caller needed to change.
+5. **A regression from the Listbox switch, caught live:** the custom panel was `position:absolute` inside
+   normal document flow. Absolutely-positioned overflow doesn't count when a flex ancestor computes its
+   *own* height (so `Sidebar`'s flex-stretched height was computed without it) but DOES count toward the
+   page's real scrollable height — opening a dropdown near the bottom of a tall page (e.g. Admin's "Choose
+   contractor") made the document taller than the sidebar meant to match it, exposing a visible gap below
+   the sidebar. A native select never has this problem (its dropdown renders in its own OS layer, entirely
+   outside document layout) — this bug class only exists because a custom-rendered panel gave that up.
+   Fixed by portaling the open panel to `document.body` with `position:fixed`, computed from the trigger's
+   own bounding rect, so it can no longer affect any ancestor's box model at all. Also flips above the
+   trigger when there's insufficient room below in the viewport, and closes on scroll/resize rather than
+   tracking every possible scrollable ancestor to reposition live.
 **Known issues / pending human steps:** Kevin's SMTP credentials not yet entered for the DI Dreamlabs org
 (/settings/email → save + test; until then sends return a friendly settings-gate error). Sequence steps
 are limited to the 5 default templates (custom templates can't be steps yet). check-sequences insert+advance
