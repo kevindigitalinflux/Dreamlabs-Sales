@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { Mic, Send, Sparkles } from 'lucide-react';
+import { Mic, Send, Sparkles, Upload } from 'lucide-react';
 import { parseCsv } from '../lib/csv';
 import { useDreamAgentSession } from '../hooks/useDreamAgentSession';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
@@ -27,6 +27,8 @@ export function DreamAgent() {
   const [csvNewPipelineName, setCsvNewPipelineName] = useState('');
   const [csvBusy, setCsvBusy] = useState(false);
   const [csvError, setCsvError] = useState<string | null>(null);
+  const [csvDragActive, setCsvDragActive] = useState(false);
+  const csvInputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState('');
   const [matchScope, setMatchScope] = useState<string>(currentPipeline?.id ?? '');
   const [leadsById, setLeadsById] = useState<Record<string, Lead>>({});
@@ -111,7 +113,38 @@ export function DreamAgent() {
           {csvPipelineChoice === 'new' && (
             <input type="text" placeholder="New pipeline name" value={csvNewPipelineName} onChange={(e) => setCsvNewPipelineName(e.target.value)} className="min-h-11 rounded-lg border border-line bg-surface px-3 text-base outline-none focus:border-cyan" />
           )}
-          <input type="file" accept=".csv" onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)} className="text-sm" />
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv"
+            onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
+            className="hidden"
+          />
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => csvInputRef.current?.click()}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') csvInputRef.current?.click(); }}
+            onDragOver={(e) => { e.preventDefault(); setCsvDragActive(true); }}
+            onDragLeave={() => setCsvDragActive(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setCsvDragActive(false);
+              const file = e.dataTransfer.files?.[0];
+              if (file) setCsvFile(file);
+            }}
+            className={`flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 text-center transition-colors ${csvDragActive ? 'border-cyan bg-cyan/5' : 'border-line hover:border-cyan/60'}`}
+          >
+            <Upload className="h-6 w-6 text-muted" aria-hidden />
+            {csvFile ? (
+              <p className="text-sm font-semibold">{csvFile.name}</p>
+            ) : (
+              <>
+                <p className="text-sm font-semibold">Click to upload or drag and drop</p>
+                <p className="text-xs text-muted">CSV files only</p>
+              </>
+            )}
+          </div>
           {csvError && <p role="alert" className="text-sm text-danger">{csvError}</p>}
           <Button
             onClick={() => void handleCsvUpload()}
