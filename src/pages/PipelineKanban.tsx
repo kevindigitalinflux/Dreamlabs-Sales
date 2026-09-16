@@ -10,6 +10,7 @@ import { KanbanBoard } from '../components/pipeline/KanbanBoard';
 import { SharedPipelineBanner } from '../components/pipeline/SharedPipelineBanner';
 import { ViewToggle } from '../components/pipeline/ViewToggle';
 import { LeadPanel } from '../components/pipeline/LeadPanel';
+import { PipelineSwitcher } from '../components/layout/PipelineSwitcher';
 import type { Lead, Stage } from '../types';
 
 /** Kanban pipeline page (desktop). Mobile users are pointed to the list view. */
@@ -39,7 +40,10 @@ export function PipelineKanban() {
     <div className="flex flex-col gap-4">
       <SharedPipelineBanner />
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[28px] font-extrabold">Pipeline</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-[28px] font-extrabold">Pipeline</h1>
+          <PipelineSwitcher />
+        </div>
         <div className="flex items-center gap-3">
           <ViewToggle current="kanban" />
           <Button onClick={() => setWizardOpen(true)}>

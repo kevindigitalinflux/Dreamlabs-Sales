@@ -15,6 +15,7 @@ import { ListTable } from '../components/pipeline/ListTable';
 import { LeadPanel } from '../components/pipeline/LeadPanel';
 import { SharedPipelineBanner } from '../components/pipeline/SharedPipelineBanner';
 import { ViewToggle } from '../components/pipeline/ViewToggle';
+import { PipelineSwitcher } from '../components/layout/PipelineSwitcher';
 import type { Lead, Stage } from '../types';
 
 /** List pipeline view: search, filters, sortable table, side panel (SPEC.md §6). */
@@ -53,7 +54,10 @@ export function PipelineList() {
     <div className="flex flex-col gap-4">
       <SharedPipelineBanner />
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[28px] font-extrabold">Pipeline</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-[28px] font-extrabold">Pipeline</h1>
+          <PipelineSwitcher />
+        </div>
         <div className="flex items-center gap-3">
           <ViewToggle current="list" />
           <Button onClick={() => setWizardOpen(true)}>

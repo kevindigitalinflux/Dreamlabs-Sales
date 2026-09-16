@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Copy, Plus } from 'lucide-react';
+import { Copy, Plus, Radar, Upload } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { usePipeline } from '../hooks/usePipeline';
 import { usePipelineActions } from '../hooks/usePipelineActions';
@@ -9,6 +9,7 @@ import { useProfiles } from '../hooks/useProfiles';
 import { useOrg } from '../hooks/useOrg';
 import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/Button';
+import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { PipelineCard } from '../components/pipeline/PipelineCard';
@@ -113,19 +114,33 @@ export function PipelineManage() {
 
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-bold">Your pipelines</h2>
-        <div className="flex items-end gap-3">
-          <Input label="New pipeline name" value={newName} onChange={(e) => setNewName(e.target.value)} />
-          <Button onClick={() => void handleCreate()}>
-            <Plus className="h-4 w-4" aria-hidden />
-            Create empty
-          </Button>
-          <Button variant="secondary" onClick={() => navigate('/dream-agent', { state: { tab: 'csv' } })}>
-            Create via CSV upload
-          </Button>
-          <Button variant="secondary" onClick={() => navigate('/scraper', { state: { newPipeline: true } })}>
-            Create via scrape
-          </Button>
-        </div>
+        <Card className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <Input
+              label="New pipeline name"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              className="max-w-xs"
+            />
+            <Button onClick={() => void handleCreate()}>
+              <Plus className="h-4 w-4" aria-hidden />
+              Create empty
+            </Button>
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold text-muted">Or start from</p>
+            <div className="flex flex-wrap gap-3">
+              <Button variant="secondary" onClick={() => navigate('/dream-agent', { state: { tab: 'csv' } })}>
+                <Upload className="h-4 w-4" aria-hidden />
+                Create via CSV upload
+              </Button>
+              <Button variant="secondary" onClick={() => navigate('/scraper', { state: { newPipeline: true } })}>
+                <Radar className="h-4 w-4" aria-hidden />
+                Create via scrape
+              </Button>
+            </div>
+          </div>
+        </Card>
         <ul className="flex flex-col gap-3">
           {owned.map((pipeline) => (
             <PipelineCard
