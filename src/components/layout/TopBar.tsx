@@ -22,12 +22,16 @@ export function TopBar() {
       </button>
       <ThemeToggle />
       <OrgSwitcher />
-      <span
-        aria-hidden
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-purple text-xs font-bold text-on-accent"
-      >
-        {initials(profile?.full_name)}
-      </span>
+      {profile?.avatar_url ? (
+        <img src={profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover" />
+      ) : (
+        <span
+          aria-hidden
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-purple text-xs font-bold text-on-accent"
+        >
+          {initials(profile?.full_name)}
+        </span>
+      )}
       <span className="hidden text-sm font-semibold sm:block">{profile?.full_name ?? profile?.email}</span>
       <button
         type="button"

@@ -10,6 +10,7 @@ interface AuthContextValue {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -54,6 +55,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [session]);
 
+  /** Re-fetches the signed-in user's own profile row — call after updating it
+   * directly (e.g. avatar_url) so every consumer of `profile` picks up the change. */
+  async function refreshProfile(): Promise<void> {
+    if (!session) return;
+    const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+    setProfile((data as Profile | null) ?? null);
+  }
+
   /** Signs in with email/password; returns an error message or null on success. */
   async function signIn(email: string, password: string): Promise<string | null> {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -66,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ session, profile, loading, signIn, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
