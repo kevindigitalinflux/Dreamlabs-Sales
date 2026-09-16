@@ -683,9 +683,16 @@ systems to small businesses" into every AI-drafted email/LinkedIn message for ev
 Mr Brush & Co, a cleaning company. Discovering this also surfaced that `generate-email`'s *deployed*
 version was badly stale (missing `orgName` entirely, literally hardcoding "Digital Influx Dreamlabs" for
 every org) — fixed as a side effect of redeploying it. New `organizations.company_context` (free text,
-admin-only via a new RLS policy — `organizations` had no UPDATE policy at all before this, so the grant is
-scoped to this one column only, matching the same REVOKE + column-scoped GRANT pattern already used for
-`profiles`/`pipelines`). Edited on a new card on `/settings/organization`. Injected into every
+edit-gated to admins via a new RLS policy — `organizations` had no UPDATE policy at all before this, so
+the grant is scoped to this one column only, matching the same REVOKE + column-scoped GRANT pattern
+already used for `profiles`/`pipelines`). **First shipped as a card on `/settings/organization` (the
+admin-only "Organization API keys" sub-page) — user testing immediately hit a real discoverability bug:
+that whole sub-page only renders when `currentOrg?.role === 'admin'` for the CURRENTLY SELECTED org, so a
+user who is an admin of one org but only a member (or not a member at all) of another can lose the entry
+point completely just by switching orgs. Moved same-day to its own card directly on the main
+`/settings` page: visible to every rep in the org (useful to know what the AI's been told), textarea and
+Save button disabled for non-admins, matching the same visible-but-edit-gated pattern already used for
+Dream Agent's `update_company_context` action row.** Injected into every
 outbound-drafting prompt (`generate-email`, `check-sequences`, `check-replies`, `draft-linkedin-message`)
 via a shared `orgDescriptionLine()` helper, falling back to a neutral line with no invented industry claim
 when an org hasn't filled it in yet. Deliberately NOT doing "supply a website and auto-extract" in this
