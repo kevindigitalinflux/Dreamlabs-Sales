@@ -4,6 +4,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { runBounded } from '../_shared/concurrency.ts';
+import { fetchFirstOfficer } from '../_shared/companiesHouse.ts';
 
 interface IcpParams {
   industry: string | null; location: string | null; city: string | null;
@@ -13,35 +14,6 @@ interface IcpParams {
 interface CHCompany {
   company_number: string; title: string;
   address_snippet?: string;
-}
-
-/**
- * Companies House returns officer names as "SURNAME, Forename Middlename".
- * Reformat to "Forename Middlename SURNAME" so downstream consumers (e.g.
- * templateVars.ts's `owner_name?.split(' ')[0]` for {{first_name}}) get a
- * real first name instead of "SURNAME," with a trailing comma. Falls back to
- * the raw value unchanged if it isn't in the comma-separated format.
- */
-function normalizeOfficerName(rawName: string): string {
-  const commaIndex = rawName.indexOf(', ');
-  if (commaIndex === -1) return rawName;
-  const surname = rawName.slice(0, commaIndex);
-  const forenames = rawName.slice(commaIndex + 2);
-  return `${forenames} ${surname}`;
-}
-
-async function fetchFirstOfficer(companyNumber: string, apiKey: string): Promise<string | null> {
-  try {
-    const res = await fetch(`https://api.company-information.service.gov.uk/company/${companyNumber}/officers`, {
-      headers: { Authorization: 'Basic ' + btoa(`${apiKey}:`) },
-    });
-    if (!res.ok) return null;
-    const data = await res.json() as { items?: { name?: string }[] };
-    const rawName = data.items?.[0]?.name;
-    return rawName ? normalizeOfficerName(rawName) : null;
-  } catch {
-    return null;
-  }
 }
 
 async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: string, icp: IcpParams, apiKey: string, cap: number) {
