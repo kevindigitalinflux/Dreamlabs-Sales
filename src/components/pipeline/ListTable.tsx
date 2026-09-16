@@ -11,6 +11,9 @@ interface ListTableProps {
   sortDir: 'asc' | 'desc';
   onSort: (key: SortKey) => void;
   onOpen: (lead: Lead) => void;
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+  onToggleAll: () => void;
 }
 
 const COLUMNS: { key: SortKey; label: string }[] = [
@@ -24,7 +27,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
 ];
 
 /** Sortable full-width lead table with sticky header; row click opens the panel. */
-export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen }: ListTableProps) {
+export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen, selected, onToggle, onToggleAll }: ListTableProps) {
   function assignee(lead: Lead): string {
     const p = profiles.find((x) => x.id === lead.assigned_to);
     return p ? initials(p.full_name ?? p.email) : '—';
@@ -35,6 +38,15 @@ export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen }:
       <table className="w-full text-left text-sm">
         <thead className="sticky top-0 bg-card">
           <tr className="border-b border-line text-xs font-semibold text-muted">
+            <th className="w-11 px-3">
+              <input
+                type="checkbox"
+                checked={leads.length > 0 && selected.size === leads.length}
+                onChange={onToggleAll}
+                className="h-4 w-4 accent-violet-500"
+                aria-label="Select all"
+              />
+            </th>
             {COLUMNS.map((col) => (
               <th key={col.key} aria-sort={sortKey === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                 <button type="button" onClick={() => onSort(col.key)} className="flex min-h-11 w-full cursor-pointer items-center gap-1 px-3 hover:text-offwhite">
@@ -49,6 +61,15 @@ export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen }:
         <tbody>
           {leads.map((lead) => (
             <tr key={lead.id} onClick={() => onOpen(lead)} className="cursor-pointer border-b border-line last:border-0 hover:bg-surface/50">
+              <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={selected.has(lead.id)}
+                  onChange={() => onToggle(lead.id)}
+                  className="h-4 w-4 accent-violet-500"
+                  aria-label={`Select ${lead.business_name}`}
+                />
+              </td>
               <td className="px-3 py-3 font-semibold">{lead.business_name}</td>
               <td className="px-3 py-3 text-muted">{lead.owner_name ?? '—'}</td>
               <td className="px-3 py-3"><StageBadge stage={lead.stage} /></td>

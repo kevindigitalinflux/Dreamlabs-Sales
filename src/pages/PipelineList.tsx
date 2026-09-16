@@ -30,12 +30,17 @@ export function PipelineList() {
   const [sortKey, setSortKey] = useState<SortKey>('business_name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [selected, setSelected] = useState<Lead | null>(null);
+  const [openLead, setOpenLead] = useState<Lead | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (selected) setSelected(leads.find((l) => l.id === selected.id) ?? null);
+    if (openLead) setOpenLead(leads.find((l) => l.id === openLead.id) ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leads]);
+
+  useEffect(() => {
+    setSelected(new Set());
+  }, [filters]);
 
   const visible = useMemo(
     () => sortLeads(filterLeads(leads, filters), sortKey, sortDir),
@@ -48,6 +53,18 @@ export function PipelineList() {
       setSortKey(key);
       setSortDir('asc');
     }
+  }
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelected((prev) => (prev.size === visible.length ? new Set() : new Set(visible.map((l) => l.id))));
   }
 
   return (
@@ -80,11 +97,21 @@ export function PipelineList() {
         />
       )}
       {!loading && !error && visible.length > 0 && (
-        <ListTable leads={visible} profiles={profiles} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} onOpen={setSelected} />
+        <ListTable
+          leads={visible}
+          profiles={profiles}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSort={handleSort}
+          onOpen={setOpenLead}
+          selected={selected}
+          onToggle={toggleSelected}
+          onToggleAll={toggleSelectAll}
+        />
       )}
 
       <AddLeadWizard open={wizardOpen} onClose={() => setWizardOpen(false)} onCreate={createLead} />
-      <LeadPanel lead={selected} profiles={profiles} onClose={() => setSelected(null)} onUpdate={updateLead} />
+      <LeadPanel lead={openLead} profiles={profiles} onClose={() => setOpenLead(null)} onUpdate={updateLead} />
     </div>
   );
 }
