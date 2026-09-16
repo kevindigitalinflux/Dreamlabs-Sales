@@ -1,6 +1,6 @@
 import { forwardRef, useId } from 'react';
-import { ChevronDown } from 'lucide-react';
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from 'react';
+import { Listbox } from './Listbox';
 
 const FIELD_CLASSES =
   'w-full rounded-lg border border-line bg-surface px-3 text-base text-offwhite outline-none placeholder:text-muted focus:border-cyan';
@@ -42,28 +42,28 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
   );
 });
 
-interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
+interface SelectFieldProps {
   label: string;
+  value: string;
+  onChange: (event: { target: { value: string } }) => void;
   children: ReactNode;
+  disabled?: boolean;
+  className?: string;
 }
 
-/** Labelled native select, 44px tall — violet focus ring and chevron match the
- * app's other choice controls (e.g. the Kanban/List toggle's selected state). */
-export function SelectField({ label, children, className = '', ...rest }: SelectFieldProps) {
+/** Labelled dropdown, 44px tall — a custom-rendered listbox (not a native
+ * <select>) so its open option list can carry the app's own violet
+ * hover/selected styling, which a native select's OS-rendered popup can't be
+ * given via CSS. Accepts the same <option>/<optgroup> children a native
+ * select would. */
+export function SelectField({ label, value, onChange, children, disabled, className = '' }: SelectFieldProps) {
   const id = useId();
   return (
     <div className="flex w-full flex-col gap-1.5">
       <label htmlFor={id} className="text-xs font-semibold text-muted">{label}</label>
-      <div className="relative w-full">
-        <select
-          id={id}
-          className={`min-h-11 w-full cursor-pointer appearance-none rounded-lg border border-line bg-surface py-2 pl-3 pr-9 text-base text-offwhite outline-none focus:border-violet ${className}`}
-          {...rest}
-        >
-          {children}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden />
-      </div>
+      <Listbox id={id} value={value} onChange={onChange} disabled={disabled} className={`text-base ${className}`}>
+        {children}
+      </Listbox>
     </div>
   );
 }
