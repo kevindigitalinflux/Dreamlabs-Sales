@@ -61,6 +61,14 @@ export interface Lead {
   updated_at: string;
 }
 
+export type EnrichableField = 'email' | 'phone' | 'owner_name';
+
+export interface EnrichmentResult {
+  lead_id: string;
+  proposed: Partial<Record<EnrichableField, string>>;
+  source: Partial<Record<EnrichableField, string>>;
+}
+
 export interface Pipeline {
   id: string;
   org_id: string;
