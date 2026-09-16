@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { OrgMemberRow, Role } from '../../types';
 import { formatShortDate } from '../../lib/utils';
@@ -46,16 +47,19 @@ export function UserTable({ members, orgId, onChanged }: UserTableProps) {
               <td className="px-3 py-3 font-semibold">{m.profiles.full_name ?? '—'}</td>
               <td className="px-3 py-3 text-muted">{m.profiles.email}</td>
               <td className="px-3 py-3">
-                <select
-                  aria-label={`Role for ${m.profiles.email}`}
-                  className="min-h-11 rounded-lg border border-line bg-surface px-2"
-                  value={m.role}
-                  disabled={m.profiles.id === session?.user.id || busyId === m.profiles.id}
-                  onChange={(e) => void setRole(m.profiles.id, e.target.value as Role)}
-                >
-                  <option value="contractor">Contractor</option>
-                  <option value="admin">Admin</option>
-                </select>
+                <div className="relative inline-block">
+                  <select
+                    aria-label={`Role for ${m.profiles.email}`}
+                    className="min-h-11 cursor-pointer appearance-none rounded-lg border border-line bg-surface py-2 pl-2 pr-8 outline-none focus:border-violet disabled:cursor-not-allowed disabled:opacity-50"
+                    value={m.role}
+                    disabled={m.profiles.id === session?.user.id || busyId === m.profiles.id}
+                    onChange={(e) => void setRole(m.profiles.id, e.target.value as Role)}
+                  >
+                    <option value="contractor">Contractor</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden />
+                </div>
               </td>
               <td className="px-3 py-3 text-muted">{formatShortDate(m.created_at)}</td>
             </tr>
