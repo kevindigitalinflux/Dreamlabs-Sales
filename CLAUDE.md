@@ -171,6 +171,7 @@ vite.config.ts
 | `src/lib/leadFilters.ts` | List-view filter + sort logic (unit-tested) |
 | `src/hooks/useLeads.ts` | Pipeline CRUD + realtime subscription |
 | `src/hooks/useLeadNotes.ts` | Notes per lead; call notes bump call_count/last_contacted_at |
+| `src/components/ui/Listbox.tsx` | Custom dropdown (not a native `<select>`) — a native select's open option list is browser/OS-rendered and can't be restyled via CSS, so this renders its own, with violet hover/selected to match brand. Accepts the same `<option>`/`<optgroup>` children a native select does. Use this (or `SelectField`, which wraps it with a label) for any new dropdown — never a raw `<select>` |
 | `supabase/functions/admin-users/` | Edge function: invite users, set roles (service-role only) |
 | `SPEC.md` | Full product spec — feature detail, schema, routes, design system |
 
@@ -692,6 +693,17 @@ multi-pipeline and Dream Agent builds.
    Kanban/List pages themselves. Pipeline Manage's three create-pipeline buttons gained icons (Plus/Upload/
    Radar, the last matching the Scraper nav item's own icon) and were regrouped into a card, separating the
    name-input row (only used by "Create empty") from the CSV/scrape options (which navigate elsewhere).
+4. **Dropdown styling, done in two passes.** First pass: every `<select>` relied on native browser
+   rendering — the dropdown arrow sat flush to the edge and clicking showed the browser's default blue
+   focus outline. Fixed with `appearance-none` + a positioned chevron + a violet focus ring (matching
+   Kanban/List's selected-state colour). Second pass, after Kevin pointed out the highlight *inside the
+   opened option list* was still native blue: a native select's open option list is rendered by the
+   browser/OS, not the page, so CSS genuinely cannot restyle its hover/selected colour — no amount of
+   className tweaking reaches it. Replaced every `<select>` app-wide with a custom-rendered
+   `src/components/ui/Listbox.tsx` (21 files' worth of `SelectField` usages plus 3 standalone selects),
+   which renders its own option list with violet hover/selected/checkmark styling, full keyboard nav, and
+   click-outside-to-close — while keeping the exact same `<option>`/`<optgroup>` children, `value`, and
+   `onChange({target:{value}})` shape a native select accepts, so no caller needed to change.
 **Known issues / pending human steps:** Kevin's SMTP credentials not yet entered for the DI Dreamlabs org
 (/settings/email → save + test; until then sends return a friendly settings-gate error). Sequence steps
 are limited to the 5 default templates (custom templates can't be steps yet). check-sequences insert+advance
