@@ -1,15 +1,17 @@
 import { useSearchParams } from 'react-router';
 import { TemplateList } from '../components/emails/TemplateList';
 import { SequenceList } from '../components/emails/SequenceList';
+import { ReleaseQueue } from '../components/emails/ReleaseQueue';
 import { EmailLogList } from '../components/emails/EmailLogList';
 
 const TABS = [
   { key: 'templates', label: 'Templates' },
   { key: 'sequences', label: 'Sequences' },
+  { key: 'release', label: 'Waiting to release' },
   { key: 'logs', label: 'Logs' },
 ] as const;
 
-/** /emails — templates / sequences / logs tabs (SPEC.md §13 routes collapsed to one hub). */
+/** /emails — templates / sequences / release / logs tabs (SPEC.md §13 routes collapsed to one hub). */
 export function EmailsHub() {
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') ?? 'templates';
@@ -27,6 +29,7 @@ export function EmailsHub() {
       </div>
       {tab === 'templates' && <TemplateList />}
       {tab === 'sequences' && <SequenceList />}
+      {tab === 'release' && <ReleaseQueue />}
       {tab === 'logs' && <EmailLogList />}
     </div>
   );
