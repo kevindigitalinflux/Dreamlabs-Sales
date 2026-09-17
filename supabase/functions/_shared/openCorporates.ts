@@ -1,4 +1,5 @@
 import { isFuzzyNameMatch } from './fuzzyMatch.ts';
+import { fetchWithTimeout } from './fetchWithTimeout.ts';
 
 interface OpenCorporatesCompany { name?: string; jurisdiction_code?: string; company_number?: string }
 interface OpenCorporatesOfficer { name?: string }
@@ -13,14 +14,14 @@ interface OpenCorporatesOfficer { name?: string }
  */
 export async function lookupOpenCorporatesOfficer(businessName: string, apiKey: string): Promise<string | null> {
   try {
-    const searchRes = await fetch(`https://api.opencorporates.com/v0.4/companies/search?q=${encodeURIComponent(businessName)}&api_token=${apiKey}`);
+    const searchRes = await fetchWithTimeout(`https://api.opencorporates.com/v0.4/companies/search?q=${encodeURIComponent(businessName)}&api_token=${apiKey}`);
     if (!searchRes.ok) return null;
     const searchData = await searchRes.json() as { results?: { companies?: { company: OpenCorporatesCompany }[] } };
     const top = searchData.results?.companies?.[0]?.company;
     if (!top?.name || !top.jurisdiction_code || !top.company_number) return null;
     if (!isFuzzyNameMatch(businessName, top.name)) return null;
 
-    const detailRes = await fetch(`https://api.opencorporates.com/v0.4/companies/${top.jurisdiction_code}/${top.company_number}?api_token=${apiKey}`);
+    const detailRes = await fetchWithTimeout(`https://api.opencorporates.com/v0.4/companies/${top.jurisdiction_code}/${top.company_number}?api_token=${apiKey}`);
     if (!detailRes.ok) return null;
     const detailData = await detailRes.json() as { results?: { company?: { officers?: { officer: OpenCorporatesOfficer }[] } } };
     const officer = detailData.results?.company?.officers?.[0]?.officer;

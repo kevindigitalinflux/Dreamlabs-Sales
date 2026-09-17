@@ -1,5 +1,6 @@
 // supabase/functions/_shared/apolloHunterLookup.ts
 import { bareDomain } from './domain.ts';
+import { fetchWithTimeout } from './fetchWithTimeout.ts';
 
 /**
  * Apollo org-enrich by domain — company-level phone only (Apollo's people
@@ -13,7 +14,7 @@ export async function lookupApolloPhone(website: string | null, apiKey: string):
   const domain = bareDomain(website ?? '');
   if (!domain) return null;
   try {
-    const res = await fetch(`https://api.apollo.io/api/v1/organizations/enrich?domain=${encodeURIComponent(domain)}`, {
+    const res = await fetchWithTimeout(`https://api.apollo.io/api/v1/organizations/enrich?domain=${encodeURIComponent(domain)}`, {
       headers: { 'X-Api-Key': apiKey, 'Content-Type': 'application/json' },
     });
     if (!res.ok) return null;
@@ -32,7 +33,7 @@ export async function lookupHunterEmail(website: string | null, apiKey: string):
   const domain = bareDomain(website ?? '');
   if (!domain) return null;
   try {
-    const res = await fetch(`https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${apiKey}`);
+    const res = await fetchWithTimeout(`https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${apiKey}`);
     if (!res.ok) return null;
     const data = await res.json() as { data?: { emails?: { value: string; confidence: number }[] } };
     const emails = data.data?.emails ?? [];

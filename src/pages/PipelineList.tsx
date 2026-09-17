@@ -4,6 +4,7 @@ import { Inbox, Plus, Radar } from 'lucide-react';
 import { useLeads } from '../hooks/useLeads';
 import { useProfiles } from '../hooks/useProfiles';
 import { useLeadEnrichment } from '../hooks/useLeadEnrichment';
+import { usePipeline } from '../hooks/usePipeline';
 import { filterLeads, sortLeads } from '../lib/leadFilters';
 import type { LeadFilters, SortKey } from '../lib/leadFilters';
 import { STAGES } from '../lib/utils';
@@ -24,6 +25,7 @@ import type { EnrichableField, EnrichmentResult, Lead, Stage } from '../types';
 export function PipelineList() {
   const { leads, loading, error, createLead, updateLead } = useLeads();
   const { profiles } = useProfiles();
+  const { currentPipeline } = usePipeline();
   const [searchParams] = useSearchParams();
   const urlStage = searchParams.get('stage');
   const initialStages = STAGES.some((s) => s.value === urlStage) ? [urlStage as Stage] : [];
@@ -46,7 +48,7 @@ export function PipelineList() {
 
   useEffect(() => {
     setSelected(new Set());
-  }, [filters]);
+  }, [filters, currentPipeline?.id]);
 
   const visible = useMemo(
     () => sortLeads(filterLeads(leads, filters), sortKey, sortDir),
@@ -75,6 +77,7 @@ export function PipelineList() {
 
   async function handleFillMissingDetails() {
     const results = await runEnrichment([...selected]);
+    if (results === null) return;
     setEnrichResults(results);
     setReviewOpen(true);
   }
@@ -86,7 +89,7 @@ export function PipelineList() {
       const err = await updateLead(leadId, patch);
       if (err) failed.push({ leadId, error: err }); else applied++;
     }
-    setSelected(new Set());
+    if (failed.length === 0) setSelected(new Set());
     return { applied, failed };
   }
 

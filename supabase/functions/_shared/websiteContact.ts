@@ -14,11 +14,13 @@ function extractEmail(html: string): string | null {
 function extractPhone(html: string): string | null {
   const tel = html.match(/tel:([+\d][\d\s()-]{6,18}\d)/);
   if (tel) return tel[1].trim();
-  // Plain-text fallback: an international-looking number — at least 8
-  // digits, optionally grouped with spaces/hyphens/parens, optional leading
-  // +. Bounded lookaround keeps it from matching inside a longer token like
-  // a tracking id or a version string glued to letters/punctuation.
-  const plain = html.match(/(?<![\w.@])(\+?\d[\d\s()-]{7,17}\d)(?![\w.@])/);
+  // Plain-text fallback runs on tag-stripped text, not raw HTML — otherwise
+  // it matches SVG viewBox attributes, CSS pixel values, and other markup
+  // noise before it ever reaches a real phone number on the page.
+  const text = html
+    .replace(/<(script|style|svg)\b[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ');
+  const plain = text.match(/(?<![\w.@])(\+?\d[\d\s()-]{7,17}\d)(?![\w.@])/);
   return plain ? plain[1].trim() : null;
 }
 

@@ -35,24 +35,24 @@ async function enrichOneLead(
   if (siteEmail && siteEmail !== lead.email) { proposed.email = siteEmail; source.email = 'website'; }
   if (sitePhone && sitePhone !== lead.phone) { proposed.phone = sitePhone; source.phone = 'website'; }
 
-  // 2. Companies House (UK) — free registration.
-  if (keys.companiesHouse) {
+  // 2. Companies House (UK) — free registration. Skip if the lead already has an owner_name.
+  if (!lead.owner_name && keys.companiesHouse) {
     const officer = await lookupCompaniesHouseOfficer(lead.business_name, keys.companiesHouse);
     if (officer && officer !== lead.owner_name) { proposed.owner_name = officer; source.owner_name = 'companies_house'; }
   }
 
-  // 3. OpenCorporates (non-UK best-effort) — only if Companies House found nothing.
-  if (!proposed.owner_name && keys.openCorporates) {
+  // 3. OpenCorporates (non-UK best-effort) — only if Companies House found nothing AND the lead has no owner_name.
+  if (!proposed.owner_name && !lead.owner_name && keys.openCorporates) {
     const officer = await lookupOpenCorporatesOfficer(lead.business_name, keys.openCorporates);
     if (officer && officer !== lead.owner_name) { proposed.owner_name = officer; source.owner_name = 'opencorporates'; }
   }
 
-  // 4. Apollo/Hunter — paid, opt-in, only for fields still blank after 1–3.
-  if (!proposed.email && keys.hunter && lead.website) {
+  // 4. Apollo/Hunter — paid, opt-in, only for fields still blank after 1–3 AND not already on the lead.
+  if (!proposed.email && !lead.email && keys.hunter && lead.website) {
     const email = await lookupHunterEmail(lead.website, keys.hunter);
     if (email && email !== lead.email) { proposed.email = email; source.email = 'hunter'; }
   }
-  if (!proposed.phone && keys.apollo && lead.website) {
+  if (!proposed.phone && !lead.phone && keys.apollo && lead.website) {
     const phone = await lookupApolloPhone(lead.website, keys.apollo);
     if (phone && phone !== lead.phone) { proposed.phone = phone; source.phone = 'apollo'; }
   }
@@ -75,7 +75,12 @@ Deno.serve(async (req) => {
   const { data: userData } = await client.auth.getUser();
   if (!userData?.user) return json({ error: 'Not signed in' }, 401, headers);
 
-  const body = (await req.json()) as { lead_ids?: string[] };
+  let body: { lead_ids?: string[] };
+  try {
+    body = (await req.json()) as { lead_ids?: string[] };
+  } catch {
+    return json({ error: 'Invalid JSON body' }, 400, headers);
+  }
   const leadIds = Array.isArray(body.lead_ids) ? body.lead_ids.map(String) : [];
   if (leadIds.length === 0) return json({ error: 'lead_ids is required' }, 400, headers);
   if (leadIds.length > MAX_LEADS) return json({ error: `Select ${MAX_LEADS} or fewer leads at once` }, 400, headers);
@@ -85,7 +90,12 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
-  const { data: leads, error: leadsErr } = await service
+  // RLS-scoped read: a caller only gets back the leads they're actually
+  // allowed to see (can_view_lead policy) — any requested id outside that
+  // scope silently drops out of resolvedLeads below, same as an id that
+  // doesn't exist at all. The org-membership check below stays as a
+  // defensive second layer.
+  const { data: leads, error: leadsErr } = await client
     .from('leads').select('id, org_id, business_name, website, email, phone, owner_name').in('id', leadIds);
   if (leadsErr) return json({ error: leadsErr.message }, 500, headers);
   const resolvedLeads = (leads ?? []) as LeadRow[];

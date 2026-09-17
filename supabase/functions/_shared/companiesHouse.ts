@@ -1,4 +1,5 @@
 import { isFuzzyNameMatch } from './fuzzyMatch.ts';
+import { fetchWithTimeout } from './fetchWithTimeout.ts';
 
 /**
  * Companies House returns officer names as "SURNAME, Forename Middlename".
@@ -17,7 +18,7 @@ export function normalizeOfficerName(rawName: string): string {
 
 export async function fetchFirstOfficer(companyNumber: string, apiKey: string): Promise<string | null> {
   try {
-    const res = await fetch(`https://api.company-information.service.gov.uk/company/${companyNumber}/officers`, {
+    const res = await fetchWithTimeout(`https://api.company-information.service.gov.uk/company/${companyNumber}/officers`, {
       headers: { Authorization: 'Basic ' + btoa(`${apiKey}:`) },
     });
     if (!res.ok) return null;
@@ -36,7 +37,7 @@ export async function fetchFirstOfficer(companyNumber: string, apiKey: string): 
  */
 export async function searchCompanyByName(businessName: string, apiKey: string): Promise<{ company_number: string; title: string } | null> {
   try {
-    const res = await fetch(`https://api.company-information.service.gov.uk/search/companies?q=${encodeURIComponent(businessName)}&items_per_page=1`, {
+    const res = await fetchWithTimeout(`https://api.company-information.service.gov.uk/search/companies?q=${encodeURIComponent(businessName)}&items_per_page=1`, {
       headers: { Authorization: 'Basic ' + btoa(`${apiKey}:`) },
     });
     if (!res.ok) return null;
