@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Inbox, Plus, Radar } from 'lucide-react';
+import { Inbox, Plus, Radar, Send } from 'lucide-react';
 import { useLeads } from '../hooks/useLeads';
 import { useProfiles } from '../hooks/useProfiles';
 import { useLeadEnrichment } from '../hooks/useLeadEnrichment';
@@ -12,6 +12,7 @@ import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Skeleton } from '../components/ui/Skeleton';
 import { AddLeadWizard } from '../components/pipeline/AddLeadWizard';
+import { BulkDraftModal } from '../components/pipeline/BulkDraftModal';
 import { EnrichmentReview } from '../components/pipeline/EnrichmentReview';
 import { FilterBar } from '../components/pipeline/FilterBar';
 import { ListTable } from '../components/pipeline/ListTable';
@@ -39,6 +40,7 @@ export function PipelineList() {
   const { running: enriching, error: enrichError, runEnrichment } = useLeadEnrichment();
   const [enrichResults, setEnrichResults] = useState<EnrichmentResult[]>([]);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [draftModalOpen, setDraftModalOpen] = useState(false);
   const leadsById = useMemo(() => Object.fromEntries(leads.map((l) => [l.id, l])), [leads]);
 
   useEffect(() => {
@@ -109,6 +111,12 @@ export function PipelineList() {
               {enriching ? 'Searching…' : `Fill missing details (${selected.size})`}
             </Button>
           )}
+          {selected.size > 0 && (
+            <Button variant="secondary" onClick={() => setDraftModalOpen(true)}>
+              <Send className="h-4 w-4" aria-hidden />
+              {`Draft emails (${selected.size})`}
+            </Button>
+          )}
           <Button onClick={() => setWizardOpen(true)}>
             <Plus className="h-4 w-4" aria-hidden />
             Add lead
@@ -151,6 +159,11 @@ export function PipelineList() {
         leadsById={leadsById}
         onClose={() => setReviewOpen(false)}
         onApply={handleApplyEnrichment}
+      />
+      <BulkDraftModal
+        open={draftModalOpen}
+        leads={[...selected].map((id) => leadsById[id]).filter((l): l is Lead => l !== undefined)}
+        onClose={() => setDraftModalOpen(false)}
       />
     </div>
   );
