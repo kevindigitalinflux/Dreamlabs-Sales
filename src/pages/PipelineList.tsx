@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Inbox, Plus } from 'lucide-react';
+import { Inbox, Plus, Radar } from 'lucide-react';
 import { useLeads } from '../hooks/useLeads';
 import { useProfiles } from '../hooks/useProfiles';
+import { useLeadEnrichment } from '../hooks/useLeadEnrichment';
 import { filterLeads, sortLeads } from '../lib/leadFilters';
 import type { LeadFilters, SortKey } from '../lib/leadFilters';
 import { STAGES } from '../lib/utils';
@@ -10,13 +11,14 @@ import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Skeleton } from '../components/ui/Skeleton';
 import { AddLeadWizard } from '../components/pipeline/AddLeadWizard';
+import { EnrichmentReview } from '../components/pipeline/EnrichmentReview';
 import { FilterBar } from '../components/pipeline/FilterBar';
 import { ListTable } from '../components/pipeline/ListTable';
 import { LeadPanel } from '../components/pipeline/LeadPanel';
 import { SharedPipelineBanner } from '../components/pipeline/SharedPipelineBanner';
 import { ViewToggle } from '../components/pipeline/ViewToggle';
 import { PipelineSwitcher } from '../components/layout/PipelineSwitcher';
-import type { Lead, Stage } from '../types';
+import type { EnrichableField, EnrichmentResult, Lead, Stage } from '../types';
 
 /** List pipeline view: search, filters, sortable table, side panel (SPEC.md §6). */
 export function PipelineList() {
@@ -32,6 +34,10 @@ export function PipelineList() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [openLead, setOpenLead] = useState<Lead | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const { running: enriching, error: enrichError, runEnrichment } = useLeadEnrichment();
+  const [enrichResults, setEnrichResults] = useState<EnrichmentResult[]>([]);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const leadsById = useMemo(() => Object.fromEntries(leads.map((l) => [l.id, l])), [leads]);
 
   useEffect(() => {
     if (openLead) setOpenLead(leads.find((l) => l.id === openLead.id) ?? null);
@@ -67,6 +73,23 @@ export function PipelineList() {
     setSelected((prev) => (prev.size === visible.length ? new Set() : new Set(visible.map((l) => l.id))));
   }
 
+  async function handleFillMissingDetails() {
+    const results = await runEnrichment([...selected]);
+    setEnrichResults(results);
+    setReviewOpen(true);
+  }
+
+  async function handleApplyEnrichment(grouped: Record<string, Partial<Record<EnrichableField, string>>>) {
+    let applied = 0;
+    const failed: { leadId: string; error: string }[] = [];
+    for (const [leadId, patch] of Object.entries(grouped)) {
+      const err = await updateLead(leadId, patch);
+      if (err) failed.push({ leadId, error: err }); else applied++;
+    }
+    setSelected(new Set());
+    return { applied, failed };
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <SharedPipelineBanner />
@@ -77,6 +100,12 @@ export function PipelineList() {
         </div>
         <div className="flex items-center gap-3">
           <ViewToggle current="list" />
+          {selected.size > 0 && (
+            <Button variant="secondary" onClick={() => void handleFillMissingDetails()} disabled={enriching}>
+              <Radar className="h-4 w-4" aria-hidden />
+              {enriching ? 'Searching…' : `Fill missing details (${selected.size})`}
+            </Button>
+          )}
           <Button onClick={() => setWizardOpen(true)}>
             <Plus className="h-4 w-4" aria-hidden />
             Add lead
@@ -88,6 +117,7 @@ export function PipelineList() {
 
       {loading && <Skeleton className="h-64 w-full" />}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      {enrichError && <p role="alert" className="text-sm text-danger">{enrichError}</p>}
       {!loading && !error && visible.length === 0 && (
         <EmptyState
           icon={Inbox}
@@ -112,6 +142,13 @@ export function PipelineList() {
 
       <AddLeadWizard open={wizardOpen} onClose={() => setWizardOpen(false)} onCreate={createLead} />
       <LeadPanel lead={openLead} profiles={profiles} onClose={() => setOpenLead(null)} onUpdate={updateLead} />
+      <EnrichmentReview
+        open={reviewOpen}
+        results={enrichResults}
+        leadsById={leadsById}
+        onClose={() => setReviewOpen(false)}
+        onApply={handleApplyEnrichment}
+      />
     </div>
   );
 }
