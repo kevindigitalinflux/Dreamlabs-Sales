@@ -16,10 +16,16 @@ function extractPhone(html: string): string | null {
   if (tel) return tel[1].trim();
   // Plain-text fallback runs on tag-stripped text, not raw HTML — otherwise
   // it matches SVG viewBox attributes, CSS pixel values, and other markup
-  // noise before it ever reaches a real phone number on the page.
+  // noise before it ever reaches a real phone number on the page. Tags are
+  // replaced with '|', not a space — a space sits inside this function's own
+  // digit-group character class, so two numbers markup used to keep apart
+  // (a stat block, a list of years) would otherwise merge into one fake
+  // match. '|' breaks that merge; the tradeoff is a number split across an
+  // inline tag (`Call 020 <b>7946</b> 0958`) is missed, which is a safe
+  // null rather than a fabricated number.
   const text = html
-    .replace(/<(script|style|svg)\b[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<[^>]*>/g, ' ');
+    .replace(/<(script|style|svg)\b[\s\S]*?<\/\1>/gi, '|')
+    .replace(/<[^>]*>/g, '|');
   const plain = text.match(/(?<![\w.@])(\+?\d[\d\s()-]{7,17}\d)(?![\w.@])/);
   return plain ? plain[1].trim() : null;
 }
