@@ -99,6 +99,20 @@ Deno.serve(async (req) => {
     logId = (inserted as { id: string } | null)?.id ?? null;
   }
 
+  // Best-effort: update the lead's last-contacted timestamp on every
+  // successful send through this function (manual, sequence, or bulk
+  // release) — and advance a brand-new lead to "contacted" specifically,
+  // never touching any other stage so a reply to an already-advanced lead
+  // is never silently reset backward. A failure here must not turn a
+  // successful send into an error response — the email already sent and
+  // logged either way.
+  if (status === 'sent' && body.lead_id) {
+    const { data: currentLead } = await service.from('leads').select('stage').eq('id', body.lead_id).maybeSingle();
+    const leadUpdate: Record<string, unknown> = { last_contacted_at: new Date().toISOString() };
+    if (currentLead?.stage === 'new_lead') leadUpdate.stage = 'contacted';
+    await service.from('leads').update(leadUpdate).eq('id', body.lead_id);
+  }
+
   const warning = logFailed ? 'Email sent but logging failed' : undefined;
   if (status === 'failed') return json({ error: 'Send failed: ' + errorMessage, log_id: logId, ...(warning ? { warning } : {}) }, 400, headers);
   return json({ ok: true, log_id: logId, ...(warning ? { warning } : {}) }, 200, headers);
