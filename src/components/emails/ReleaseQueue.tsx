@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { readableInvokeError } from '../../lib/invokeError';
 import { supabase } from '../../lib/supabase';
 import { useDrafts } from '../../hooks/useDrafts';
 import type { DraftLog } from '../../hooks/useDrafts';
@@ -39,17 +40,23 @@ export function ReleaseQueue() {
     setSummary(null);
     let sent = 0;
     let failed = 0;
+    let firstFailReason: string | null = null;
     for (const draft of drafts) {
       if (!selected.has(draft.id)) continue;
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: { to_email: draft.to_email, subject: draft.subject, body: draft.body, lead_id: draft.lead?.id, log_id: draft.id },
       });
       const result = data as { ok?: boolean; error?: string } | null;
-      if (error || !result?.ok) failed++; else sent++;
+      if (error || !result?.ok) {
+        failed++;
+        if (!firstFailReason) firstFailReason = error ? await readableInvokeError(error) : (result?.error ?? 'Send failed');
+      } else {
+        sent++;
+      }
     }
     setReleasing(false);
     setSelected(new Set());
-    setSummary(failed === 0 ? `Sent ${sent}` : `Sent ${sent} — ${failed} failed (stays in the queue, marked Failed)`);
+    setSummary(failed === 0 ? `Sent ${sent}` : `Sent ${sent} — ${failed} failed${firstFailReason ? `: ${firstFailReason}` : ''}`);
     await refresh();
   }
 

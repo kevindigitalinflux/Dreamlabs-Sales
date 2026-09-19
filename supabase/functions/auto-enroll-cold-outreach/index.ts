@@ -6,9 +6,11 @@ const HEADERS = { 'Content-Type': 'application/json' };
 
 /**
  * Cron target: auto-enrolls newly-approved new_lead-stage leads into their
- * org's default cold-outreach sequence. Nothing in this app advances a
- * lead's `stage` off `new_lead` automatically, so a lead can still show as
- * `new_lead` long after its cold-outreach sequence has completed — the
+ * org's default cold-outreach sequence. A lead can still show as `new_lead`
+ * long after its cold-outreach sequence has completed (the only automatic
+ * stage advance anywhere in this app is send-email's own new_lead→contacted
+ * bump on a successful send, which requires an actual outreach email to have
+ * gone out — an enrolled-but-not-yet-emailed lead is unaffected) — the
  * existing-enrollment check below is therefore scoped to "has EVER had an
  * enrollment in this exact sequence, regardless of status" (not just
  * active/paused), so a completed sequence is never restarted from step 1.

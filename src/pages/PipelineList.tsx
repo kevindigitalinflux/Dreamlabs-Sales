@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Inbox, Plus, Radar, Send } from 'lucide-react';
+import { Inbox, PenLine, Plus, Radar } from 'lucide-react';
 import { useLeads } from '../hooks/useLeads';
 import { useProfiles } from '../hooks/useProfiles';
 import { useLeadEnrichment } from '../hooks/useLeadEnrichment';
@@ -103,19 +103,19 @@ export function PipelineList() {
           <h1 className="text-[28px] font-extrabold">Pipeline</h1>
           <PipelineSwitcher />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <ViewToggle current="list" />
           {selected.size > 0 && (
-            <Button variant="secondary" onClick={() => void handleFillMissingDetails()} disabled={enriching}>
-              <Radar className="h-4 w-4" aria-hidden />
-              {enriching ? 'Searching…' : `Fill missing details (${selected.size})`}
-            </Button>
-          )}
-          {selected.size > 0 && (
-            <Button variant="secondary" onClick={() => setDraftModalOpen(true)}>
-              <Send className="h-4 w-4" aria-hidden />
-              {`Draft emails (${selected.size})`}
-            </Button>
+            <>
+              <Button variant="secondary" onClick={() => void handleFillMissingDetails()} disabled={enriching}>
+                <Radar className="h-4 w-4" aria-hidden />
+                {enriching ? 'Searching…' : `Fill missing details (${selected.size})`}
+              </Button>
+              <Button variant="secondary" onClick={() => setDraftModalOpen(true)}>
+                <PenLine className="h-4 w-4" aria-hidden />
+                {`Draft emails (${selected.size})`}
+              </Button>
+            </>
           )}
           <Button onClick={() => setWizardOpen(true)}>
             <Plus className="h-4 w-4" aria-hidden />
@@ -164,6 +164,7 @@ export function PipelineList() {
         open={draftModalOpen}
         leads={[...selected].map((id) => leadsById[id]).filter((l): l is Lead => l !== undefined)}
         onClose={() => setDraftModalOpen(false)}
+        onGenerated={() => setSelected(new Set())}
       />
     </div>
   );

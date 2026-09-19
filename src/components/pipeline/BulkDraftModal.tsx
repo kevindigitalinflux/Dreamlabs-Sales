@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../../hooks/useAuth';
 import { useOrg } from '../../hooks/useOrg';
 import { useTemplates } from '../../hooks/useTemplates';
+import { readableInvokeError } from '../../lib/invokeError';
 import { supabase } from '../../lib/supabase';
 import type { Lead } from '../../types';
 import { Button } from '../ui/Button';
@@ -13,6 +14,7 @@ interface BulkDraftModalProps {
   open: boolean;
   leads: Lead[];
   onClose: () => void;
+  onGenerated?: () => void;
 }
 
 /**
@@ -21,7 +23,7 @@ interface BulkDraftModalProps {
  * EmailComposer's own "Save as draft" already uses. Leads with no email
  * address are skipped up front, not failed mid-loop.
  */
-export function BulkDraftModal({ open, leads, onClose }: BulkDraftModalProps) {
+export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftModalProps) {
   const { session } = useAuth();
   const { currentOrg } = useOrg();
   const { templates } = useTemplates();
@@ -32,6 +34,17 @@ export function BulkDraftModal({ open, leads, onClose }: BulkDraftModalProps) {
   const [progress, setProgress] = useState(0);
   const [summary, setSummary] = useState<string | null>(null);
 
+  // The modal stays mounted for the page's lifetime (Modal just returns null
+  // while closed), so `summary` would survive a close and permanently hide the
+  // Generate button on reopen. Reset it whenever the modal opens — same pattern
+  // EnrichmentReview uses for the same reason.
+  useEffect(() => {
+    if (open) {
+      setSummary(null);
+      setProgress(0);
+    }
+  }, [open]);
+
   const withEmail = leads.filter((l) => l.email);
   const withoutEmailCount = leads.length - withEmail.length;
 
@@ -41,10 +54,16 @@ export function BulkDraftModal({ open, leads, onClose }: BulkDraftModalProps) {
     setProgress(0);
     setSummary(null);
     let drafted = 0;
+    let firstFailReason: string | null = null;
     for (const lead of withEmail) {
-      const { data } = await supabase.functions.invoke('generate-email', {
+      const { data, error: invokeErr } = await supabase.functions.invoke('generate-email', {
         body: { lead_id: lead.id, template_id: templateId, use_ai: useAi },
       });
+      if (invokeErr) {
+        if (!firstFailReason) firstFailReason = await readableInvokeError(invokeErr);
+        setProgress((p) => p + 1);
+        continue;
+      }
       const result = data as { subject?: string; body?: string; error?: string } | null;
       if (result && !result.error && result.subject && result.body) {
         const { error: insertErr } = await supabase.from('email_logs').insert({
@@ -52,6 +71,9 @@ export function BulkDraftModal({ open, leads, onClose }: BulkDraftModalProps) {
           status: 'draft', sent_by: session.user.id, org_id: currentOrg.id,
         });
         if (!insertErr) drafted++;
+        else if (!firstFailReason) firstFailReason = insertErr.message;
+      } else if (!firstFailReason) {
+        firstFailReason = result?.error ?? 'Draft generation failed';
       }
       setProgress((p) => p + 1);
     }
@@ -59,8 +81,9 @@ export function BulkDraftModal({ open, leads, onClose }: BulkDraftModalProps) {
     const skippedFailed = withEmail.length - drafted;
     const parts = [`Drafted ${drafted} emails`];
     if (withoutEmailCount > 0) parts.push(`${withoutEmailCount} skipped (no email address)`);
-    if (skippedFailed > 0) parts.push(`${skippedFailed} failed to draft`);
+    if (skippedFailed > 0) parts.push(`${skippedFailed} failed to draft${firstFailReason ? ` (${firstFailReason})` : ''}`);
     setSummary(parts.join(' — '));
+    if (drafted > 0) onGenerated?.();
   }
 
   return (

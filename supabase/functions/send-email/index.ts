@@ -33,11 +33,21 @@ Deno.serve(async (req) => {
   if (!pass) return json({ error: 'No stored email password — re-save your settings' }, 400, headers);
 
   let orgId: string | null = null;
+  let leadStage: string | null = null;
   if (body.lead_id) {
-    const { data: lead } = await service.from('leads').select('org_id').eq('id', body.lead_id).maybeSingle();
-    orgId = (lead as { org_id: string } | null)?.org_id ?? null;
+    const { data: lead } = await service.from('leads').select('org_id, stage').eq('id', body.lead_id).maybeSingle();
+    orgId = (lead as { org_id: string; stage: string } | null)?.org_id ?? null;
+    leadStage = (lead as { org_id: string; stage: string } | null)?.stage ?? null;
   }
   if (!orgId && !body.log_id) return json({ error: 'lead_id is required to send a new email' }, 400, headers);
+  // The caller supplies lead_id directly, and we later write to that lead
+  // (last_contacted_at / stage) — so confirm they are actually a member of the
+  // lead's org before trusting it. 404 rather than 403: don't confirm the
+  // lead's existence to a non-member.
+  if (orgId) {
+    const { data: membership } = await service.from('org_members').select('role').eq('org_id', orgId).eq('user_id', user.id).maybeSingle();
+    if (!membership) return json({ error: 'Lead not found' }, 404, headers);
+  }
 
   // If updating an existing draft, make sure it belongs to the caller — except
   // for system-generated drafts (sent_by = null, e.g. autopilot's auto-enrolled
@@ -107,9 +117,8 @@ Deno.serve(async (req) => {
   // successful send into an error response — the email already sent and
   // logged either way.
   if (status === 'sent' && body.lead_id) {
-    const { data: currentLead } = await service.from('leads').select('stage').eq('id', body.lead_id).maybeSingle();
     const leadUpdate: Record<string, unknown> = { last_contacted_at: new Date().toISOString() };
-    if (currentLead?.stage === 'new_lead') leadUpdate.stage = 'contacted';
+    if (leadStage === 'new_lead') leadUpdate.stage = 'contacted';
     await service.from('leads').update(leadUpdate).eq('id', body.lead_id);
   }
 
