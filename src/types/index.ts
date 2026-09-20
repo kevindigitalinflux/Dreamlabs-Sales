@@ -61,6 +61,8 @@ export interface Lead {
   updated_at: string;
 }
 
+// Kept in sync with supabase/functions/enrich-leads-bulk/index.ts's own
+// Deno-side copy (Field/EnrichResult) — see that file's comment.
 export type EnrichableField = 'email' | 'phone' | 'owner_name';
 
 export interface EnrichmentResult {

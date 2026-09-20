@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { readableInvokeError } from '../../lib/invokeError';
 import { supabase } from '../../lib/supabase';
 import { useDrafts } from '../../hooks/useDrafts';
@@ -22,6 +22,19 @@ export function ReleaseQueue() {
   const [releasing, setReleasing] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
   const reviewLead = reviewing?.lead ? leads.find((l) => l.id === reviewing.lead!.id) ?? null : null;
+
+  // A discard (or any other refresh) can drop a draft that's still checked
+  // — without this, the "Release selected (N)" count and the header
+  // checkbox's all-selected comparison both go stale, even though the
+  // release loop itself only ever iterates `drafts` and so can't act on a
+  // dead id.
+  useEffect(() => {
+    setSelected((prev) => {
+      const draftIds = new Set(drafts.map((d) => d.id));
+      const next = new Set([...prev].filter((id) => draftIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [drafts]);
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -78,6 +91,7 @@ export function ReleaseQueue() {
         selected={selected}
         onToggle={toggleSelected}
         onToggleAll={toggleSelectAll}
+        selectionDisabled={releasing}
       />
       {reviewing && reviewLead && (
         <EmailComposer

@@ -30,6 +30,12 @@ export function EnrichmentReview({ open, results, leadsById, onClose, onApply }:
   const [checked, setChecked] = useState<Record<string, Set<EnrichableField>>>({});
   const [applying, setApplying] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
+  // Snapshot of each lead's pre-change field values, frozen at the moment
+  // `results` arrives. Apply's realtime lead refresh can land before this
+  // modal closes, and reading `leadsById` live for the "from" side would
+  // then show a field's OLD and NEW value as identical once the real
+  // update lands — the from→to diff would read "new@x.com → new@x.com".
+  const [fromSnapshot, setFromSnapshot] = useState<Record<string, Partial<Record<EnrichableField, string>>>>({});
 
   // EnrichmentReview stays mounted for the page's lifetime (Modal just
   // returns null while closed), so a one-time lazy useState initializer
@@ -37,9 +43,22 @@ export function EnrichmentReview({ open, results, leadsById, onClose, onApply }:
   // Re-derive it from `results` on every new run instead.
   useEffect(() => {
     const initial: Record<string, Set<EnrichableField>> = {};
-    for (const r of results) initial[r.lead_id] = new Set(Object.keys(r.proposed) as EnrichableField[]);
+    const snapshot: Record<string, Partial<Record<EnrichableField, string>>> = {};
+    for (const r of results) {
+      const fields = Object.keys(r.proposed) as EnrichableField[];
+      initial[r.lead_id] = new Set(fields);
+      const lead = leadsById[r.lead_id];
+      const leadSnapshot: Partial<Record<EnrichableField, string>> = {};
+      for (const field of fields) leadSnapshot[field] = (lead?.[field] as string | null) ?? '—';
+      snapshot[r.lead_id] = leadSnapshot;
+    }
     setChecked(initial);
+    setFromSnapshot(snapshot);
     setSummary(null);
+    // leadsById intentionally excluded — it changes on every realtime lead
+    // update, and this snapshot must only be taken once per `results` run,
+    // not re-taken every time the underlying leads refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [results]);
 
   const changeCount = useMemo(
@@ -76,7 +95,7 @@ export function EnrichmentReview({ open, results, leadsById, onClose, onApply }:
               <p className="mb-2 text-sm font-semibold">{lead?.business_name ?? r.lead_id}</p>
               <ul className="flex flex-col gap-1">
                 {(Object.keys(r.proposed) as EnrichableField[]).map((field) => {
-                  const from = (lead?.[field] as string | null) ?? '—';
+                  const from = fromSnapshot[r.lead_id]?.[field] ?? '—';
                   const to = r.proposed[field]!;
                   const isChecked = checked[r.lead_id]?.has(field) ?? false;
                   return (

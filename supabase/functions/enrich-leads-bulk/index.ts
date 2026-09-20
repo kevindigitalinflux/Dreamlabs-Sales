@@ -15,6 +15,8 @@ interface LeadRow {
   website: string | null; email: string | null; phone: string | null; owner_name: string | null;
 }
 
+// Deno copy of src/types/index.ts's EnrichableField/EnrichmentResult — keep
+// the two in sync (same convention as templateVars.ts's Deno/browser split).
 type Field = 'email' | 'phone' | 'owner_name';
 
 interface EnrichResult {

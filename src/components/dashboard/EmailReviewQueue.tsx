@@ -17,10 +17,16 @@ interface EmailReviewQueueProps {
   selected?: Set<string>;
   onToggle?: (id: string) => void;
   onToggleAll?: () => void;
+  /** Disables the select-all and per-row checkboxes without hiding them —
+   * for use while a caller's own bulk action (e.g. a release in progress)
+   * is running, so a mid-flight toggle can't be silently ignored and then
+   * wiped once the action completes. Has no effect unless `selected` etc.
+   * are also provided. */
+  selectionDisabled?: boolean;
 }
 
 /** Drafts awaiting review — sequence output + manual saves. Nothing sends without a click. */
-export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selected, onToggle, onToggleAll }: EmailReviewQueueProps) {
+export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selected, onToggle, onToggleAll, selectionDisabled }: EmailReviewQueueProps) {
   if (loading) return <Skeleton className="h-20 w-full" />;
   if (drafts.length === 0) {
     return <EmptyState icon={MailCheck} title="No emails waiting for review" hint="Sequence drafts and saved drafts appear here for you to approve." />;
@@ -34,14 +40,14 @@ export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selecte
     <ul className="flex flex-col gap-2">
       {selectable && (
         <li className="flex items-center gap-2 px-1">
-          <input type="checkbox" checked={drafts.length > 0 && selected.size === drafts.length} onChange={onToggleAll} className="h-4 w-4 accent-violet-500" aria-label="Select all" />
+          <input type="checkbox" checked={drafts.length > 0 && selected.size === drafts.length} onChange={onToggleAll} disabled={selectionDisabled} className="h-4 w-4 accent-violet-500 disabled:cursor-not-allowed disabled:opacity-50" aria-label="Select all" />
           <span className="text-xs font-semibold text-muted">Select all</span>
         </li>
       )}
       {drafts.map((d) => (
         <li key={d.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-line p-3">
           {selectable && (
-            <input type="checkbox" checked={selected.has(d.id)} onChange={() => onToggle(d.id)} className="h-4 w-4 accent-violet-500" aria-label={`Select ${d.lead?.business_name ?? d.to_email}`} />
+            <input type="checkbox" checked={selected.has(d.id)} onChange={() => onToggle(d.id)} disabled={selectionDisabled} className="h-4 w-4 accent-violet-500 disabled:cursor-not-allowed disabled:opacity-50" aria-label={`Select ${d.lead?.business_name ?? d.to_email}`} />
           )}
           <span className="font-heading text-sm font-bold">{d.lead?.business_name ?? d.to_email}</span>
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${d.sequence_enrollment_id ? 'bg-violet/25 text-offwhite' : 'bg-surface text-muted'}`}>
