@@ -177,7 +177,7 @@ vite.config.ts
 
 ---
 
-## Current Status (updated 2026-09-16)
+## Current Status (updated 2026-09-20)
 **Working:** Cycle 1-2 (single-tenant foundation, full pipeline, email automation incl. AI-personalised
 composer/sequences/review queue) — see prior status below, all still functional. **Cycle 3 (multi-tenant
 foundation) is FULLY COMPLETE** — Tasks 1-12 done, controller-verified, and pushed:
@@ -776,6 +776,58 @@ with `org_id = NULL` (the platform default templates/sequences) can only be edit
 (`is_org_admin_of_any()`), not scoped per-org — acceptable for now since there's only one shared default
 set across all 4 orgs; worth revisiting if orgs ever need their own default sets. Full triage list in
 `docs/CYCLE3-BACKLOG.md`.
+
+**Bulk lead enrichment and bulk email drafting shipped (2026-09-20), both built via subagent-driven
+development against written specs.** Two independent features landed on the Pipeline/Emails pages:
+
+*Bulk lead enrichment* (`docs/superpowers/specs/2026-09-16-bulk-lead-enrichment-design.md`, plan
+`docs/superpowers/plans/2026-09-16-bulk-lead-enrichment.md`, 8 tasks): multi-select leads on `/pipeline`
+(new checkboxes on `ListTable`, mirroring `ScraperJob.tsx`'s pattern), "Fill missing details" runs a
+free-first lookup waterfall in a new edge function `enrich-leads-bulk` — website scrape (mailto:/tel:
+regex, no key needed) → Companies House officer lookup (UK, free registration) → OpenCorporates officer
+lookup (non-UK best-effort, new free-tier BYO-key provider, 200/month cap) → Apollo/Hunter (paid,
+opt-in, tried last and only for fields still blank) — then a review-before-apply modal (`EnrichmentReview`)
+shows every found value as a from→to diff, checked by default, nothing writes until Apply. Real production
+bugs found and fixed along the way: the plain-text phone-extraction fallback matched SVG `viewBox`
+attributes and CSS pixel values before real phone numbers (fixed twice — first by stripping tags with a
+space separator, which the final re-review caught as still-broken since a space sits inside the phone
+regex's own character class and let markup-separated numbers merge into fake matches; the working fix uses
+`'|'` as the separator); `isFuzzyNameMatch` used raw substring containment (so "Bloom" matched "BLOOMBERG
+L.P.") — now tokenizes and requires a whole-word match. `enrich-leads-bulk` reads leads via the caller's
+own RLS-scoped client, not service-role, so a caller only ever gets back leads they can actually see.
+
+*Bulk email drafting + release queue* (`docs/superpowers/specs/2026-09-16-bulk-email-drafting-design.md`,
+plan `docs/superpowers/plans/2026-09-17-bulk-email-drafting.md`, 4 tasks, explicitly built on top of the
+enrichment plan's multi-select foundation): "Draft emails" on `/pipeline` opens `BulkDraftModal` — pick one
+template, toggle AI personalisation, generate a draft per selected lead via the existing (unchanged)
+`generate-email` + `email_logs` insert path, `sent_by` always the person who ran the batch. Drafts land in
+a new "Waiting to release" tab on `/emails` (`ReleaseQueue`, reusing `EmailReviewQueue` — extended with
+optional multi-select props so the Dashboard's own "Emails ready to review" card stays byte-identical when
+those props are omitted) where multi-select + "Release selected" sends via the existing `send-email`.
+Fixed a real, previously-undetected security gap surfaced by this feature: `send-email`'s pre-existing
+"send a fresh email not from a draft" call shape (`lead_id` with no `log_id`) had no org-membership check
+at all, and this feature's own new `leads` write on every successful send turned that unauthorized-*read*
+gap into an unauthorized-*write* one — fixed by checking `org_members` before proceeding, live-verified
+both directions (cross-org blocked with 404, same-org passes through). Also fixed at the source: no send
+path anywhere in the app previously updated `leads.last_contacted_at` — now every successful send
+(manual, sequence, or bulk release) does, and a `new_lead` also auto-advances to `contacted` specifically
+(never any other stage, so a reply to an already-advanced lead is never silently reset backward).
+
+**Process note for future SDD plans on this project:** every provider-key-dependent edge-function task in
+both plans hit the same wall — `org_api_settings` has zero rows for any provider across all 4 orgs, so no
+Google Places/Companies House/OpenCorporates/Apollo/Hunter call has ever succeeded live in this project.
+The working pattern, used repeatedly: (1) a live, authenticated invocation proving the code reaches the
+*correct expected failure point* (no regression in auth/membership/request-parsing), plus (2) a
+deterministic test of any pure logic the task added, run directly and independent of the real API. Also
+hit twice: platform session/weekly rate limits interrupting a subagent mid-task — always safely resumable
+(no partial commits, no partial DB writes; the controller verifies DB state directly before resuming) once
+the limit clears. A Supabase MCP token expiry mid-session is a simple re-auth, not a data-loss risk.
+Deferred, real, and explicitly *not* fixed (documented trade-offs, not oversights): no automatic
+`lead_notes` audit entry for `send-email`'s auto stage-advance (would risk triggering an unbudgeted AI
+notes-pass via `check-sequences`'s `hasHumanNote` check — needs its own excluded note_type first); the
+release queue has no per-batch progress line (spec asked for one, the plan simplified it away — accepted
+scope drift, not a bug); 40 sequential `updateLead`/`send-email` calls per bulk action each trigger a full
+realtime leads refetch (real perf cost at scale, not yet redesigned).
 
 ---
 
