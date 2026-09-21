@@ -131,9 +131,9 @@ export function Login() {
           </div>
         </AuthCard>
 
-        <p className="mx-auto mt-4 max-w-[20rem] text-center text-xs text-muted">
+        <p className="mx-auto mt-4 max-w-[20rem] text-center text-xs text-nav-muted">
           <ShieldIcon />
-          Protected by Dreamlabs Sales security. By continuing you agree to our <span className="underline decoration-line">Terms</span>.
+          Protected by Dreamlabs Sales security. By continuing you agree to our <span className="underline decoration-white/30">Terms</span>.
         </p>
       </AuthShell>
 
