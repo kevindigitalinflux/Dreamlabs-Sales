@@ -1,4 +1,5 @@
-import { BrowserRouter, Route, Routes } from 'react-router';
+import { useEffect } from 'react';
+import { BrowserRouter, Route, Routes, useNavigate } from 'react-router';
 import { AuthProvider } from './hooks/useAuth';
 import { FocusModeProvider } from './hooks/useFocusMode';
 import { OrgProvider } from './hooks/useOrg';
@@ -6,6 +7,7 @@ import { PipelineProvider } from './hooks/usePipeline';
 import { AdminRoute, ProtectedRoute } from './components/layout/ProtectedRoute';
 import { AppShell } from './components/layout/AppShell';
 import { ComingSoon } from './components/layout/ComingSoon';
+import { SplashLoader } from './components/branding/SplashLoader';
 import { Login } from './pages/Login';
 import { AuthCallback } from './pages/AuthCallback';
 import { Welcome } from './pages/Welcome';
@@ -31,6 +33,21 @@ import { AutopilotSetup } from './pages/AutopilotSetup';
 import { AutopilotStatus } from './pages/AutopilotStatus';
 import { PipelineManage } from './pages/PipelineManage';
 
+/**
+ * Temporary demo route so the splash → login transition can be watched on
+ * demand (the real ProtectedRoute loading gate resolves almost instantly
+ * once a session is cached, too fast to see). Plays one full animation
+ * loop, then navigates to /login. Remove once no longer needed.
+ */
+function SplashToLoginPreview() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const timer = setTimeout(() => navigate('/login', { replace: true }), 8000);
+    return () => clearTimeout(timer);
+  }, [navigate]);
+  return <SplashLoader />;
+}
+
 /** App root: full SPEC.md §13 route tree (later-cycle modules render ComingSoon). */
 export function App() {
   return (
@@ -41,6 +58,7 @@ export function App() {
         <PipelineProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/preview/splash-to-login" element={<SplashToLoginPreview />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/unsubscribe/:leadId" element={<Unsubscribe />} />

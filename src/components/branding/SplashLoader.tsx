@@ -51,8 +51,6 @@ const LOOP = 8; // Rise(3) + Swell(3) + Settle(2), seconds
 const CUES = { Swell: 3, Settle: 6 };
 
 const W = 420; // mark group footprint
-const GX = 750;
-const GY = 281; // group origin inside the 1920x1080 stage
 const SRC = { x: 213, y: 220 }; // neck mouth, group-local
 const TOP = -80; // where bubbles leave frame, group-local
 const CROP = 0.502; // hide the mark's printed bubble trail
@@ -119,18 +117,6 @@ function useLoopClock(loopSeconds: number) {
   return t;
 }
 
-/** Scales a fixed 1920x1080 stage to fit the viewport, letterboxed in the same navy. */
-function useStageScale(width: number, height: number) {
-  const [scale, setScale] = useState(1);
-  useEffect(() => {
-    const measure = () => setScale(Math.min(window.innerWidth / width, window.innerHeight / height));
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [width, height]);
-  return scale;
-}
-
 function LoaderScene() {
   const T = useLoopClock(LOOP);
   const bubbles: ReactElement[] = [];
@@ -187,6 +173,16 @@ function LoaderScene() {
   const barFill = 392 * RISE01(clamp(T / (LOOP - 0.8), 0, 1));
   const barOpacity = MOTION.enter({ from: 1, to: 0, start: LOOP - 0.45, end: LOOP - 0.05 })(T);
 
+  // Only the bottom (1 - CROP) slice of the WxW mark group is ever inked —
+  // the top portion is transparent (it's cropped away below). Allocating
+  // layout space for just that slice, instead of the full WxW box, is what
+  // lets the flask + wordmark + bar center as one tight group: the mark's
+  // own coordinates (SRC, FL, ...) stay authored against the full box
+  // unchanged, and the wrapper below just shifts that box up by CROP * W
+  // so its inked content starts flush with the top of the visible slice.
+  // Bubbles still rise freely above it (overflow: visible).
+  const visibleH = (1 - CROP) * W;
+
   return (
     <div style={{ position: 'absolute', inset: 0, background: '#040F49', overflow: 'hidden' }}>
       <div
@@ -203,123 +199,112 @@ function LoaderScene() {
         }}
       />
 
-      <div style={{ position: 'absolute', left: GX, top: GY, width: W, height: W }}>
-        <div style={{ position: 'absolute', left: FL.x, top: FL.y, width: FL.w, height: FL.h, background: '#040F49', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', left: 0, right: 0, top: lvl, bottom: 0, background: '#8B32FF' }} />
-          <div
-            style={{
-              position: 'absolute',
-              left: FL.w / 2 - S1 / 2,
-              top: lvl + S1 * 0.452 - S1 / 2,
-              width: S1,
-              height: S1,
-              borderRadius: '43%',
-              background: '#8B32FF',
-              transform: `rotate(${rotA}deg)`,
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              left: FL.w / 2 - S2 / 2,
-              top: lvl + S2 * 0.458 - S2 / 2,
-              width: S2,
-              height: S2,
-              borderRadius: '47% 44% 46% 45%',
-              background: '#8B32FF',
-              transform: `rotate(${rotB}deg)`,
-            }}
-          />
-          {[0, 1, 2].map((k) => {
-            const fp = ((T / LOOP) * (2 + k) + k * 0.37) % 1;
-            const sz = 3 + k;
-            return (
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'relative', width: W, height: visibleH, overflow: 'visible' }}>
+          <div style={{ position: 'absolute', left: 0, top: -CROP * W, width: W, height: W }}>
+            <div style={{ position: 'absolute', left: FL.x, top: FL.y, width: FL.w, height: FL.h, background: '#040F49', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', left: 0, right: 0, top: lvl, bottom: 0, background: '#8B32FF' }} />
               <div
-                key={`fz${k}`}
                 style={{
                   position: 'absolute',
-                  left: FL.w * (0.3 + 0.2 * k) + 3 * Math.sin(T * w * 4 + k),
-                  top: FL.h - (FL.h - lvl - 6) * fp - sz,
-                  width: sz,
-                  height: sz,
-                  borderRadius: '50%',
-                  background: '#C49BFF',
-                  opacity: 0.55 * (1 - fp),
+                  left: FL.w / 2 - S1 / 2,
+                  top: lvl + S1 * 0.452 - S1 / 2,
+                  width: S1,
+                  height: S1,
+                  borderRadius: '43%',
+                  background: '#8B32FF',
+                  transform: `rotate(${rotA}deg)`,
                 }}
               />
-            );
-          })}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: FL.w / 2 - S2 / 2,
+                  top: lvl + S2 * 0.458 - S2 / 2,
+                  width: S2,
+                  height: S2,
+                  borderRadius: '47% 44% 46% 45%',
+                  background: '#8B32FF',
+                  transform: `rotate(${rotB}deg)`,
+                }}
+              />
+              {[0, 1, 2].map((k) => {
+                const fp = ((T / LOOP) * (2 + k) + k * 0.37) % 1;
+                const sz = 3 + k;
+                return (
+                  <div
+                    key={`fz${k}`}
+                    style={{
+                      position: 'absolute',
+                      left: FL.w * (0.3 + 0.2 * k) + 3 * Math.sin(T * w * 4 + k),
+                      top: FL.h - (FL.h - lvl - 6) * fp - sz,
+                      width: sz,
+                      height: sz,
+                      borderRadius: '50%',
+                      background: '#C49BFF',
+                      opacity: 0.55 * (1 - fp),
+                    }}
+                  />
+                );
+              })}
+            </div>
+
+            <div style={{ position: 'absolute', left: 0, top: CROP * W, width: W, height: visibleH, overflow: 'hidden' }}>
+              <img src={dlMarkAlpha} alt="" style={{ display: 'block', width: W, height: W, marginTop: -CROP * W }} />
+            </div>
+
+            {[0, 1, 2].map((k) => {
+              const sz = 5 + k * 2;
+              const o = 0.22 + 0.3 * (0.5 + 0.5 * Math.sin(T * w * 4 + k * 2.1));
+              return (
+                <div
+                  key={`foam${k}`}
+                  style={{
+                    position: 'absolute',
+                    left: SRC.x - 11 + k * 6,
+                    top: SRC.y + 9 - k * 3,
+                    width: sz,
+                    height: sz,
+                    borderRadius: '50%',
+                    background: '#8B32FF',
+                    opacity: o,
+                  }}
+                />
+              );
+            })}
+
+            {bubbles}
+          </div>
         </div>
 
-        <div style={{ position: 'absolute', left: 0, top: CROP * W, width: W, height: (1 - CROP) * W, overflow: 'hidden' }}>
-          <img src={dlMarkAlpha} alt="" style={{ display: 'block', width: W, height: W, marginTop: -CROP * W }} />
-        </div>
-
-        {[0, 1, 2].map((k) => {
-          const sz = 5 + k * 2;
-          const o = 0.22 + 0.3 * (0.5 + 0.5 * Math.sin(T * w * 4 + k * 2.1));
-          return (
-            <div
-              key={`foam${k}`}
-              style={{
-                position: 'absolute',
-                left: SRC.x - 11 + k * 6,
-                top: SRC.y + 9 - k * 3,
-                width: sz,
-                height: sz,
-                borderRadius: '50%',
-                background: '#8B32FF',
-                opacity: o,
-              }}
-            />
-          );
-        })}
-
-        {bubbles}
-      </div>
-
-      {/* Wordmark, sitting in the gap between the flask and the progress bar. */}
-      <div
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          top: GY + W,
-          height: 793 - (GY + W),
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <h1 className="m-0 text-[32px] font-extrabold text-nav-text">
+        <h1 className="m-0 mt-5 text-[32px] font-extrabold text-nav-text">
           Dreamlabs<span className="text-cyan">Sales</span>
         </h1>
-      </div>
 
-      <div
-        style={{
-          position: 'absolute',
-          left: 764,
-          top: 793,
-          width: 392,
-          height: 6,
-          borderRadius: 999,
-          background: 'rgba(244,244,248,0.12)',
-          overflow: 'hidden',
-          opacity: barOpacity,
-        }}
-      >
         <div
           style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            height: '100%',
-            width: barFill,
+            position: 'relative',
+            marginTop: 18,
+            width: 392,
+            height: 6,
             borderRadius: 999,
-            background: 'linear-gradient(90deg,#64378B 0%,#8B32FF 72%,#A559FF 100%)',
+            background: 'rgba(244,244,248,0.12)',
+            overflow: 'hidden',
+            opacity: barOpacity,
           }}
-        />
+        >
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              height: '100%',
+              width: barFill,
+              borderRadius: 999,
+              background: 'linear-gradient(90deg,#64378B 0%,#8B32FF 72%,#A559FF 100%)',
+            }}
+          />
+        </div>
       </div>
     </div>
   );
@@ -327,12 +312,9 @@ function LoaderScene() {
 
 /** Full-viewport branded loading screen — drop in wherever the app is waiting on auth/session state. */
 export function SplashLoader() {
-  const scale = useStageScale(1920, 1080);
   return (
-    <div className="fixed inset-0 flex items-center justify-center overflow-hidden" style={{ background: '#040F49' }}>
-      <div style={{ position: 'relative', width: 1920, height: 1080, transform: `scale(${scale})`, transformOrigin: 'center' }}>
-        <LoaderScene />
-      </div>
+    <div className="fixed inset-0">
+      <LoaderScene />
     </div>
   );
 }
