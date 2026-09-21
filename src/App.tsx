@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Route, Routes, useNavigate } from 'react-router';
 import { AuthProvider } from './hooks/useAuth';
 import { FocusModeProvider } from './hooks/useFocusMode';
@@ -8,6 +8,7 @@ import { AdminRoute, ProtectedRoute } from './components/layout/ProtectedRoute';
 import { AppShell } from './components/layout/AppShell';
 import { ComingSoon } from './components/layout/ComingSoon';
 import { SplashLoader } from './components/branding/SplashLoader';
+import { BigBubbles, BUBBLE_COVER_TOTAL_MS } from './components/branding/BigBubbles';
 import { Login } from './pages/Login';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
@@ -38,16 +39,34 @@ import { PipelineManage } from './pages/PipelineManage';
 /**
  * Temporary demo route so the splash → login transition can be watched on
  * demand (the real ProtectedRoute loading gate resolves almost instantly
- * once a session is cached, too fast to see). Plays one full animation
- * loop, then navigates to /login. Remove once no longer needed.
+ * once a session is cached, too fast to see). Plays one full animation loop,
+ * then runs the SAME bubble-cover handoff ProtectedRoute uses, so this
+ * preview actually matches what a signed-out user sees. Remove once no
+ * longer needed.
  */
 function SplashToLoginPreview() {
   const navigate = useNavigate();
+  const [covering, setCovering] = useState(false);
+
   useEffect(() => {
-    const timer = setTimeout(() => navigate('/login', { replace: true }), 8000);
-    return () => clearTimeout(timer);
-  }, [navigate]);
-  return <SplashLoader />;
+    const showBubbles = setTimeout(() => setCovering(true), 8000);
+    return () => clearTimeout(showBubbles);
+  }, []);
+
+  useEffect(() => {
+    if (!covering) return;
+    const goToLogin = setTimeout(() => {
+      navigate('/login', { replace: true, state: { splashTransition: true } });
+    }, BUBBLE_COVER_TOTAL_MS);
+    return () => clearTimeout(goToLogin);
+  }, [covering, navigate]);
+
+  return (
+    <>
+      <SplashLoader />
+      {covering && <BigBubbles mode="cover" />}
+    </>
+  );
 }
 
 /** App root: full SPEC.md §13 route tree (later-cycle modules render ComingSoon). */

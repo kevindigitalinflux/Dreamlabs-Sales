@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import dlMarkAlpha from '../../assets/branding/dl-mark-alpha.png';
+import logoIcon from '../../assets/logo/logo-icon.png';
 
 /**
  * Shared visual language for the public auth pages (Login, ForgotPassword,
@@ -17,7 +17,7 @@ export const LOGO_SHADOW = '0 10px 20px -6px rgba(139,50,255,0.55), inset 0 1px 
 /** Full-bleed centered-card page shell: soft canvas, faint violet glows, a center-masked grid. */
 export function AuthShell({ children }: { children: ReactNode }) {
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-bg px-4 py-12">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-bg px-4 py-6">
       <div
         className="pointer-events-none absolute inset-0"
         style={{
@@ -53,14 +53,14 @@ export function AuthCard({ children }: { children: ReactNode }) {
   );
 }
 
-/** Brand-gradient rounded logo tile carrying the flask mark, sized for the auth card header. */
+/** The brand mark itself (navy square, flask + bubbles), sized for the auth card header. */
 export function AuthLogoTile({ size = 56 }: { size?: number }) {
   return (
-    <div
-      className="mx-auto flex items-center justify-center rounded-2xl"
-      style={{ width: size, height: size, background: BRAND_GRADIENT, boxShadow: LOGO_SHADOW }}
-    >
-      <img src={dlMarkAlpha} alt="" style={{ width: size * 0.72, height: size * 0.72, objectFit: 'contain' }} />
-    </div>
+    <img
+      src={logoIcon}
+      alt="Dreamlabs Sales"
+      className="mx-auto block rounded-2xl"
+      style={{ width: size, height: size, objectFit: 'cover', boxShadow: LOGO_SHADOW }}
+    />
   );
 }

@@ -60,13 +60,13 @@ export function ResetPassword() {
   return (
     <AuthShell>
       <AuthCard>
-        <div className="px-8 pb-7 pt-9 text-center sm:px-10">
-          <AuthLogoTile />
-          <h1 className="mt-5 text-[27px] font-extrabold tracking-tight text-offwhite">Choose a new password</h1>
-          <p className="mt-1.5 text-[14.5px] text-muted">Make it something you haven't used before.</p>
+        <div className="px-8 pb-5 pt-7 text-center sm:px-10">
+          <AuthLogoTile size={48} />
+          <h1 className="mt-4 text-[25px] font-extrabold tracking-tight text-offwhite">Choose a new password</h1>
+          <p className="mt-1 text-[14px] text-muted">Make it something you haven't used before.</p>
         </div>
 
-        <div className="px-8 pb-9 sm:px-10">
+        <div className="px-8 pb-7 sm:px-10">
           {checking ? (
             <p className="text-center text-sm text-muted">Checking your reset link…</p>
           ) : !ready ? (
@@ -77,7 +77,7 @@ export function ResetPassword() {
               </Link>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
               <FloatingField
                 id="password"
                 label="New password"

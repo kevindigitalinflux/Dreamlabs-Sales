@@ -28,15 +28,15 @@ export function ForgotPassword() {
   return (
     <AuthShell>
       <AuthCard>
-        <div className="px-8 pb-7 pt-9 text-center sm:px-10">
-          <AuthLogoTile />
-          <h1 className="mt-5 text-[27px] font-extrabold tracking-tight text-offwhite">Reset your password</h1>
-          <p className="mt-1.5 text-[14.5px] text-muted">
+        <div className="px-8 pb-5 pt-7 text-center sm:px-10">
+          <AuthLogoTile size={48} />
+          <h1 className="mt-4 text-[25px] font-extrabold tracking-tight text-offwhite">Reset your password</h1>
+          <p className="mt-1 text-[14px] text-muted">
             {sent ? "We've sent a reset link to your email." : "Enter your email and we'll send you a reset link."}
           </p>
         </div>
 
-        <div className="px-8 pb-9 sm:px-10">
+        <div className="px-8 pb-7 sm:px-10">
           {sent ? (
             <p className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-muted">
               Check <span className="font-semibold text-offwhite">{email}</span> for a link to choose a new password. It'll expire soon, so use it

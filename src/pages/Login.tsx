@@ -56,13 +56,13 @@ export function Login() {
     <>
       <AuthShell>
         <AuthCard>
-          <div className="px-8 pb-7 pt-9 text-center sm:px-10">
-            <AuthLogoTile />
-            <h1 className="mt-5 text-[27px] font-extrabold tracking-tight text-offwhite">Welcome back</h1>
-            <p className="mt-1.5 text-[14.5px] text-muted">Sign in to your Dreamlabs Sales workspace.</p>
+          <div className="px-8 pb-5 pt-7 text-center sm:px-10">
+            <AuthLogoTile size={48} />
+            <h1 className="mt-4 text-[25px] font-extrabold tracking-tight text-offwhite">Welcome back</h1>
+            <p className="mt-1 text-[14px] text-muted">Sign in to your Dreamlabs Sales workspace.</p>
           </div>
 
-          <div className="px-8 pb-9 sm:px-10">
+          <div className="px-8 pb-7 sm:px-10">
             <button
               type="button"
               onClick={() => void handleGoogleSignIn()}
@@ -72,13 +72,13 @@ export function Login() {
               Continue with Google
             </button>
 
-            <div className="my-6 flex items-center gap-3">
+            <div className="my-4 flex items-center gap-3">
               <span className="h-px flex-1 bg-line" />
               <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">or with email</span>
               <span className="h-px flex-1 bg-line" />
             </div>
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
               <FloatingField id="email" label="Email address" type="email" value={email} onChange={setEmail} autoComplete="email" required />
               <FloatingField
                 id="password"
@@ -131,7 +131,7 @@ export function Login() {
           </div>
         </AuthCard>
 
-        <p className="mx-auto mt-6 max-w-[20rem] text-center text-xs text-muted">
+        <p className="mx-auto mt-4 max-w-[20rem] text-center text-xs text-muted">
           <ShieldIcon />
           Protected by Dreamlabs Sales security. By continuing you agree to our <span className="underline decoration-line">Terms</span>.
         </p>
