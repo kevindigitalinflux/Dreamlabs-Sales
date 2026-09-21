@@ -182,6 +182,7 @@ function LoaderScene() {
   // so its inked content starts flush with the top of the visible slice.
   // Bubbles still rise freely above it (overflow: visible).
   const visibleH = (1 - CROP) * W;
+  const LOGO_SCALE = 1 / 1.3;
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: '#040F49', overflow: 'hidden' }}>
@@ -200,6 +201,8 @@ function LoaderScene() {
       />
 
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'relative', width: W * LOGO_SCALE, height: visibleH * LOGO_SCALE, overflow: 'visible' }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, width: W, height: visibleH, transform: `scale(${LOGO_SCALE})`, transformOrigin: 'top left' }}>
         <div style={{ position: 'relative', width: W, height: visibleH, overflow: 'visible' }}>
           <div style={{ position: 'absolute', left: 0, top: -CROP * W, width: W, height: W }}>
             <div style={{ position: 'absolute', left: FL.x, top: FL.y, width: FL.w, height: FL.h, background: '#040F49', overflow: 'hidden' }}>
@@ -275,6 +278,8 @@ function LoaderScene() {
 
             {bubbles}
           </div>
+        </div>
+        </div>
         </div>
 
         <h1 className="m-0 mt-5 text-[32px] font-extrabold text-nav-text">

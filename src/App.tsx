@@ -9,6 +9,8 @@ import { AppShell } from './components/layout/AppShell';
 import { ComingSoon } from './components/layout/ComingSoon';
 import { SplashLoader } from './components/branding/SplashLoader';
 import { Login } from './pages/Login';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
 import { AuthCallback } from './pages/AuthCallback';
 import { Welcome } from './pages/Welcome';
 import { Unsubscribe } from './pages/Unsubscribe';
@@ -58,6 +60,8 @@ export function App() {
         <PipelineProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/preview/splash-to-login" element={<SplashToLoginPreview />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/welcome" element={<Welcome />} />
