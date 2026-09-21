@@ -30,14 +30,17 @@ const SPOTS: Spot[] = [
 
 const MAX_DELAY = Math.max(...SPOTS.map((s) => s.delay));
 export const BUBBLE_COVER_MS = 1500;
-export const BUBBLE_REVEAL_MS = 1300;
-export const BUBBLE_REVEAL_HOLD_MS = 180;
+export const BUBBLE_REVEAL_MS = 600;
+export const BUBBLE_REVEAL_HOLD_MS = 90;
+// Reveal reuses the same cascade as cover but compressed — the full stagger
+// (up to 380ms) would eat most of a deliberately short reveal.
+const REVEAL_DELAY_SCALE = 0.35;
 /** Total time from triggering `mode="cover"` to the screen being fully hidden. */
 export const BUBBLE_COVER_TOTAL_MS = BUBBLE_COVER_MS + MAX_DELAY;
 
 const GROWN_SCALE = 26; // each bubble starts at 10vmax, so this comfortably exceeds any viewport diagonal
 const RISE_VH = 55; // how far up the bubbles drift while covering the screen
-const DRIFT_VH = 100; // how much further they drift up while fading away on reveal
+const DRIFT_VH = 80; // how much further they drift up while fading away on reveal
 
 // Smooth accelerate-into-decelerate, no overshoot or snap — a gentle float,
 // not a bounce.
@@ -66,25 +69,28 @@ export function BigBubbles({ mode }: { mode: 'cover' | 'reveal' }) {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden" aria-hidden>
-      {SPOTS.map((s, i) => (
-        <div
-          key={i}
-          style={{
-            position: 'absolute',
-            left: `${s.x}%`,
-            top: `${s.y}%`,
-            width: '10vmax',
-            height: '10vmax',
-            marginLeft: '-5vmax',
-            marginTop: '-5vmax',
-            borderRadius: '50%',
-            background: '#8B32FF',
-            boxShadow: '-8px 10px 0 rgba(100,55,139,0.55)',
-            transform: `translateY(-${rise}vh) scale(${scale})`,
-            transition: `transform ${duration}ms ${EASE} ${s.delay}ms`,
-          }}
-        />
-      ))}
+      {SPOTS.map((s, i) => {
+        const delay = mode === 'cover' ? s.delay : Math.round(s.delay * REVEAL_DELAY_SCALE);
+        return (
+          <div
+            key={i}
+            style={{
+              position: 'absolute',
+              left: `${s.x}%`,
+              top: `${s.y}%`,
+              width: '10vmax',
+              height: '10vmax',
+              marginLeft: '-5vmax',
+              marginTop: '-5vmax',
+              borderRadius: '50%',
+              background: '#8B32FF',
+              boxShadow: '-8px 10px 0 rgba(100,55,139,0.55)',
+              transform: `translateY(-${rise}vh) scale(${scale})`,
+              transition: `transform ${duration}ms ${EASE} ${delay}ms`,
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
