@@ -177,7 +177,7 @@ vite.config.ts
 
 ---
 
-## Current Status (updated 2026-09-20)
+## Current Status (updated 2026-09-22)
 **Working:** Cycle 1-2 (single-tenant foundation, full pipeline, email automation incl. AI-personalised
 composer/sequences/review queue) — see prior status below, all still functional. **Cycle 3 (multi-tenant
 foundation) is FULLY COMPLETE** — Tasks 1-12 done, controller-verified, and pushed:
@@ -828,6 +828,53 @@ notes-pass via `check-sequences`'s `hasHumanNote` check — needs its own exclud
 release queue has no per-batch progress line (spec asked for one, the plan simplified it away — accepted
 scope drift, not a bug); 40 sequential `updateLead`/`send-email` calls per bulk action each trigger a full
 realtime leads refetch (real perf cost at scale, not yet redesigned).
+
+**Branded splash loader + full auth-flow redesign shipped (2026-09-21/22).** A Claude Design project
+("Dreamlabs Splash Loader") was imported and translated into `src/components/branding/SplashLoader.tsx` —
+the design tool's own composition engine (authored clock, scene cues, easing helpers) doesn't exist at
+runtime, so the choreography was reimplemented against a plain `requestAnimationFrame` clock. Flask mark +
+bubbles + progress bar render as a single flex-centered group (not pinned to the original design's fixed
+1920×1080 canvas grid, which left the cluster sitting low with empty space above); logo scaled to 1/1.3 of
+its original size; splash loop shortened 8s → 5s (Rise/Swell/Settle 3/3/2 → 2/2/1, every bubble's authored
+duration scaled by 5/8 to still fit the shorter loop without overshooting).
+
+`Login.tsx` was rebuilt from a pasted cobalt-accent SaaS auth-page spec, adapted onto this app's actual
+brand and product shape rather than implemented literally: violet for fills/buttons/logo tile, cyan for
+focus rings (matching the split already used everywhere else in the app, not the spec's single-accent
+approach) — floating-label email/password fields (`components/auth/FloatingField.tsx`), a password
+show/hide toggle, and a Google-only social row. Dropped from the spec entirely: the marketing-site top nav
+(Product/Templates/Pricing/Docs, "Start free"), "Create an account" (self-serve signup doesn't exist — every
+account is invite-only via `org_members`), and a GitHub social button (no GitHub OAuth is configured). The
+spec's "Forgot password?" link is now a real feature, not just UI: `ForgotPassword.tsx` +
+`ResetPassword.tsx` using Supabase's `resetPasswordForEmail`/`updateUser` (default Supabase email template,
+not yet custom-branded). Shared chrome (`components/auth/AuthChrome.tsx`) — `AuthShell`, `AuthCard`,
+`AuthLogoTile` (now the real navy brand-mark asset, `assets/logo/logo-icon.png`, not a synthesized tile) —
+is reused by all three public auth pages.
+
+**Dark navy interactive 3D background on all three auth pages**, adapted from a pasted `threejs-components`
+"tubes cursor" reference: installed the real npm package (`threejs-components`, not the reference's raw CDN
+import — it's genuinely published) and lazy-load its `build/cursors/tubes1.min.js` via dynamic `import()`
+so the ~750KB effect never blocks initial page render; skipped entirely under `prefers-reduced-motion`
+(falls back to a plain navy background). Recolored to the brand palette (violet/purple/cyan/magenta) —
+click cycles through a few curated on-brand palette combinations (`components/auth/TubesBackground.tsx`)
+instead of the reference's fully-random RGB, so the background can never drift off-brand. **Real bug hit and
+fixed:** the library's bloom post-processing pass composites an opaque black backdrop instead of true canvas
+transparency, hiding the page's navy background entirely — fixed with the standard `mix-blend-mode: screen`
+trick (black contributes nothing under "screen", bright tube pixels blend on top), not by disabling bloom
+(which would have killed the neon-glow look the effect is for).
+
+**Bubble-wipe transition** (`components/branding/BigBubbles.tsx`) replaces the instant splash→login redirect:
+big violet bubbles (same skin as the flask's own) float up from the bottom of the screen while growing to
+fully cover it, `ProtectedRoute` navigates to `/login` underneath that cover (via `navigate(..., {state:
+{splashTransition:true}}))`), and `Login.tsx` picks up that state to shrink the bubbles back away on mount,
+revealing itself. Tuned through several rounds of live feedback: first pass used a snappy
+`easeOutBack`-style curve that read as bouncy — replaced with a plain no-overshoot ease; both phases were
+then slowed for smoothness, then found too slow overall and sped back up (**current: cover 800ms, reveal
+600ms**, shared easing curve throughout, cover's stagger delays scaled to 50% and reveal's to 35% of their
+base spread so the cascade doesn't eat a short phase). A `/preview/splash-to-login` route still exists
+(temporary, App.tsx) for watching the full sequence on demand — the real `ProtectedRoute` gate resolves
+almost instantly once a session is cached, too fast to see normally; remove this route once no longer
+needed for iterating on the animation.
 
 ---
 
