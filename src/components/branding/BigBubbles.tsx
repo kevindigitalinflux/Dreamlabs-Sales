@@ -28,15 +28,18 @@ const SPOTS: Spot[] = [
   { x: 90, y: 94, delay: 380 },
 ];
 
-const MAX_DELAY = Math.max(...SPOTS.map((s) => s.delay));
-export const BUBBLE_COVER_MS = 1500;
+export const BUBBLE_COVER_MS = 800;
 export const BUBBLE_REVEAL_MS = 600;
 export const BUBBLE_REVEAL_HOLD_MS = 90;
-// Reveal reuses the same cascade as cover but compressed — the full stagger
-// (up to 380ms) would eat most of a deliberately short reveal.
+// Both phases reuse the same SPOTS cascade but compressed by a different
+// amount — the raw delays (up to 380ms) were authored for a slower cover;
+// scaling them keeps the staggered-bubbles feel without it dominating a
+// deliberately short phase.
+const COVER_DELAY_SCALE = 0.5;
 const REVEAL_DELAY_SCALE = 0.35;
+const MAX_COVER_DELAY = Math.max(...SPOTS.map((s) => Math.round(s.delay * COVER_DELAY_SCALE)));
 /** Total time from triggering `mode="cover"` to the screen being fully hidden. */
-export const BUBBLE_COVER_TOTAL_MS = BUBBLE_COVER_MS + MAX_DELAY;
+export const BUBBLE_COVER_TOTAL_MS = BUBBLE_COVER_MS + MAX_COVER_DELAY;
 
 const GROWN_SCALE = 26; // each bubble starts at 10vmax, so this comfortably exceeds any viewport diagonal
 const RISE_VH = 55; // how far up the bubbles drift while covering the screen
@@ -70,7 +73,7 @@ export function BigBubbles({ mode }: { mode: 'cover' | 'reveal' }) {
   return (
     <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden" aria-hidden>
       {SPOTS.map((s, i) => {
-        const delay = mode === 'cover' ? s.delay : Math.round(s.delay * REVEAL_DELAY_SCALE);
+        const delay = Math.round(s.delay * (mode === 'cover' ? COVER_DELAY_SCALE : REVEAL_DELAY_SCALE));
         return (
           <div
             key={i}

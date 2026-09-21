@@ -47,8 +47,8 @@ const BURSTF = MOTION.enter({ from: 1, to: 0, start: 0.88, end: 0.94 });
 const DRIFTF = MOTION.enter({ from: 1, to: 0, start: 0.74, end: 1 });
 const DROPS = MOTION.enter({ from: 0, to: 1, start: 0.89, end: 1 });
 
-const LOOP = 8; // Rise(3) + Swell(3) + Settle(2), seconds
-const CUES = { Swell: 3, Settle: 6 };
+const LOOP = 5; // Rise(2) + Swell(2) + Settle(1), seconds
+const CUES = { Swell: 2, Settle: 4 };
 
 const W = 420; // mark group footprint
 const SRC = { x: 213, y: 220 }; // neck mouth, group-local
@@ -70,16 +70,18 @@ interface FreeBubble {
   ph: number;
 }
 
-// at = share of the loop the bubble is born at; dur = its life in seconds.
+// at = share of the loop the bubble is born at; dur = its life in seconds
+// (scaled by 5/8 from the original 8s-loop authoring so each bubble still
+// spans the same share of the now-5s loop).
 const FREE: FreeBubble[] = [
-  { at: 0.02, dur: 3.6, r: 18, pop: true, lane: -9, amp: 18, waves: 2.2, ph: 0.4 },
-  { at: 0.34, dur: 3.9, r: 34, pop: false, lane: 6, amp: 20, waves: 1.6, ph: 0.9 },
-  { at: 0.24, dur: 3.0, r: 7, pop: false, lane: -16, amp: 14, waves: 2.6, ph: 3.1 },
-  { at: 0.55, dur: 4.0, r: 14, pop: false, lane: 16, amp: 22, waves: 1.7, ph: 4.2 },
-  { at: 0.82, dur: 3.3, r: 12, pop: true, lane: 10, amp: 16, waves: 2.1, ph: 1.4 },
-  { at: 0.13, dur: 4.2, r: 10, pop: false, lane: 12, amp: 24, waves: 1.8, ph: 1.9 },
-  { at: 0.44, dur: 3.2, r: 9, pop: true, lane: -12, amp: 13, waves: 2.4, ph: 2.4 },
-  { at: 0.70, dur: 3.6, r: 8, pop: false, lane: -5, amp: 12, waves: 2.8, ph: 5.0 },
+  { at: 0.02, dur: 2.25, r: 18, pop: true, lane: -9, amp: 18, waves: 2.2, ph: 0.4 },
+  { at: 0.34, dur: 2.44, r: 34, pop: false, lane: 6, amp: 20, waves: 1.6, ph: 0.9 },
+  { at: 0.24, dur: 1.88, r: 7, pop: false, lane: -16, amp: 14, waves: 2.6, ph: 3.1 },
+  { at: 0.55, dur: 2.5, r: 14, pop: false, lane: 16, amp: 22, waves: 1.7, ph: 4.2 },
+  { at: 0.82, dur: 2.06, r: 12, pop: true, lane: 10, amp: 16, waves: 2.1, ph: 1.4 },
+  { at: 0.13, dur: 2.63, r: 10, pop: false, lane: 12, amp: 24, waves: 1.8, ph: 1.9 },
+  { at: 0.44, dur: 2.0, r: 9, pop: true, lane: -12, amp: 13, waves: 2.4, ph: 2.4 },
+  { at: 0.70, dur: 2.25, r: 8, pop: false, lane: -5, amp: 12, waves: 2.8, ph: 5.0 },
 ];
 
 const SKIN = { background: '#8B32FF', boxShadow: '-3px 4px 0 rgba(100,55,139,0.85)' };
