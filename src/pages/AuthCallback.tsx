@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { Skeleton } from '../components/ui/Skeleton';
+import { SplashLoader } from '../components/branding/SplashLoader';
 
 /**
  * Landing page for the Google OAuth redirect. Guardrail: a Google sign-in
@@ -47,9 +47,5 @@ export function AuthCallback() {
       </div>
     );
   }
-  return (
-    <div className="flex min-h-screen items-center justify-center">
-      <Skeleton className="h-24 w-72" />
-    </div>
-  );
+  return <SplashLoader />;
 }

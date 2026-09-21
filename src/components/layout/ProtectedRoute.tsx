@@ -1,18 +1,12 @@
 import { Navigate, Outlet } from 'react-router';
 import { useAuth } from '../../hooks/useAuth';
 import { useOrg } from '../../hooks/useOrg';
-import { Skeleton } from '../ui/Skeleton';
+import { SplashLoader } from '../branding/SplashLoader';
 
 /** Blocks unauthenticated users; renders child routes once a session exists. */
 export function ProtectedRoute() {
   const { session, loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Skeleton className="h-24 w-72" />
-      </div>
-    );
-  }
+  if (loading) return <SplashLoader />;
   if (!session) return <Navigate to="/login" replace />;
   return <Outlet />;
 }
