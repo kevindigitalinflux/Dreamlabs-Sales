@@ -977,6 +977,99 @@ before relying on the next build.
 
 ---
 
+## Security
+
+**First full `di-security-auditor` pass run 2026-09-22. Audit Status: OPEN — 0 CRITICAL, 3 HIGH (all fixed
+same-day, see below), 12 WARNING findings still open, all documented below and in the full audit report
+from that session.** RLS is enabled
+and correctly `auth.uid()`/org-scoped on all 23 `public` tables (live-verified via direct SQL, not just
+code review, including an empirical unauthenticated-anon-key request against `leads`/`org_members`
+returning `200 []`). No secrets in frontend code, no SQL injection or XSS surface found, no plaintext
+password/API-key columns anywhere (Vault-only). Dream Agent's AI action pipeline has real defense in depth
+(whitelist sanitization + a fresh RLS-scoped re-fetch of valid lead ids before every write) — confirmed via
+code, not assumed.
+
+**HIGH findings — all 3 fixed same-day (2026-09-22), immediately after the audit landed:**
+1. **SSRF via unvalidated website fetch — FIXED.** `supabase/functions/_shared/websiteContact.ts`'s
+   `scrapeWebsiteContact()` fetched `leads.website` (a plain user-editable text field) with zero
+   host/scheme validation, called from `enrich-leads-bulk`'s "Fill missing details" action — any
+   authenticated user could point it at an internal/metadata-service URL. Fixed by adding
+   `parseSafeWebsiteUrl()`/`isPrivateOrLoopbackHost()` guards (scheme must be `http`/`https`; blocks
+   loopback, all RFC1918 ranges, link-local incl. `169.254.169.254`, and IPv6 loopback/ULA/link-local) before
+   every `fetch()`. Verified with 10 manual test cases (legit URLs pass, all attack vectors blocked).
+   Redeployed both callers: `enrich-leads-bulk` (v5) and `scrape-google-places` (v10). **Known limitation,
+   not fixed**: this is a static check on the literal URL, not a DNS-rebinding defense — a public hostname
+   that resolves to a private IP at fetch time would still get through, since Deno's edge runtime doesn't
+   expose a pre-fetch resolve step here.
+2. **`avatars` Storage bucket had no server-side upload limits — FIXED.** `file_size_limit` and
+   `allowed_mime_types` were both `NULL`, only client-side checks existed. Fixed via migration
+   `027_avatars_storage_limits.sql`, applied live: `file_size_limit = 5242880` (5MB),
+   `allowed_mime_types = ARRAY['image/png','image/jpeg','image/webp','image/gif']`. Confirmed via direct
+   `storage.buckets` query post-apply.
+3. **`npm audit`: 3 HIGH, 2 MODERATE, 0 CRITICAL — FIXED.** `react-router`, `postcss`, `nanoid` (HIGH) and
+   `vitest`/`@vitest/mocker` (MODERATE, dev-only) all resolved via `npm audit fix` — transitive bumps only,
+   `package.json` itself unchanged, so no breaking version jump. `npm audit` now reports 0 vulnerabilities.
+   Re-verified clean after the bump: `tsc --noEmit` clean, `vitest run` 92/92 passing, `npm run build`
+   succeeds (same pre-existing 500kB chunk warning, not a regression).
+
+**WARNING findings, not yet fixed (lower urgency, roughly by priority):**
+- 9 custom `SECURITY DEFINER` helper functions (`can_view_lead`, `can_edit_lead`, `can_view_pipeline`,
+  `can_edit_pipeline`, `can_insert_lead_into`, `is_org_admin`, `is_org_member`, `is_org_admin_of_any`,
+  `handle_new_user`) are directly callable via `/rest/v1/rpc/...` by `anon`/`authenticated` (Supabase
+  linter WARN) — intended only for internal use inside RLS policies. All correctly key off the caller's own
+  `auth.uid()` (not spoofable) so there's no cross-user impersonation risk, but a caller who already knows a
+  specific lead/pipeline UUID (122 bits of entropy, not enumerable in practice) could probe permission
+  booleans on it directly. Standard fix: move these functions to a non-`public`, non-exposed schema while
+  keeping RLS policies able to reference them schema-qualified.
+- Supabase Auth's "Leaked Password Protection" (HaveIBeenPwned check) is disabled — a one-click enable in
+  the Auth dashboard, no user-facing downside.
+- `pg_net` extension installed in the `public` schema — Supabase recommends a dedicated schema.
+- `update_updated_at`/`pipelines_prevent_org_move` trigger functions lack a pinned `search_path` (Supabase
+  linter WARN) — confirmed near-zero practical risk in this project specifically, since neither `anon` nor
+  `authenticated` has `CREATE` on the `public` schema (verified live), so no lower-privileged role can shadow
+  an object in the search path. Still a one-line cheap fix (`SET search_path = public, pg_temp`).
+- No `public/_headers` file — zero CSP/HSTS/X-Frame-Options/etc. configured on the deployed Worker (already
+  flagged this session; Workers-with-static-assets supports the exact same `_headers` file mechanism as
+  classic Pages, confirmed via Cloudflare's docs — just needs the file added to `public/`).
+- No app-level rate limiting beyond the `unsubscribe` endpoint (which has one, live-tested). Every other
+  edge function — including AI-cost-incurring ones (`generate-email`, `parse-session-notes`,
+  `parse-csv-leads`, `draft-linkedin-message`) — has none of its own; Supabase Auth's built-in limits cover
+  login itself, but a compromised or malicious authenticated account could otherwise hammer AI-drafting
+  endpoints with no app-level throttle.
+- Many edge functions return raw Postgres/Supabase `error.message` directly to the authenticated caller
+  (e.g. constraint-violation text) — not stack traces or credentials, but more internal detail than a
+  user-facing error needs.
+- No audit-log table for sensitive admin actions (role changes via `set_org_role`, org creation) — these
+  are correctly permission-gated server-side, just not logged anywhere queryable after the fact.
+- No error-monitoring service (Sentry or equivalent) connected — runtime errors in production are invisible
+  unless a user reports them.
+- No documented backup plan for this Supabase project (still on the Free tier — no PITR available) despite
+  now holding real multi-org production data with at least one org's payroll-adjacent workflow context.
+- `/preview/splash-to-login` (`App.tsx`) is a public, unauthenticated demo route already flagged in this
+  file as "temporary... remove once no longer needed" — still live. No sensitive data exposure (plays an
+  animation only), just a lingering non-production route.
+- (Already flagged and reported to the user this session, not re-investigated here: `.env` contents were
+  printed into a chat transcript while checking for a GitHub token — user's call on rotation.)
+
+**Confirmed clean (real evidence, not assumption):** no committed secrets ever (`git log --all -- .env*`
+empty), no hardcoded credentials or service-role key in `src/`, no XSS-prone patterns
+(`dangerouslySetInnerHTML`/`eval`/etc.) anywhere in the app, no SQL injection surface (zero raw SQL
+construction, all `.rpc()` calls are parameterized Vault-secret helpers), CORS on every edge function is an
+explicit `APP_ORIGINS` allowlist (never `*`), all cron-only functions (`check-sequences`, `run-autopilot`,
+`auto-enroll-cold-outreach`, `check-replies`) correctly gate on a shared `x-cron-secret` rather than trusting
+a client-supplied `org_id`, and the org-membership-check pattern documented earlier in this file (`parse-icp`
+et al.) is now consistently present everywhere it needs to be, re-verified fresh via grep across every edge
+function.
+
+**Non-negotiable gate status:** 9 of 10 PASS. **G-07 (rate limiting on auth/form endpoints) FAILS** on a
+strict reading — Supabase Auth has its own built-in login rate limiting, but there is no Cloudflare-level
+rate limiting configured for this project at all, and only one of the app's many edge functions
+(`unsubscribe`) has any app-level limiter. Since this app is already live in production (not pre-launch),
+this is a retroactive remediation item, not a ship/no-ship blocker — but it's the one item that would
+formally fail a fresh pre-launch gate today.
+
+---
+
 ## Do Not Touch
 - `SPEC.md` — do not edit during Claude Code sessions; it is the source of truth for product decisions
 - `supabase/migrations/001_initial_schema.sql` — once run against production, never edit directly; create new migrations
