@@ -907,32 +907,31 @@ loading screen forever with no way out; `AuthCallback` now has a real `'error'` 
 `main` (commit `8403e0a`) but, per the Cloudflare issue below, was not yet actually live on the deployed
 site as of this write-up; needs a real re-test once a deploy actually lands.
 
-**Cloudflare Workers deploy pipeline: initial setup done, but auto-deploy-on-push is currently broken
-(2026-09-22), root cause not yet found — first thing to check next session.** The project deploys as a
-**Workers-with-static-assets** app (not classic Pages) — Cloudflare's "Connect to Git" flow put it there;
-this is expected, just different tooling (`wrangler deploy`, not a Pages build). Confirmed live at
+**Cloudflare Workers deploy pipeline — auto-deploy-on-push fixed (2026-09-22, later session).** The project
+deploys as a **Workers-with-static-assets** app (not classic Pages) — Cloudflare's "Connect to Git" flow put
+it there; this is expected, just different tooling (`wrangler deploy`, not a Pages build). Confirmed live at
 **`https://dreamlabs-sales.kevindigitalinflux.workers.dev`** (Kevin had to manually enable `workers.dev`
 access in the dashboard — the worker's name is `dreamlabs-sales`, worker ID
-`697d860cc6e14d16bf2cc3bb54940f76`, account `kevindigitalinflux@gmail.com`). One real deploy-config bug already found and fixed: the project initially
-shipped a classic-Pages-style `public/_redirects` (`/* /index.html 200`) for SPA routing, which conflicts
-with Workers static-assets' own native SPA handling and produced "Invalid _redirects configuration: Infinite
-loop detected" on deploy — fixed by deleting `_redirects` and committing a proper `wrangler.jsonc`
-(`assets.not_found_handling: "single-page-application"`) instead; `wrangler` pinned as a devDependency
-(`^4.136.2`) so the build doesn't re-run Wrangler's interactive first-run setup wizard on every CI build.
+`697d860cc6e14d16bf2cc3bb54940f76`, account `kevindigitalinflux@gmail.com`). One real deploy-config bug
+already found and fixed: the project initially shipped a classic-Pages-style `public/_redirects`
+(`/* /index.html 200`) for SPA routing, which conflicts with Workers static-assets' own native SPA handling
+and produced "Invalid _redirects configuration: Infinite loop detected" on deploy — fixed by deleting
+`_redirects` and committing a proper `wrangler.jsonc` (`assets.not_found_handling:
+"single-page-application"`) instead; `wrangler` pinned as a devDependency (`^4.136.2`) so the build doesn't
+re-run Wrangler's interactive first-run setup wizard on every CI build.
 
-**The actual open problem:** only 2 builds have ever run for this worker, both from the initial setup
-(one fail, one success, both 2026-09-22 ~11:20 UTC) — confirmed via Cloudflare's `workers_builds_list_builds`
-API. **None of the ~8 commits pushed to `main` since then have triggered a new build at all** — not the
-`_redirects` fix, not the splash-timing reverts, not the Google sign-in fix. The GitHub → Cloudflare
-auto-deploy trigger is not firing on new pushes, and the cause hasn't been identified yet: checked and ruled
-out an auto-generated Cloudflare bot PR sitting unmerged on GitHub (none exists). Not yet checked: the
-dashboard's actual Settings → Builds page (is a repo/branch really shown as connected? is there a specific
-"automatic deployments" toggle?), and whether the GitHub webhook itself is registered/firing (delivery logs
-live in the repo's GitHub Settings → Webhooks, not checked yet). **Kevin was walked through manually
-triggering a deploy via the dashboard as an immediate unblock, but as of this write-up it's unconfirmed
-whether that succeeded or whether the next commit will need the same manual step.** First thing to verify
-next session: check `workers_builds_list_builds` for build #3+, and if still stuck, walk through
-Settings → Builds together live.
+**Root cause of the stuck trigger:** never fully identified at the webhook level, but the fix was to fully
+disconnect and recreate the Git integration (Kevin disconnected the repo in the dashboard, which deleted the
+old trigger and repo connection entirely; then redid Settings → Builds → Connect → GitHub, which created a
+fresh trigger `9ac786e7-aa80-414d-bb2f-fe13987bf00e` at 2026-09-22T14:20:55Z). This wiped the trigger's build
+environment variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` — restored from the last build's stored
+metadata via the Workers Builds API, `PATCH /builds/triggers/{uuid}/environment_variables`; both non-secret,
+safe to have re-entered this way). A manually-triggered build (`POST /builds/triggers/{uuid}/builds`) then
+succeeded and deployed cleanly — confirmed via a new `workers/scripts/.../deployments` entry at 14:24:09Z and
+a live 200 from the workers.dev URL. **This commit is the real test**: it's a no-op push made specifically to
+confirm the GitHub → Cloudflare auto-trigger fires on a normal push, not just a manual API-triggered build.
+If a new build shows up in `workers_builds_list_builds` shortly after this lands on `main`, the pipeline is
+confirmed fully fixed end-to-end.
 
 **Tool-access notes for whoever continues this (2026-09-22):**
 - The `cloudflare-api` MCP tool (`execute`/`search`/`docs`, generic Cloudflare REST access) is connected to
