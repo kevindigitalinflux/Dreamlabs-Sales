@@ -907,6 +907,27 @@ loading screen forever with no way out; `AuthCallback` now has a real `'error'` 
 `main` (commit `8403e0a`) but, per the Cloudflare issue below, was not yet actually live on the deployed
 site as of this write-up; needs a real re-test once a deploy actually lands.
 
+**Custom domain live (2026-09-22): `https://sales.didreamlabs.com`.** Attached via Cloudflare's Workers
+Custom Domains API (`PUT /accounts/{account_id}/workers/domains`, zone `didreamlabs.com` /
+`0b118a2e6d2127aee1c5c7f03d5e6863`, same account as the Worker) — this auto-creates the DNS record
+(proxied AAAA to `100::`, Cloudflare's internal Worker-routing placeholder) and issues the TLS cert, no
+manual DNS step needed. Live within seconds of attaching (zone's Universal SSL already covered the new
+hostname). The `dreamlabs-sales.kevindigitalinflux.workers.dev` URL still works and stays enabled — not
+replaced, just an additional hostname routing to the same Worker.
+
+**Found and fixed while adding the domain: `APP_ORIGINS` (the edge-function CORS allowlist secret) was
+stale since 2026-07-12 — from before the Cloudflare Workers deploy existed at all.** This almost certainly
+meant every edge-function call from the live `workers.dev` production domain (bulk enrichment, scraping,
+email generation, admin actions, Dream Agent — anything routed through `_shared/cors.ts`'s `APP_ORIGINS`
+check) was silently CORS-blocked in production before this fix, unrelated to anything else done this
+session — ordinary Supabase REST/Auth calls via supabase-js were unaffected (different, more permissive
+CORS layer), which is why login/dashboard/basic RLS-backed reads looked fine. Fixed via
+`npx supabase secrets set APP_ORIGINS="http://localhost:5173,https://sales.didreamlabs.com,https://dreamlabs-sales.kevindigitalinflux.workers.dev"`
+— no redeploy needed, Deno picks up updated secrets on next cold start. Verified live via a real OPTIONS
+preflight against `enrich-leads-bulk` from both production origins, correct `Access-Control-Allow-Origin`
+echoed back for each. **Any future custom domain or environment added to this project must be added to
+this same secret**, or its edge-function features will silently CORS-fail exactly like this.
+
 **Cloudflare Workers deploy pipeline — auto-deploy-on-push fixed (2026-09-22, later session).** The project
 deploys as a **Workers-with-static-assets** app (not classic Pages) — Cloudflare's "Connect to Git" flow put
 it there; this is expected, just different tooling (`wrangler deploy`, not a Pages build). Confirmed live at
