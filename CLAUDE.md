@@ -661,7 +661,7 @@ has no indeterminate checkbox state. The Scraper wizard's new-pipeline creation 
 with the scrape invoke (unlike `parse-csv-leads`'s server-side equivalent) — either path can, on failure
 partway through, leave behind an empty, harmless, manually-deletable orphaned pipeline.
 
-**Not yet started:** Cloudflare Pages deploy, Power Dialer Phase 1's provider-specific wiring (`test`
+**Not yet started:** Power Dialer Phase 1's provider-specific wiring (`test`
 action, `dialer-push-queue`, `dialer-webhook`), Phase 2 (AI voice agent), the `text-cyan`/`--color-muted`
 light-mode contrast follow-up, and piece 5 of the user's original 5-part request — an autopilot "existing
 pipeline vs. new scrape" choice — deliberately kept as its own separate future plan throughout both the
@@ -835,8 +835,8 @@ the design tool's own composition engine (authored clock, scene cues, easing hel
 runtime, so the choreography was reimplemented against a plain `requestAnimationFrame` clock. Flask mark +
 bubbles + progress bar render as a single flex-centered group (not pinned to the original design's fixed
 1920×1080 canvas grid, which left the cluster sitting low with empty space above); logo scaled to 1/1.3 of
-its original size; splash loop shortened 8s → 5s (Rise/Swell/Settle 3/3/2 → 2/2/1, every bubble's authored
-duration scaled by 5/8 to still fit the shorter loop without overshooting).
+its original size. Splash loop duration was tried at 5s (briefly) but reverted back to the original 8s —
+too fast read as rushed once seen at real load times; **current: 8s, unchanged from the original import.**
 
 `Login.tsx` was rebuilt from a pasted cobalt-accent SaaS auth-page spec, adapted onto this app's actual
 brand and product shape rather than implemented literally: violet for fills/buttons/logo tile, cyan for
@@ -875,6 +875,91 @@ base spread so the cascade doesn't eat a short phase). A `/preview/splash-to-log
 (temporary, App.tsx) for watching the full sequence on demand — the real `ProtectedRoute` gate resolves
 almost instantly once a session is cached, too fast to see normally; remove this route once no longer
 needed for iterating on the animation.
+
+**Splash is now guaranteed to play in full before the login handoff (2026-09-22).** Originally
+`ProtectedRoute` cut straight to the bubble-cover the moment auth resolved — since that's normally
+near-instant, the splash was getting cut short after well under a second instead of playing as the intended
+branded intro. Fixed: for a signed-out visitor, `ProtectedRoute` now always waits out the splash's full
+`SPLASH_LOOP_MS` (exported from `SplashLoader.tsx`) before starting the bubble-cover sequence. An
+already-authenticated return visit is completely unaffected — it never shows the splash as a gate, only
+while genuinely loading.
+
+**Real, previously-unverified Google sign-in bug found and fixed (2026-09-22) — a full Google OAuth
+round-trip against the live deployed domain had never actually been completed end-to-end before this
+session** (earlier live-browser checks only confirmed reaching Google's account chooser, per this
+assistant's standing policy of never completing a sign-in on the user's behalf). Once actually tested live,
+sign-in got stuck on the loading screen forever. Root-caused with real data, not guesswork: Supabase's own
+auth logs showed the OAuth exchange itself succeeded (real session created, correct referer); RLS was
+verified correct by simulating both post-login queries (`profiles` select, `org_members` count) as the real
+authenticated user; CORS was verified wide open; the deployed JS bundle was verified to have the correct
+`VITE_SUPABASE_URL`/anon key baked in; edge caching was verified to always revalidate. All clean — pointing
+at a client-side bug. Supabase's own docs warn against the exact pattern `useAuth.tsx` had: calling both an
+explicit `getSession()` **and** subscribing to `onAuthStateChange` on mount is racy specifically around
+post-redirect sessions (`onAuthStateChange` already fires once immediately with the current — including
+URL-detected — session; the separate `getSession()` call can resolve with a stale `null` afterward and
+silently clobber the real session back to `null`, with nothing left to ever re-trigger `AuthCallback`'s
+org-membership check). Fixed by removing the redundant `getSession()` call. Also hardened both
+`AuthCallback`'s org_members check and `useAuth`'s profile fetch with real error handling — Supabase's query
+builder is thenable, not a full `Promise` (no `.catch()`, so failures are caught via `.then()`'s second
+argument) — since previously a genuine network failure in either path would have left the UI stuck on the
+loading screen forever with no way out; `AuthCallback` now has a real `'error'` status with a link back to
+`/login` instead of hanging silently. **Not yet re-confirmed live after this fix** — the fix is deployed to
+`main` (commit `8403e0a`) but, per the Cloudflare issue below, was not yet actually live on the deployed
+site as of this write-up; needs a real re-test once a deploy actually lands.
+
+**Cloudflare Workers deploy pipeline: initial setup done, but auto-deploy-on-push is currently broken
+(2026-09-22), root cause not yet found — first thing to check next session.** The project deploys as a
+**Workers-with-static-assets** app (not classic Pages) — Cloudflare's "Connect to Git" flow put it there;
+this is expected, just different tooling (`wrangler deploy`, not a Pages build). Confirmed live at
+**`https://dreamlabs-sales.kevindigitalinflux.workers.dev`** (Kevin had to manually enable `workers.dev`
+access in the dashboard — the worker's name is `dreamlabs-sales`, worker ID
+`697d860cc6e14d16bf2cc3bb54940f76`, account `kevindigitalinflux@gmail.com`). One real deploy-config bug already found and fixed: the project initially
+shipped a classic-Pages-style `public/_redirects` (`/* /index.html 200`) for SPA routing, which conflicts
+with Workers static-assets' own native SPA handling and produced "Invalid _redirects configuration: Infinite
+loop detected" on deploy — fixed by deleting `_redirects` and committing a proper `wrangler.jsonc`
+(`assets.not_found_handling: "single-page-application"`) instead; `wrangler` pinned as a devDependency
+(`^4.136.2`) so the build doesn't re-run Wrangler's interactive first-run setup wizard on every CI build.
+
+**The actual open problem:** only 2 builds have ever run for this worker, both from the initial setup
+(one fail, one success, both 2026-09-22 ~11:20 UTC) — confirmed via Cloudflare's `workers_builds_list_builds`
+API. **None of the ~8 commits pushed to `main` since then have triggered a new build at all** — not the
+`_redirects` fix, not the splash-timing reverts, not the Google sign-in fix. The GitHub → Cloudflare
+auto-deploy trigger is not firing on new pushes, and the cause hasn't been identified yet: checked and ruled
+out an auto-generated Cloudflare bot PR sitting unmerged on GitHub (none exists). Not yet checked: the
+dashboard's actual Settings → Builds page (is a repo/branch really shown as connected? is there a specific
+"automatic deployments" toggle?), and whether the GitHub webhook itself is registered/firing (delivery logs
+live in the repo's GitHub Settings → Webhooks, not checked yet). **Kevin was walked through manually
+triggering a deploy via the dashboard as an immediate unblock, but as of this write-up it's unconfirmed
+whether that succeeded or whether the next commit will need the same manual step.** First thing to verify
+next session: check `workers_builds_list_builds` for build #3+, and if still stuck, walk through
+Settings → Builds together live.
+
+**Tool-access notes for whoever continues this (2026-09-22):**
+- The `cloudflare-api` MCP tool (`execute`/`search`/`docs`, generic Cloudflare REST access) is connected to
+  the **wrong Cloudflare account** (a client's — Jmpublicidad.web@gmail.com's — not Kevin's own
+  kevindigitalinflux@gmail.com) and has **no re-authentication path from inside a session** — it's an
+  `http` MCP server with no static-token config slot (confirmed by reading
+  `~/.claude/plugins/marketplaces/cloudflare/.mcp.json`: no `headers`/`${VAR}` block, unlike the GitHub
+  plugin's config) and no `authenticate` tool of its own. A Cloudflare API token cannot fix this — there's
+  nowhere to put one. Do not ask Kevin to generate a Cloudflare API token expecting it to plug in anywhere;
+  it won't.
+- The `cloudflare-builds` MCP tool **is** correctly connected to Kevin's own account (re-authenticated
+  2026-09-22 via its own OAuth flow — `mcp__plugin_cloudflare_cloudflare-builds__authenticate` /
+  `complete_authentication`) and correctly lists `dreamlabs-sales` and `mr-brush-quote-proxy`. But it is
+  **read-only monitoring** (`workers_list`, `workers_get_worker`, `workers_get_worker_code`,
+  `workers_builds_list_builds`, `workers_builds_get_build`, `workers_builds_get_build_logs`) — no tool to
+  change build/git settings or manually trigger a deploy. Useful for checking build status; not for fixing
+  the trigger.
+- GitHub MCP (`plugin:github:github`) was broken most of this session (expired PAT, malformed
+  Authorization header) and was fixed by Kevin generating a new PAT (valid until Nov 21) and adding it as
+  `GITHUB_PERSONAL_ACCESS_TOKEN` in `~/.claude/settings.json`'s top-level `env` block — the exact variable
+  name the plugin's `.mcp.json` expects (`Authorization: Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}`). **This
+  env var must never be set inside a project's own `.env` file** — a project `.env` here only holds
+  `VITE_*` client-bundled values that ship to every browser; the GitHub token belongs only in the global,
+  never-committed `~/.claude/settings.json`. Confirmed Kevin put it in the right place, not the project
+  `.env`. Note: Claude Code's own auto-mode safety classifier blocks *this assistant* from writing a
+  plaintext credential into `settings.json` directly (flagged as "Credential Leakage") even when it's the
+  documented correct location — the user has to add it themselves.
 
 ---
 
