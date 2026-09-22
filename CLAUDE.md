@@ -920,18 +920,24 @@ and produced "Invalid _redirects configuration: Infinite loop detected" on deplo
 "single-page-application"`) instead; `wrangler` pinned as a devDependency (`^4.136.2`) so the build doesn't
 re-run Wrangler's interactive first-run setup wizard on every CI build.
 
-**Root cause of the stuck trigger:** never fully identified at the webhook level, but the fix was to fully
-disconnect and recreate the Git integration (Kevin disconnected the repo in the dashboard, which deleted the
-old trigger and repo connection entirely; then redid Settings → Builds → Connect → GitHub, which created a
-fresh trigger `9ac786e7-aa80-414d-bb2f-fe13987bf00e` at 2026-09-22T14:20:55Z). This wiped the trigger's build
-environment variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` — restored from the last build's stored
-metadata via the Workers Builds API, `PATCH /builds/triggers/{uuid}/environment_variables`; both non-secret,
-safe to have re-entered this way). A manually-triggered build (`POST /builds/triggers/{uuid}/builds`) then
-succeeded and deployed cleanly — confirmed via a new `workers/scripts/.../deployments` entry at 14:24:09Z and
-a live 200 from the workers.dev URL. **This commit is the real test**: it's a no-op push made specifically to
-confirm the GitHub → Cloudflare auto-trigger fires on a normal push, not just a manual API-triggered build.
-If a new build shows up in `workers_builds_list_builds` shortly after this lands on `main`, the pipeline is
-confirmed fully fixed end-to-end.
+**Root cause hunt (2026-09-22, chronological):** First attempt — Kevin disconnected the repo in the Cloudflare
+dashboard (deleted the old trigger + repo connection), then redid Settings → Builds → Connect → GitHub,
+creating a fresh trigger (`9ac786e7-...`) at 14:20:55Z. A manually-triggered build succeeded and deployed
+cleanly (confirmed via a new `deployments` entry and a live 200 from the workers.dev URL), but a real no-op
+push to `main` (commit `9a7a42e`) **still did not auto-trigger a build** after 2.5+ minutes — confirmed via
+`workers_builds_list_builds` (no new entry) and via GitHub's own commit-status/check-runs API on that commit
+(zero statuses posted by Cloudflare). So reconnecting the repo alone did not fix it — the repo connection
+object always shows `grant_id: null`, which pointed at the underlying **GitHub App installation/grant**
+being the actual stale piece, not the repo-connection record itself (Cloudflare's own docs list this exact
+symptom under "Reinstall the Cloudflare GitHub App": disconnecting a repo in the dashboard ≠ uninstalling the
+App). Second attempt — Kevin fully uninstalled "Cloudflare Workers and Pages" from
+`github.com/settings/installations`, then reconnected via Settings → Builds in Cloudflare, which forced a
+fresh App authorization and created trigger `1e24dac7-...` at 19:13:18Z (env vars re-restored the same way
+as before). **This commit is the real test of the second fix** — a no-op push made specifically to confirm
+the GitHub → Cloudflare auto-trigger fires this time. If a new build shows up in `workers_builds_list_builds`
+shortly after this lands on `main`, the pipeline is confirmed fixed end-to-end; if not, the GitHub App
+reinstall wasn't the actual root cause either and this needs escalating to Cloudflare support with both
+failed no-op commits (`9a7a42e`, and this one) as evidence.
 
 **Tool-access notes for whoever continues this (2026-09-22):**
 - The `cloudflare-api` MCP tool (`execute`/`search`/`docs`, generic Cloudflare REST access) is connected to
