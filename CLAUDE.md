@@ -933,11 +933,20 @@ symptom under "Reinstall the Cloudflare GitHub App": disconnecting a repo in the
 App). Second attempt — Kevin fully uninstalled "Cloudflare Workers and Pages" from
 `github.com/settings/installations`, then reconnected via Settings → Builds in Cloudflare, which forced a
 fresh App authorization and created trigger `1e24dac7-...` at 19:13:18Z (env vars re-restored the same way
-as before). **This commit is the real test of the second fix** — a no-op push made specifically to confirm
-the GitHub → Cloudflare auto-trigger fires this time. If a new build shows up in `workers_builds_list_builds`
-shortly after this lands on `main`, the pipeline is confirmed fixed end-to-end; if not, the GitHub App
-reinstall wasn't the actual root cause either and this needs escalating to Cloudflare support with both
-failed no-op commits (`9a7a42e`, and this one) as evidence.
+as before). **Confirmed fixed**: the no-op push (`6b5fe89`) auto-triggered a real build (`db6477ad...`,
+`build_trigger_metadata.build_trigger_source: "push_event"` — the first genuine push-triggered build this
+project has ever had) within ~90 seconds of the push, which succeeded and deployed; live site verified 200
+immediately after. **Root cause, confirmed**: the stale piece was the GitHub App installation/grant itself,
+not the repo-connection record — disconnecting/reconnecting the repo in Cloudflare's dashboard recreates the
+repo connection but does not refresh the underlying App grant, so a full uninstall+reinstall of the GitHub
+App was required. Auto-deploy-on-push is fully working as of this write-up; no further action needed here
+unless it regresses.
+
+**Reminder for any future repo/trigger reset on this project:** disconnecting the repo in Cloudflare's
+dashboard (or recreating a trigger via the API) always wipes that trigger's build environment variables —
+currently just `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (both non-secret, values live in the local
+`.env`) — restore them via `PATCH /accounts/{account_id}/builds/triggers/{trigger_uuid}/environment_variables`
+before relying on the next build.
 
 **Tool-access notes for whoever continues this (2026-09-22):**
 - The `cloudflare-api` MCP tool (`execute`/`search`/`docs`, generic Cloudflare REST access) is connected to
