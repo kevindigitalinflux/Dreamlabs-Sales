@@ -90,7 +90,7 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
           <Section title="Assignment">
             <SelectField label="Assigned to" value={lead.assigned_to ?? ''} onChange={(e) => void onUpdate(lead.id, { assigned_to: e.target.value || null })}>
               <option value="">Unassigned</option>
-              {profiles.filter((p) => p.role === 'contractor').map((p) => (
+              {profiles.filter((p) => p.role !== 'admin').map((p) => (
                 <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>
               ))}
             </SelectField>

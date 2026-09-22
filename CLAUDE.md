@@ -177,7 +177,7 @@ vite.config.ts
 
 ---
 
-## Current Status (updated 2026-09-22)
+## Current Status (updated 2026-09-23)
 **Working:** Cycle 1-2 (single-tenant foundation, full pipeline, email automation incl. AI-personalised
 composer/sequences/review queue) — see prior status below, all still functional. **Cycle 3 (multi-tenant
 foundation) is FULLY COMPLETE** — Tasks 1-12 done, controller-verified, and pushed:
@@ -1097,15 +1097,39 @@ custom domain, and caught/fixed a real pre-existing production bug in the proces
 since before the Cloudflare deploy existed, silently CORS-blocking edge-function features). Everything in
 this entry is live and verified, not just committed.
 
-**Next up (not started):** admin-facing member management needs two additions — (1) remove/delete a
-member from an organization (`org_members` currently has no delete path from the UI at all, only invite +
-role-change in `UserTable.tsx`/`admin-users`), and (2) a new `org_members.role` option alongside
-`admin`/`contractor` — working name **"team member"** — for org members who aren't admins but also aren't
-field contractors doing lead work (exact permission differences from `contractor` still to be defined).
-`contractor` is referenced across ~10 files (`InviteModal.tsx`, `UserTable.tsx`, `AssignmentPanel.tsx`,
-`LeadPanel.tsx`'s `profiles.filter((p) => p.role === 'contractor')`, analytics, dialer settings, etc.) —
-adding a third role is a real schema + RLS + UI surface change, not a small tweak, and needs its own
-brainstorm/spec before implementation.
+**Member removal + "Team Member" role — shipped 2026-09-23.** Both features from the previous entry are
+now live. Brainstormed as a bounded task (both pieces extended an already-existing flow, not new
+architecture) — key decision from that conversation: "team member" has **identical permissions to
+contractor**, it's purely a label distinction (in-house staff vs external contractors), which meant no new
+RLS logic was needed anywhere.
+
+- **Schema**: migration `028_org_members_team_member_role.sql` widened `org_members_role_check` to
+  `('admin', 'contractor', 'team_member')`. Confirmed via grep before writing it that no RLS policy
+  anywhere gates on `role = 'contractor'` specifically (every policy checks `role = 'admin'` — i.e. "is an
+  admin" vs "isn't"), so zero policy changes were needed.
+- **Backend**: new `remove_member` action in `admin-users/index.ts`, same shape as `set_org_role` —
+  `canManageOrg()` gate, refuses self-removal, and a new **last-admin guard** (refuses to remove an org's
+  only remaining admin — nothing previously protected against orphaning an org with zero admins). On
+  removal, the member's `leads.assigned_to` in that org is set to `null` (not deleted) before the
+  `org_members` row is deleted; `profiles`/`auth.users` and all historical `lead_notes`/`email_logs`
+  attribution are untouched (those FKs point at `profiles`, not `org_members` — the person may belong to
+  other orgs). Access to org-scoped data is cut off immediately on removal purely because RLS re-checks
+  `org_members` on every request — no separate session-revocation step needed.
+- **Frontend**: `UserTable.tsx` gained a "Remove" button per row (disabled for yourself, confirms via the
+  shared `Modal` component before calling the edge function) and a "Team Member" role option; `InviteModal.tsx`
+  gained the same option, retitled from "Invite contractor" to "Invite member" since it's no longer
+  contractor-only. The two places that filtered `role === 'contractor'` to mean "assignable non-admin
+  member" (`Admin.tsx`'s `AssignmentPanel` data, `LeadPanel.tsx`'s "Assigned to" dropdown) now check
+  `role !== 'admin'` instead, so team members show up there too.
+- **Live-verified** with throwaway org/users/lead (Kevin's controller session, direct `auth.users` access —
+  standard pattern for this project): self-removal blocked, non-last-admin removal succeeds, team-member
+  removal succeeds and correctly unassigns their lead, and the last-admin guard correctly blocks even when
+  the caller is a platform admin acting on an org they aren't a member of. All throwaway rows fully deleted
+  afterward; real prod counts (4 orgs/4 users/4 profiles) confirmed unchanged before/after.
+- **Not independently re-tested**: the `invite` action's identical one-line validation extension
+  (`orgRole !== 'admin' && orgRole !== 'contractor' && orgRole !== 'team_member'`) — skipped a live invite
+  email to a throwaway address since it's the exact same conditional shape already proven via
+  `set_org_role`/direct insert, not worth the side effect of an extra sent email.
 
 ---
 

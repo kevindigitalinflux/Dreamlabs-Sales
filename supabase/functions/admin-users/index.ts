@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
     const fullName = String(body.full_name ?? '');
     const redirectTo = String(body.redirect_to ?? '');
     if (!orgId) return json({ error: 'org_id is required' }, 400, headers);
-    if (orgRole !== 'admin' && orgRole !== 'contractor') return json({ error: 'Invalid org_role' }, 400, headers);
+    if (orgRole !== 'admin' && orgRole !== 'contractor' && orgRole !== 'team_member') return json({ error: 'Invalid org_role' }, 400, headers);
     if (!email) return json({ error: 'email is required' }, 400, headers);
     if (!APP_ORIGINS.some((o) => redirectTo.startsWith(o))) return json({ error: 'redirect_to not allowed' }, 400, headers);
     if (!(await canManageOrg(orgId))) return json({ error: 'Admin only' }, 403, headers);
@@ -104,10 +104,34 @@ Deno.serve(async (req) => {
     const orgId = String(body.org_id ?? '');
     const userId = String(body.user_id ?? '');
     const role = String(body.role ?? '');
-    if (role !== 'admin' && role !== 'contractor') return json({ error: 'Invalid role' }, 400, headers);
+    if (role !== 'admin' && role !== 'contractor' && role !== 'team_member') return json({ error: 'Invalid role' }, 400, headers);
     if (userId === caller.id) return json({ error: 'You cannot change your own role' }, 400, headers);
     if (!(await canManageOrg(orgId))) return json({ error: 'Admin only' }, 403, headers);
     const { error } = await service.from('org_members').update({ role }).eq('org_id', orgId).eq('user_id', userId);
+    if (error) return json({ error: error.message }, 400, headers);
+    return json({ ok: true }, 200, headers);
+  }
+
+  if (body.action === 'remove_member') {
+    const orgId = String(body.org_id ?? '');
+    const userId = String(body.user_id ?? '');
+    if (!orgId || !userId) return json({ error: 'org_id and user_id are required' }, 400, headers);
+    if (userId === caller.id) return json({ error: 'You cannot remove yourself' }, 400, headers);
+    if (!(await canManageOrg(orgId))) return json({ error: 'Admin only' }, 403, headers);
+
+    const { data: target } = await service.from('org_members').select('role').eq('org_id', orgId).eq('user_id', userId).maybeSingle();
+    if (!target) return json({ error: 'Not a member of this organization' }, 404, headers);
+    if (target.role === 'admin') {
+      const { count } = await service.from('org_members').select('*', { count: 'exact', head: true }).eq('org_id', orgId).eq('role', 'admin');
+      if ((count ?? 0) <= 1) return json({ error: 'Cannot remove the last admin of an organization' }, 400, headers);
+    }
+
+    // Their leads are unassigned, not deleted — historical notes/email logs keep
+    // this person's attribution (those FKs point at profiles, not org_members).
+    const { error: unassignErr } = await service.from('leads').update({ assigned_to: null }).eq('org_id', orgId).eq('assigned_to', userId);
+    if (unassignErr) return json({ error: unassignErr.message }, 400, headers);
+
+    const { error } = await service.from('org_members').delete().eq('org_id', orgId).eq('user_id', userId);
     if (error) return json({ error: error.message }, 400, headers);
     return json({ ok: true }, 200, headers);
   }

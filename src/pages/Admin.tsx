@@ -59,7 +59,7 @@ export function Admin() {
     void supabase.functions.invoke('admin-users', { body: { action: 'list_org_members', org_id: currentOrg.id } })
       .then(({ data }) => {
         const rows = (data as { members: OrgMemberRow[] } | null)?.members ?? [];
-        setCurrentOrgContractors(rows.filter((r) => r.role === 'contractor').map((r) => r.profiles));
+        setCurrentOrgContractors(rows.filter((r) => r.role !== 'admin').map((r) => r.profiles));
       });
   }, [currentOrg]);
 

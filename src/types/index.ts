@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'contractor';
+export type Role = 'admin' | 'contractor' | 'team_member';
 
 export type PlatformRole = 'platform_admin' | 'user';
 

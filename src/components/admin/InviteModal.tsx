@@ -16,7 +16,7 @@ interface InviteModalProps {
 export function InviteModal({ open, onClose, orgId, onInvited }: InviteModalProps) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [orgRole, setOrgRole] = useState<'admin' | 'contractor'>('contractor');
+  const [orgRole, setOrgRole] = useState<'admin' | 'contractor' | 'team_member'>('contractor');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -45,12 +45,13 @@ export function InviteModal({ open, onClose, orgId, onInvited }: InviteModalProp
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Invite contractor">
+    <Modal open={open} onClose={onClose} title="Invite member">
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input label="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
         <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <SelectField label="Role" value={orgRole} onChange={(e) => setOrgRole(e.target.value as 'admin' | 'contractor')}>
+        <SelectField label="Role" value={orgRole} onChange={(e) => setOrgRole(e.target.value as 'admin' | 'contractor' | 'team_member')}>
           <option value="contractor">Contractor</option>
+          <option value="team_member">Team Member</option>
           <option value="admin">Admin</option>
         </SelectField>
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
