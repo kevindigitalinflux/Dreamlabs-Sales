@@ -22,10 +22,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      if (!data.session) setLoading(false);
-    });
+    // Rely solely on onAuthStateChange for the initial session, per Supabase's
+    // own guidance: it fires once immediately on subscription with whatever
+    // session already exists (including one just detected from the URL after
+    // an OAuth/magic-link/recovery redirect), so a separate explicit
+    // getSession() call here is redundant — and racy: on a fresh full-page
+    // load landing on /auth/callback, an explicit getSession() call can
+    // resolve with a stale null AFTER onAuthStateChange has already delivered
+    // the real post-redirect session, silently clobbering it back to null and
+    // leaving the app stuck on the loading screen forever (nothing re-fires
+    // the effects gated on `session` once that happens).
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
       if (!s) setLoading(false);
@@ -39,17 +45,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     let cancelled = false;
+    // Supabase's query builder is thenable (PromiseLike), not a full Promise
+    // — it has no .catch(), so the rejection handler is passed as .then()'s
+    // second argument instead. Without it, a rejected (not just error-shaped)
+    // promise here — e.g. a genuine network failure — would leave `loading`
+    // stuck true forever, since nothing else ever sets it false for this
+    // session.
     void supabase
       .from('profiles')
       .select('*')
       .eq('id', session.user.id)
       .single()
-      .then(({ data }) => {
-        if (!cancelled) {
-          setProfile((data as Profile | null) ?? null);
+      .then(
+        ({ data }) => {
+          if (!cancelled) {
+            setProfile((data as Profile | null) ?? null);
+            setLoading(false);
+          }
+        },
+        (err: unknown) => {
+          if (cancelled) return;
+          console.error('Failed to load profile:', err);
+          setProfile(null);
           setLoading(false);
-        }
-      });
+        },
+      );
     return () => {
       cancelled = true;
     };

@@ -49,6 +49,9 @@ const DROPS = MOTION.enter({ from: 0, to: 1, start: 0.89, end: 1 });
 
 const LOOP = 8; // Rise(3) + Swell(3) + Settle(2), seconds
 const CUES = { Swell: 3, Settle: 6 };
+/** The splash's full authored loop, in ms — how long it should play as a
+ * deliberate brand intro before anything transitions away from it. */
+export const SPLASH_LOOP_MS = LOOP * 1000;
 
 const W = 420; // mark group footprint
 const SRC = { x: 213, y: 220 }; // neck mouth, group-local
