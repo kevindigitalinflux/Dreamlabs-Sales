@@ -49,7 +49,7 @@ function SplashToLoginPreview() {
   const [covering, setCovering] = useState(false);
 
   useEffect(() => {
-    const showBubbles = setTimeout(() => setCovering(true), 5000);
+    const showBubbles = setTimeout(() => setCovering(true), 8000);
     return () => clearTimeout(showBubbles);
   }, []);
 
