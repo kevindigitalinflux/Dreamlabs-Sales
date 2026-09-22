@@ -1089,6 +1089,24 @@ rate limiting configured for this project at all, and only one of the app's many
 this is a retroactive remediation item, not a ship/no-ship blocker — but it's the one item that would
 formally fail a fresh pre-launch gate today.
 
+**Session wrap-up (2026-09-22).** In order: fixed the Cloudflare auto-deploy pipeline (root cause: stale
+GitHub App grant, not the repo connection — full reinstall required), ran the app's first-ever full
+`di-security-auditor` pass and fixed all 3 HIGH findings same-day (SSRF guard, avatar upload limits,
+dependency CVEs — 12 WARNING findings left open, tracked above), attached the `sales.didreamlabs.com`
+custom domain, and caught/fixed a real pre-existing production bug in the process (`APP_ORIGINS` stale
+since before the Cloudflare deploy existed, silently CORS-blocking edge-function features). Everything in
+this entry is live and verified, not just committed.
+
+**Next up (not started):** admin-facing member management needs two additions — (1) remove/delete a
+member from an organization (`org_members` currently has no delete path from the UI at all, only invite +
+role-change in `UserTable.tsx`/`admin-users`), and (2) a new `org_members.role` option alongside
+`admin`/`contractor` — working name **"team member"** — for org members who aren't admins but also aren't
+field contractors doing lead work (exact permission differences from `contractor` still to be defined).
+`contractor` is referenced across ~10 files (`InviteModal.tsx`, `UserTable.tsx`, `AssignmentPanel.tsx`,
+`LeadPanel.tsx`'s `profiles.filter((p) => p.role === 'contractor')`, analytics, dialer settings, etc.) —
+adding a third role is a real schema + RLS + UI surface change, not a small tweak, and needs its own
+brainstorm/spec before implementation.
+
 ---
 
 ## Do Not Touch
