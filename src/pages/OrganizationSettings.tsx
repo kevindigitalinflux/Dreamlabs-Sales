@@ -63,7 +63,14 @@ const PROVIDERS: {
     label: 'Apollo.io (optional lead enrichment)',
     url: 'https://app.apollo.io/#/settings/integrations/api',
     ctaLabel: 'Get your Apollo API key →',
-    freeText: "Paid — Apollo's free plan has no API access, so this needs a paid Apollo plan. Usage bills to your own Apollo account, never Kevin's. Entirely optional: only appears as an \"Enrich with Apollo\" button on individual leads if configured — nothing runs automatically.",
+    freeText: "A free Apollo account can create an API key (confirmed 2026-09-23) — usage is limited by whatever credits your Apollo plan includes. Usage bills to your own Apollo account, never Kevin's. Entirely optional: only appears as an \"Enrich with Apollo\" button on individual leads if configured — nothing runs automatically.",
+    steps: [
+      'Click the button above to open Apollo (sign in or create a free account first if you don’t have one).',
+      'Click "API Keys" inside Apollo’s settings.',
+      'Click "Create new key" and give it a name you’ll recognize, e.g. "Dreamlabs Sales".',
+      'Copy the generated key immediately and save it somewhere secure — it’s only shown once.',
+      'Paste it into the box below.',
+    ],
   },
   {
     key: 'hunter',
@@ -71,6 +78,11 @@ const PROVIDERS: {
     url: 'https://hunter.io/api-keys',
     ctaLabel: 'Get your Hunter API key →',
     freeText: "Hunter's free plan includes some monthly credits but API access requires a paid plan. Usage bills to your own Hunter account, never Kevin's. Entirely optional: only appears as a \"Find email with Hunter\" button on individual leads if configured.",
+    steps: [
+      'Click the button above and sign in (or create a Hunter.io account).',
+      'You’ll land on the API page — Hunter shows your account’s API key there directly (generate one if the page prompts you to).',
+      'Copy the key and paste it into the box below.',
+    ],
   },
   {
     key: 'anthropic',
