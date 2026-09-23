@@ -1131,6 +1131,37 @@ RLS logic was needed anywhere.
   email to a throwaway address since it's the exact same conditional shape already proven via
   `set_org_role`/direct insert, not worth the side effect of an extra sent email.
 
+**Real bug found and fixed (2026-09-23): API-key input fields used `type="password"`, which silently
+corrupted pasted values.** Kevin (operating as Mr Brush & Co) hit "Companies House rejected the key" twice
+in a row with two *different* HTTP statuses (401, then 400) despite pasting what he believed was the same
+value each time. Root-caused by fetching the actual key directly from his Companies House developer
+account (via live browser access, with his explicit consent and after he signed in himself — this
+assistant never enters credentials) and testing it directly against `api.company-information.service.gov.uk`:
+the raw key returned a clean `200` with real search results, proving the key itself, the application's
+"live" environment, the REST key type, and the blank IP/domain restrictions were all correct — the
+corruption was happening somewhere between copying the key and it reaching the Save button. Root cause:
+`OrganizationSettings.tsx`'s and `DialerConfig.tsx`'s "API key" fields both used `<Input type="password">`
+with no `autoComplete` attribute — this is the exact trigger pattern for Chrome's native "suggest a strong
+password" feature, which can silently overwrite a password-type field's content on certain focus/autofill
+interactions, especially on a field labeled "key" that Chrome's heuristics read as a credential field.
+**Fixed**: both changed to `type="text"` with `autoComplete="off"` — matches how GitHub/Stripe/most SaaS
+tools present API tokens (plain text, not masked as a login password), and removes the trigger condition
+entirely rather than working around it. `EmailConfig.tsx`'s SMTP password field was deliberately left as
+`type="password"` — that one really is a login credential where the browser's password-manager behavior is
+correct/expected, unlike an API key. **Immediate unblock for Mr Brush & Co**: rather than have Kevin fight
+the same input field again, the confirmed-working key was set directly via `app_set_org_api_key()` RPC +
+an `org_api_settings` upsert (the controller's own Supabase-MCP-authenticated session, replicating exactly
+what `org-api-settings`'s `save` action does) — confirmed `is_configured = true` and the stored Vault value
+matches the tested key exactly.
+
+**Companies House setup guide added (2026-09-23)**: `OrganizationSettings.tsx`'s `PROVIDERS` array already
+had a `steps?: string[]` mechanism (built for Gemini's guide, rendered by `ProviderGuide.tsx` as a numbered
+list) that was simply empty for `companies_house` — filled in with the exact flow Kevin walked through
+(register → create an application → create a REST-type key → leave IP/domain restrictions blank → copy via
+the Copy button, not manual selection → a note that a brand-new key can take a few minutes to activate).
+That last point turned out not to be this incident's actual cause, but it's still real, documented
+Companies House behavior worth keeping in the guide for future users.
+
 ---
 
 ## Do Not Touch

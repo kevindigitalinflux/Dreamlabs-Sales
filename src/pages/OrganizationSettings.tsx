@@ -42,6 +42,14 @@ const PROVIDERS: {
     url: 'https://developer.company-information.service.gov.uk/',
     ctaLabel: 'Register for a free Companies House key →',
     freeText: "Free — registration has no cost. One-time setup for the whole organization, done once by whoever administers it.",
+    steps: [
+      'Click the button above and register (or sign in) for a Companies House developer account.',
+      'Click "Add an application" and give it any name you’ll recognize later, e.g. "[Your Company] Dreamlabs Sales".',
+      'Inside that application, click "Add API key". For Key type, choose REST (not Streaming or Web).',
+      'Leave "Restricted IPs" and "JavaScript domains" blank — this key is used from a server, not a browser, so it has no fixed IP or domain to restrict it to.',
+      'Copy the key immediately — it’s only shown once — and paste it into the box below.',
+      'If saving says the key was rejected right after creating it, wait a few minutes and try again — brand-new Companies House keys can take a little while to activate.',
+    ],
   },
   {
     key: 'opencorporates',
@@ -104,7 +112,7 @@ function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configur
       <ProviderGuide url={url} ctaLabel={ctaLabel} freeText={freeText} steps={steps} />
       <div className="flex items-end gap-2">
         <div className="flex-1">
-          <Input label="API key" type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={configured ? 'Replace the saved key' : ''} />
+          <Input label="API key" type="text" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={configured ? 'Replace the saved key' : ''} />
         </div>
         <Button variant="secondary" onClick={() => void handleSave()} disabled={busy}>{busy ? 'Verifying…' : 'Save'}</Button>
       </div>

@@ -73,7 +73,7 @@ export function DialerConfig() {
           </SelectField>
 
           <Input label="Your dialer phone number" value={form.phone_number} onChange={(e) => setForm((f) => ({ ...f, phone_number: e.target.value }))} placeholder="+1 555 123 4567" />
-          <Input label="API key" type="password" value={form.api_key} onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))} placeholder={settings ? 'Leave blank to keep the current key' : ''} />
+          <Input label="API key" type="text" autoComplete="off" value={form.api_key} onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))} placeholder={settings ? 'Leave blank to keep the current key' : ''} />
 
           {msg && <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : 'text-success'}`}>{msg.text}</p>}
 
