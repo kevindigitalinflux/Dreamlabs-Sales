@@ -10,6 +10,25 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 interface ApolloPhoneNumber { raw_number?: string; type_cd?: string }
 interface ApolloWebhookPerson { id?: string; phone_numbers?: ApolloPhoneNumber[] }
 
+/**
+ * Constant-time string equality via SHA-256 digest + XOR-accumulation
+ * comparison. Used to compare the caller-supplied token against the expected
+ * secret without leaking timing information (a plain `!==` on the raw
+ * strings would let an attacker recover the secret byte-by-byte via timing).
+ */
+async function timingSafeEqualStrings(a: string, b: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const [digestA, digestB] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(a)),
+    crypto.subtle.digest('SHA-256', enc.encode(b)),
+  ]);
+  const bytesA = new Uint8Array(digestA);
+  const bytesB = new Uint8Array(digestB);
+  let diff = 0;
+  for (let i = 0; i < bytesA.length; i++) diff |= bytesA[i] ^ bytesB[i];
+  return diff === 0;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response(null, { status: 405 });
 
@@ -17,7 +36,7 @@ Deno.serve(async (req) => {
   const candidateId = url.searchParams.get('candidate_id');
   const token = url.searchParams.get('token');
   const expected = Deno.env.get('APOLLO_WEBHOOK_SECRET');
-  if (!expected || !token || token !== expected || !candidateId) {
+  if (!expected || !token || !candidateId || !(await timingSafeEqualStrings(token, expected))) {
     return new Response(null, { status: 401 });
   }
 
