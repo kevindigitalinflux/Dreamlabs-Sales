@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { readableInvokeError } from '../lib/invokeError';
 import type { DecisionMakerCandidate } from '../types';
 
 /**
@@ -19,7 +20,7 @@ export function useDecisionMakers() {
       body: { lead_ids: leadIds },
     });
     setSearching(false);
-    if (invokeErr) { setError(invokeErr.message); return {}; }
+    if (invokeErr) { setError(await readableInvokeError(invokeErr)); return {}; }
     const result = data as { results?: { lead_id: string; candidates: DecisionMakerCandidate[] }[]; error?: string };
     if (result.error) { setError(result.error); return {}; }
     const grouped: Record<string, DecisionMakerCandidate[]> = {};
