@@ -34,7 +34,15 @@ const PROVIDERS: {
     label: 'Google Places (lead scraper)',
     url: 'https://console.cloud.google.com/google/maps-apis/credentials',
     ctaLabel: 'Open Google Cloud Console for Places →',
-    freeText: "Google gives every account a $200/month free credit, which comfortably covers normal usage here — so it isn't unconditionally free above that. One-time setup for the whole organization; usage bills to your own Google Cloud account, never Kevin's.",
+    freeText: "Google gives this specific API 5,000 free searches every month before any charge applies (confirmed 2026-09-24) — comfortably covers normal usage here. A payment method is still required to enable it (Google's anti-abuse requirement, not a cost to you unless you go over 5,000/month), but nothing is charged unless you exceed the free allowance. Usage bills to your own Google Cloud account, never Kevin's.",
+    steps: [
+      'Click the button above and sign in with a Google account.',
+      'If asked to create a project, name it anything you’ll recognize, e.g. "[Your Company] Dreamlabs Sales" — if you already have one from setting up Gemini or another key, you can reuse it.',
+      'If prompted to set up billing, click "Link a billing account" → "Create a new billing account", add a debit or credit card, and confirm. This is required even though usage stays free under 5,000 searches/month.',
+      'Search for "Places API" and click Enable. Make sure it says "Places API" — not "Places API (New)", which is a different, non-free product covered separately under "Google Places Pro" below.',
+      'Google will show your new API key on a "Get started" screen right after enabling — copy it and paste it into the box below. If you miss it, find it later under "Credentials" on the same page.',
+      'If saving says the key was rejected right after creating it, wait a few minutes and try again — brand-new Google API keys can take a little while to activate.',
+    ],
   },
   {
     key: 'google_places_pro',
