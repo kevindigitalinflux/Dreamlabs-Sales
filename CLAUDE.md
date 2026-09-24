@@ -1160,7 +1160,51 @@ list) that was simply empty for `companies_house` — filled in with the exact f
 (register → create an application → create a REST-type key → leave IP/domain restrictions blank → copy via
 the Copy button, not manual selection → a note that a brand-new key can take a few minutes to activate).
 That last point turned out not to be this incident's actual cause, but it's still real, documented
-Companies House behavior worth keeping in the guide for future users.
+Companies House behavior worth keeping in the guide for future users. Same session, added Apollo (steps
+matching the actual free-account flow Kevin walked through: API Keys → Create new key) and Hunter (generic
+sign-in → key shown on the API page) guides, and corrected `apollo`'s `freeText` — a free Apollo account
+can create an API key (confirmed live 2026-09-23), contradicting the prior "paid only" copy.
+
+**Google Places API key — long saga, resolved 2026-09-24, root cause was a messy Google Cloud account, not
+the app.** Kevin (as Mr Brush & Co) hit `REQUEST_DENIED` trying to add a Google Places key. Root-caused via
+live browser access (his own sign-ins throughout, this assistant never entered credentials): his Google
+Cloud account (`mrbrushandco@gmail.com`) turned out to have a full pre-existing "landing zone" org structure
+(`mrbrushandco-org` with Production/Non-Production/Development/Common folders, each holding a real project
+plus a `-mp` "monitoring package" project) that Kevin didn't recognize and never knowingly set up — likely
+from a Terraform "Cloud Foundation Toolkit"-style template run at some point. Nearly all of it (`prod`,
+`nonprod`, `development`, `central-logging-monitoring`, 3× stray "My First Project", plus the original
+abandoned `dreamlabssalesmrbrushandco` project) was suspended for repeated Acceptable Use Policy violations
+— confirmed by the fact that trying to manage billing on ANY of them redirected to the same
+`/appeal` page, not just the one project Kevin knew was flagged. This meant "My Billing Account" was stuck
+at Google's per-account billing-enabled-project quota (5 projects, all consumed by dead infrastructure),
+blocking billing from ever attaching to a clean new project (`dreamlabs-sales-509612`, created specifically
+to escape the flagged original). Security activity on the Google account was checked and came back clean —
+this was old abandoned infrastructure, not an active compromise.
+
+**Fix, in order:** (1) Kevin deleted the 8 offending projects himself — deliberately not automated by this
+assistant, since Claude Code's own auto-mode classifier blocks irreversible-deletion actions like typing a
+project-ID delete-confirmation, by design, even with Google's 30-day recovery window; this assistant
+selected the correct checkboxes via browser automation and confirmed the exact list, but Kevin typed each
+confirmation and clicked "shut down" himself. 3 `-mp` "monitoring package" projects couldn't be deleted at
+all (missing `resourcemanager.projects.delete` permission, likely owned by whatever process originally ran
+the Terraform deploy) — turned out not to matter, since they were never linked to the billing account in
+the first place and aren't part of the quota problem. (2) Kevin linked "My Billing Account" to
+`dreamlabs-sales-509612` once the quota freed up. (3) This assistant enabled Places API (Legacy) — confirmed
+via the actual edge-function code (`_shared/companiesHouse.ts`-adjacent scraper functions call the legacy
+`/place/textsearch` and `/place/details` REST endpoints, not the new Places API) — which auto-generated a
+fresh key through Google's "get started" onboarding flow, live-tested directly against
+`maps.googleapis.com` (real search results, not just a 200), then set directly via `app_set_org_api_key()`
++ an `org_api_settings` upsert for Mr Brush & Co, same pattern as the Companies House fix. Confirmed stored
+value matches the tested key exactly.
+
+**General lesson for any future "add an API key" support request on this project**: a rejected/denied key
+is not always a key problem. This one traced through GitHub-App-grant-style layers of account state
+(wrong Google login signed in, no Cloud Billing account existing at all despite payment methods existing in
+Google Wallet, a billing-enabled-project quota silently exhausted by unrelated abandoned infrastructure,
+and finally a suspended-project appeal wall) before reaching the actual API-enablement step. When a
+provider's own key-validation test fails, checking the account/billing/project state directly (with the
+user's own live, consented browser access) finds root causes much faster than iterating on the key value
+itself.
 
 ---
 
