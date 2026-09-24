@@ -71,6 +71,24 @@ export interface EnrichmentResult {
   source: Partial<Record<EnrichableField, string>>;
 }
 
+export interface DecisionMakerCandidate {
+  id: string;
+  lead_id: string;
+  source: 'hunter' | 'apollo';
+  apollo_person_id: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  name_obfuscated: boolean;
+  title: string | null;
+  email: string | null;
+  email_revealed: boolean;
+  phone: string | null;
+  phone_status: 'not_requested' | 'pending' | 'revealed' | 'not_found' | 'failed';
+  applied_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Pipeline {
   id: string;
   org_id: string;
