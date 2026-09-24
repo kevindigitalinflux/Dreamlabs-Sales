@@ -44,7 +44,7 @@ export async function lookupHunterEmail(website: string | null, apiKey: string):
   }
 }
 
-const DECISION_MAKER_TITLE_PATTERN = /owner|founder|chief|ceo|coo|cfo|cto|president|managing director|^director$/i;
+const DECISION_MAKER_TITLE_PATTERN = /owner|founder|chief|ceo|coo|cfo|cto|president|managing director|director/i;
 
 interface HunterEmailEntry {
   value: string;
