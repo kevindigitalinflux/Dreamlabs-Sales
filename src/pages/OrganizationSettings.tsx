@@ -37,6 +37,19 @@ const PROVIDERS: {
     freeText: "Google gives every account a $200/month free credit, which comfortably covers normal usage here — so it isn't unconditionally free above that. One-time setup for the whole organization; usage bills to your own Google Cloud account, never Kevin's.",
   },
   {
+    key: 'google_places_pro',
+    label: 'Google Places Pro (optional, not yet used)',
+    url: 'https://console.cloud.google.com/google/maps-apis/credentials',
+    ctaLabel: 'Open Google Cloud Console for Places (New) →',
+    freeText: "Not used by any feature yet — configuring this key does nothing right now, it's just here for when it's worth switching on. This is the newer Places API, which returns richer results than the free Google Places key above (more place types, more data per result), but it has no free tier for the fields this app needs: every search costs real money from the first request (roughly $32-35 per 1,000 searches, billed to your own Google Cloud account). Worth turning on once your organization is generating enough revenue that the extra lead quality/quantity pays for itself — not recommended for a new or low-volume org.",
+    steps: [
+      'Click the button above and select the same Google Cloud project you used for the free Google Places key.',
+      'Search for and enable "Places API (New)" (not "Places API" without "(New)" — that’s the free one above).',
+      'Create a new API key for this project, or reuse the existing one — the same key works for both APIs.',
+      'Paste it into the box below. Nothing will use it until a future update adds a "Google Places Pro" scraper option.',
+    ],
+  },
+  {
     key: 'companies_house',
     label: 'Companies House (lead scraper)',
     url: 'https://developer.company-information.service.gov.uk/',

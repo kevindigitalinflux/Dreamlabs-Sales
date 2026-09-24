@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 
-type Provider = 'gemini' | 'google_places' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates';
+type Provider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates';
 
 async function validateKey(provider: Provider, key: string): Promise<string | null> {
   try {
@@ -18,6 +18,17 @@ async function validateKey(provider: Provider, key: string): Promise<string | nu
       const res = await fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?query=test&key=${key}`);
       const data = await res.json() as { status?: string };
       return data.status === 'REQUEST_DENIED' || data.status === 'INVALID_REQUEST' ? `Google rejected the key (${data.status})` : null;
+    }
+    if (provider === 'google_places_pro') {
+      // Places API (New) bills per field requested — "places.id" alone stays
+      // in the free "Essentials (IDs only)" tier, so validating a key here
+      // never costs anything, unlike an actual search with rating/phone/etc.
+      const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key, 'X-Goog-FieldMask': 'places.id' },
+        body: JSON.stringify({ textQuery: 'test' }),
+      });
+      return res.ok ? null : `Google rejected the key (HTTP ${res.status})`;
     }
     if (provider === 'companies_house') {
       const res = await fetch('https://api.company-information.service.gov.uk/search/companies?q=test', {
@@ -100,7 +111,7 @@ Deno.serve(async (req) => {
     if (!canManage) return json({ error: 'Org admin only' }, 403, headers);
     const provider = String(body.provider ?? '') as Provider;
     const apiKey = String(body.api_key ?? '').trim();
-    if (!['gemini', 'google_places', 'companies_house', 'apollo', 'hunter', 'anthropic', 'opencorporates'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
+    if (!['gemini', 'google_places', 'google_places_pro', 'companies_house', 'apollo', 'hunter', 'anthropic', 'opencorporates'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
     if (!apiKey) return json({ error: 'api_key is required' }, 400, headers);
 
     const validationError = await validateKey(provider, apiKey);

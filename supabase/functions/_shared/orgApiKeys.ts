@@ -1,18 +1,22 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
-export type ApiProvider = 'gemini' | 'google_places' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates';
+export type ApiProvider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates';
 
 const GLOBAL_ENV_VARS: Record<ApiProvider, string> = {
   gemini: 'GEMINI_API_KEY',
   google_places: 'GOOGLE_PLACES_API_KEY',
   companies_house: 'COMPANIES_HOUSE_API_KEY',
-  // apollo/hunter map to env vars that are never configured as secrets on
-  // this project, by design — Deno.env.get() returns undefined for them no
-  // matter what, so resolveOrgApiKey() below always returns null for these
-  // two unless the org has its own key, regardless of use_global_api_fallback.
-  // Paid providers must never fall back to Kevin's account.
+  // apollo/hunter/google_places_pro map to env vars that are never configured
+  // as secrets on this project, by design — Deno.env.get() returns undefined
+  // for them no matter what, so resolveOrgApiKey() below always returns null
+  // for these unless the org has its own key, regardless of
+  // use_global_api_fallback. Paid providers must never fall back to Kevin's
+  // account. google_places_pro also has no consuming feature yet (2026-09-24)
+  // — the key can be configured ahead of time, but nothing reads it until a
+  // future Places API (New) scraper source is built.
   apollo: 'APOLLO_API_KEY',
   hunter: 'HUNTER_API_KEY',
+  google_places_pro: 'GOOGLE_PLACES_PRO_API_KEY',
   // anthropic follows the Gemini/Places/Companies-House tier instead — it's a
   // real, configured global secret, so Mr Brush & Co / DI Dreamlabs (the two
   // orgs with use_global_api_fallback=true) get outreach AI without setting

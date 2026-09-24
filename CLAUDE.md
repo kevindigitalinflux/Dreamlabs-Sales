@@ -1206,6 +1206,21 @@ provider's own key-validation test fails, checking the account/billing/project s
 user's own live, consented browser access) finds root causes much faster than iterating on the key value
 itself.
 
+**"Google Places Pro" key slot added (2026-09-24) — configuration only, no scraper feature yet.** Kevin
+asked why the scraper uses Places API (Legacy) instead of Places API (New), which returns richer results.
+Answer: it's just what Cycle 4's code already targeted, not a deliberate choice. Researched New API pricing
+before recommending a migration: it bills per field-mask tier with **no free allowance** for the fields this
+app needs (rating pushes into Enterprise, $35/1,000 requests) — Legacy currently gives 5,000 free
+requests/month covering the same fields. Decision: stay on Legacy for the default scraper, but add
+`google_places_pro` as a new optional `org_api_settings.provider` (migration
+`029_google_places_pro_provider.sql`) so orgs can configure the key ahead of time, framed explicitly in
+`OrganizationSettings.tsx` as "not yet used by any feature" and cost-warned. `org-api-settings`'s
+`validateKey()` tests it via `POST /v1/places:searchText` with `X-Goog-FieldMask: places.id` — the "IDs
+only" field alone stays in the free Essentials tier, so validating a key never itself costs money. **No
+scraping logic was touched** — `scrape-google-places` still only calls the Legacy endpoints; wiring an
+actual Places API (New) source into the scraper wizard is deferred until an org's revenue justifies the
+per-search cost, per Kevin's explicit call.
+
 ---
 
 ## Do Not Touch
