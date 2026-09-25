@@ -43,3 +43,53 @@ export async function lookupHunterEmail(website: string | null, apiKey: string):
     return null;
   }
 }
+
+const DECISION_MAKER_TITLE_PATTERN = /owner|founder|chief|ceo|coo|cfo|cto|president|managing director|director/i;
+
+interface HunterEmailEntry {
+  value: string;
+  confidence: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  position?: string | null;
+  seniority?: string | null;
+}
+
+export interface HunterDecisionMakerCandidate {
+  firstName: string | null;
+  lastName: string | null;
+  title: string | null;
+  email: string;
+}
+
+/**
+ * Hunter domain-search, but scored for "most likely decision-maker" instead
+ * of "highest confidence" — prefers seniority: 'executive', then a title
+ * matching an owner/founder/C-suite/director pattern, then falls back to
+ * confidence. Hunter already includes name+position+seniority per email in
+ * this same call (unlike lookupHunterEmail above, which discards them) — no
+ * extra request, no extra cost.
+ */
+export async function findHunterDecisionMaker(website: string | null, apiKey: string): Promise<HunterDecisionMakerCandidate | null> {
+  const domain = bareDomain(website ?? '');
+  if (!domain) return null;
+  try {
+    const res = await fetchWithTimeout(`https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${apiKey}`);
+    if (!res.ok) return null;
+    const data = await res.json() as { data?: { emails?: HunterEmailEntry[] } };
+    const emails = data.data?.emails ?? [];
+    if (emails.length === 0) return null;
+    const ranked = [...emails].sort((a, b) => {
+      const seniorityScore = (e: HunterEmailEntry) => (e.seniority === 'executive' ? 2 : e.seniority === 'senior' ? 1 : 0);
+      const titleScore = (e: HunterEmailEntry) => (e.position && DECISION_MAKER_TITLE_PATTERN.test(e.position) ? 1 : 0);
+      const aScore = seniorityScore(a) * 10 + titleScore(a) * 5;
+      const bScore = seniorityScore(b) * 10 + titleScore(b) * 5;
+      if (aScore !== bScore) return bScore - aScore;
+      return b.confidence - a.confidence;
+    });
+    const top = ranked[0]!;
+    return { firstName: top.first_name ?? null, lastName: top.last_name ?? null, title: top.position ?? null, email: top.value };
+  } catch {
+    return null;
+  }
+}

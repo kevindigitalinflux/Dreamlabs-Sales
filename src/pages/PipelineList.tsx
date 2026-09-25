@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Inbox, PenLine, Plus, Radar } from 'lucide-react';
+import { Inbox, PenLine, Plus, Radar, UserSearch } from 'lucide-react';
 import { useLeads } from '../hooks/useLeads';
 import { useProfiles } from '../hooks/useProfiles';
 import { useLeadEnrichment } from '../hooks/useLeadEnrichment';
+import { useDecisionMakers } from '../hooks/useDecisionMakers';
 import { usePipeline } from '../hooks/usePipeline';
 import { filterLeads, sortLeads } from '../lib/leadFilters';
 import type { LeadFilters, SortKey } from '../lib/leadFilters';
@@ -14,13 +15,14 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { AddLeadWizard } from '../components/pipeline/AddLeadWizard';
 import { BulkDraftModal } from '../components/pipeline/BulkDraftModal';
 import { EnrichmentReview } from '../components/pipeline/EnrichmentReview';
+import { DecisionMakerReview } from '../components/pipeline/DecisionMakerReview';
 import { FilterBar } from '../components/pipeline/FilterBar';
 import { ListTable } from '../components/pipeline/ListTable';
 import { LeadPanel } from '../components/pipeline/LeadPanel';
 import { SharedPipelineBanner } from '../components/pipeline/SharedPipelineBanner';
 import { ViewToggle } from '../components/pipeline/ViewToggle';
 import { PipelineSwitcher } from '../components/layout/PipelineSwitcher';
-import type { EnrichableField, EnrichmentResult, Lead, Stage } from '../types';
+import type { DecisionMakerCandidate, EnrichableField, EnrichmentResult, Lead, Stage } from '../types';
 
 /** List pipeline view: search, filters, sortable table, side panel (SPEC.md §6). */
 export function PipelineList() {
@@ -41,6 +43,9 @@ export function PipelineList() {
   const [enrichResults, setEnrichResults] = useState<EnrichmentResult[]>([]);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [draftModalOpen, setDraftModalOpen] = useState(false);
+  const { searching: findingDecisionMakers, error: decisionMakerError, runSearch } = useDecisionMakers();
+  const [decisionMakerResults, setDecisionMakerResults] = useState<Record<string, DecisionMakerCandidate[]>>({});
+  const [decisionMakerReviewOpen, setDecisionMakerReviewOpen] = useState(false);
   const leadsById = useMemo(() => Object.fromEntries(leads.map((l) => [l.id, l])), [leads]);
 
   useEffect(() => {
@@ -95,6 +100,20 @@ export function PipelineList() {
     return { applied, failed };
   }
 
+  async function handleFindDecisionMaker() {
+    const results = await runSearch([...selected]);
+    if (results === null) return;
+    setDecisionMakerResults(results);
+    setDecisionMakerReviewOpen(true);
+  }
+
+  async function handleApplyHunterCandidate(leadId: string, candidate: DecisionMakerCandidate): Promise<string | null> {
+    const patch: Record<string, string> = { email: candidate.email! };
+    const name = `${candidate.first_name ?? ''} ${candidate.last_name ?? ''}`.trim();
+    if (name) patch.owner_name = name;
+    return updateLead(leadId, patch);
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <SharedPipelineBanner />
@@ -115,6 +134,10 @@ export function PipelineList() {
                 <PenLine className="h-4 w-4" aria-hidden />
                 {`Draft emails (${selected.size})`}
               </Button>
+              <Button variant="secondary" onClick={() => void handleFindDecisionMaker()} disabled={findingDecisionMakers}>
+                <UserSearch className="h-4 w-4" aria-hidden />
+                {findingDecisionMakers ? 'Searching…' : `Find decision maker (${selected.size})`}
+              </Button>
             </>
           )}
           <Button onClick={() => setWizardOpen(true)}>
@@ -129,6 +152,7 @@ export function PipelineList() {
       {loading && <Skeleton className="h-64 w-full" />}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {enrichError && <p role="alert" className="text-sm text-danger">{enrichError}</p>}
+      {decisionMakerError && <p role="alert" className="text-sm text-danger">{decisionMakerError}</p>}
       {!loading && !error && visible.length === 0 && (
         <EmptyState
           icon={Inbox}
@@ -165,6 +189,13 @@ export function PipelineList() {
         leads={[...selected].map((id) => leadsById[id]).filter((l): l is Lead => l !== undefined)}
         onClose={() => setDraftModalOpen(false)}
         onGenerated={() => setSelected(new Set())}
+      />
+      <DecisionMakerReview
+        open={decisionMakerReviewOpen}
+        resultsByLead={decisionMakerResults}
+        leadsById={leadsById}
+        onClose={() => setDecisionMakerReviewOpen(false)}
+        onApplyHunter={handleApplyHunterCandidate}
       />
     </div>
   );
