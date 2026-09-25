@@ -7,7 +7,10 @@ export interface OutgoingShare {
   id: string;
   pipeline_id: string;
   permission: PipelinePermission;
-  profiles: { id: string; full_name: string | null; email: string };
+  // Null when the shared-with user's profile isn't readable under RLS from
+  // the caller's own context (e.g. a cross-org share the RLS policy hasn't
+  // been extended to cover) — always guard before reading its fields.
+  profiles: { id: string; full_name: string | null; email: string } | null;
 }
 
 export interface IncomingShare {

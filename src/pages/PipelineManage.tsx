@@ -8,6 +8,7 @@ import { usePipelineShares } from '../hooks/usePipelineShares';
 import { useProfiles } from '../hooks/useProfiles';
 import { useOrg } from '../hooks/useOrg';
 import { supabase } from '../lib/supabase';
+import { readableInvokeError } from '../lib/invokeError';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
@@ -40,6 +41,7 @@ export function PipelineManage() {
 
   const [newName, setNewName] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [shareTarget, setShareTarget] = useState<Record<string, string>>({});
   const [sharePermission, setSharePermission] = useState<Record<string, PipelinePermission>>({});
   const [crossOrgEmail, setCrossOrgEmail] = useState<Record<string, string>>({});
@@ -67,25 +69,33 @@ export function PipelineManage() {
   }
 
   async function handleShare(pipeline: Pipeline) {
+    setError(null);
+    setMessage(null);
     const userId = shareTarget[pipeline.id];
     const permission = sharePermission[pipeline.id] ?? 'view';
     if (!userId) return;
     const err = await shareWithinOrg(pipeline.id, userId, permission);
     if (err) setError(err);
-    else await refreshShares();
+    else {
+      setMessage(`Shared "${pipeline.name}" with your teammate.`);
+      await refreshShares();
+    }
   }
 
   async function handleShareCrossOrg(pipeline: Pipeline) {
+    setError(null);
+    setMessage(null);
     const email = crossOrgEmail[pipeline.id];
     const permission = sharePermission[pipeline.id] ?? 'view';
     if (!email) return;
     const { data, error: invokeErr } = await supabase.functions.invoke('pipeline-shares', {
       body: { action: 'share_cross_org', pipeline_id: pipeline.id, email, permission },
     });
-    if (invokeErr) { setError(invokeErr.message); return; }
+    if (invokeErr) { setError(await readableInvokeError(invokeErr)); return; }
     const result = data as { error?: string };
     if (result.error) { setError(result.error); return; }
     setCrossOrgEmail((prev) => ({ ...prev, [pipeline.id]: '' }));
+    setMessage(`Shared "${pipeline.name}" with ${email}. They'll see it under "Shared with you" in their own account.`);
     await refreshShares();
   }
 
@@ -111,6 +121,7 @@ export function PipelineManage() {
     <div className="flex max-w-3xl flex-col gap-8">
       <h1 className="text-[28px] font-extrabold">Manage pipelines</h1>
       {bannerError && <p role="alert" className="text-sm text-danger">{bannerError}</p>}
+      {message && <p role="status" className="text-sm text-success">{message}</p>}
 
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-bold">Your pipelines</h2>
