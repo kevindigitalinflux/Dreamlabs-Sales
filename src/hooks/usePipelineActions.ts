@@ -46,10 +46,11 @@ export function usePipelineActions() {
   /** Within-org only — RLS rejects a target user outside the pipeline's own org. */
   const shareWithinOrg = useCallback(
     async (pipelineId: string, userId: string, permission: PipelinePermission): Promise<string | null> => {
-      const { error } = await supabase.from('pipeline_shares').insert({
+      const { error } = await supabase.from('pipeline_shares').upsert({
         pipeline_id: pipelineId, shared_with_user_id: userId, permission, shared_by: session?.user.id,
-      });
-      return error ? error.message : null;
+      }, { onConflict: 'pipeline_id,shared_with_user_id' });
+      if (error) console.error('Failed to share pipeline:', error);
+      return error ? 'Could not share this pipeline. Please try again.' : null;
     },
     [session],
   );
