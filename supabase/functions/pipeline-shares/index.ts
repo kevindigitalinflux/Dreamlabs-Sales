@@ -65,9 +65,12 @@ Deno.serve(async (req) => {
     .from('org_members').select('org_id').eq('user_id', targetProfile.id).eq('role', 'admin').limit(1);
   if (!targetIsAdminAnywhere || targetIsAdminAnywhere.length === 0) return json(notFoundError, 404, headers);
 
-  const { error: shareErr } = await service.from('pipeline_shares').insert({
+  const { error: shareErr } = await service.from('pipeline_shares').upsert({
     pipeline_id: pipelineId, shared_with_user_id: targetProfile.id, permission, shared_by: caller.id,
-  });
-  if (shareErr) return json({ error: shareErr.message }, 400, headers);
+  }, { onConflict: 'pipeline_id,shared_with_user_id' });
+  if (shareErr) {
+    console.error('Failed to share pipeline cross-org:', shareErr);
+    return json({ error: 'Could not share this pipeline. Please try again.' }, 500, headers);
+  }
   return json({ ok: true }, 200, headers);
 });
