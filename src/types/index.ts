@@ -84,7 +84,6 @@ export interface DecisionMakerCandidate {
   email_revealed: boolean;
   phone: string | null;
   phone_status: 'not_requested' | 'pending' | 'revealed' | 'not_found' | 'failed';
-  applied_at: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -102,6 +102,7 @@ export function PipelineList() {
 
   async function handleFindDecisionMaker() {
     const results = await runSearch([...selected]);
+    if (results === null) return;
     setDecisionMakerResults(results);
     setDecisionMakerReviewOpen(true);
   }

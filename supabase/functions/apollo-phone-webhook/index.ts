@@ -6,6 +6,7 @@
 // all, so the `token` query param compared below IS the entire security
 // boundary. Never log its value.
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { computeWebhookToken } from '../_shared/webhookToken.ts';
 
 interface ApolloPhoneNumber { raw_number?: string; type_cd?: string }
 interface ApolloWebhookPerson { id?: string; phone_numbers?: ApolloPhoneNumber[] }
@@ -35,8 +36,12 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const candidateId = url.searchParams.get('candidate_id');
   const token = url.searchParams.get('token');
-  const expected = Deno.env.get('APOLLO_WEBHOOK_SECRET');
-  if (!expected || !token || !candidateId || !(await timingSafeEqualStrings(token, expected))) {
+  const secret = Deno.env.get('APOLLO_WEBHOOK_SECRET');
+  if (!secret || !token || !candidateId) {
+    return new Response(null, { status: 401 });
+  }
+  const expected = await computeWebhookToken(secret, candidateId);
+  if (!(await timingSafeEqualStrings(token, expected))) {
     return new Response(null, { status: 401 });
   }
 

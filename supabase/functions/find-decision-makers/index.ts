@@ -25,7 +25,13 @@ Deno.serve(async (req) => {
   const { data: userData } = await client.auth.getUser();
   if (!userData?.user) return json({ error: 'Not signed in' }, 401, headers);
 
-  const body = (await req.json()) as { lead_ids?: string[] };
+  let body: { lead_ids?: string[] };
+  try {
+    body = (await req.json()) as { lead_ids?: string[] };
+  } catch {
+    return json({ error: 'Invalid JSON body' }, 400, headers);
+  }
+  if (typeof body !== 'object' || body === null) return json({ error: 'Invalid JSON body' }, 400, headers);
   const leadIds = Array.isArray(body.lead_ids) ? body.lead_ids.map(String) : [];
   if (leadIds.length === 0) return json({ error: 'lead_ids is required' }, 400, headers);
   if (leadIds.length > MAX_LEADS) return json({ error: `Select ${MAX_LEADS} or fewer leads at once` }, 400, headers);
@@ -35,7 +41,10 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
-  const { data: leads, error: leadsErr } = await service
+  // RLS-scoped read: a caller only gets back leads they're actually allowed
+  // to see (can_view_lead policy) — matches enrich-leads-bulk's pattern. The
+  // org-membership check below stays as a defensive second layer.
+  const { data: leads, error: leadsErr } = await client
     .from('leads').select('id, org_id, website').in('id', leadIds);
   if (leadsErr) return json({ error: leadsErr.message }, 500, headers);
   const resolvedLeads = (leads ?? []) as LeadRow[];
@@ -84,10 +93,10 @@ Deno.serve(async (req) => {
 
     if (rows.length === 0) return { lead_id: lead.id, candidates: [] as Record<string, unknown>[] };
 
-    // Deliberately omits phone/phone_status/applied_at: PostgREST's upsert
-    // only SETs the columns present in the payload, so re-running search on
-    // a lead with an in-progress or already-revealed Apollo phone leaves
-    // that state untouched instead of resetting it back to defaults.
+    // Deliberately omits phone/phone_status: PostgREST's upsert only SETs the
+    // columns present in the payload, so re-running search on a lead with an
+    // in-progress or already-revealed Apollo phone leaves that state
+    // untouched instead of resetting it back to defaults.
     const { data: upserted, error: upsertErr } = await service
       .from('decision_maker_candidates')
       .upsert(rows, { onConflict: 'lead_id,source' })
