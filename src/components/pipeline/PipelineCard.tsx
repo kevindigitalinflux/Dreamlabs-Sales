@@ -62,7 +62,7 @@ export function PipelineCard({
       <ul className="mt-3 flex flex-col gap-1">
         {shares.map((share) => (
           <li key={share.id} className="flex items-center justify-between text-sm text-muted">
-            <span>{share.profiles.full_name ?? share.profiles.email} — {share.permission}</span>
+            <span>{share.profiles?.full_name ?? share.profiles?.email ?? 'Unknown user'} — {share.permission}</span>
             <button type="button" onClick={() => onRevoke(share.id)} aria-label="Revoke access" className="cursor-pointer hover:text-danger">
               <X className="h-4 w-4" aria-hidden />
             </button>
