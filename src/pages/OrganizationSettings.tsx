@@ -147,7 +147,7 @@ function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configur
         <div className="flex-1">
           <Input label="API key" type="text" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={configured ? 'Replace the saved key' : ''} />
         </div>
-        <Button variant="secondary" onClick={() => void handleSave()} disabled={busy}>{busy ? 'Verifying…' : 'Save'}</Button>
+        <Button variant="secondary" onClick={() => void handleSave()} disabled={busy} loading={busy}>{busy ? 'Verifying…' : 'Save'}</Button>
       </div>
       {msg && <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : 'text-success'}`}>{msg.text}</p>}
     </div>

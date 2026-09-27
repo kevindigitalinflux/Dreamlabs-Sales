@@ -85,9 +85,9 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <div className="flex items-center justify-between">
           {template && !template.is_default ? (
-            <Button variant="ghost" onClick={() => void handleDelete()} disabled={busy}>Delete</Button>
+            <Button variant="ghost" onClick={() => void handleDelete()} disabled={busy} loading={busy}>Delete</Button>
           ) : <span />}
-          <Button onClick={() => void handleSave()} disabled={busy}>{busy ? 'Saving…' : 'Save template'}</Button>
+          <Button onClick={() => void handleSave()} disabled={busy} loading={busy}>{busy ? 'Saving…' : 'Save template'}</Button>
         </div>
       </div>
     </Modal>

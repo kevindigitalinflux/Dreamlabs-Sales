@@ -117,8 +117,8 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
           {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </SelectField>
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => void generate(false)} disabled={busy !== null}>{busy === 'load' ? 'Loading…' : 'Use template'}</Button>
-          <Button onClick={() => void generate(true)} disabled={busy !== null}>
+          <Button variant="secondary" onClick={() => void generate(false)} disabled={busy !== null} loading={busy === 'load'}>{busy === 'load' ? 'Loading…' : 'Use template'}</Button>
+          <Button onClick={() => void generate(true)} disabled={busy !== null} loading={busy === 'ai'}>
             <Sparkles className="h-4 w-4" aria-hidden />{busy === 'ai' ? 'Personalising…' : 'Personalise with AI'}
           </Button>
         </div>
@@ -142,8 +142,8 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
           </p>
         )}
         <div className="flex items-center justify-between">
-          <Button variant="ghost" onClick={() => void send(true)} disabled={busy !== null}>{busy === 'save' ? 'Saving…' : 'Save as draft'}</Button>
-          <Button onClick={() => void send(false)} disabled={busy !== null || !lead.email}>
+          <Button variant="ghost" onClick={() => void send(true)} disabled={busy !== null} loading={busy === 'save'}>{busy === 'save' ? 'Saving…' : 'Save as draft'}</Button>
+          <Button onClick={() => void send(false)} disabled={busy !== null || !lead.email} loading={busy === 'send'}>
             <Send className="h-4 w-4" aria-hidden />{busy === 'send' ? 'Sending…' : `Send to ${lead.email ?? '—'}`}
           </Button>
         </div>

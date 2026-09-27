@@ -38,7 +38,7 @@ export function Welcome() {
               <Input label="New password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="new-password" />
               <Input label="Confirm password" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required autoComplete="new-password" />
               {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-              <Button type="submit" disabled={submitting} className="w-full">
+              <Button type="submit" disabled={submitting} loading={submitting} className="w-full">
                 {submitting ? 'Saving…' : 'Set password & enter'}
               </Button>
             </div>

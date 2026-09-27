@@ -46,6 +46,7 @@ export function PipelineManage() {
   const [sharePermission, setSharePermission] = useState<Record<string, PipelinePermission>>({});
   const [crossOrgEmail, setCrossOrgEmail] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [shareBusyId, setShareBusyId] = useState<string | null>(null);
 
   async function handleCreate() {
     setError(null);
@@ -74,7 +75,9 @@ export function PipelineManage() {
     const userId = shareTarget[pipeline.id];
     const permission = sharePermission[pipeline.id] ?? 'view';
     if (!userId) return;
+    setShareBusyId(pipeline.id);
     const err = await shareWithinOrg(pipeline.id, userId, permission);
+    setShareBusyId(null);
     if (err) setError(err);
     else {
       setMessage(`Shared "${pipeline.name}" with your teammate.`);
@@ -88,19 +91,23 @@ export function PipelineManage() {
     const email = crossOrgEmail[pipeline.id];
     const permission = sharePermission[pipeline.id] ?? 'view';
     if (!email) return;
+    setShareBusyId(pipeline.id);
     const { data, error: invokeErr } = await supabase.functions.invoke('pipeline-shares', {
       body: { action: 'share_cross_org', pipeline_id: pipeline.id, email, permission },
     });
-    if (invokeErr) { setError(await readableInvokeError(invokeErr)); return; }
+    if (invokeErr) { setShareBusyId(null); setError(await readableInvokeError(invokeErr)); return; }
     const result = data as { error?: string };
-    if (result.error) { setError(result.error); return; }
+    if (result.error) { setShareBusyId(null); setError(result.error); return; }
+    setShareBusyId(null);
     setCrossOrgEmail((prev) => ({ ...prev, [pipeline.id]: '' }));
     setMessage(`Shared "${pipeline.name}" with ${email}. They'll see it under "Shared with you" in their own account.`);
     await refreshShares();
   }
 
   async function handleRevoke(shareId: string) {
+    setBusyId(shareId);
     const err = await revokeShare(shareId);
+    setBusyId(null);
     if (err) setError(err);
     else await refreshShares();
   }
@@ -163,6 +170,8 @@ export function PipelineManage() {
               sharePermission={sharePermission[pipeline.id] ?? 'view'}
               crossOrgEmail={crossOrgEmail[pipeline.id] ?? ''}
               busy={busyId === pipeline.id}
+              shareBusy={shareBusyId === pipeline.id}
+              revokeBusyId={busyId}
               onShareTargetChange={(userId) => setShareTarget((prev) => ({ ...prev, [pipeline.id]: userId }))}
               onSharePermissionChange={(permission) => setSharePermission((prev) => ({ ...prev, [pipeline.id]: permission }))}
               onCrossOrgEmailChange={(email) => setCrossOrgEmail((prev) => ({ ...prev, [pipeline.id]: email }))}
@@ -184,7 +193,7 @@ export function PipelineManage() {
             <li key={share.id} className="flex items-center justify-between rounded-xl border border-line bg-card p-4">
               <span className="font-semibold">{share.pipelines.name} — {share.permission}</span>
               {share.permission === 'edit' && (
-                <Button onClick={() => void handleFork(share.pipelines)} disabled={busyId === share.pipelines.id}>
+                <Button onClick={() => void handleFork(share.pipelines)} disabled={busyId === share.pipelines.id} loading={busyId === share.pipelines.id}>
                   <Copy className="h-4 w-4" aria-hidden />
                   Make my own copy
                 </Button>

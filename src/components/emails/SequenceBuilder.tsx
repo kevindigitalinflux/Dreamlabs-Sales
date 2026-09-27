@@ -106,8 +106,8 @@ export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }
         )}
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <div className="flex items-center justify-between">
-          {sequence && !sequence.is_default ? <Button variant="ghost" onClick={() => { setBusy(true); void onDelete(sequence.id).then((err) => { setBusy(false); if (err) setError(err); else onClose(); }); }} disabled={busy}>Delete</Button> : <span />}
-          <Button onClick={() => void handleSave()} disabled={busy}>{busy ? 'Saving…' : 'Save sequence'}</Button>
+          {sequence && !sequence.is_default ? <Button variant="ghost" onClick={() => { setBusy(true); void onDelete(sequence.id).then((err) => { setBusy(false); if (err) setError(err); else onClose(); }); }} disabled={busy} loading={busy}>Delete</Button> : <span />}
+          <Button onClick={() => void handleSave()} disabled={busy} loading={busy}>{busy ? 'Saving…' : 'Save sequence'}</Button>
         </div>
       </div>
     </Modal>

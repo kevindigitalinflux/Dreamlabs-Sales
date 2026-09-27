@@ -13,6 +13,8 @@ interface PipelineCardProps {
   sharePermission: PipelinePermission;
   crossOrgEmail: string;
   busy: boolean;
+  shareBusy: boolean;
+  revokeBusyId: string | null;
   onShareTargetChange: (userId: string) => void;
   onSharePermissionChange: (permission: PipelinePermission) => void;
   onCrossOrgEmailChange: (email: string) => void;
@@ -34,6 +36,8 @@ export function PipelineCard({
   sharePermission,
   crossOrgEmail,
   busy,
+  shareBusy,
+  revokeBusyId,
   onShareTargetChange,
   onSharePermissionChange,
   onCrossOrgEmailChange,
@@ -53,7 +57,7 @@ export function PipelineCard({
         {!pipeline.is_default && (
           <div className="flex gap-2">
             <Button variant="ghost" onClick={onRename}>Rename</Button>
-            <Button variant="danger" onClick={onDelete} disabled={busy}>
+            <Button variant="danger" onClick={onDelete} disabled={busy} loading={busy}>
               <Trash2 className="h-4 w-4" aria-hidden />
             </Button>
           </div>
@@ -63,8 +67,16 @@ export function PipelineCard({
         {shares.map((share) => (
           <li key={share.id} className="flex items-center justify-between text-sm text-muted">
             <span>{share.profiles?.full_name ?? share.profiles?.email ?? 'Unknown user'} — {share.permission}</span>
-            <button type="button" onClick={() => onRevoke(share.id)} aria-label="Revoke access" className="cursor-pointer hover:text-danger">
-              <X className="h-4 w-4" aria-hidden />
+            <button
+              type="button"
+              onClick={() => onRevoke(share.id)}
+              disabled={revokeBusyId === share.id}
+              aria-label="Revoke access"
+              className="cursor-pointer hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {revokeBusyId === share.id
+                ? <span className="block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" aria-hidden />
+                : <X className="h-4 w-4" aria-hidden />}
             </button>
           </li>
         ))}
@@ -89,7 +101,7 @@ export function PipelineCard({
             <option value="view">View</option>
             <option value="edit">Edit (can fork)</option>
           </SelectField>
-          <Button variant="secondary" onClick={onShare}>
+          <Button variant="secondary" onClick={onShare} disabled={shareBusy} loading={shareBusy}>
             <Share2 className="h-4 w-4" aria-hidden />
             Share
           </Button>
@@ -103,7 +115,7 @@ export function PipelineCard({
             value={crossOrgEmail}
             onChange={(e) => onCrossOrgEmailChange(e.target.value)}
           />
-          <Button variant="secondary" onClick={onShareCrossOrg}>
+          <Button variant="secondary" onClick={onShareCrossOrg} disabled={shareBusy} loading={shareBusy}>
             <Share2 className="h-4 w-4" aria-hidden />
             Share
           </Button>

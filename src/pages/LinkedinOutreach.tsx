@@ -41,7 +41,7 @@ export function LinkedinOutreach() {
           <Input label="Full name" value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} />
           <Input label="LinkedIn URL (optional)" value={form.linkedin_url} onChange={(e) => setForm((f) => ({ ...f, linkedin_url: e.target.value }))} />
           <Textarea label="Context signal (optional — a recent post, job change, etc.)" value={form.context_signal} onChange={(e) => setForm((f) => ({ ...f, context_signal: e.target.value }))} />
-          <Button onClick={() => void handleAdd()} disabled={busy === 'add' || !form.full_name.trim()}>{busy === 'add' ? 'Adding…' : 'Add contact'}</Button>
+          <Button onClick={() => void handleAdd()} disabled={busy === 'add' || !form.full_name.trim()} loading={busy === 'add'}>{busy === 'add' ? 'Adding…' : 'Add contact'}</Button>
         </div>
       </Card>
 
@@ -52,7 +52,7 @@ export function LinkedinOutreach() {
             {pendingContacts.map((c) => (
               <div key={c.id} className="flex items-center justify-between rounded-lg bg-surface/50 p-3">
                 <span className="font-semibold">{c.full_name}</span>
-                <Button variant="secondary" onClick={() => void (async () => { setBusy(c.id); setError(await draftFor(c.id)); setBusy(null); })()} disabled={busy === c.id}>
+                <Button variant="secondary" onClick={() => void (async () => { setBusy(c.id); setError(await draftFor(c.id)); setBusy(null); })()} disabled={busy === c.id} loading={busy === c.id}>
                   <Sparkles className="h-4 w-4" aria-hidden /> {busy === c.id ? 'Drafting…' : 'Draft message'}
                 </Button>
               </div>
@@ -81,12 +81,12 @@ export function LinkedinOutreach() {
               <div className="flex gap-2">
                 {d.status === 'draft' && (
                   <>
-                    <Button onClick={() => void approve(d.id)}><CheckCircle2 className="h-4 w-4" aria-hidden /> Approve</Button>
-                    <Button variant="ghost" onClick={() => void skip(d.id)}><SkipForward className="h-4 w-4" aria-hidden /> Skip</Button>
+                    <Button onClick={() => void (async () => { setBusy(d.id); setError(await approve(d.id)); setBusy(null); })()} disabled={busy === d.id} loading={busy === d.id}><CheckCircle2 className="h-4 w-4" aria-hidden /> Approve</Button>
+                    <Button variant="ghost" onClick={() => void (async () => { setBusy(d.id); setError(await skip(d.id)); setBusy(null); })()} disabled={busy === d.id} loading={busy === d.id}><SkipForward className="h-4 w-4" aria-hidden /> Skip</Button>
                   </>
                 )}
                 {d.status === 'approved' && (
-                  <Button onClick={() => void markSent(d.id, d.contact.id)}>Mark as sent</Button>
+                  <Button onClick={() => void (async () => { setBusy(d.id); setError(await markSent(d.id, d.contact.id)); setBusy(null); })()} disabled={busy === d.id} loading={busy === d.id}>Mark as sent</Button>
                 )}
               </div>
             </div>

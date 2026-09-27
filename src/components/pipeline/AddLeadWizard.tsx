@@ -104,7 +104,7 @@ export function AddLeadWizard({ open, onClose, onCreate }: AddLeadWizardProps) {
           {step < TOTAL_STEPS ? (
             <Button onClick={next}>Next</Button>
           ) : (
-            <Button onClick={() => void submit()} disabled={submitting}>
+            <Button onClick={() => void submit()} disabled={submitting} loading={submitting}>
               {submitting ? 'Creating…' : 'Create lead'}
             </Button>
           )}

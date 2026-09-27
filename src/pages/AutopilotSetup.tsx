@@ -80,7 +80,7 @@ export function AutopilotSetup() {
           <div className="flex flex-col gap-3">
             <p className="font-semibold">Describe your ideal customer</p>
             <Textarea label="ICP description" value={rawInput} onChange={(e) => setRawInput(e.target.value)} placeholder="Commercial cleaning companies in London, 10-30 staff" />
-            <Button onClick={() => void parseIcp()} disabled={busy || !rawInput.trim()}>{busy ? 'Reading…' : 'Continue'}</Button>
+            <Button onClick={() => void parseIcp()} disabled={busy || !rawInput.trim()} loading={busy}>{busy ? 'Reading…' : 'Continue'}</Button>
           </div>
         </Card>
       )}
@@ -130,7 +130,7 @@ export function AutopilotSetup() {
             <p className="text-sm text-muted">Estimated Claude API cost for this run: ${(low / 100).toFixed(2)}–${(high / 100).toFixed(2)}, billed to your own Anthropic key.</p>
             <div className="flex justify-between">
               <Button variant="secondary" onClick={() => setStep(2)}>Back</Button>
-              <Button onClick={() => void handleCreate()} disabled={busy}>{busy ? 'Starting…' : 'Start autopilot'}</Button>
+              <Button onClick={() => void handleCreate()} disabled={busy} loading={busy}>{busy ? 'Starting…' : 'Start autopilot'}</Button>
             </div>
           </div>
         </Card>

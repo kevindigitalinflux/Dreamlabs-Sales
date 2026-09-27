@@ -115,6 +115,7 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
                           variant="secondary"
                           onClick={() => void handleApplyHunter(leadId, candidate)}
                           disabled={busyId === candidate.id || appliedIds.has(candidate.id)}
+                          loading={busyId === candidate.id}
                         >
                           {appliedIds.has(candidate.id) ? 'Added' : busyId === candidate.id ? 'Adding…' : 'Add to lead'}
                         </Button>
@@ -126,6 +127,7 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
                           variant="secondary"
                           onClick={() => void handleReveal(candidate, 'reveal_email')}
                           disabled={busyId === candidate.id || candidate.email_revealed}
+                          loading={busyId === candidate.id}
                         >
                           {candidate.email_revealed ? candidate.email! : busyId === candidate.id ? 'Revealing…' : 'Reveal email'}
                         </Button>
@@ -133,6 +135,7 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
                           variant="secondary"
                           onClick={() => void handleReveal(candidate, 'reveal_phone')}
                           disabled={busyId === candidate.id || candidate.phone_status !== 'not_requested'}
+                          loading={busyId === candidate.id}
                         >
                           {candidate.phone_status === 'revealed' ? candidate.phone!
                             : candidate.phone_status === 'pending' ? 'Waiting for phone number…'

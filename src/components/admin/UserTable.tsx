@@ -109,6 +109,7 @@ export function UserTable({ members, orgId, onChanged }: UserTableProps) {
           <Button
             variant="danger"
             disabled={busyId === pendingRemoval?.profiles.id}
+            loading={busyId === pendingRemoval?.profiles.id}
             onClick={() => pendingRemoval && void removeMember(pendingRemoval.profiles.id)}
           >
             Remove

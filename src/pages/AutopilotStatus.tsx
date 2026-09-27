@@ -48,7 +48,7 @@ export function AutopilotStatus() {
               {run.max_total_spend_cents != null && ` · cap $${(run.max_total_spend_cents / 100).toFixed(2)}`}
             </p>
             <p className="text-sm text-muted">Bounces: {run.bounce_count}</p>
-            <Button variant="danger" onClick={() => void (async () => { setBusy(true); setError(await stopRun()); setBusy(false); })()} disabled={busy}>
+            <Button variant="danger" onClick={() => void (async () => { setBusy(true); setError(await stopRun()); setBusy(false); })()} disabled={busy} loading={busy}>
               <XCircle className="h-4 w-4" aria-hidden /> Stop autopilot
             </Button>
           </div>
@@ -71,6 +71,7 @@ export function AutopilotStatus() {
                 if (err) setError(err); else { setBlockValue(''); setBlockReason(''); }
               })()}
               disabled={busy}
+              loading={busy}
             >
               Add
             </Button>

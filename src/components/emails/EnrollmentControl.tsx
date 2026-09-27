@@ -36,7 +36,7 @@ export function EnrollmentControl({ lead }: { lead: Lead }) {
               {sequences.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </SelectField>
           </div>
-          <Button onClick={() => picked && void run(() => enroll(picked))} disabled={busy || !picked || !lead.email}>
+          <Button onClick={() => picked && void run(() => enroll(picked))} disabled={busy || !picked || !lead.email} loading={busy}>
             <Repeat className="h-4 w-4" aria-hidden />Enroll
           </Button>
         </div>
@@ -58,9 +58,9 @@ export function EnrollmentControl({ lead }: { lead: Lead }) {
       </p>
       <div className="flex gap-2">
         {enrollment.status === 'active'
-          ? <Button variant="secondary" onClick={() => void run(() => setStatus('paused'))} disabled={busy}><Pause className="h-4 w-4" aria-hidden />Pause</Button>
-          : <Button variant="secondary" onClick={() => void run(() => setStatus('active'))} disabled={busy}><Play className="h-4 w-4" aria-hidden />Resume</Button>}
-        <Button variant="ghost" onClick={() => void run(() => setStatus('cancelled'))} disabled={busy}><XCircle className="h-4 w-4" aria-hidden />Cancel</Button>
+          ? <Button variant="secondary" onClick={() => void run(() => setStatus('paused'))} disabled={busy} loading={busy}><Pause className="h-4 w-4" aria-hidden />Pause</Button>
+          : <Button variant="secondary" onClick={() => void run(() => setStatus('active'))} disabled={busy} loading={busy}><Play className="h-4 w-4" aria-hidden />Resume</Button>}
+        <Button variant="ghost" onClick={() => void run(() => setStatus('cancelled'))} disabled={busy} loading={busy}><XCircle className="h-4 w-4" aria-hidden />Cancel</Button>
       </div>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     </div>

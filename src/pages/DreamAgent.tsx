@@ -149,6 +149,7 @@ export function DreamAgent() {
           <Button
             onClick={() => void handleCsvUpload()}
             disabled={csvBusy || !csvFile || (csvPipelineChoice === 'existing' && !csvPipelineId) || (csvPipelineChoice === 'new' && !csvNewPipelineName.trim())}
+            loading={csvBusy}
           >
             {csvBusy ? 'Uploading…' : 'Upload and review'}
           </Button>
@@ -177,7 +178,7 @@ export function DreamAgent() {
         ))}
         {actions.length > 0 && (
           <div className="flex justify-end">
-            <Button onClick={() => void confirmAll()} disabled={!anyConfirmed || loading}>
+            <Button onClick={() => void confirmAll()} disabled={!anyConfirmed || loading} loading={loading}>
               {loading ? 'Applying…' : 'Apply confirmed changes'}
             </Button>
           </div>
@@ -204,7 +205,7 @@ export function DreamAgent() {
               {isListening ? 'Listening…' : 'Voice note'}
             </Button>
           )}
-          <Button onClick={() => void handleSend()} disabled={!draft.trim() || loading}>
+          <Button onClick={() => void handleSend()} disabled={!draft.trim() || loading} loading={loading}>
             <Send className="h-4 w-4" aria-hidden />
             {loading ? 'Thinking…' : 'Send'}
           </Button>
