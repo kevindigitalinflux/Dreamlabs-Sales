@@ -126,7 +126,7 @@ export function PipelineList() {
           <ViewToggle current="list" />
           {selected.size > 0 && (
             <>
-              <Button variant="secondary" onClick={() => void handleFillMissingDetails()} disabled={enriching}>
+              <Button variant="secondary" onClick={() => void handleFillMissingDetails()} disabled={enriching} loading={enriching}>
                 <Radar className="h-4 w-4" aria-hidden />
                 {enriching ? 'Searching…' : `Fill missing details (${selected.size})`}
               </Button>
@@ -134,7 +134,7 @@ export function PipelineList() {
                 <PenLine className="h-4 w-4" aria-hidden />
                 {`Draft emails (${selected.size})`}
               </Button>
-              <Button variant="secondary" onClick={() => void handleFindDecisionMaker()} disabled={findingDecisionMakers}>
+              <Button variant="secondary" onClick={() => void handleFindDecisionMaker()} disabled={findingDecisionMakers} loading={findingDecisionMakers}>
                 <UserSearch className="h-4 w-4" aria-hidden />
                 {findingDecisionMakers ? 'Searching…' : `Find decision maker (${selected.size})`}
               </Button>

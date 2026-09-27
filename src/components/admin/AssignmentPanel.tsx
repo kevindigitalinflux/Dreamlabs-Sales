@@ -15,6 +15,7 @@ export function AssignmentPanel({ contractors }: { contractors: { id: string; fu
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [assignee, setAssignee] = useState('');
   const [loading, setLoading] = useState(true);
+  const [assigning, setAssigning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -41,8 +42,10 @@ export function AssignmentPanel({ contractors }: { contractors: { id: string; fu
 
   async function assign() {
     if (!assignee || selected.size === 0) return;
+    setAssigning(true);
     const { error: err } = await supabase
       .from('leads').update({ assigned_to: assignee }).in('id', [...selected]);
+    setAssigning(false);
     if (err) setError(err.message);
     else {
       setSelected(new Set());
@@ -76,7 +79,7 @@ export function AssignmentPanel({ contractors }: { contractors: { id: string; fu
             <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>
           ))}
         </SelectField>
-        <Button onClick={() => void assign()} disabled={!assignee || selected.size === 0}>
+        <Button onClick={() => void assign()} disabled={!assignee || selected.size === 0 || assigning} loading={assigning}>
           Assign {selected.size > 0 ? `(${selected.size})` : ''}
         </Button>
       </div>

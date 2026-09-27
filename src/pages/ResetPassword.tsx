@@ -112,6 +112,9 @@ export function ResetPassword() {
                 className="flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl text-[15px] font-semibold text-on-accent transition-all hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ background: BRAND_GRADIENT, boxShadow: BUTTON_SHADOW }}
               >
+                {submitting && (
+                  <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" aria-hidden />
+                )}
                 {submitting ? 'Saving…' : 'Save new password'}
                 {!submitting && <ArrowIcon />}
               </button>

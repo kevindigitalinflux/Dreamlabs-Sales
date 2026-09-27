@@ -77,7 +77,7 @@ export function ReleaseQueue() {
     <div className="flex flex-col gap-3">
       {selected.size > 0 && (
         <div className="flex items-center justify-end">
-          <Button onClick={() => void handleRelease()} disabled={releasing}>
+          <Button onClick={() => void handleRelease()} disabled={releasing} loading={releasing}>
             {releasing ? 'Releasing…' : `Release selected (${selected.size})`}
           </Button>
         </div>

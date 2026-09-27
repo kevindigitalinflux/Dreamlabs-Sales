@@ -117,7 +117,7 @@ export function EnrichmentReview({ open, results, leadsById, onClose, onApply }:
         <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={onClose}>{summary ? 'Close' : 'Cancel'}</Button>
           {!summary && (
-            <Button onClick={() => void handleApply()} disabled={applying || changeCount === 0}>
+            <Button onClick={() => void handleApply()} disabled={applying || changeCount === 0} loading={applying}>
               {applying ? 'Applying…' : `Apply selected (${changeCount})`}
             </Button>
           )}

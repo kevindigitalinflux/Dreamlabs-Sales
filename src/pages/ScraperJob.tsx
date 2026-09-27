@@ -115,7 +115,7 @@ export function ScraperJob() {
             ))}
           </SelectField>
           {selected.size > 0 && (
-            <Button onClick={() => void approveSelected(pending)} disabled={bulkBusy || !pipelineId}>
+            <Button onClick={() => void approveSelected(pending)} disabled={bulkBusy || !pipelineId} loading={bulkBusy}>
               {bulkBusy ? 'Approving…' : `Approve selected (${selected.size})`}
             </Button>
           )}
@@ -160,22 +160,22 @@ export function ScraperJob() {
                 <td className="p-3">{lead.source}</td>
                 <td className="p-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="secondary" onClick={() => void runAction(lead, approve)} disabled={busyId === lead.id || !pipelineId} title="Approve">
+                    <Button variant="secondary" onClick={() => void runAction(lead, approve)} disabled={busyId === lead.id || !pipelineId} loading={busyId === lead.id} title="Approve">
                       <CheckCircle2 className="h-4 w-4" aria-hidden />
                     </Button>
-                    <Button variant="danger" onClick={() => void runAction(lead, reject)} disabled={busyId === lead.id} title="Reject">
+                    <Button variant="danger" onClick={() => void runAction(lead, reject)} disabled={busyId === lead.id} loading={busyId === lead.id} title="Reject">
                       <XCircle className="h-4 w-4" aria-hidden />
                     </Button>
-                    <Button variant="ghost" onClick={() => void runAction(lead, skip)} disabled={busyId === lead.id} title="Skip">
+                    <Button variant="ghost" onClick={() => void runAction(lead, skip)} disabled={busyId === lead.id} loading={busyId === lead.id} title="Skip">
                       <SkipForward className="h-4 w-4" aria-hidden />
                     </Button>
                     {apolloConfigured && lead.website && (
-                      <Button variant="ghost" onClick={() => void runAction(lead, enrichWithApollo)} disabled={busyId === lead.id} title="Enrich with Apollo — uses 1 Apollo credit">
+                      <Button variant="ghost" onClick={() => void runAction(lead, enrichWithApollo)} disabled={busyId === lead.id} loading={busyId === lead.id} title="Enrich with Apollo — uses 1 Apollo credit">
                         <Sparkles className="h-4 w-4" aria-hidden />
                       </Button>
                     )}
                     {hunterConfigured && lead.website && !lead.email && (
-                      <Button variant="ghost" onClick={() => void runAction(lead, enrichWithHunter)} disabled={busyId === lead.id} title="Find email with Hunter — uses 1 Hunter credit">
+                      <Button variant="ghost" onClick={() => void runAction(lead, enrichWithHunter)} disabled={busyId === lead.id} loading={busyId === lead.id} title="Find email with Hunter — uses 1 Hunter credit">
                         <Mail className="h-4 w-4" aria-hidden />
                       </Button>
                     )}

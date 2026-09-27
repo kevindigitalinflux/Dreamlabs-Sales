@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { MailCheck, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { DraftLog } from '../../hooks/useDrafts';
@@ -27,12 +28,15 @@ interface EmailReviewQueueProps {
 
 /** Drafts awaiting review — sequence output + manual saves. Nothing sends without a click. */
 export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selected, onToggle, onToggleAll, selectionDisabled }: EmailReviewQueueProps) {
+  const [discardingId, setDiscardingId] = useState<string | null>(null);
   if (loading) return <Skeleton className="h-20 w-full" />;
   if (drafts.length === 0) {
     return <EmptyState icon={MailCheck} title="No emails waiting for review" hint="Sequence drafts and saved drafts appear here for you to approve." />;
   }
   async function discard(id: string) {
+    setDiscardingId(id);
     await supabase.from('email_logs').delete().eq('id', id);
+    setDiscardingId(null);
     onChanged();
   }
   const selectable = selected !== undefined && onToggle !== undefined && onToggleAll !== undefined;
@@ -60,7 +64,17 @@ export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selecte
           )}
           <span className="w-full truncate text-sm text-muted sm:w-auto sm:flex-1">{d.subject}</span>
           <div className="ml-auto flex gap-2">
-            <button type="button" onClick={() => void discard(d.id)} aria-label="Discard draft" className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-muted hover:text-danger"><Trash2 className="h-4 w-4" aria-hidden /></button>
+            <button
+              type="button"
+              onClick={() => void discard(d.id)}
+              disabled={discardingId === d.id}
+              aria-label="Discard draft"
+              className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-muted hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {discardingId === d.id
+                ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" aria-hidden />
+                : <Trash2 className="h-4 w-4" aria-hidden />}
+            </button>
             <Button variant="secondary" onClick={() => onReview(d)}>Review &amp; send</Button>
           </div>
         </li>

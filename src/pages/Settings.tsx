@@ -65,7 +65,7 @@ function CompanyContextCard({ orgId, orgName, isOrgAdmin }: { orgId: string; org
         {!isOrgAdmin && <p className="text-xs text-muted">Only an org admin can edit this.</p>}
         {isOrgAdmin && (
           <div className="flex items-center gap-3">
-            <Button onClick={() => void handleSave()} disabled={status === 'saving'}>
+            <Button onClick={() => void handleSave()} disabled={status === 'saving'} loading={status === 'saving'}>
               {status === 'saving' ? 'Saving…' : 'Save'}
             </Button>
             {status === 'saved' && <span className="text-sm text-success">Saved ✓</span>}
@@ -165,7 +165,7 @@ export function Settings() {
           <form onSubmit={handleSave} className="flex flex-col gap-4">
             <Input label="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
             <div className="flex items-center gap-3">
-              <Button type="submit" disabled={status === 'saving'}>
+              <Button type="submit" disabled={status === 'saving'} loading={status === 'saving'}>
                 {status === 'saving' ? 'Saving…' : 'Save'}
               </Button>
               {status === 'saved' && <span className="text-sm text-success">Saved ✓</span>}

@@ -105,7 +105,7 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
         <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={onClose}>{summary ? 'Close' : 'Cancel'}</Button>
           {!summary && (
-            <Button onClick={() => void handleGenerate()} disabled={busy || !templateId || withEmail.length === 0}>
+            <Button onClick={() => void handleGenerate()} disabled={busy || !templateId || withEmail.length === 0} loading={busy}>
               {busy ? 'Generating…' : 'Generate drafts'}
             </Button>
           )}

@@ -42,7 +42,7 @@ export function Unsubscribe() {
               <p className="text-lg font-bold">Stop future emails?</p>
               <p className="text-sm text-muted">Confirm below and we'll remove you from any further outreach.</p>
               {state === 'error' && <p role="alert" className="text-sm text-danger">{error}</p>}
-              <Button onClick={() => void handleConfirm()} disabled={state === 'busy'}>
+              <Button onClick={() => void handleConfirm()} disabled={state === 'busy'} loading={state === 'busy'}>
                 {state === 'busy' ? 'Unsubscribing…' : 'Confirm — stop future emails'}
               </Button>
             </>

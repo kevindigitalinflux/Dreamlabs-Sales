@@ -95,7 +95,7 @@ export function Scraper() {
               onChange={(e) => setRawInput(e.target.value)}
               placeholder="Commercial cleaning companies in London, 10-30 staff, rating between 3.0 and 4.2, fewer than 30 reviews"
             />
-            <Button onClick={() => void parseIcp()} disabled={busy || !rawInput.trim()}>
+            <Button onClick={() => void parseIcp()} disabled={busy || !rawInput.trim()} loading={busy}>
               {busy ? 'Reading…' : 'Continue'}
             </Button>
           </div>
@@ -172,6 +172,7 @@ export function Scraper() {
               <Button
                 onClick={() => void runScrape()}
                 disabled={busy || (pipelineChoice === 'existing' && !pipelineId) || (pipelineChoice === 'new' && !newPipelineName.trim())}
+                loading={busy}
               >
                 {busy ? 'Starting…' : 'Find leads'}
               </Button>

@@ -78,7 +78,7 @@ export function DialerConfig() {
           {msg && <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : 'text-success'}`}>{msg.text}</p>}
 
           <div>
-            <Button onClick={() => void handleSave()} disabled={busy}>{busy ? 'Saving…' : 'Save settings'}</Button>
+            <Button onClick={() => void handleSave()} disabled={busy} loading={busy}>{busy ? 'Saving…' : 'Save settings'}</Button>
           </div>
         </div>
       </Card>

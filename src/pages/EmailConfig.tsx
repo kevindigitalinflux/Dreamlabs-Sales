@@ -122,8 +122,8 @@ export function EmailConfig() {
           {msg && <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : 'text-success'}`}>{msg.text}</p>}
 
           <div className="flex items-center justify-between">
-            <Button onClick={() => void handleSave()} disabled={busy !== null}>{busy === 'save' ? 'Saving…' : 'Save settings'}</Button>
-            <Button variant="secondary" onClick={() => void handleTest()} disabled={busy !== null || !settings}>
+            <Button onClick={() => void handleSave()} disabled={busy !== null} loading={busy === 'save'}>{busy === 'save' ? 'Saving…' : 'Save settings'}</Button>
+            <Button variant="secondary" onClick={() => void handleTest()} disabled={busy !== null || !settings} loading={busy === 'test'}>
               <Mail className="h-4 w-4" aria-hidden />
               {busy === 'test' ? 'Sending…' : 'Send test email'}
             </Button>
