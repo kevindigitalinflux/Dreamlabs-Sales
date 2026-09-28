@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Copy, Plus, Radar, Upload, X } from 'lucide-react';
+import { Copy, Eye, Plus, Radar, Upload, X } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { usePipeline } from '../hooks/usePipeline';
 import { usePipelineActions } from '../hooks/usePipelineActions';
@@ -80,6 +80,11 @@ export function PipelineManage() {
   function handleGoMoveLeads(pipeline: Pipeline) {
     switchPipeline(pipeline.id);
     navigate('/pipeline/list', { state: { selectAllOnLoad: true } });
+  }
+
+  function handleViewPipeline(pipeline: Pipeline) {
+    switchPipeline(pipeline.id);
+    navigate('/pipeline/list');
   }
 
   async function handleShare(pipeline: Pipeline) {
@@ -229,6 +234,10 @@ export function PipelineManage() {
                 </Badge>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => handleViewPipeline(share.pipelines)}>
+                  <Eye className="h-4 w-4" aria-hidden />
+                  View pipeline
+                </Button>
                 {share.permission === 'edit' && (
                   <Button onClick={() => void handleFork(share.pipelines)} disabled={busyId === share.pipelines.id} loading={busyId === share.pipelines.id}>
                     <Copy className="h-4 w-4" aria-hidden />
