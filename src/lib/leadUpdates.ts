@@ -14,8 +14,18 @@ export async function applyLeadUpdate(
   before: Lead | null,
   userId?: string,
 ): Promise<string | null> {
-  const { error } = await supabase.from('leads').update(patch).eq('id', id);
-  if (error) return error.message;
+  // .select().single() is required, not cosmetic: a plain .update().eq() reports no
+  // error when RLS silently blocks the write (0 rows matched, e.g. a view-only
+  // shared pipeline) — the caller would think the edit succeeded when it never
+  // persisted. Requesting the row back turns that silent no-op into a real error.
+  const { error } = await supabase.from('leads').update(patch).eq('id', id).select().single();
+  if (error) {
+    // PGRST116 = "no rows returned" from .single() — RLS silently matched 0 rows
+    // (e.g. a view-only shared pipeline), not a real database error.
+    if (error.code === 'PGRST116') return 'You don\'t have permission to edit this lead.';
+    console.error('Failed to update lead:', error);
+    return 'Could not save this change. Please try again.';
+  }
   if (patch.stage && before && patch.stage !== before.stage) {
     await supabase.from('lead_notes').insert({
       lead_id: id,

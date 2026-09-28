@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
-import { Download, Inbox, PenLine, Plus, Radar, UserSearch } from 'lucide-react';
+import { Download, Inbox, PenLine, Plus, Radar, Trash2, UserSearch } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import { useLeads } from '../hooks/useLeads';
 import { useProfiles } from '../hooks/useProfiles';
 import { useLeadEnrichment } from '../hooks/useLeadEnrichment';
@@ -13,6 +14,7 @@ import { toCsv } from '../lib/csv';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Skeleton } from '../components/ui/Skeleton';
+import { SelectField } from '../components/ui/Input';
 import { AddLeadWizard } from '../components/pipeline/AddLeadWizard';
 import { BulkDraftModal } from '../components/pipeline/BulkDraftModal';
 import { EnrichmentReview } from '../components/pipeline/EnrichmentReview';
@@ -27,9 +29,9 @@ import type { DecisionMakerCandidate, EnrichableField, EnrichmentResult, Lead, S
 
 /** List pipeline view: search, filters, sortable table, side panel (SPEC.md §6). */
 export function PipelineList() {
-  const { leads, loading, error, createLead, updateLead } = useLeads();
+  const { leads, loading, error, createLead, updateLead, refresh } = useLeads();
   const { profiles } = useProfiles();
-  const { currentPipeline } = usePipeline();
+  const { currentPipeline, pipelines } = usePipeline();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -49,7 +51,14 @@ export function PipelineList() {
   const { searching: findingDecisionMakers, error: decisionMakerError, runSearch } = useDecisionMakers();
   const [decisionMakerResults, setDecisionMakerResults] = useState<Record<string, DecisionMakerCandidate[]>>({});
   const [decisionMakerReviewOpen, setDecisionMakerReviewOpen] = useState(false);
+  const [moveTargetId, setMoveTargetId] = useState('');
+  const [moving, setMoving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
   const leadsById = useMemo(() => Object.fromEntries(leads.map((l) => [l.id, l])), [leads]);
+  const otherPipelines = currentPipeline
+    ? pipelines.filter((p) => p.org_id === currentPipeline.org_id && p.id !== currentPipeline.id)
+    : [];
 
   useEffect(() => {
     if (openLead) setOpenLead(leads.find((l) => l.id === openLead.id) ?? null);
@@ -58,6 +67,7 @@ export function PipelineList() {
 
   useEffect(() => {
     setSelected(new Set());
+    setBulkError(null);
   }, [filters, currentPipeline?.id]);
 
   // Arrives via navigate(..., { state: { selectAllOnLoad: true } }) — e.g. Pipeline
@@ -155,6 +165,38 @@ export function PipelineList() {
     URL.revokeObjectURL(url);
   }
 
+  async function handleMoveSelected() {
+    if (!moveTargetId) return;
+    setBulkError(null);
+    setMoving(true);
+    let failed = 0;
+    for (const leadId of selected) {
+      const err = await updateLead(leadId, { pipeline_id: moveTargetId });
+      if (err) failed++;
+    }
+    setMoving(false);
+    setMoveTargetId('');
+    if (failed > 0) setBulkError(`Moved ${selected.size - failed} of ${selected.size} leads — ${failed} failed.`);
+    else setSelected(new Set());
+  }
+
+  async function handleDeleteSelected() {
+    const count = selected.size;
+    if (!window.confirm(`Permanently delete ${count} lead${count === 1 ? '' : 's'}? This can't be undone.`)) return;
+    setBulkError(null);
+    setDeleting(true);
+    // .select('id') matters here, not just for the count: a plain .delete() reports
+    // no error when RLS silently matches 0 rows, which would otherwise look like a
+    // successful delete of leads that were never actually removed.
+    const { data, error: err } = await supabase.from('leads').delete().in('id', [...selected]).select('id');
+    setDeleting(false);
+    await refresh();
+    if (err) { setBulkError('Could not delete the selected leads. Please try again.'); return; }
+    const deletedCount = data?.length ?? 0;
+    if (deletedCount < count) setBulkError(`Deleted ${deletedCount} of ${count} leads — you may not have permission to delete the rest.`);
+    else setSelected(new Set());
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <SharedPipelineBanner />
@@ -183,6 +225,21 @@ export function PipelineList() {
                 <UserSearch className="h-4 w-4" aria-hidden />
                 {findingDecisionMakers ? 'Searching…' : `Find decision maker (${selected.size})`}
               </Button>
+              {otherPipelines.length > 0 && (
+                <div className="flex items-end gap-2">
+                  <SelectField label="Move to" value={moveTargetId} onChange={(e) => setMoveTargetId(e.target.value)} className="min-w-40">
+                    <option value="">Choose pipeline…</option>
+                    {otherPipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </SelectField>
+                  <Button variant="secondary" onClick={() => void handleMoveSelected()} disabled={!moveTargetId || moving} loading={moving}>
+                    {moving ? 'Moving…' : `Move (${selected.size})`}
+                  </Button>
+                </div>
+              )}
+              <Button variant="danger" onClick={() => void handleDeleteSelected()} disabled={deleting} loading={deleting}>
+                <Trash2 className="h-4 w-4" aria-hidden />
+                {deleting ? 'Deleting…' : `Delete (${selected.size})`}
+              </Button>
             </>
           )}
           <Button onClick={() => setWizardOpen(true)}>
@@ -196,6 +253,7 @@ export function PipelineList() {
 
       {loading && <Skeleton className="h-64 w-full" />}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      {bulkError && <p role="alert" className="text-sm text-danger">{bulkError}</p>}
       {enrichError && <p role="alert" className="text-sm text-danger">{enrichError}</p>}
       {decisionMakerError && <p role="alert" className="text-sm text-danger">{decisionMakerError}</p>}
       {!loading && !error && visible.length === 0 && (
