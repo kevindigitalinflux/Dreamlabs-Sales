@@ -23,12 +23,19 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
-  const body = (await req.json()) as { lead_id?: string; template_id?: string; use_ai?: boolean };
+  const body = (await req.json()) as { lead_id?: string; template_id?: string; use_ai?: boolean; recipient_name?: string };
   if (!body.lead_id || !body.template_id) return json({ error: 'lead_id and template_id required' }, 400, headers);
 
   // RLS applies: contractors can only draft for leads they can see.
   const { data: lead, error: leadErr } = await client.from('leads').select('*').eq('id', body.lead_id).single();
   if (leadErr || !lead) return json({ error: 'Lead not found' }, 404, headers);
+  // When drafting for a specific decision-maker rather than the lead's own
+  // contact, override owner_name for template substitution and AI drafting
+  // -- every downstream consumer (buildTemplateVars, draftEmail) already
+  // reads owner_name off this object, so nothing else needs to change.
+  const leadForDraft: Record<string, unknown> = body.recipient_name
+    ? { ...(lead as Record<string, unknown>), owner_name: body.recipient_name }
+    : (lead as Record<string, unknown>);
   const { data: template } = await client.from('email_templates').select('*').eq('id', body.template_id).single();
   if (!template) return json({ error: 'Template not found' }, 404, headers);
   const { data: notes } = await client
@@ -38,7 +45,7 @@ Deno.serve(async (req) => {
   const { data: profile } = await client.from('profiles').select('full_name, email').eq('id', userData.user.id).single();
   const contractorName = (profile?.full_name ?? profile?.email ?? 'The Dreamlabs team').split(' ')[0]!;
 
-  const vars = buildTemplateVars(lead as Record<string, unknown>, contractorName, noteTexts);
+  const vars = buildTemplateVars(leadForDraft, contractorName, noteTexts);
   const subject = substituteVariables(template.subject as string, vars);
   const bodyText = substituteVariables(template.body as string, vars);
   const missing = [...new Set([...subject.missing, ...bodyText.missing])];
@@ -54,7 +61,7 @@ Deno.serve(async (req) => {
   const { data: org } = await service.from('organizations').select('name, company_context').eq('id', orgId).maybeSingle();
   const orgName = org?.name ?? 'our team';
   try {
-    const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: lead as Record<string, unknown>, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, apiKey });
+    const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: leadForDraft, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, apiKey });
     return json({ subject: ai.subject, body: ai.body, ai_used: true, missing }, 200, headers);
   } catch (e) {
     console.error('draftEmail failed, falling back to plain template:', e);

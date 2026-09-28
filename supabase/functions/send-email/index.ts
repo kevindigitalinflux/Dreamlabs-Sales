@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
   const user = userData?.user;
   if (!user) return json({ error: 'Not signed in' }, 401, headers);
 
-  const body = (await req.json()) as { to_email?: string; subject?: string; body?: string; lead_id?: string; log_id?: string };
+  const body = (await req.json()) as { to_email?: string; subject?: string; body?: string; lead_id?: string; log_id?: string; decision_maker_candidate_id?: string };
   if (!body.to_email || !body.subject || !body.body) {
     return json({ error: 'to_email, subject and body are required' }, 400, headers);
   }
@@ -85,6 +85,7 @@ Deno.serve(async (req) => {
     lead_id: body.lead_id ?? null, sent_by: user.id, to_email: body.to_email,
     subject: body.subject, body: body.body, status, error_message: errorMessage,
     message_id: messageId, sent_at: new Date().toISOString(),
+    decision_maker_candidate_id: body.decision_maker_candidate_id ?? null,
   };
   if (orgId) row.org_id = orgId; // omitted on update-only calls where org_id is already set on the existing row
   let logId = body.log_id ?? null;
