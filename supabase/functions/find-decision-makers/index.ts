@@ -110,11 +110,16 @@ Deno.serve(async (req) => {
     // queue without a separate action (matches the controller-approved
     // design: "automatic, as soon as found"). context_signal stays null --
     // see this plan's Global Constraints for why. Idempotent via the
-    // partial unique index on decision_maker_candidate_id (Task 1).
+    // unique index on decision_maker_candidate_id (Task 1; made non-partial
+    // in migration 035 so PostgREST's onConflict inference can target it).
     for (const candidate of (upserted ?? []) as { id: string; first_name: string | null; last_name: string | null; linkedin_url: string | null }[]) {
       if (!candidate.linkedin_url) continue;
       const fullName = `${candidate.first_name ?? ''} ${candidate.last_name ?? ''}`.trim() || 'Unknown';
-      await service.from('linkedin_contacts').upsert({
+      // Best-effort: auto-capture is additive, never load-bearing for the
+      // decision-maker search itself (matches this plan's Error Handling
+      // section and pipeline-shares' notifyShare pattern) -- log and move on
+      // rather than failing the whole request.
+      const { error: linkedinErr } = await service.from('linkedin_contacts').upsert({
         org_id: orgId,
         lead_id: lead.id,
         decision_maker_candidate_id: candidate.id,
@@ -123,6 +128,7 @@ Deno.serve(async (req) => {
         context_signal: null,
         created_by: userData.user.id,
       }, { onConflict: 'decision_maker_candidate_id' });
+      if (linkedinErr) console.error('Failed to auto-capture linkedin_contacts row:', linkedinErr);
     }
 
     return { lead_id: lead.id, candidates: upserted ?? [] };
