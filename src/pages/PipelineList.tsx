@@ -133,13 +133,6 @@ export function PipelineList() {
     setDecisionMakerReviewOpen(true);
   }
 
-  async function handleApplyHunterCandidate(leadId: string, candidate: DecisionMakerCandidate): Promise<string | null> {
-    const patch: Record<string, string> = { email: candidate.email! };
-    const name = `${candidate.first_name ?? ''} ${candidate.last_name ?? ''}`.trim();
-    if (name) patch.owner_name = name;
-    return updateLead(leadId, patch);
-  }
-
   function handleExportCsv() {
     const headers = [
       'Business', 'Owner', 'Phone', 'Email', 'Website', 'Address', 'City', 'Postcode',
@@ -309,7 +302,6 @@ export function PipelineList() {
         resultsByLead={decisionMakerResults}
         leadsById={leadsById}
         onClose={() => setDecisionMakerReviewOpen(false)}
-        onApplyHunter={handleApplyHunterCandidate}
       />
     </div>
   );

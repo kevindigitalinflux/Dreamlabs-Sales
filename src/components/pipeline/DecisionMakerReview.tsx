@@ -10,7 +10,6 @@ interface DecisionMakerReviewProps {
   resultsByLead: Record<string, DecisionMakerCandidate[]>;
   leadsById: Record<string, Lead>;
   onClose: () => void;
-  onApplyHunter: (leadId: string, candidate: DecisionMakerCandidate) => Promise<string | null>;
 }
 
 function candidateName(c: DecisionMakerCandidate): string {
@@ -21,22 +20,23 @@ function candidateName(c: DecisionMakerCandidate): string {
 }
 
 /**
- * Review UI for the "Find decision maker" action. Unlike EnrichmentReview,
- * there's no diff-and-apply step — every action here (Hunter's "Add to
- * lead", Apollo's "Reveal email"/"Reveal phone") is its own explicit,
- * already-consented write. Subscribes to realtime updates on the visible
- * candidate rows so a phone number appears the moment Apollo's webhook
- * lands, with no polling.
+ * Review UI for the "Find decision maker" bulk-search action -- a summary
+ * of what turned up across the selected leads, for when you don't want to
+ * visit each lead's own detail page. Every candidate found is already
+ * persistent on its lead (see DecisionMakersCard) -- there is no "add to
+ * lead" action here anymore, only Apollo's explicit, already-consented
+ * "Reveal email"/"Reveal phone" (Hunter candidates arrive already
+ * revealed). Subscribes to realtime updates on the visible candidate rows
+ * so a phone number appears the moment Apollo's webhook lands, with no
+ * polling.
  */
-export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, onApplyHunter }: DecisionMakerReviewProps) {
+export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose }: DecisionMakerReviewProps) {
   const [candidatesByLead, setCandidatesByLead] = useState<Record<string, DecisionMakerCandidate[]>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
   const [errorByCandidate, setErrorByCandidate] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setCandidatesByLead(resultsByLead);
-    setAppliedIds(new Set());
     setErrorByCandidate({});
   }, [resultsByLead]);
 
@@ -57,20 +57,8 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
     return () => {
       void supabase.removeChannel(channel);
     };
-    // resultsByLead intentionally excluded beyond the id list captured above
-    // — this subscription is set up once per search run (when the modal
-    // opens with a new results set), not re-subscribed on every realtime
-    // update it itself receives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultsByLead]);
-
-  async function handleApplyHunter(leadId: string, candidate: DecisionMakerCandidate) {
-    setBusyId(candidate.id);
-    const err = await onApplyHunter(leadId, candidate);
-    setBusyId(null);
-    if (err) setErrorByCandidate((prev) => ({ ...prev, [candidate.id]: err }));
-    else setAppliedIds((prev) => new Set(prev).add(candidate.id));
-  }
 
   async function handleReveal(candidate: DecisionMakerCandidate, field: 'reveal_email' | 'reveal_phone') {
     setBusyId(candidate.id);
@@ -93,6 +81,7 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
   return (
     <Modal open={open} onClose={onClose} title="Find decision maker">
       <div className="flex flex-col gap-4">
+        <p className="text-xs text-muted">Full contact list for each lead is on its own Decision Makers section.</p>
         {leadIds.length === 0 && <p className="text-sm text-muted">No decision-maker candidates found for the selected leads.</p>}
         {leadIds.map((leadId) => {
           const lead = leadsById[leadId];
@@ -109,17 +98,7 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
                       {candidate.title && <span className="text-muted">— {candidate.title}</span>}
                     </div>
                     {candidate.source === 'hunter' && (
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <span className="text-success">{candidate.email}</span>
-                        <Button
-                          variant="secondary"
-                          onClick={() => void handleApplyHunter(leadId, candidate)}
-                          disabled={busyId === candidate.id || appliedIds.has(candidate.id)}
-                          loading={busyId === candidate.id}
-                        >
-                          {appliedIds.has(candidate.id) ? 'Added' : busyId === candidate.id ? 'Adding…' : 'Add to lead'}
-                        </Button>
-                      </div>
+                      <p className="mt-1 text-success">{candidate.email}</p>
                     )}
                     {candidate.source === 'apollo' && (
                       <div className="mt-1 flex flex-wrap items-center gap-2">
