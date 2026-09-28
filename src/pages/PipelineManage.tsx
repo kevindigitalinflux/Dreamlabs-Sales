@@ -9,6 +9,7 @@ import { useProfiles } from '../hooks/useProfiles';
 import { useOrg } from '../hooks/useOrg';
 import { supabase } from '../lib/supabase';
 import { readableInvokeError } from '../lib/invokeError';
+import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
@@ -220,16 +221,21 @@ export function PipelineManage() {
         {incoming.length === 0 && <p className="text-sm text-muted">Nothing shared with you yet.</p>}
         <ul className="flex flex-col gap-3">
           {incoming.map((share) => (
-            <li key={share.id} className="flex items-center justify-between rounded-xl border border-line bg-card p-4">
-              <span className="font-semibold">{share.pipelines.name} — {share.permission}</span>
-              <div className="flex gap-2">
+            <li key={share.id} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold">{share.pipelines.name}</span>
+                <Badge className={share.permission === 'edit' ? 'bg-cyan/15 text-cyan' : 'bg-surface text-muted'}>
+                  {share.permission === 'edit' ? 'Can edit' : 'View only'}
+                </Badge>
+              </div>
+              <div className="flex flex-wrap gap-2">
                 {share.permission === 'edit' && (
                   <Button onClick={() => void handleFork(share.pipelines)} disabled={busyId === share.pipelines.id} loading={busyId === share.pipelines.id}>
                     <Copy className="h-4 w-4" aria-hidden />
                     Make my own copy
                   </Button>
                 )}
-                <Button variant="ghost" onClick={() => void handleRevoke(share.id)} disabled={busyId === share.id} loading={busyId === share.id}>
+                <Button variant="secondary" onClick={() => void handleRevoke(share.id)} disabled={busyId === share.id} loading={busyId === share.id}>
                   <X className="h-4 w-4" aria-hidden />
                   Remove
                 </Button>
