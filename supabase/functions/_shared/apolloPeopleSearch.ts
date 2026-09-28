@@ -8,6 +8,7 @@ export interface ApolloPersonCandidate {
   firstName: string | null;
   lastNameObfuscated: string | null;
   title: string | null;
+  linkedinUrl: string | null;
 }
 
 /**
@@ -29,7 +30,7 @@ export async function searchApolloDecisionMaker(domain: string, apiKey: string):
       body: params.toString(),
     });
     if (!res.ok) return null;
-    const data = await res.json() as { people?: { id?: string; first_name?: string; last_name_obfuscated?: string; title?: string | null }[] };
+    const data = await res.json() as { people?: { id?: string; first_name?: string; last_name_obfuscated?: string; title?: string | null; linkedin_url?: string | null }[] };
     const top = data.people?.[0];
     if (!top?.id) return null;
     return {
@@ -37,6 +38,7 @@ export async function searchApolloDecisionMaker(domain: string, apiKey: string):
       firstName: top.first_name ?? null,
       lastNameObfuscated: top.last_name_obfuscated ?? null,
       title: top.title ?? null,
+      linkedinUrl: top.linkedin_url || null,
     };
   } catch {
     return null;

@@ -53,6 +53,7 @@ interface HunterEmailEntry {
   last_name?: string | null;
   position?: string | null;
   seniority?: string | null;
+  linkedin?: string | null;
 }
 
 export interface HunterDecisionMakerCandidate {
@@ -60,6 +61,7 @@ export interface HunterDecisionMakerCandidate {
   lastName: string | null;
   title: string | null;
   email: string;
+  linkedinUrl: string | null;
 }
 
 /**
@@ -88,7 +90,7 @@ export async function findHunterDecisionMaker(website: string | null, apiKey: st
       return b.confidence - a.confidence;
     });
     const top = ranked[0]!;
-    return { firstName: top.first_name ?? null, lastName: top.last_name ?? null, title: top.position ?? null, email: top.value };
+    return { firstName: top.first_name ?? null, lastName: top.last_name ?? null, title: top.position ?? null, email: top.value, linkedinUrl: top.linkedin || null };
   } catch {
     return null;
   }
