@@ -65,7 +65,6 @@ Deno.serve(async (req) => {
       await service.from('decision_maker_candidates')
         .update({ phone: chosen.raw_number, phone_status: 'revealed', updated_at: new Date().toISOString() })
         .eq('id', candidateId);
-      await service.from('leads').update({ phone: chosen.raw_number }).eq('id', candidate.lead_id);
     } else {
       await service.from('decision_maker_candidates')
         .update({ phone_status: 'not_found', updated_at: new Date().toISOString() })

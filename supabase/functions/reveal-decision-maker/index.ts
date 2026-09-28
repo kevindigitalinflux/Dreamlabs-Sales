@@ -87,10 +87,9 @@ Deno.serve(async (req) => {
     .from('decision_maker_candidates').update(patch).eq('id', candidateId).select('*').single();
   if (updateErr) return json({ error: updateErr.message }, 500, headers);
 
-  if (revealEmail && result.email) {
-    const leadPatch: Record<string, unknown> = { email: result.email };
-    if (result.firstName || result.lastName) leadPatch.owner_name = [result.firstName, result.lastName].filter(Boolean).join(' ');
-    await client.from('leads').update(leadPatch).eq('id', row.lead_id);
+  if (revealEmail && result.email && (result.firstName || result.lastName)) {
+    const fullName = [result.firstName, result.lastName].filter(Boolean).join(' ');
+    await service.from('linkedin_contacts').update({ full_name: fullName }).eq('decision_maker_candidate_id', candidateId);
   }
 
   return json({ candidate: updated }, 200, headers);
