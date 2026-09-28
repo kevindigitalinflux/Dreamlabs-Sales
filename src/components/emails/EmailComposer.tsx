@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Send, Sparkles, WandSparkles } from 'lucide-react';
 import { readableInvokeError } from '../../lib/invokeError';
 import { supabase } from '../../lib/supabase';
 import { useOrg } from '../../hooks/useOrg';
 import { useTemplates } from '../../hooks/useTemplates';
-import type { Lead } from '../../types';
+import type { DecisionMakerCandidate, Lead } from '../../types';
 import { Button } from '../ui/Button';
 import { Input, SelectField, Textarea } from '../ui/Input';
 import { Modal } from '../ui/Modal';
@@ -43,7 +43,10 @@ interface EmailComposerProps {
 
 type StatusMsg = { kind: 'ok' | 'warn' | 'err'; text: string };
 
-/** Draft-email modal: template → optional AI personalisation with diff → edit → send. */
+/** A selectable send target: the lead's own email, or one of its decision-makers. */
+interface Recipient { key: string; email: string; label: string; candidateId: string | null }
+
+/** Draft-email modal: template → optional AI personalisation with diff → edit → send to one or more recipients. */
 export function EmailComposer({ lead, open, onClose, draft = null }: EmailComposerProps) {
   const { templates } = useTemplates();
   const { currentOrg } = useOrg();
@@ -55,6 +58,37 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
   const [missing, setMissing] = useState<string[]>([]);
   const [busy, setBusy] = useState<'load' | 'ai' | 'send' | 'save' | null>(null);
   const [msg, setMsg] = useState<StatusMsg | null>(null);
+  const [decisionMakers, setDecisionMakers] = useState<DecisionMakerCandidate[]>([]);
+  const [selectedRecipients, setSelectedRecipients] = useState<Set<string>>(new Set(lead.email ? ['lead'] : []));
+
+  useEffect(() => {
+    let cancelled = false;
+    void supabase.from('decision_maker_candidates').select('*').eq('lead_id', lead.id).not('email', 'is', null).then(({ data }) => {
+      if (!cancelled) setDecisionMakers((data as DecisionMakerCandidate[]) ?? []);
+    });
+    setSelectedRecipients(new Set(lead.email ? ['lead'] : []));
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead.id]);
+
+  const recipients: Recipient[] = useMemo(() => {
+    const list: Recipient[] = [];
+    if (lead.email) list.push({ key: 'lead', email: lead.email, label: `${lead.owner_name ?? lead.business_name} (${lead.email})`, candidateId: null });
+    for (const dm of decisionMakers) {
+      if (!dm.email) continue;
+      const name = `${dm.first_name ?? ''} ${dm.last_name ?? ''}`.trim() || 'Unknown';
+      list.push({ key: dm.id, email: dm.email, label: `${name}${dm.title ? ` — ${dm.title}` : ''} (${dm.email})`, candidateId: dm.id });
+    }
+    return list;
+  }, [lead, decisionMakers]);
+
+  function toggleRecipient(key: string) {
+    setSelectedRecipients((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
 
   const diff = useMemo(() => (baseBody !== null && showDiff ? diffLines(baseBody, body) : null), [baseBody, body, showDiff]);
 
@@ -78,40 +112,60 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
   }
 
   async function send(asDraft: boolean) {
-    if (!lead.email) return setMsg({ kind: 'err', text: 'This lead has no email address — add one first.' });
+    const targets = recipients.filter((r) => selectedRecipients.has(r.key));
+    if (targets.length === 0) return setMsg({ kind: 'err', text: 'Select at least one recipient.' });
     if (!subject.trim() || !body.trim()) return setMsg({ kind: 'err', text: 'Subject and body are required.' });
     setBusy(asDraft ? 'save' : 'send'); setMsg(null);
-    if (asDraft) {
-      const { error } = await supabase.from('email_logs').insert({
-        lead_id: lead.id, to_email: lead.email, subject, body, status: 'draft',
-        sent_by: (await supabase.auth.getUser()).data.user?.id,
-        org_id: currentOrg?.id,
+    let succeeded = 0;
+    let firstFailReason: string | null = null;
+    for (const target of targets) {
+      if (asDraft) {
+        const { error } = await supabase.from('email_logs').insert({
+          lead_id: lead.id, to_email: target.email, subject, body, status: 'draft',
+          decision_maker_candidate_id: target.candidateId,
+          sent_by: (await supabase.auth.getUser()).data.user?.id,
+          org_id: currentOrg?.id,
+        });
+        if (error) { if (!firstFailReason) firstFailReason = error.message; continue; }
+        succeeded++;
+        continue;
+      }
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: {
+          to_email: target.email, subject, body, lead_id: lead.id,
+          decision_maker_candidate_id: target.candidateId,
+          log_id: targets.length === 1 ? draft?.log_id : undefined,
+        },
       });
-      setBusy(null);
-      if (error) return setMsg({ kind: 'err', text: error.message });
-      setMsg({ kind: 'ok', text: 'Saved to your review queue.' });
-      return;
-    }
-    const { data, error } = await supabase.functions.invoke('send-email', {
-      body: { to_email: lead.email, subject, body, lead_id: lead.id, log_id: draft?.log_id },
-    });
-    if (error) {
-      const text = await readableInvokeError(error);
-      setBusy(null);
-      return setMsg({ kind: 'err', text });
+      if (error) { if (!firstFailReason) firstFailReason = await readableInvokeError(error); continue; }
+      const r = data as { ok?: boolean; error?: string };
+      if (r.error) { if (!firstFailReason) firstFailReason = r.error; continue; }
+      succeeded++;
     }
     setBusy(null);
-    const r = data as { ok?: boolean; error?: string; warning?: string };
-    if (r.error) return setMsg({ kind: 'err', text: r.error });
-    if (r.warning) { setMsg({ kind: 'warn', text: `Sent ✓ — ${r.warning}` }); setTimeout(onClose, 1200); return; }
-    setMsg({ kind: 'ok', text: 'Sent ✓' });
-    setTimeout(onClose, 800);
+    if (succeeded === targets.length) {
+      setMsg({ kind: 'ok', text: asDraft ? 'Saved to your review queue.' : (targets.length > 1 ? `Sent to ${succeeded} recipients ✓` : 'Sent ✓') });
+      if (!asDraft) setTimeout(onClose, 800);
+    } else {
+      setMsg({ kind: 'err', text: `${succeeded} of ${targets.length} succeeded${firstFailReason ? ` — ${firstFailReason}` : ''}` });
+    }
   }
 
   return (
     <Modal open={open} onClose={onClose} title={`Email — ${lead.business_name}`}>
       <div className="flex flex-col gap-4">
-        {!lead.email && <p role="alert" className="text-sm text-danger">This lead has no email address.</p>}
+        {recipients.length === 0 && <p role="alert" className="text-sm text-danger">No email addresses available for this lead or its decision-makers.</p>}
+        {recipients.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs font-semibold text-muted">Send to</p>
+            {recipients.map((r) => (
+              <label key={r.key} className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
+                <input type="checkbox" checked={selectedRecipients.has(r.key)} onChange={() => toggleRecipient(r.key)} className="h-4 w-4 accent-violet-500" />
+                {r.label}
+              </label>
+            ))}
+          </div>
+        )}
         <SelectField label="Template" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
           <option value="">Choose…</option>
           {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -143,8 +197,8 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
         )}
         <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={() => void send(true)} disabled={busy !== null} loading={busy === 'save'}>{busy === 'save' ? 'Saving…' : 'Save as draft'}</Button>
-          <Button onClick={() => void send(false)} disabled={busy !== null || !lead.email} loading={busy === 'send'}>
-            <Send className="h-4 w-4" aria-hidden />{busy === 'send' ? 'Sending…' : `Send to ${lead.email ?? '—'}`}
+          <Button onClick={() => void send(false)} disabled={busy !== null || selectedRecipients.size === 0} loading={busy === 'send'}>
+            <Send className="h-4 w-4" aria-hidden />{busy === 'send' ? 'Sending…' : selectedRecipients.size > 1 ? `Send to ${selectedRecipients.size} recipients` : 'Send'}
           </Button>
         </div>
       </div>
