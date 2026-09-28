@@ -75,6 +75,7 @@ Deno.serve(async (req) => {
           lead_id: lead.id, source: 'hunter',
           first_name: hunter.firstName, last_name: hunter.lastName, title: hunter.title,
           email: hunter.email, email_revealed: true, name_obfuscated: false,
+          linkedin_url: hunter.linkedinUrl,
           created_by: userData.user.id,
         });
       }
@@ -86,6 +87,7 @@ Deno.serve(async (req) => {
           lead_id: lead.id, source: 'apollo', apollo_person_id: apollo.apolloPersonId,
           first_name: apollo.firstName, last_name: apollo.lastNameObfuscated, title: apollo.title,
           name_obfuscated: true, email_revealed: false,
+          linkedin_url: apollo.linkedinUrl,
           created_by: userData.user.id,
         });
       }
@@ -102,6 +104,27 @@ Deno.serve(async (req) => {
       .upsert(rows, { onConflict: 'lead_id,source' })
       .select('*');
     if (upsertErr) return { lead_id: lead.id, candidates: [] as Record<string, unknown>[] };
+
+    // Auto-capture: any candidate with a LinkedIn URL gets a linked
+    // linkedin_contacts row immediately, so it shows up in the LinkedIn
+    // queue without a separate action (matches the controller-approved
+    // design: "automatic, as soon as found"). context_signal stays null --
+    // see this plan's Global Constraints for why. Idempotent via the
+    // partial unique index on decision_maker_candidate_id (Task 1).
+    for (const candidate of (upserted ?? []) as { id: string; first_name: string | null; last_name: string | null; linkedin_url: string | null }[]) {
+      if (!candidate.linkedin_url) continue;
+      const fullName = `${candidate.first_name ?? ''} ${candidate.last_name ?? ''}`.trim() || 'Unknown';
+      await service.from('linkedin_contacts').upsert({
+        org_id: orgId,
+        lead_id: lead.id,
+        decision_maker_candidate_id: candidate.id,
+        full_name: fullName,
+        linkedin_url: candidate.linkedin_url,
+        context_signal: null,
+        created_by: userData.user.id,
+      }, { onConflict: 'decision_maker_candidate_id' });
+    }
+
     return { lead_id: lead.id, candidates: upserted ?? [] };
   });
 
