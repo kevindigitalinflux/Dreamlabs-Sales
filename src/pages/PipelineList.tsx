@@ -14,7 +14,7 @@ import { toCsv } from '../lib/csv';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Skeleton } from '../components/ui/Skeleton';
-import { SelectField } from '../components/ui/Input';
+import { Listbox } from '../components/ui/Listbox';
 import { AddLeadWizard } from '../components/pipeline/AddLeadWizard';
 import { BulkDraftModal } from '../components/pipeline/BulkDraftModal';
 import { EnrichmentReview } from '../components/pipeline/EnrichmentReview';
@@ -211,43 +211,54 @@ export function PipelineList() {
             <Download className="h-4 w-4" aria-hidden />
             Export CSV
           </Button>
-          {selected.size > 0 && (
-            <>
-              <Button variant="secondary" onClick={() => void handleFillMissingDetails()} disabled={enriching} loading={enriching}>
-                <Radar className="h-4 w-4" aria-hidden />
-                {enriching ? 'Searching…' : `Fill missing details (${selected.size})`}
-              </Button>
-              <Button variant="secondary" onClick={() => setDraftModalOpen(true)}>
-                <PenLine className="h-4 w-4" aria-hidden />
-                {`Draft emails (${selected.size})`}
-              </Button>
-              <Button variant="secondary" onClick={() => void handleFindDecisionMaker()} disabled={findingDecisionMakers} loading={findingDecisionMakers}>
-                <UserSearch className="h-4 w-4" aria-hidden />
-                {findingDecisionMakers ? 'Searching…' : `Find decision maker (${selected.size})`}
-              </Button>
-              {otherPipelines.length > 0 && (
-                <div className="flex items-end gap-2">
-                  <SelectField label="Move to" value={moveTargetId} onChange={(e) => setMoveTargetId(e.target.value)} className="min-w-40">
-                    <option value="">Choose pipeline…</option>
-                    {otherPipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </SelectField>
-                  <Button variant="secondary" onClick={() => void handleMoveSelected()} disabled={!moveTargetId || moving} loading={moving}>
-                    {moving ? 'Moving…' : `Move (${selected.size})`}
-                  </Button>
-                </div>
-              )}
-              <Button variant="danger" onClick={() => void handleDeleteSelected()} disabled={deleting} loading={deleting}>
-                <Trash2 className="h-4 w-4" aria-hidden />
-                {deleting ? 'Deleting…' : `Delete (${selected.size})`}
-              </Button>
-            </>
-          )}
           <Button onClick={() => setWizardOpen(true)}>
             <Plus className="h-4 w-4" aria-hidden />
             Add lead
           </Button>
         </div>
       </div>
+
+      {selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface/40 p-3">
+          <span className="text-sm font-semibold">{selected.size} selected</span>
+          <Button variant="secondary" onClick={() => void handleFillMissingDetails()} disabled={enriching} loading={enriching}>
+            <Radar className="h-4 w-4" aria-hidden />
+            {enriching ? 'Searching…' : 'Fill missing details'}
+          </Button>
+          <Button variant="secondary" onClick={() => setDraftModalOpen(true)}>
+            <PenLine className="h-4 w-4" aria-hidden />
+            Draft emails
+          </Button>
+          <Button variant="secondary" onClick={() => void handleFindDecisionMaker()} disabled={findingDecisionMakers} loading={findingDecisionMakers}>
+            <UserSearch className="h-4 w-4" aria-hidden />
+            {findingDecisionMakers ? 'Searching…' : 'Find decision maker'}
+          </Button>
+          {otherPipelines.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Listbox
+                value={moveTargetId}
+                onChange={(e) => setMoveTargetId(e.target.value)}
+                ariaLabel="Move selected leads to pipeline"
+                fullWidth={false}
+                className="min-w-40"
+              >
+                <option value="">Move to…</option>
+                {otherPipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </Listbox>
+              <Button variant="secondary" onClick={() => void handleMoveSelected()} disabled={!moveTargetId || moving} loading={moving}>
+                {moving ? 'Moving…' : 'Move'}
+              </Button>
+            </div>
+          )}
+          <Button variant="danger" onClick={() => void handleDeleteSelected()} disabled={deleting} loading={deleting}>
+            <Trash2 className="h-4 w-4" aria-hidden />
+            {deleting ? 'Deleting…' : 'Delete'}
+          </Button>
+          <Button variant="ghost" className="ml-auto" onClick={() => setSelected(new Set())}>
+            Clear selection
+          </Button>
+        </div>
+      )}
 
       <FilterBar filters={filters} onChange={setFilters} profiles={profiles.filter((p) => p.role === 'contractor')} />
 

@@ -16,6 +16,14 @@ function json(body: unknown, status: number, headers: Record<string, string>): R
   return new Response(JSON.stringify(body), { status, headers });
 }
 
+/** Runs a task after the response has already been sent — an SMTP round-trip
+ * (connect, auth, send) takes real seconds, and the share itself has already
+ * succeeded by the time notifyShare runs, so it must never delay the response
+ * the client is waiting on. Same pattern already used by the scrapers. */
+function scheduleBackground(task: Promise<unknown>): void {
+  (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime?.waitUntil(task);
+}
+
 /**
  * Best-effort "a pipeline was shared with you" email, sent via the SHARER's
  * own configured SMTP (there's no system-level mailer in this app — reusing
@@ -101,7 +109,7 @@ Deno.serve(async (req) => {
       service.from('profiles').select('email, full_name').eq('id', recipientId).maybeSingle(),
     ]);
     if (pipeline && recipient) {
-      await notifyShare(service, caller.id, recipient.email, recipient.full_name, pipeline.name);
+      scheduleBackground(notifyShare(service, caller.id, recipient.email, recipient.full_name, pipeline.name));
     }
     return json({ ok: true }, 200, headers);
   }
@@ -142,6 +150,6 @@ Deno.serve(async (req) => {
     console.error('Failed to share pipeline cross-org:', shareErr);
     return json({ error: 'Could not share this pipeline. Please try again.' }, 500, headers);
   }
-  await notifyShare(service, caller.id, email, targetProfile.full_name, pipeline.name);
+  scheduleBackground(notifyShare(service, caller.id, email, targetProfile.full_name, pipeline.name));
   return json({ ok: true }, 200, headers);
 });
