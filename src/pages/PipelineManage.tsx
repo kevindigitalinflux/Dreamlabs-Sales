@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Copy, Plus, Radar, Upload } from 'lucide-react';
+import { Copy, Plus, Radar, Upload, X } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { usePipeline } from '../hooks/usePipeline';
 import { usePipelineActions } from '../hooks/usePipelineActions';
@@ -47,6 +47,7 @@ export function PipelineManage() {
   const [crossOrgEmail, setCrossOrgEmail] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [shareBusyId, setShareBusyId] = useState<string | null>(null);
+  const [deleteBlockedId, setDeleteBlockedId] = useState<string | null>(null);
 
   async function handleCreate() {
     setError(null);
@@ -63,10 +64,21 @@ export function PipelineManage() {
   }
 
   async function handleDelete(pipeline: Pipeline) {
+    setError(null);
+    setDeleteBlockedId(null);
     setBusyId(pipeline.id);
     const err = await deletePipeline(pipeline.id);
     setBusyId(null);
-    if (err) setError(err);
+    if (err && err === 'Move or delete every lead in this pipeline before deleting it.') {
+      setDeleteBlockedId(pipeline.id);
+    } else if (err) {
+      setError(err);
+    }
+  }
+
+  function handleGoMoveLeads(pipeline: Pipeline) {
+    switchPipeline(pipeline.id);
+    navigate('/pipeline/list', { state: { selectAllOnLoad: true } });
   }
 
   async function handleShare(pipeline: Pipeline) {
@@ -166,26 +178,39 @@ export function PipelineManage() {
         </Card>
         <ul className="flex flex-col gap-3">
           {owned.map((pipeline) => (
-            <PipelineCard
-              key={pipeline.id}
-              pipeline={pipeline}
-              shares={outgoing[pipeline.id] ?? []}
-              profiles={profiles}
-              shareTarget={shareTarget[pipeline.id] ?? ''}
-              sharePermission={sharePermission[pipeline.id] ?? 'view'}
-              crossOrgEmail={crossOrgEmail[pipeline.id] ?? ''}
-              busy={busyId === pipeline.id}
-              shareBusy={shareBusyId === pipeline.id}
-              revokeBusyId={busyId}
-              onShareTargetChange={(userId) => setShareTarget((prev) => ({ ...prev, [pipeline.id]: userId }))}
-              onSharePermissionChange={(permission) => setSharePermission((prev) => ({ ...prev, [pipeline.id]: permission }))}
-              onCrossOrgEmailChange={(email) => setCrossOrgEmail((prev) => ({ ...prev, [pipeline.id]: email }))}
-              onRename={() => void handleRename(pipeline)}
-              onDelete={() => void handleDelete(pipeline)}
-              onShare={() => void handleShare(pipeline)}
-              onShareCrossOrg={() => void handleShareCrossOrg(pipeline)}
-              onRevoke={(shareId) => void handleRevoke(shareId)}
-            />
+            <Fragment key={pipeline.id}>
+              <PipelineCard
+                pipeline={pipeline}
+                shares={outgoing[pipeline.id] ?? []}
+                profiles={profiles}
+                shareTarget={shareTarget[pipeline.id] ?? ''}
+                sharePermission={sharePermission[pipeline.id] ?? 'view'}
+                crossOrgEmail={crossOrgEmail[pipeline.id] ?? ''}
+                busy={busyId === pipeline.id}
+                shareBusy={shareBusyId === pipeline.id}
+                revokeBusyId={busyId}
+                onShareTargetChange={(userId) => setShareTarget((prev) => ({ ...prev, [pipeline.id]: userId }))}
+                onSharePermissionChange={(permission) => setSharePermission((prev) => ({ ...prev, [pipeline.id]: permission }))}
+                onCrossOrgEmailChange={(email) => setCrossOrgEmail((prev) => ({ ...prev, [pipeline.id]: email }))}
+                onRename={() => void handleRename(pipeline)}
+                onDelete={() => void handleDelete(pipeline)}
+                onShare={() => void handleShare(pipeline)}
+                onShareCrossOrg={() => void handleShareCrossOrg(pipeline)}
+                onRevoke={(shareId) => void handleRevoke(shareId)}
+              />
+              {deleteBlockedId === pipeline.id && (
+                <li role="alert" className="flex flex-wrap items-center gap-2 text-sm text-danger">
+                  Move or delete every lead in this pipeline before deleting it.
+                  <button
+                    type="button"
+                    onClick={() => handleGoMoveLeads(pipeline)}
+                    className="cursor-pointer font-semibold text-cyan hover:underline"
+                  >
+                    Go move/delete its leads →
+                  </button>
+                </li>
+              )}
+            </Fragment>
           ))}
         </ul>
       </section>
@@ -197,12 +222,18 @@ export function PipelineManage() {
           {incoming.map((share) => (
             <li key={share.id} className="flex items-center justify-between rounded-xl border border-line bg-card p-4">
               <span className="font-semibold">{share.pipelines.name} — {share.permission}</span>
-              {share.permission === 'edit' && (
-                <Button onClick={() => void handleFork(share.pipelines)} disabled={busyId === share.pipelines.id} loading={busyId === share.pipelines.id}>
-                  <Copy className="h-4 w-4" aria-hidden />
-                  Make my own copy
+              <div className="flex gap-2">
+                {share.permission === 'edit' && (
+                  <Button onClick={() => void handleFork(share.pipelines)} disabled={busyId === share.pipelines.id} loading={busyId === share.pipelines.id}>
+                    <Copy className="h-4 w-4" aria-hidden />
+                    Make my own copy
+                  </Button>
+                )}
+                <Button variant="ghost" onClick={() => void handleRevoke(share.id)} disabled={busyId === share.id} loading={busyId === share.id}>
+                  <X className="h-4 w-4" aria-hidden />
+                  Remove
                 </Button>
-              )}
+              </div>
             </li>
           ))}
         </ul>
