@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Inbox, PenLine, Plus, Radar, UserSearch } from 'lucide-react';
+import { Download, Inbox, PenLine, Plus, Radar, UserSearch } from 'lucide-react';
 import { useLeads } from '../hooks/useLeads';
 import { useProfiles } from '../hooks/useProfiles';
 import { useLeadEnrichment } from '../hooks/useLeadEnrichment';
@@ -8,7 +8,8 @@ import { useDecisionMakers } from '../hooks/useDecisionMakers';
 import { usePipeline } from '../hooks/usePipeline';
 import { filterLeads, sortLeads } from '../lib/leadFilters';
 import type { LeadFilters, SortKey } from '../lib/leadFilters';
-import { STAGES } from '../lib/utils';
+import { STAGES, packageLabel, stageInfo } from '../lib/utils';
+import { toCsv } from '../lib/csv';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Skeleton } from '../components/ui/Skeleton';
@@ -114,6 +115,31 @@ export function PipelineList() {
     return updateLead(leadId, patch);
   }
 
+  function handleExportCsv() {
+    const headers = [
+      'Business', 'Owner', 'Phone', 'Email', 'Website', 'Address', 'City', 'Postcode',
+      'Rating', 'Reviews', 'Vertical', 'Stage', 'Package', 'Deal value', 'Assigned to',
+      'Next action date', 'Next action note', 'Priority', 'Calls', 'Last contacted', 'Created',
+    ];
+    const rows = visible.map((l) => [
+      l.business_name, l.owner_name ?? '', l.phone ?? '', l.email ?? '', l.website ?? '',
+      l.address ?? '', l.city ?? '', l.postcode ?? '',
+      l.google_rating?.toString() ?? '', l.review_count?.toString() ?? '', l.vertical ?? '',
+      stageInfo(l.stage).label, packageLabel(l.package_tier),
+      l.deal_value?.toString() ?? '',
+      profiles.find((p) => p.id === l.assigned_to)?.full_name
+        ?? profiles.find((p) => p.id === l.assigned_to)?.email ?? '',
+      l.next_action_date ?? '', l.next_action_note ?? '', l.is_priority ? 'Yes' : 'No',
+      l.call_count.toString(), l.last_contacted_at ?? '', l.created_at,
+    ]);
+    const blob = new Blob([toCsv(headers, rows)], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const name = (currentPipeline?.name ?? 'pipeline').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    a.href = url; a.download = `${name}-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <SharedPipelineBanner />
@@ -124,6 +150,10 @@ export function PipelineList() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <ViewToggle current="list" />
+          <Button variant="secondary" onClick={handleExportCsv} disabled={visible.length === 0}>
+            <Download className="h-4 w-4" aria-hidden />
+            Export CSV
+          </Button>
           {selected.size > 0 && (
             <>
               <Button variant="secondary" onClick={() => void handleFillMissingDetails()} disabled={enriching} loading={enriching}>

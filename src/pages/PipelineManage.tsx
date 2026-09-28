@@ -82,6 +82,11 @@ export function PipelineManage() {
     else {
       setMessage(`Shared "${pipeline.name}" with your teammate.`);
       await refreshShares();
+      // Best-effort email notification — never blocks the success message or
+      // surfaces its own error; the share itself already succeeded above.
+      void supabase.functions.invoke('pipeline-shares', {
+        body: { action: 'notify_within_org_share', pipeline_id: pipeline.id, shared_with_user_id: userId },
+      }).catch(() => {});
     }
   }
 

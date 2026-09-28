@@ -75,7 +75,7 @@ export function PipelineCard({
               className="cursor-pointer hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
             >
               {revokeBusyId === share.id
-                ? <span className="block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" aria-hidden />
+                ? <span className="block h-4 w-4 animate-spin rounded-full border-2 border-violet border-t-transparent motion-reduce:animate-none" aria-hidden />
                 : <X className="h-4 w-4" aria-hidden />}
             </button>
           </li>

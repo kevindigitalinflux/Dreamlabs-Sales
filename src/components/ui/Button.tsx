@@ -9,6 +9,17 @@ const VARIANT_CLASSES: Record<Variant, string> = {
   danger: 'border border-red-500/40 bg-red-500/15 text-danger hover:bg-red-500/25',
 };
 
+// Primary's background is already violet, so its spinner stays on the
+// button's own (light) text color for contrast; every other variant's own
+// text color is muted/gray/red, so the spinner is pinned to the brand
+// violet instead of blending in.
+const SPINNER_CLASSES: Record<Variant, string> = {
+  primary: 'border-current border-t-transparent',
+  secondary: 'border-violet border-t-transparent',
+  ghost: 'border-violet border-t-transparent',
+  danger: 'border-violet border-t-transparent',
+};
+
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   /** Shows a spinner before the label and disables the button while true. */
@@ -27,7 +38,7 @@ export function Button({ variant = 'primary', className = '', type = 'button', l
     >
       {loading && (
         <span
-          className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none"
+          className={`h-4 w-4 shrink-0 animate-spin rounded-full border-2 motion-reduce:animate-none ${SPINNER_CLASSES[variant]}`}
           aria-hidden
         />
       )}
