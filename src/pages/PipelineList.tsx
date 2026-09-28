@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { Download, Inbox, PenLine, Plus, Radar, UserSearch } from 'lucide-react';
 import { useLeads } from '../hooks/useLeads';
 import { useProfiles } from '../hooks/useProfiles';
@@ -30,6 +30,8 @@ export function PipelineList() {
   const { leads, loading, error, createLead, updateLead } = useLeads();
   const { profiles } = useProfiles();
   const { currentPipeline } = usePipeline();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const urlStage = searchParams.get('stage');
   const initialStages = STAGES.some((s) => s.value === urlStage) ? [urlStage as Stage] : [];
@@ -57,6 +59,19 @@ export function PipelineList() {
   useEffect(() => {
     setSelected(new Set());
   }, [filters, currentPipeline?.id]);
+
+  // Arrives via navigate(..., { state: { selectAllOnLoad: true } }) — e.g. Pipeline
+  // Manage's "delete blocked, go move its leads" link. Waits for this pipeline's
+  // leads to actually finish loading (switching pipeline triggers a refetch), then
+  // clears the nav state so it can't re-trigger on a later remount or back-nav.
+  useEffect(() => {
+    const state = location.state as { selectAllOnLoad?: boolean } | null;
+    if (state?.selectAllOnLoad && !loading) {
+      setSelected(new Set(leads.map((l) => l.id)));
+      navigate(location.pathname + location.search, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, leads]);
 
   const visible = useMemo(
     () => sortLeads(filterLeads(leads, filters), sortKey, sortDir),
