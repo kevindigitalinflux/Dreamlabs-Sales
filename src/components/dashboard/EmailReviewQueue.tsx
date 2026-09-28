@@ -72,7 +72,7 @@ export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selecte
               className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-muted hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
             >
               {discardingId === d.id
-                ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" aria-hidden />
+                ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-violet border-t-transparent motion-reduce:animate-none" aria-hidden />
                 : <Trash2 className="h-4 w-4" aria-hidden />}
             </button>
             <Button variant="secondary" onClick={() => onReview(d)}>Review &amp; send</Button>
