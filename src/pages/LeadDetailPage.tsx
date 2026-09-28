@@ -14,6 +14,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { StageBadge } from '../components/pipeline/StageBadge';
 import { NextActionEditor } from '../components/pipeline/NextActionEditor';
 import { ContactInfo, PipelineInfo } from '../components/pipeline/LeadPanelSections';
+import { DecisionMakersCard } from '../components/pipeline/DecisionMakersCard';
 import { NotesTimeline } from '../components/pipeline/NotesTimeline';
 import { NoteComposer } from '../components/pipeline/NoteComposer';
 import { ActivityHistory, CallHistorySection, EmailLogSection } from '../components/pipeline/LeadDetailSections';
@@ -65,6 +66,11 @@ export function LeadDetailPage() {
       <Card>
         <h2 className="mb-2 text-[18px] font-bold">Contact</h2>
         <ContactInfo lead={lead} onSave={(patch) => updateLead(patch)} />
+      </Card>
+
+      <Card>
+        <h2 className="mb-2 text-[18px] font-bold">Decision Makers</h2>
+        <DecisionMakersCard leadId={lead.id} />
       </Card>
 
       <Card>
