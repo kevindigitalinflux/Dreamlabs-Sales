@@ -116,17 +116,24 @@ export function Listbox({ value, onChange, children, id, ariaLabel, disabled, cl
     function close() {
       setOpen(false);
     }
+    // The scroll listener below is capture-phase on window, so it also fires for
+    // scrolling INSIDE the open list itself — which used to close it the moment
+    // you tried to scroll to a lower option. Only outside scrolls should close.
+    function handleScroll(e: Event) {
+      if (e.target instanceof Node && panelRef.current?.contains(e.target)) return;
+      setOpen(false);
+    }
     function handlePointerDown(e: MouseEvent) {
       const target = e.target as Node;
       if (triggerRef.current?.contains(target)) return;
       if (panelRef.current?.contains(target)) return;
       setOpen(false);
     }
-    window.addEventListener('scroll', close, true);
+    window.addEventListener('scroll', handleScroll, true);
     window.addEventListener('resize', close);
     document.addEventListener('mousedown', handlePointerDown);
     return () => {
-      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('resize', close);
       document.removeEventListener('mousedown', handlePointerDown);
     };
