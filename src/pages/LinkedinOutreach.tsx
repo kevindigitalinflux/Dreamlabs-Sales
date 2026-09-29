@@ -1,18 +1,24 @@
 import { useState } from 'react';
 import { Contact as LinkedinIcon, CheckCircle2, ExternalLink, Sparkles, SkipForward } from 'lucide-react';
 import { useLinkedinOutreach } from '../hooks/useLinkedinOutreach';
+import { usePipeline } from '../hooks/usePipeline';
+import { useOrg } from '../hooks/useOrg';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
-import { Input, Textarea } from '../components/ui/Input';
+import { Input, SelectField, Textarea } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 
 /** LinkedIn contacts + drafts review queue (SPEC.md §2 Channel 2). */
 export function LinkedinOutreach() {
   const { contacts, drafts, loading, addContact, draftFor, approve, skip, markSent } = useLinkedinOutreach();
+  const { pipelines } = usePipeline();
+  const { currentOrg } = useOrg();
   const [form, setForm] = useState({ full_name: '', linkedin_url: '', context_signal: '' });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [pipelineFilter, setPipelineFilter] = useState(''); // '' = all, 'unlinked' = no lead_id, else a pipeline id
 
   async function handleAdd() {
     if (!form.full_name.trim()) return;
@@ -24,6 +30,18 @@ export function LinkedinOutreach() {
   }
 
   const pendingContacts = contacts.filter((c) => c.status === 'pending');
+  const orgPipelines = pipelines.filter((p) => p.org_id === currentOrg?.id);
+
+  function matchesSearchAndPipeline(fullName: string, lead: { business_name: string; pipeline_id: string } | null): boolean {
+    const q = search.trim().toLowerCase();
+    if (q && !fullName.toLowerCase().includes(q) && !(lead?.business_name.toLowerCase().includes(q))) return false;
+    if (pipelineFilter === 'unlinked') return !lead;
+    if (pipelineFilter && lead?.pipeline_id !== pipelineFilter) return false;
+    return true;
+  }
+
+  const filteredPendingContacts = pendingContacts.filter((c) => matchesSearchAndPipeline(c.full_name, c.lead));
+  const filteredDrafts = drafts.filter((d) => matchesSearchAndPipeline(d.contact.full_name, d.contact.lead));
 
   if (loading) return <Skeleton className="h-96 w-full" />;
 
@@ -33,6 +51,14 @@ export function LinkedinOutreach() {
         <LinkedinIcon className="h-6 w-6 text-cyan" aria-hidden />
         <h1 className="text-[28px] font-extrabold">LinkedIn outreach</h1>
       </header>
+      <div className="flex flex-wrap items-end gap-3">
+        <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Contact or company name" className="max-w-xs" />
+        <SelectField label="Pipeline" value={pipelineFilter} onChange={(e) => setPipelineFilter(e.target.value)} className="max-w-xs">
+          <option value="">All</option>
+          <option value="unlinked">Unlinked</option>
+          {orgPipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </SelectField>
+      </div>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
       <Card>
@@ -45,11 +71,11 @@ export function LinkedinOutreach() {
         </div>
       </Card>
 
-      {pendingContacts.length > 0 && (
+      {filteredPendingContacts.length > 0 && (
         <Card>
           <div className="flex flex-col gap-3">
             <p className="font-semibold">Not yet drafted</p>
-            {pendingContacts.map((c) => (
+            {filteredPendingContacts.map((c) => (
               <div key={c.id} className="flex items-center justify-between rounded-lg bg-surface/50 p-3">
                 <span className="font-semibold">{c.full_name}</span>
                 <Button variant="secondary" onClick={() => void (async () => { setBusy(c.id); setError(await draftFor(c.id)); setBusy(null); })()} disabled={busy === c.id} loading={busy === c.id}>
@@ -63,10 +89,10 @@ export function LinkedinOutreach() {
 
       <div className="flex flex-col gap-3">
         <p className="font-semibold">Review queue</p>
-        {drafts.length === 0 && (
+        {filteredDrafts.length === 0 && (
           <EmptyState icon={LinkedinIcon} title="No drafts waiting" hint="Add a contact and draft a message to see it here." />
         )}
-        {drafts.map((d) => (
+        {filteredDrafts.map((d) => (
           <Card key={d.id}>
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
