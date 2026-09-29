@@ -1221,6 +1221,145 @@ scraping logic was touched** — `scrape-google-places` still only calls the Leg
 actual Places API (New) source into the scraper wizard is deferred until an org's revenue justifies the
 per-search cost, per Kevin's explicit call.
 
+**Decision-makers-as-lead-records + LinkedIn Phase 1 — shipped and merged to `main`/production (2026-09-28/29),
+via subagent-driven-development.** Spec: `docs/superpowers/specs/2026-09-28-decision-makers-linkedin-phase1-design.md`.
+Plan: `docs/superpowers/plans/2026-09-28-decision-makers-linkedin-phase1.md`. Full per-task ledger (findings,
+live-verification detail, every ruling) was deleted after merge per this project's standard SDD cleanup —
+git history is the record now; this entry is the durable summary. Follow-up to live user feedback on the
+already-shipped decision-maker-enrichment feature (Hunter/Apollo lookup + Apollo reveal). 12 tasks, each
+individually implemented + independently reviewed (fresh subagent per role, live-verified against real data
+on Mr Brush & Co / DI Dreamlabs), plus one final whole-branch review that caught real cross-task bugs no
+single-task review could see, one fix wave, one scoped re-review — clean, then merged.
+
+**What shipped:**
+- `decision_maker_candidates` gained `linkedin_url`; `find-decision-makers` now parses it from Hunter/Apollo
+  and auto-captures a linked `linkedin_contacts` row (`context_signal` always literal `null` — that field
+  gets interpolated directly into `draft-linkedin-message`'s achievement/life_update templates, so a
+  synthesized "title at company" string would read as nonsense there).
+- **`reveal-decision-maker` and `apollo-phone-webhook` no longer overwrite `leads.email`/`owner_name`/`phone`**
+  — this was the actual bug report that started the plan. Decision-maker contact data now lives permanently
+  in its own place: a new `DecisionMakersCard.tsx` on the lead detail page, realtime-subscribed, with inline
+  Reveal-email/Reveal-phone buttons for Apollo candidates. A compensating sync updates a linked LinkedIn
+  contact's `full_name` once an Apollo email reveal succeeds (so an auto-captured obfuscated name like
+  "Andrew Hu***n" gets corrected once the real name is known).
+- `generate-email` gained an optional `recipient_name` override (in-memory only — never written back to the
+  lead); `send-email`/`email_logs` gained `decision_maker_candidate_id` for attribution.
+- `EmailComposer.tsx` (single-lead) and `BulkDraftModal.tsx` (many-leads) both gained the ability to send/draft
+  to multiple recipients per lead — the lead's own contact AND/OR any decision-maker with an email. Per this
+  plan's Global Constraint, `EmailComposer` sends identical hand-edited content to every checked recipient
+  (no per-recipient AI variation there); `BulkDraftModal` does personalize per recipient via `recipient_name`.
+- `useLinkedinOutreach.ts` now joins every contact/draft to a lightweight lead summary; `markSent` takes the
+  full draft object and, when linked to a real lead, logs a note + advances `new_lead`→`contacted`
+  specifically (mirroring `send-email`'s existing safety rule) + bumps `last_contacted_at`.
+- `LinkedinOutreach.tsx` (the LinkedIn queue) gained a search box, a pipeline filter (All/Unlinked/each real
+  pipeline), multi-select checkboxes, and a bulk "Draft messages (N)" action.
+- Researched a free LinkedIn API for automated profile/people search: none exists (LinkedIn's real APIs for
+  this are partnership-gated — Recruiter/Sales Navigator — not self-serve; scraping violates ToS, ban risk).
+  Automating LinkedIn *message sending* was also researched and explicitly declined by Kevin for the same
+  reason — the queue instead gets a manual "mark as sent" action that updates the lead's own state.
+
+**Final whole-branch review caught real cross-task bugs, all fixed same-day before merge (commit
+`a00c274` on the feature branch, now folded into `main`):**
+1. **Critical — reviewing a decision-maker's bulk-drafted email from the Dashboard or release queue defaulted
+   to sending it to the lead's own generic email instead of the decision-maker it was written for.** Root
+   cause: `EmailComposer`'s `draft` prop only carried `{log_id, subject, body}`, not `to_email`/
+   `decision_maker_candidate_id`, so the composer couldn't tell who a reviewed draft was actually for. This
+   was the default path for every bulk decision-maker draft reviewed one at a time — an email written "Hi
+   John" would silently go to the company's general inbox instead, and overwrite John's draft row as sent to
+   the wrong address. Fixed by widening the `draft` prop and seeding `selectedRecipients` from it once the
+   decision-makers list loads.
+2. **`send-email` wiped `decision_maker_candidate_id` on every draft-update release** — the release queue never
+   passed that field, so its `?? null` fallback nulled out attribution on every bulk-released decision-maker
+   email. Fixed to only set the column when the caller actually supplies it.
+3. **Plan/spec gap, not an implementation bug: `linkedin_contacts` (and, caught by the fixer during the same
+   pass, `linkedin_drafts`) had org-wide RLS (`is_org_member`) while their source `decision_maker_candidates`
+   is lead-scoped (`can_view_lead`)** — auto-capture copied lead-restricted data into an org-wide-visible
+   table, so a contractor who can't see a given lead's pipeline could still see/draft-for/mark-sent that
+   lead's decision-makers via the LinkedIn queue, and such rows were mislabelled "Unlinked" (the filter
+   checked the joined object, not the contact's own `lead_id` column). Latent today since every live user is
+   an org admin — becomes real the moment a contractor is onboarded to an org with non-default pipelines.
+   Fixed via migration `036_linkedin_contacts_lead_visibility.sql`, tightening both tables' RLS to
+   `is_org_member(org_id) AND (lead_id IS NULL OR can_view_lead(lead_id))`, and fixing the "Unlinked" filter
+   to check the contact's own `lead_id` column directly.
+4. Stale bulk-selection in the LinkedIn queue could silently re-draft (and re-charge a real Anthropic call
+   for) a contact already drafted individually, or one hidden by a filter change — fixed by filtering against
+   the currently-visible list at click time, plus a pruning effect mirroring `ReleaseQueue`'s existing pattern.
+5. `EmailComposer`'s multi-recipient send never passed `recipient_name`, so every decision-maker got the
+   lead-owner's salutation ("Hi Sarah" sent to John) — sharper than the plan's own ruling anticipated. Fixed
+   to pass `recipient_name` when exactly one decision-maker is selected.
+
+**Residual gap, deliberately NOT fixed in this plan (flagged as a real fast-follow):** `draft-linkedin-message`
+reads/writes `linkedin_contacts` via the service-role client (bypasses RLS entirely) keyed off a
+client-supplied `contact_id`, gating only on `org_members` membership — no `can_view_lead` check. So even
+after the migration-036 RLS tightening above, a direct invocation with a known lead-restricted contact's UUID
+would still succeed. Not exploitable today (every live org member is an admin; the UUID isn't enumerable in
+practice), becomes real once a contractor is onboarded. **Fix pattern already established elsewhere in this
+app** (`find-decision-makers`/`reveal-decision-maker` both do this correctly) — add an explicit
+`can_view_lead(contact.lead_id)` check alongside the membership check when `contact.lead_id` is non-null.
+
+**Also parked, lower priority:** `EmailComposer` — opening an existing single-recipient draft and adding
+another recipient before sending leaves the original draft row orphaned as `status='draft'` in the release
+queue forever (harmless, just confusing; `log_id` is only passed when exactly one target is selected, by
+design, to avoid a worse bug where a multi-recipient send would clobber a single existing draft row).
+`send-email`'s response type lost the prior version's `warning` field (a send that succeeds but fails to log
+now silently reports as plain success). `linkedin_drafts_update`'s RLS `WITH CHECK` clause doesn't re-verify
+lead visibility on the new row (only `USING` does) — not exploitable by any current code path, since nothing
+in this app ever updates `contact_id` on an existing draft. A phone-reveal button label has no branch for a
+hypothetical `phone_status==='failed'` state nothing currently writes (dead code).
+
+**Merge saga worth remembering for next time:** this branch was worked in an isolated worktree
+(`.claude/worktrees/decision-maker-enrichment`), and the session doing the work was itself sandboxed to that
+worktree — it could not `cd`, `git checkout`, or push directly into the primary checkout, and git's own
+cross-worktree safety (`refusing to fetch into branch 'refs/heads/main' checked out at ...`) blocks the same
+thing even via plumbing. Kevin had to run the actual `git checkout main && git merge --ff-only ...` himself
+from a separate terminal (not the in-session `!` shortcut, which runs through the same sandbox) — and
+separately, his terminal is Windows PowerShell, which doesn't support `&&` chaining or `npx` directly
+(script-execution-policy blocks `.ps1`; use `npx.cmd`). **Bigger discovery**: the previous
+"decision-maker-enrichment" cycle (the one before this plan, documented above under "Real bug found and fixed
+2026-09-23" era entries) had been reported as "merged to main via individual PRs" — this was only half true:
+the PRs (#1–#8) really were squash-merged into `origin/main` on GitHub, but the local primary checkout's
+`main` had never been fetched since, so it looked stale-but-in-sync (`git checkout main` said "up to date"
+from cached remote-tracking state). This plan's own work was rebased on the WRONG local base as a result. Fix:
+confirmed the tree at this plan's actual starting commit was byte-identical to real `origin/main` (only
+different commit-shape — squashed PRs vs. granular local commits, zero content drift), then rebased just this
+plan's 16 genuinely-new commits onto a fresh `git fetch origin/main`, verified tests, and pushed as a clean
+fast-forward. **Lesson: always `git fetch origin/main` and diff against the FETCHED ref, never trust a stale
+local `main`/`git merge-base main HEAD` result, before assuming what is or isn't already merged.**
+
+**Real, unrelated issue found and flagged mid-plan, not yet resolved: Mr Brush & Co's Gemini API key is
+returning a live `402 RESOURCE_EXHAUSTED` ("prepayment credits are depleted") from Google — but this is
+NOT explained by real usage.** The key was connected via `org_api_settings` on **2026-09-23** (confirmed via
+`created_at`/`updated_at` on that row) — 6 days before this was discovered — and in that entire window the
+org has exactly **3** `email_logs` rows total, **0** `ai_summary` lead-notes rows, and **0** `linkedin_drafts`
+— i.e. essentially no real AI usage happened through this app for this org at all. A brand-new key exhausting
+prepaid credits after ~3 real calls (if that many even succeeded) points at a billing/account-setup problem,
+not usage-based drain. Given this project's own prior history with Mr Brush & Co's Google Cloud account
+(`mrbrushandco@gmail.com` — the "Google Places API key" saga above: a messy pre-existing landing-zone org
+structure, several suspended projects, a billing-account project quota silently exhausted by unrelated dead
+infrastructure), the most likely explanation is a similar account/billing-state issue on whatever Google
+Cloud project this Gemini key belongs to, not a leaked/abused key or genuine heavy use. **Next step: check
+that project's actual billing/quota state directly in Google AI Studio / Cloud Console (same account,
+`mrbrushandco@gmail.com`) before assuming a top-up alone fixes it** — https://ai.studio/projects, and cross-
+check against the billing account already linked for Places (`dreamlabs-sales-509612`) in case this Gemini
+key is sitting on one of the suspended/quota-exhausted projects instead.
+
+**Checklist for Kevin, in priority order:**
+1. Investigate the Mr Brush & Co Gemini key per the paragraph above — this is genuinely suspicious given the
+   near-zero real usage, not a normal "ran out from use" situation.
+2. **Do one real click-through of the whole decision-makers/LinkedIn feature** — nothing in this plan has
+   been clicked through in a browser by anyone (every implementer and reviewer hit the same wall: no dev
+   session has org membership on the test orgs, and the platform's safety classifier blocks creating
+   throwaway test users or minting sessions via internal credentials, so every live check across all 12 tasks
+   was a DB-level RLS-simulation trace instead — independently verified each time, but never a real click).
+   Minimum path: find a decision-maker on a lead → bulk-draft an email to them → review it from the
+   Dashboard → confirm it's addressed to the right person → release it → mark a LinkedIn draft as sent →
+   confirm the lead's notes/stage updated.
+3. Schedule the `draft-linkedin-message` `can_view_lead` fast-follow (real gap, not yet fixed, see above).
+4. Decide if/when the `EmailComposer` orphaned-draft edge case is worth fixing (UX polish, not urgent).
+5. `origin/main` is now ahead of what may be deployed — confirm `sales.didreamlabs.com` picked up the new
+   deploy (Cloudflare's auto-deploy-on-push has been reliable since the 2026-09-22 fix, should land within
+   ~90 seconds of the push, but this hasn't been independently re-confirmed for this specific push).
+
 ---
 
 ## Do Not Touch
