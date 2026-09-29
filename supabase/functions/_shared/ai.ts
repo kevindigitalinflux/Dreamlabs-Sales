@@ -109,6 +109,13 @@ function packageChoices(customPackages: string[] | null | undefined): string {
   return (custom.length > 0 ? custom : DEFAULT_PACKAGE_VALUES).join(', ');
 }
 
+/**
+ * Shared follow-up rule for both note parsers. next_action_* fields are
+ * proposals the user confirms or dismisses like every other field, so a
+ * sensible default is safe — unlike inventing facts, which the prompts forbid.
+ */
+const FOLLOW_UP_GUIDANCE = `FOLLOW-UP: if the note reports that a contact was made (call, email, text, meeting) or an outcome that needs a next step, and does NOT already state a follow-up, ALWAYS propose one: next_action_date = a sensible date (about 3 days after today for an email or text with no reply yet, 1 to 2 days for a lead who sounds interested or asked for something, a few weeks for "not now"), and next_action_note = a short phrase naming the method, reusing the channel the rep just used unless the note implies another (e.g. "Follow up by email"). If the note DOES state a follow-up, use exactly that instead. Do not propose one when the lead is won or lost, or nothing needs following up. This is the one exception to "suggest nothing you are not confident about": the rep reviews and can decline it.`;
+
 /** Suggests lead field updates from a note. Throws on failure. */
 export async function parseNotes(input: { note: string; lead: Record<string, unknown>; customPackages?: string[] | null; apiKey: string }): Promise<Record<string, unknown>> {
   return await geminiJson(
@@ -118,6 +125,7 @@ deal_value (number, GBP), package_tier (exactly one of: ${packageChoices(input.c
 next_action_date (YYYY-MM-DD), next_action_note (string), pain_point (string),
 rationale (string, ALWAYS present: one sentence explaining the suggestions).
 Suggest nothing you are not confident about. Today is ${new Date().toISOString().slice(0, 10)}.
+${FOLLOW_UP_GUIDANCE}
 
 CURRENT LEAD: ${JSON.stringify(input.lead)}
 NOTE:
@@ -178,6 +186,8 @@ Only emit an action for something a genuine business update/mention was made abo
 do not invent actions for names that only appear in passing. Today is
 ${new Date().toISOString().slice(0, 10)}. Return a JSON array of actions (empty
 array if nothing found).
+
+For every "update" action, apply this rule to its patch. ${FOLLOW_UP_GUIDANCE}
 
 LEAD INDEX: ${JSON.stringify(input.leadIndex)}
 
