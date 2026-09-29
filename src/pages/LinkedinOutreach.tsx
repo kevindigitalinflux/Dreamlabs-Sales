@@ -19,6 +19,8 @@ export function LinkedinOutreach() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [pipelineFilter, setPipelineFilter] = useState(''); // '' = all, 'unlinked' = no lead_id, else a pipeline id
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDrafting, setBulkDrafting] = useState(false);
 
   async function handleAdd() {
     if (!form.full_name.trim()) return;
@@ -27,6 +29,29 @@ export function LinkedinOutreach() {
     setBusy(null);
     if (err) setError(err);
     else setForm({ full_name: '', linkedin_url: '', context_signal: '' });
+  }
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleBulkDraft() {
+    setBulkDrafting(true);
+    setError(null);
+    let drafted = 0;
+    let firstFailReason: string | null = null;
+    for (const contactId of selected) {
+      const err = await draftFor(contactId);
+      if (err) { if (!firstFailReason) firstFailReason = err; continue; }
+      drafted++;
+    }
+    setBulkDrafting(false);
+    setSelected(new Set());
+    if (drafted < selected.size) setError(`Drafted ${drafted} of ${selected.size}${firstFailReason ? ` — ${firstFailReason}` : ''}`);
   }
 
   const pendingContacts = contacts.filter((c) => c.status === 'pending');
@@ -74,10 +99,21 @@ export function LinkedinOutreach() {
       {filteredPendingContacts.length > 0 && (
         <Card>
           <div className="flex flex-col gap-3">
-            <p className="font-semibold">Not yet drafted</p>
+            <div className="flex items-center justify-between">
+              <p className="font-semibold">Not yet drafted</p>
+              {selected.size > 0 && (
+                <Button variant="secondary" onClick={() => void handleBulkDraft()} disabled={bulkDrafting} loading={bulkDrafting}>
+                  <Sparkles className="h-4 w-4" aria-hidden />
+                  {bulkDrafting ? 'Drafting…' : `Draft messages (${selected.size})`}
+                </Button>
+              )}
+            </div>
             {filteredPendingContacts.map((c) => (
               <div key={c.id} className="flex items-center justify-between rounded-lg bg-surface/50 p-3">
-                <span className="font-semibold">{c.full_name}</span>
+                <label className="flex min-h-11 cursor-pointer items-center gap-2">
+                  <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} className="h-4 w-4 accent-violet-500" />
+                  <span className="font-semibold">{c.full_name}</span>
+                </label>
                 <Button variant="secondary" onClick={() => void (async () => { setBusy(c.id); setError(await draftFor(c.id)); setBusy(null); })()} disabled={busy === c.id} loading={busy === c.id}>
                   <Sparkles className="h-4 w-4" aria-hidden /> {busy === c.id ? 'Drafting…' : 'Draft message'}
                 </Button>
