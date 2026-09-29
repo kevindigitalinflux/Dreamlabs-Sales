@@ -93,12 +93,28 @@ ${input.body}`,
   return { subject: stripAiPunctuation(result.subject), body: stripAiPunctuation(result.body) };
 }
 
+const DEFAULT_PACKAGE_VALUES = [
+  'pilot_systems', 'pilot_ai_app', 'pilot_full_build', 'automation_sprint', 'ai_foundation',
+  'full_build', 'retainer_bronze', 'retainer_silver', 'retainer_gold', 'custom',
+];
+
+/**
+ * The comma-separated list of allowed package_tier values for a parse prompt: the
+ * org's own custom package names when it has set any (stored value === name), else
+ * the built-in DI Dreamlabs slugs. Must stay in step with the client's
+ * useOrgPackages, which whitelists whatever the AI returns against the same list.
+ */
+function packageChoices(customPackages: string[] | null | undefined): string {
+  const custom = (customPackages ?? []).map((p) => p.trim()).filter(Boolean);
+  return (custom.length > 0 ? custom : DEFAULT_PACKAGE_VALUES).join(', ');
+}
+
 /** Suggests lead field updates from a note. Throws on failure. */
-export async function parseNotes(input: { note: string; lead: Record<string, unknown>; apiKey: string }): Promise<Record<string, unknown>> {
+export async function parseNotes(input: { note: string; lead: Record<string, unknown>; customPackages?: string[] | null; apiKey: string }): Promise<Record<string, unknown>> {
   return await geminiJson(
 `You extract CRM field updates from a sales call note. Compare the note against the current lead and output ONLY fields that should change, as JSON with any of these keys:
 stage (one of: new_lead, contacted, audit_booked, proposal_sent, negotiating, won, lost, not_now_nurture),
-deal_value (number, GBP), package_tier (one of: pilot_systems, pilot_ai_app, pilot_full_build, automation_sprint, ai_foundation, full_build, retainer_bronze, retainer_silver, retainer_gold, custom),
+deal_value (number, GBP), package_tier (exactly one of: ${packageChoices(input.customPackages)}; omit it if none clearly fits),
 next_action_date (YYYY-MM-DD), next_action_note (string), pain_point (string),
 rationale (string, ALWAYS present: one sentence explaining the suggestions).
 Suggest nothing you are not confident about. Today is ${new Date().toISOString().slice(0, 10)}.
@@ -121,7 +137,7 @@ ${input.note}`,
  */
 export async function parseSessionNotes(input: {
   messages: string[]; leadIndex: { id: string; business_name: string; city: string | null; stage: string }[];
-  currentCompanyContext: string | null; apiKey: string;
+  currentCompanyContext: string | null; customPackages?: string[] | null; apiKey: string;
 }): Promise<unknown> {
   return await geminiJson(
 `You extract CRM actions from a sales rep's session notes. The rep may mention
@@ -134,9 +150,8 @@ For each company/person mentioned, decide one of four action types:
    {"type":"update","lead_id":<id from LEAD INDEX>,"business_name":<their name>,
    "patch":{<only fields that should change, keys from: stage (one of new_lead,
    contacted, audit_booked, proposal_sent, negotiating, won, lost,
-   not_now_nurture), deal_value (number, GBP), package_tier (one of pilot_systems,
-   pilot_ai_app, pilot_full_build, automation_sprint, ai_foundation, full_build,
-   retainer_bronze, retainer_silver, retainer_gold, custom), next_action_date
+   not_now_nurture), deal_value (number, GBP), package_tier (exactly one of
+   ${packageChoices(input.customPackages)}; omit it if none clearly fits), next_action_date
    (YYYY-MM-DD), next_action_note (string), pain_point (string)>},
    "excerpt":<the relevant sentence(s) from the note>,"rationale":<one sentence
    explaining the match and the changes>}

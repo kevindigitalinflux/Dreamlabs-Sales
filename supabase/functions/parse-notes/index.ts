@@ -28,10 +28,13 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
-  const apiKey = await resolveOrgApiKey(service, (lead as { org_id: string }).org_id, 'gemini');
+  const orgId = (lead as { org_id: string }).org_id;
+  const apiKey = await resolveOrgApiKey(service, orgId, 'gemini');
   if (!apiKey) return json({ suggestion: null, error: 'AI unavailable' }, 200, headers);
+  const { data: org } = await service.from('organizations').select('custom_packages').eq('id', orgId).maybeSingle();
+  const customPackages = (org?.custom_packages as string[] | null) ?? null;
   try {
-    const suggestion = await parseNotes({ note: String(body.note ?? ''), lead: lead as Record<string, unknown>, apiKey });
+    const suggestion = await parseNotes({ note: String(body.note ?? ''), lead: lead as Record<string, unknown>, customPackages, apiKey });
     return json({ suggestion }, 200, headers);
   } catch (e) {
     console.error('parse-notes failed:', e);
