@@ -13,6 +13,7 @@ import { StageBadge } from './StageBadge';
 import { NextActionEditor } from './NextActionEditor';
 import { ContactInfo, NotesPreview, PipelineInfo } from './LeadPanelSections';
 import { NoteComposer } from './NoteComposer';
+import { DecisionMakersCard } from './DecisionMakersCard';
 import { EmailComposer } from '../emails/EmailComposer';
 import { EnrollmentControl } from '../emails/EnrollmentControl';
 
@@ -78,6 +79,7 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
         </Section>
 
         <Section title="Contact"><ContactInfo lead={lead} onSave={(patch) => onUpdate(lead.id, patch)} /></Section>
+        <Section title="Decision makers"><DecisionMakersCard leadId={lead.id} /></Section>
         <Section title="Pipeline"><PipelineInfo lead={lead} onSave={(patch) => onUpdate(lead.id, patch)} /></Section>
 
         <Section title="Next action">
