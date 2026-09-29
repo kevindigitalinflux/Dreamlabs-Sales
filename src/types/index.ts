@@ -347,6 +347,8 @@ export interface LinkedinContact {
   linkedin_url: string | null;
   context_signal: string | null;
   status: LinkedinContactStatus;
+  lead_id: string | null;
+  decision_maker_candidate_id: string | null;
   created_by: string | null;
   created_at: string;
 }

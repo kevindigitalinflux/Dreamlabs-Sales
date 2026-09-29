@@ -4,26 +4,30 @@ import { useOrg } from './useOrg';
 import { useAuth } from './useAuth';
 import type { LinkedinContact, LinkedinDraft } from '../types';
 
-export type DraftWithContact = LinkedinDraft & { contact: LinkedinContact };
+export interface LeadSummary { id: string; business_name: string; pipeline_id: string }
+export type ContactWithLead = LinkedinContact & { lead: LeadSummary | null };
+export type DraftWithContact = LinkedinDraft & { contact: ContactWithLead };
 
-/** LinkedIn contacts + their drafts for the current org. */
+/** LinkedIn contacts + their drafts for the current org, each joined to its
+ * linked lead's summary (null for a manually-added contact with no lead
+ * tie) so callers can search/filter by pipeline (see LinkedinOutreach.tsx). */
 export function useLinkedinOutreach() {
   const { currentOrg } = useOrg();
   const { session } = useAuth();
-  const [contacts, setContacts] = useState<LinkedinContact[]>([]);
+  const [contacts, setContacts] = useState<ContactWithLead[]>([]);
   const [drafts, setDrafts] = useState<DraftWithContact[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     if (!currentOrg) return;
     const [contactsRes, draftsRes] = await Promise.all([
-      supabase.from('linkedin_contacts').select('*').eq('org_id', currentOrg.id).order('created_at', { ascending: false }),
+      supabase.from('linkedin_contacts').select('*, lead:leads(id, business_name, pipeline_id)').eq('org_id', currentOrg.id).order('created_at', { ascending: false }),
       // Include 'approved' so a draft stays visible (with its "Mark as
       // sent" action available) after approval — otherwise it drops out of
       // this query the moment it's approved and its button can never render.
-      supabase.from('linkedin_drafts').select('*, contact:linkedin_contacts(*)').eq('org_id', currentOrg.id).in('status', ['draft', 'approved']).order('created_at', { ascending: false }),
+      supabase.from('linkedin_drafts').select('*, contact:linkedin_contacts(*, lead:leads(id, business_name, pipeline_id))').eq('org_id', currentOrg.id).in('status', ['draft', 'approved']).order('created_at', { ascending: false }),
     ]);
-    setContacts((contactsRes.data as LinkedinContact[] | null) ?? []);
+    setContacts((contactsRes.data as ContactWithLead[] | null) ?? []);
     setDrafts((draftsRes.data as DraftWithContact[] | null) ?? []);
     setLoading(false);
   }, [currentOrg]);
@@ -65,13 +69,35 @@ export function useLinkedinOutreach() {
     return null;
   }, [refresh]);
 
-  const markSent = useCallback(async (draftId: string, contactId: string): Promise<string | null> => {
-    const { error: draftErr } = await supabase.from('linkedin_drafts').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', draftId);
+  /**
+   * Marks a draft sent and, when its contact is linked to a lead, mirrors
+   * send-email's own safety-scoped side effects: logs a note and advances
+   * the lead from new_lead to contacted specifically (never any other
+   * stage), plus bumps last_contacted_at. Takes the full draft object
+   * (not just ids) so it has the message text and the linked lead's id
+   * without an extra fetch. A contact with no lead tie behaves exactly as
+   * today — only its own/the draft's status changes.
+   */
+  const markSent = useCallback(async (draft: DraftWithContact): Promise<string | null> => {
+    const { error: draftErr } = await supabase.from('linkedin_drafts').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', draft.id);
     if (draftErr) return draftErr.message;
-    await supabase.from('linkedin_contacts').update({ status: 'sent' }).eq('id', contactId);
+    await supabase.from('linkedin_contacts').update({ status: 'sent' }).eq('id', draft.contact.id);
+    if (draft.contact.lead) {
+      const leadId = draft.contact.lead.id;
+      const { data: lead } = await supabase.from('leads').select('stage').eq('id', leadId).maybeSingle();
+      await supabase.from('lead_notes').insert({
+        lead_id: leadId,
+        created_by: session?.user.id,
+        note_type: 'general',
+        content: `LinkedIn message sent to ${draft.contact.full_name}:\n\n${draft.message}`,
+      });
+      const leadUpdate: Record<string, unknown> = { last_contacted_at: new Date().toISOString() };
+      if (lead?.stage === 'new_lead') leadUpdate.stage = 'contacted';
+      await supabase.from('leads').update(leadUpdate).eq('id', leadId);
+    }
     await refresh();
     return null;
-  }, [refresh]);
+  }, [session, refresh]);
 
   return { contacts, drafts, loading, addContact, draftFor, approve, skip, markSent };
 }

@@ -86,7 +86,7 @@ export function LinkedinOutreach() {
                   </>
                 )}
                 {d.status === 'approved' && (
-                  <Button onClick={() => void (async () => { setBusy(d.id); setError(await markSent(d.id, d.contact.id)); setBusy(null); })()} disabled={busy === d.id} loading={busy === d.id}>Mark as sent</Button>
+                  <Button onClick={() => void (async () => { setBusy(d.id); setError(await markSent(d)); setBusy(null); })()} disabled={busy === d.id} loading={busy === d.id}>Mark as sent</Button>
                 )}
               </div>
             </div>
