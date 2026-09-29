@@ -23,6 +23,8 @@ interface ActionRowProps {
    * proposed and see it, since useful context can come from anyone. */
   isOrgAdmin: boolean;
   onResolve: (resolution: ActionResolution) => void;
+  /** Ambiguous rows only: the user chose which lead they meant. */
+  onPickLead: (leadId: string) => void;
 }
 
 /** One proposed action from Dream Agent, resolved by the user before it can be
@@ -31,7 +33,7 @@ interface ActionRowProps {
  * a candidate picker plus "this is someone new", which itself becomes a create-like
  * picker step rather than guessing a pipeline; `update_company_context` shows an
  * editable textarea pre-filled with the AI's proposed merge. */
-export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipelineId, needsPipelinePicker, isOrgAdmin, onResolve }: ActionRowProps) {
+export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipelineId, needsPipelinePicker, isOrgAdmin, onResolve, onPickLead }: ActionRowProps) {
   const [promotedToNew, setPromotedToNew] = useState(false);
   const [editedContext, setEditedContext] = useState(
     action.type === 'update_company_context' ? action.proposed_context : '',
@@ -159,15 +161,14 @@ export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipe
     );
   }
 
-  const asLeadSelected = resolution.status === 'confirmed_ambiguous_as_lead' ? resolution.lead_id : '';
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4">
       <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-cyan" aria-hidden />Not sure who "{action.mentioned_text}" is</p>
       <p className="text-xs text-muted">{action.excerpt}</p>
       <SelectField
         label="Which lead did you mean?"
-        value={asLeadSelected}
-        onChange={(e) => onResolve({ status: 'confirmed_ambiguous_as_lead', lead_id: e.target.value })}
+        value=""
+        onChange={(e) => { if (e.target.value) onPickLead(e.target.value); }}
       >
         <option value="">Choose…</option>
         {action.candidate_lead_ids.map((id) => (

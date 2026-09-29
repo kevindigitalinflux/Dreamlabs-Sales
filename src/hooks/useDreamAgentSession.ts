@@ -6,7 +6,12 @@ import { sanitizeDreamAgentActions } from '../lib/dreamAgentActions';
 import { useAuth } from './useAuth';
 import { useOrg } from './useOrg';
 import { useOrgPackages } from './useOrgPackages';
+import { usePersistedState } from './usePersistedState';
 import type { DreamAgentAction, DreamAgentUpdatePatch, Lead } from '../types';
+
+const NO_MESSAGES: string[] = [];
+const NO_ACTIONS: DreamAgentAction[] = [];
+const NO_RESOLUTIONS: Record<number, ActionResolution> = {};
 
 export type ActionResolution =
   | { status: 'pending' }
@@ -29,9 +34,12 @@ export function useDreamAgentSession() {
   const { session } = useAuth();
   const { currentOrg } = useOrg();
   const packages = useOrgPackages();
-  const [messages, setMessages] = useState<string[]>([]);
-  const [actions, setActions] = useState<DreamAgentAction[]>([]);
-  const [resolutions, setResolutions] = useState<Record<number, ActionResolution>>({});
+  // Persisted per org so leaving the page (e.g. to look up a lead's name) and
+  // coming back doesn't wipe the in-progress conversation or its proposed actions.
+  const storageScope = currentOrg?.id ?? 'none';
+  const [messages, setMessages] = usePersistedState<string[]>(`dream-agent:messages:${storageScope}`, NO_MESSAGES);
+  const [actions, setActions] = usePersistedState<DreamAgentAction[]>(`dream-agent:actions:${storageScope}`, NO_ACTIONS);
+  const [resolutions, setResolutions] = usePersistedState<Record<number, ActionResolution>>(`dream-agent:resolutions:${storageScope}`, NO_RESOLUTIONS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

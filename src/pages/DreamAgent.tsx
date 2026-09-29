@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { Mic, Send, Sparkles, Upload } from 'lucide-react';
 import { parseCsv } from '../lib/csv';
 import { useDreamAgentSession } from '../hooks/useDreamAgentSession';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
+import { usePersistedState } from '../hooks/usePersistedState';
 import { usePipeline } from '../hooks/usePipeline';
 import { useOrg } from '../hooks/useOrg';
 import { supabase } from '../lib/supabase';
@@ -29,7 +30,9 @@ export function DreamAgent() {
   const [csvError, setCsvError] = useState<string | null>(null);
   const [csvDragActive, setCsvDragActive] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
-  const [draft, setDraft] = useState('');
+  // Persisted per org: what's been typed survives a trip to another screen
+  // (e.g. to look up a lead's name) and only clears on send or manual delete.
+  const [draft, setDraft] = usePersistedState(`dream-agent:draft:${currentOrg?.id ?? 'none'}`, '');
   const [matchScope, setMatchScope] = useState<string>(currentPipeline?.id ?? '');
   const [leadsById, setLeadsById] = useState<Record<string, Lead>>({});
 
@@ -38,12 +41,8 @@ export function DreamAgent() {
   const orgPipelines = pipelines.filter((p) => p.org_id === currentOrg?.id);
   const matchPipelineId = matchScope || null;
 
-  async function handleSend() {
-    if (!draft.trim()) return;
-    const text = draft;
-    setDraft('');
-    await sendMessage(text, matchPipelineId);
-    // Refresh the lead lookup used to render "from" values on update rows.
+  /** Refreshes the lead lookup used to render "from" values and candidate names on action rows. */
+  const refreshLeads = useCallback(async () => {
     if (!currentOrg) return;
     let query = supabase.from('leads').select('*').eq('org_id', currentOrg.id);
     if (matchPipelineId) query = query.eq('pipeline_id', matchPipelineId);
@@ -51,6 +50,35 @@ export function DreamAgent() {
     const byId: Record<string, Lead> = {};
     for (const l of (data as Lead[] | null) ?? []) byId[l.id] = l;
     setLeadsById(byId);
+  }, [currentOrg, matchPipelineId]);
+
+  // Coming back to the page with restored actions: re-fetch the lookup, since it
+  // isn't persisted and the rows would otherwise render without "from" values.
+  useEffect(() => {
+    if (actions.length > 0) void refreshLeads();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentOrg?.id]);
+
+  async function handleSend() {
+    if (!draft.trim()) return;
+    const text = draft;
+    setDraft('');
+    await sendMessage(text, matchPipelineId);
+    await refreshLeads();
+  }
+
+  /**
+   * The user picked which lead an "ambiguous" mention meant. An ambiguous action
+   * carries no field changes of its own, so instead of only logging a note, feed
+   * the choice back as a clarification and let the AI re-propose a real update
+   * for that lead (stage, package, next action…) — same refinement loop as typing
+   * a correction. Note this re-proposes the whole list, so other rows go back to
+   * unconfirmed.
+   */
+  async function handleClarify(mentionedText: string, leadId: string) {
+    const name = leadsById[leadId]?.business_name ?? leadId;
+    await sendMessage(`Clarification: "${mentionedText}" means ${name} (lead id ${leadId}). Apply what I said about it to that lead.`, matchPipelineId);
+    await refreshLeads();
   }
 
   async function handleCsvUpload() {
@@ -174,6 +202,7 @@ export function DreamAgent() {
             needsPipelinePicker={!matchPipelineId}
             isOrgAdmin={currentOrg?.role === 'admin'}
             onResolve={(resolution) => resolveAction(i, resolution)}
+            onPickLead={(leadId) => action.type === 'ambiguous' && void handleClarify(action.mentioned_text, leadId)}
           />
         ))}
         {actions.length > 0 && (
