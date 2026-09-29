@@ -57,7 +57,10 @@ export function ReleaseQueue() {
     for (const draft of drafts) {
       if (!selected.has(draft.id)) continue;
       const { data, error } = await supabase.functions.invoke('send-email', {
-        body: { to_email: draft.to_email, subject: draft.subject, body: draft.body, lead_id: draft.lead?.id, log_id: draft.id },
+        body: {
+          to_email: draft.to_email, subject: draft.subject, body: draft.body, lead_id: draft.lead?.id, log_id: draft.id,
+          decision_maker_candidate_id: draft.decision_maker_candidate_id,
+        },
       });
       const result = data as { ok?: boolean; error?: string } | null;
       if (error || !result?.ok) {
@@ -98,7 +101,7 @@ export function ReleaseQueue() {
           lead={reviewLead}
           open
           onClose={() => { setReviewing(null); void refresh(); }}
-          draft={{ log_id: reviewing.id, subject: reviewing.subject, body: reviewing.body }}
+          draft={{ log_id: reviewing.id, subject: reviewing.subject, body: reviewing.body, to_email: reviewing.to_email, decision_maker_candidate_id: reviewing.decision_maker_candidate_id }}
         />
       )}
     </div>

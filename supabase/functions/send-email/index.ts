@@ -85,8 +85,17 @@ Deno.serve(async (req) => {
     lead_id: body.lead_id ?? null, sent_by: user.id, to_email: body.to_email,
     subject: body.subject, body: body.body, status, error_message: errorMessage,
     message_id: messageId, sent_at: new Date().toISOString(),
-    decision_maker_candidate_id: body.decision_maker_candidate_id ?? null,
   };
+  // Only touch decision_maker_candidate_id when the caller actually supplied
+  // it. Omitting the key entirely (rather than defaulting to null) matters
+  // on the update path: ReleaseQueue's bulk release calls this with log_id
+  // only, and this update runs against an EXISTING row that may already
+  // carry real attribution set at draft time — always writing `?? null`
+  // here silently wiped it on every bulk release (see I1 in the
+  // 2026-09-28 final review).
+  if (body.decision_maker_candidate_id !== undefined) {
+    row.decision_maker_candidate_id = body.decision_maker_candidate_id;
+  }
   if (orgId) row.org_id = orgId; // omitted on update-only calls where org_id is already set on the existing row
   let logId = body.log_id ?? null;
   let logFailed = false;

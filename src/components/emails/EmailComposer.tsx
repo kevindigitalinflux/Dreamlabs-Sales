@@ -37,14 +37,18 @@ interface EmailComposerProps {
   lead: Lead;
   open: boolean;
   onClose: () => void;
-  /** When reviewing an existing draft from the queue. */
-  draft?: { log_id: string; subject: string; body: string } | null;
+  /** When reviewing an existing draft from the queue — carries who it was
+   * actually written for, so the composer can correctly re-select that
+   * recipient instead of defaulting to the lead's own email (see the
+   * effect below, which seeds `selectedRecipients` from these fields once
+   * `decisionMakers` has loaded). */
+  draft?: { log_id: string; subject: string; body: string; to_email: string; decision_maker_candidate_id: string | null } | null;
 }
 
 type StatusMsg = { kind: 'ok' | 'warn' | 'err'; text: string };
 
 /** A selectable send target: the lead's own email, or one of its decision-makers. */
-interface Recipient { key: string; email: string; label: string; candidateId: string | null }
+interface Recipient { key: string; email: string; label: string; candidateId: string | null; name: string | null }
 
 /** Draft-email modal: template → optional AI personalisation with diff → edit → send to one or more recipients. */
 export function EmailComposer({ lead, open, onClose, draft = null }: EmailComposerProps) {
@@ -63,24 +67,44 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
 
   useEffect(() => {
     let cancelled = false;
+    // While reviewing an existing draft, don't guess a default selection
+    // until decisionMakers has loaded (below) — the draft's own
+    // to_email/decision_maker_candidate_id are the source of truth for who
+    // it was actually written for, and checking decision_maker_candidate_id
+    // against the loaded list is what tells us it's still a valid, current
+    // recipient (see C1 in the 2026-09-28 final review).
+    setSelectedRecipients(draft ? new Set() : new Set(lead.email ? ['lead'] : []));
     void supabase.from('decision_maker_candidates').select('*').eq('lead_id', lead.id).not('email', 'is', null).then(({ data }) => {
-      if (!cancelled) setDecisionMakers((data as DecisionMakerCandidate[]) ?? []);
+      if (cancelled) return;
+      const dms = (data as DecisionMakerCandidate[]) ?? [];
+      setDecisionMakers(dms);
+      if (draft) {
+        if (draft.decision_maker_candidate_id && dms.some((d) => d.id === draft.decision_maker_candidate_id)) {
+          setSelectedRecipients(new Set([draft.decision_maker_candidate_id]));
+        } else if (draft.to_email === lead.email) {
+          setSelectedRecipients(new Set(['lead']));
+        }
+        // else: the draft's recipient is neither the lead nor a still-known
+        // decision-maker (e.g. the candidate row was later removed) — leave
+        // nothing pre-selected rather than defaulting to the wrong person.
+      }
     });
-    setSelectedRecipients(new Set(lead.email ? ['lead'] : []));
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lead.id]);
+  }, [lead.id, draft?.log_id, draft?.to_email, draft?.decision_maker_candidate_id]);
 
   const recipients: Recipient[] = useMemo(() => {
     const list: Recipient[] = [];
-    if (lead.email) list.push({ key: 'lead', email: lead.email, label: `${lead.owner_name ?? lead.business_name} (${lead.email})`, candidateId: null });
+    if (lead.email) list.push({ key: 'lead', email: lead.email, label: `${lead.owner_name ?? lead.business_name} (${lead.email})`, candidateId: null, name: lead.owner_name ?? null });
     for (const dm of decisionMakers) {
       if (!dm.email) continue;
-      const name = `${dm.first_name ?? ''} ${dm.last_name ?? ''}`.trim() || 'Unknown';
-      list.push({ key: dm.id, email: dm.email, label: `${name}${dm.title ? ` — ${dm.title}` : ''} (${dm.email})`, candidateId: dm.id });
+      const name = `${dm.first_name ?? ''} ${dm.last_name ?? ''}`.trim() || null;
+      list.push({ key: dm.id, email: dm.email, label: `${name ?? 'Unknown'}${dm.title ? ` — ${dm.title}` : ''} (${dm.email})`, candidateId: dm.id, name });
     }
     return list;
   }, [lead, decisionMakers]);
+
+  const selectedTargets = useMemo(() => recipients.filter((r) => selectedRecipients.has(r.key)), [recipients, selectedRecipients]);
 
   function toggleRecipient(key: string) {
     setSelectedRecipients((prev) => {
@@ -95,8 +119,15 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
   async function generate(useAi: boolean) {
     if (!templateId) return setMsg({ kind: 'err', text: 'Pick a template first.' });
     setBusy(useAi ? 'ai' : 'load'); setMsg(null);
+    // Only override the greeting when exactly one decision-maker (not the
+    // lead, not a mixed/multi selection) is checked — matches
+    // BulkDraftModal's own per-recipient personalisation. A mixed or empty
+    // selection keeps the existing lead-owner greeting, since one drafted
+    // body is shared across every checked recipient (see I4 in the
+    // 2026-09-28 final review).
+    const single = selectedTargets.length === 1 && selectedTargets[0]!.candidateId ? selectedTargets[0]! : null;
     const { data, error } = await supabase.functions.invoke('generate-email', {
-      body: { lead_id: lead.id, template_id: templateId, use_ai: useAi },
+      body: { lead_id: lead.id, template_id: templateId, use_ai: useAi, recipient_name: single?.name ?? undefined },
     });
     if (error) {
       const text = await readableInvokeError(error);
@@ -112,7 +143,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
   }
 
   async function send(asDraft: boolean) {
-    const targets = recipients.filter((r) => selectedRecipients.has(r.key));
+    const targets = selectedTargets;
     if (targets.length === 0) return setMsg({ kind: 'err', text: 'Select at least one recipient.' });
     if (!subject.trim() || !body.trim()) return setMsg({ kind: 'err', text: 'Subject and body are required.' });
     setBusy(asDraft ? 'save' : 'send'); setMsg(null);
@@ -164,6 +195,9 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
                 {r.label}
               </label>
             ))}
+            {selectedRecipients.size > 1 && (
+              <p className="text-xs text-muted">The greeting is shared across all selected recipients when personalising with AI.</p>
+            )}
           </div>
         )}
         <SelectField label="Template" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
@@ -198,7 +232,14 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
         <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={() => void send(true)} disabled={busy !== null} loading={busy === 'save'}>{busy === 'save' ? 'Saving…' : 'Save as draft'}</Button>
           <Button onClick={() => void send(false)} disabled={busy !== null || selectedRecipients.size === 0} loading={busy === 'send'}>
-            <Send className="h-4 w-4" aria-hidden />{busy === 'send' ? 'Sending…' : selectedRecipients.size > 1 ? `Send to ${selectedRecipients.size} recipients` : 'Send'}
+            <Send className="h-4 w-4" aria-hidden />
+            {busy === 'send'
+              ? 'Sending…'
+              : selectedTargets.length > 1
+                ? `Send to ${selectedTargets.length} recipients`
+                : selectedTargets.length === 1
+                  ? `Send to ${selectedTargets[0]!.email}`
+                  : 'Send'}
           </Button>
         </div>
       </div>

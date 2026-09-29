@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Contact as LinkedinIcon, CheckCircle2, ExternalLink, Sparkles, SkipForward } from 'lucide-react';
 import { useLinkedinOutreach } from '../hooks/useLinkedinOutreach';
 import { usePipeline } from '../hooks/usePipeline';
@@ -42,31 +42,60 @@ export function LinkedinOutreach() {
   async function handleBulkDraft() {
     setBulkDrafting(true);
     setError(null);
+    // Filter against the currently-visible pending list, not the raw
+    // `selected` Set — a contact drafted individually via its own "Draft
+    // message" button, or hidden by a search/pipeline filter change, must
+    // never be re-drafted just because it's still technically checked (see
+    // I3 in the 2026-09-28 final review).
+    const targets = filteredPendingContacts.filter((c) => selected.has(c.id));
     let drafted = 0;
     let firstFailReason: string | null = null;
-    for (const contactId of selected) {
-      const err = await draftFor(contactId);
+    for (const contact of targets) {
+      const err = await draftFor(contact.id);
       if (err) { if (!firstFailReason) firstFailReason = err; continue; }
       drafted++;
     }
     setBulkDrafting(false);
     setSelected(new Set());
-    if (drafted < selected.size) setError(`Drafted ${drafted} of ${selected.size}${firstFailReason ? ` — ${firstFailReason}` : ''}`);
+    if (drafted < targets.length) setError(`Drafted ${drafted} of ${targets.length}${firstFailReason ? ` — ${firstFailReason}` : ''}`);
   }
 
   const pendingContacts = contacts.filter((c) => c.status === 'pending');
   const orgPipelines = pipelines.filter((p) => p.org_id === currentOrg?.id);
 
-  function matchesSearchAndPipeline(fullName: string, lead: { business_name: string; pipeline_id: string } | null): boolean {
+  // Checks the contact's own lead_id column directly rather than whether the
+  // joined `lead` object happened to resolve — a contact can have a non-null
+  // lead_id whose `lead` join comes back null under RLS (a lead the caller
+  // isn't permitted to view; see I2 in the 2026-09-28 final review), and
+  // that is NOT the same thing as being genuinely unlinked. linkedin_contacts
+  // .lead_id is ON DELETE CASCADE from leads, so a hard-deleted lead removes
+  // the contact row entirely rather than leaving a dangling lead_id — the
+  // RLS-invisible case is the only real source of a null join with a
+  // non-null lead_id today.
+  function matchesSearchAndPipeline(fullName: string, leadId: string | null, lead: { business_name: string; pipeline_id: string } | null): boolean {
     const q = search.trim().toLowerCase();
     if (q && !fullName.toLowerCase().includes(q) && !(lead?.business_name.toLowerCase().includes(q))) return false;
-    if (pipelineFilter === 'unlinked') return !lead;
+    if (pipelineFilter === 'unlinked') return leadId === null;
     if (pipelineFilter && lead?.pipeline_id !== pipelineFilter) return false;
     return true;
   }
 
-  const filteredPendingContacts = pendingContacts.filter((c) => matchesSearchAndPipeline(c.full_name, c.lead));
-  const filteredDrafts = drafts.filter((d) => matchesSearchAndPipeline(d.contact.full_name, d.contact.lead));
+  const filteredPendingContacts = pendingContacts.filter((c) => matchesSearchAndPipeline(c.full_name, c.lead_id, c.lead));
+  const filteredDrafts = drafts.filter((d) => matchesSearchAndPipeline(d.contact.full_name, d.contact.lead_id, d.contact.lead));
+
+  // Prunes stale selections whenever the visible pending list changes (an
+  // individual "Draft message" click, a search/pipeline filter change, or a
+  // refresh) so the bulk button can never count or act on a contact that's
+  // no longer shown — mirrors ReleaseQueue.tsx's identical pattern for its
+  // own selection Set (see I3 in the 2026-09-28 final review).
+  useEffect(() => {
+    setSelected((prev) => {
+      const visibleIds = new Set(filteredPendingContacts.map((c) => c.id));
+      const next = new Set([...prev].filter((id) => visibleIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredPendingContacts]);
 
   if (loading) return <Skeleton className="h-96 w-full" />;
 

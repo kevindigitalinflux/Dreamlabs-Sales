@@ -178,6 +178,7 @@ export interface EmailLog {
   error_message: string | null;
   message_id: string | null;
   sent_at: string;
+  decision_maker_candidate_id: string | null;
 }
 
 export type EmailProvider = 'gmail' | 'outlook' | 'yahoo' | 'smtp';
