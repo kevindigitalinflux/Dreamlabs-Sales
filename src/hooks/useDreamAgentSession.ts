@@ -5,6 +5,7 @@ import type { LeadPatch } from '../lib/leadUpdates';
 import { sanitizeDreamAgentActions } from '../lib/dreamAgentActions';
 import { useAuth } from './useAuth';
 import { useOrg } from './useOrg';
+import { useOrgPackages } from './useOrgPackages';
 import type { DreamAgentAction, DreamAgentUpdatePatch, Lead } from '../types';
 
 export type ActionResolution =
@@ -27,6 +28,7 @@ export type ActionResolution =
 export function useDreamAgentSession() {
   const { session } = useAuth();
   const { currentOrg } = useOrg();
+  const packages = useOrgPackages();
   const [messages, setMessages] = useState<string[]>([]);
   const [actions, setActions] = useState<DreamAgentAction[]>([]);
   const [resolutions, setResolutions] = useState<Record<number, ActionResolution>>({});
@@ -52,11 +54,11 @@ export function useDreamAgentSession() {
     if (matchPipelineId) query = query.eq('pipeline_id', matchPipelineId);
     const { data: leadRows } = await query;
     const validIds = new Set((leadRows ?? []).map((l) => l.id as string));
-    const sanitized = sanitizeDreamAgentActions(result.actions, validIds);
+    const sanitized = sanitizeDreamAgentActions(result.actions, validIds, packages.allowed);
     setMessages(nextMessages);
     setActions(sanitized);
     setResolutions(Object.fromEntries(sanitized.map((_, i) => [i, { status: 'pending' } as ActionResolution])));
-  }, [currentOrg, messages]);
+  }, [currentOrg, messages, packages]);
 
   const resolveAction = useCallback((index: number, resolution: ActionResolution) => {
     setResolutions((prev) => ({ ...prev, [index]: resolution }));

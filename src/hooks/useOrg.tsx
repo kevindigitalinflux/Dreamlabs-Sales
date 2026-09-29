@@ -9,13 +9,15 @@ interface OrgContextValue {
   orgs: OrgMembership[];
   loading: boolean;
   switchOrg: (orgId: string) => void;
+  /** Updates an org's cached custom package list after a successful save. */
+  setOrgPackages: (orgId: string, packages: string[] | null) => void;
 }
 
 const OrgContext = createContext<OrgContextValue | null>(null);
 
 interface MembershipRow {
   role: Role;
-  organizations: { id: string; name: string };
+  organizations: { id: string; name: string; custom_packages: string[] | null };
 }
 
 /** Provides the signed-in user's org memberships and the currently-selected org. */
@@ -35,12 +37,12 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     void supabase
       .from('org_members')
-      .select('role, organizations(id, name)')
+      .select('role, organizations(id, name, custom_packages)')
       .eq('user_id', session.user.id)
       .then(({ data }) => {
         if (cancelled) return;
         const rows = (data as MembershipRow[] | null) ?? [];
-        const memberships = rows.map((r) => ({ id: r.organizations.id, name: r.organizations.name, role: r.role }));
+        const memberships = rows.map((r) => ({ id: r.organizations.id, name: r.organizations.name, role: r.role, custom_packages: r.organizations.custom_packages }));
         setOrgs(memberships);
         const saved = localStorage.getItem('current-org');
         const restored = memberships.find((m) => m.id === saved);
@@ -57,10 +59,14 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     setCurrentOrgId(orgId);
   }, []);
 
+  const setOrgPackages = useCallback((orgId: string, packages: string[] | null) => {
+    setOrgs((prev) => prev.map((o) => (o.id === orgId ? { ...o, custom_packages: packages } : o)));
+  }, []);
+
   const currentOrg = orgs.find((o) => o.id === currentOrgId) ?? null;
 
   return (
-    <OrgContext.Provider value={{ currentOrg, orgs, loading, switchOrg }}>
+    <OrgContext.Provider value={{ currentOrg, orgs, loading, switchOrg, setOrgPackages }}>
       {children}
     </OrgContext.Provider>
   );

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useOrgPackages } from '../../hooks/useOrgPackages';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import type { Lead, LeadSuggestion, NoteType } from '../../types';
 import { Button } from '../ui/Button';
@@ -20,6 +21,7 @@ type Phase = 'compose' | 'next-action' | 'suggest';
 
 /** Log-note dialog: guided debrief OR free text, then a "set your next action" prompt. */
 export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: NoteComposerProps) {
+  const packages = useOrgPackages();
   const [tab, setTab] = useState<'debrief' | 'free'>('debrief');
   const [phase, setPhase] = useState<Phase>('compose');
   const [freeText, setFreeText] = useState('');
@@ -50,7 +52,7 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
     const { data } = await supabase.functions.invoke('parse-notes', { body: { lead_id: lead.id, note: noteText } });
     setBusy(false);
     const raw = (data as { suggestion?: unknown } | null)?.suggestion;
-    const clean = raw ? sanitizeSuggestion(raw) : null;
+    const clean = raw ? sanitizeSuggestion(raw, packages.allowed) : null;
     if (clean) {
       setSuggestion(clean);
       setPhase('suggest');

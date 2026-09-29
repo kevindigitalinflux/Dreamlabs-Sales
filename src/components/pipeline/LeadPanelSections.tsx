@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { ExternalLink, Mail, Phone, Star } from 'lucide-react';
 import type { Lead, LeadNote, PackageTier } from '../../types';
 import type { LeadPatch } from '../../lib/leadUpdates';
-import { PACKAGE_TIERS, formatShortDate } from '../../lib/utils';
+import { formatShortDate } from '../../lib/utils';
+import { useOrgPackages } from '../../hooks/useOrgPackages';
 import { Input, SelectField } from '../ui/Input';
 import { Skeleton } from '../ui/Skeleton';
 
@@ -110,6 +111,7 @@ export function PipelineInfo({ lead, onSave }: EditableSectionProps) {
   const [rating, setRating] = useState(lead.google_rating?.toString() ?? '');
   const [reviews, setReviews] = useState(lead.review_count?.toString() ?? '');
   const { status, setStatus, save } = useSectionSave(onSave);
+  const packages = useOrgPackages();
 
   useEffect(() => {
     setDealValue(lead.deal_value?.toString() ?? '');
@@ -146,7 +148,7 @@ export function PipelineInfo({ lead, onSave }: EditableSectionProps) {
         onChange={(e) => void save({ package_tier: (e.target.value || null) as PackageTier | null })}
       >
         <option value="">Not set</option>
-        {PACKAGE_TIERS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+        {packages.optionsFor(lead.package_tier).map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
       </SelectField>
       <Input label="Deal value (£)" type="number" min="0" value={dealValue} onChange={(e) => setDealValue(e.target.value)} onBlur={() => saveNumber('deal_value', dealValue, lead.deal_value)} />
       <Input label="Vertical" value={vertical} onChange={(e) => setVertical(e.target.value)} onBlur={() => { if (vertical.trim() !== (lead.vertical ?? '')) void save({ vertical: vertical.trim() || null }); }} placeholder="e.g. Commercial cleaning" />

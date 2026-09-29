@@ -1,14 +1,11 @@
+import { PACKAGE_TIERS } from './utils';
 import type { DreamAgentAction, DreamAgentUpdatePatch, PackageTier, Stage } from '../types';
 
 const STAGE_VALUES = new Set<Stage>([
   'new_lead', 'contacted', 'audit_booked', 'proposal_sent',
   'negotiating', 'won', 'lost', 'not_now_nurture',
 ]);
-const PACKAGE_TIER_VALUES = new Set<PackageTier>([
-  'pilot_systems', 'pilot_ai_app', 'pilot_full_build',
-  'automation_sprint', 'ai_foundation', 'full_build',
-  'retainer_bronze', 'retainer_silver', 'retainer_gold', 'custom',
-]);
+const DEFAULT_PACKAGE_VALUES = new Set<PackageTier>(PACKAGE_TIERS.map((t) => t.value));
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_TEXT_LEN = 500;
 // company_context is meant to hold a few paragraphs (see OrganizationSettings'
@@ -24,12 +21,12 @@ function sanitizedString(value: unknown): string | undefined {
   return typeof value === 'string' ? value.slice(0, MAX_TEXT_LEN) : undefined;
 }
 
-function sanitizePatch(raw: unknown): DreamAgentUpdatePatch {
+function sanitizePatch(raw: unknown, allowedPackages: Set<PackageTier>): DreamAgentUpdatePatch {
   if (typeof raw !== 'object' || raw === null) return {};
   const r = raw as Record<string, unknown>;
   const patch: DreamAgentUpdatePatch = {};
   if (typeof r.stage === 'string' && STAGE_VALUES.has(r.stage as Stage)) patch.stage = r.stage as Stage;
-  if (typeof r.package_tier === 'string' && PACKAGE_TIER_VALUES.has(r.package_tier as PackageTier)) patch.package_tier = r.package_tier as PackageTier;
+  if (typeof r.package_tier === 'string' && allowedPackages.has(r.package_tier)) patch.package_tier = r.package_tier;
   if (typeof r.deal_value === 'number' && Number.isFinite(r.deal_value) && r.deal_value >= 0) patch.deal_value = r.deal_value;
   if (typeof r.next_action_date === 'string' && isValidDateOnly(r.next_action_date)) patch.next_action_date = r.next_action_date;
   const nextActionNote = sanitizedString(r.next_action_note);
@@ -46,7 +43,7 @@ function sanitizePatch(raw: unknown): DreamAgentUpdatePatch {
  * to the AI in the lead index; any lead_id/candidate id outside that set is
  * dropped, never trusted — the AI is never a source of truth for which leads exist.
  */
-export function sanitizeDreamAgentActions(raw: unknown, validLeadIds: Set<string>): DreamAgentAction[] {
+export function sanitizeDreamAgentActions(raw: unknown, validLeadIds: Set<string>, allowedPackages: Set<PackageTier> = DEFAULT_PACKAGE_VALUES): DreamAgentAction[] {
   if (!Array.isArray(raw)) return [];
   const actions: DreamAgentAction[] = [];
 
@@ -60,7 +57,7 @@ export function sanitizeDreamAgentActions(raw: unknown, validLeadIds: Set<string
       if (businessName === undefined) continue;
       const excerpt = sanitizedString(r.excerpt) ?? '';
       const rationale = sanitizedString(r.rationale) ?? '';
-      actions.push({ type: 'update', lead_id: r.lead_id, business_name: businessName, patch: sanitizePatch(r.patch), excerpt, rationale });
+      actions.push({ type: 'update', lead_id: r.lead_id, business_name: businessName, patch: sanitizePatch(r.patch, allowedPackages), excerpt, rationale });
       continue;
     }
 

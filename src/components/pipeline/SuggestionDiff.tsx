@@ -1,11 +1,12 @@
 import { ArrowRight, Sparkles } from 'lucide-react';
 import { formatCurrency, packageLabel, PACKAGE_TIERS, stageInfo, STAGES } from '../../lib/utils';
+import type { PackageTier } from '../../types';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import type { Lead, LeadSuggestion } from '../../types';
 import { Button } from '../ui/Button';
 
 const STAGE_VALUES = new Set(STAGES.map((s) => s.value));
-const PACKAGE_TIER_VALUES = new Set(PACKAGE_TIERS.map((t) => t.value));
+const DEFAULT_PACKAGE_VALUES = new Set<PackageTier>(PACKAGE_TIERS.map((t) => t.value));
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_TEXT_LEN = 500;
 
@@ -23,8 +24,9 @@ function sanitizedString(value: unknown): string | undefined {
  * Unknown shapes, out-of-range enums, and malformed values are dropped field-by-field
  * rather than rejecting the whole suggestion — a partially-useful suggestion is still useful.
  * Returns null only when `raw` isn't a plausible suggestion object at all.
+ * `allowedPackages` is the current org's package list (defaults to the built-in one).
  */
-export function sanitizeSuggestion(raw: unknown): LeadSuggestion | null {
+export function sanitizeSuggestion(raw: unknown, allowedPackages: Set<PackageTier> = DEFAULT_PACKAGE_VALUES): LeadSuggestion | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const r = raw as Record<string, unknown>;
 
@@ -33,7 +35,7 @@ export function sanitizeSuggestion(raw: unknown): LeadSuggestion | null {
   if (typeof r.stage === 'string' && STAGE_VALUES.has(r.stage as Lead['stage'])) {
     suggestion.stage = r.stage as LeadSuggestion['stage'];
   }
-  if (typeof r.package_tier === 'string' && PACKAGE_TIER_VALUES.has(r.package_tier as NonNullable<Lead['package_tier']>)) {
+  if (typeof r.package_tier === 'string' && allowedPackages.has(r.package_tier)) {
     suggestion.package_tier = r.package_tier as LeadSuggestion['package_tier'];
   }
   if (typeof r.deal_value === 'number' && Number.isFinite(r.deal_value) && r.deal_value >= 0) {

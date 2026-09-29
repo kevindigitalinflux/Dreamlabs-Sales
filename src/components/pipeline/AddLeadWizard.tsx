@@ -3,7 +3,8 @@ import { Button } from '../ui/Button';
 import { Input, SelectField } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { StepProgress } from '../ui/StepProgress';
-import { PACKAGE_TIERS, STAGES } from '../../lib/utils';
+import { STAGES } from '../../lib/utils';
+import { useOrgPackages } from '../../hooks/useOrgPackages';
 import type { LeadInput } from '../../hooks/useLeads';
 import type { PackageTier, Stage } from '../../types';
 
@@ -18,6 +19,7 @@ const TOTAL_STEPS = 4;
 
 /** 4-step "Add lead" wizard: Company → Contact → Location → Deal. */
 export function AddLeadWizard({ open, onClose, onCreate }: AddLeadWizardProps) {
+  const packages = useOrgPackages();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<LeadInput>(EMPTY);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +89,7 @@ export function AddLeadWizard({ open, onClose, onCreate }: AddLeadWizardProps) {
             </SelectField>
             <SelectField label="Package tier" value={form.package_tier ?? ''} onChange={(e) => set('package_tier', (e.target.value || null) as PackageTier | null)}>
               <option value="">Not set</option>
-              {PACKAGE_TIERS.map((t) => (
+              {packages.options.map((t) => (
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </SelectField>

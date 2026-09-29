@@ -6,16 +6,20 @@ export interface OrgMembership {
   id: string;
   name: string;
   role: Role;
+  /** Org-specific package names; null = use the built-in default list. */
+  custom_packages: string[] | null;
 }
 
 export type Stage =
   | 'new_lead' | 'contacted' | 'audit_booked' | 'proposal_sent'
   | 'negotiating' | 'won' | 'lost' | 'not_now_nurture';
 
-export type PackageTier =
-  | 'pilot_systems' | 'pilot_ai_app' | 'pilot_full_build'
-  | 'automation_sprint' | 'ai_foundation' | 'full_build'
-  | 'retainer_bronze' | 'retainer_silver' | 'retainer_gold' | 'custom';
+/**
+ * A package's stored value. For the built-in DI Dreamlabs list this is one of
+ * the slugs in PACKAGE_TIERS (utils.ts); for an org's own custom list
+ * (organizations.custom_packages) it is the package name itself.
+ */
+export type PackageTier = string;
 
 export type NoteType = 'call' | 'email' | 'meeting' | 'general' | 'ai_summary';
 
