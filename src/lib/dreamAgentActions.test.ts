@@ -23,7 +23,19 @@ describe('sanitizeDreamAgentActions', () => {
 
   it('keeps a valid create action', () => {
     const raw = [{ type: 'create', extracted: { business_name: 'Bright Sparks', owner_name: null, phone: '01234', email: null, website: null, city: 'Bristol', vertical: null }, excerpt: 'Followed up with Bright Sparks', rationale: 'New prospect mentioned' }];
-    expect(sanitizeDreamAgentActions(raw, VALID_IDS)).toEqual(raw);
+    expect(sanitizeDreamAgentActions(raw, VALID_IDS)).toEqual([{ ...raw[0], patch: {} }]);
+  });
+
+  it('keeps and whitelists a create action patch (stage + follow-up)', () => {
+    const raw = [{
+      type: 'create',
+      extracted: { business_name: 'The Greenhouse', owner_name: null, phone: null, email: null, website: null, city: null, vertical: null },
+      patch: { stage: 'contacted', next_action_date: '2026-10-05', next_action_note: 'Follow up by email', package_tier: 'nonsense', stage_extra: 'x' },
+      excerpt: 'Left card', rationale: 'Walk-in visit',
+    }];
+    const [action] = sanitizeDreamAgentActions(raw, VALID_IDS);
+    expect(action).toMatchObject({ type: 'create', patch: { stage: 'contacted', next_action_date: '2026-10-05', next_action_note: 'Follow up by email' } });
+    expect((action as unknown as { patch: Record<string, unknown> }).patch).not.toHaveProperty('package_tier');
   });
 
   it('drops a create action missing a business_name', () => {

@@ -6,18 +6,19 @@ import { runBounded } from '../_shared/concurrency.ts';
 import { scrapeWebsiteContact } from '../_shared/websiteContact.ts';
 import { lookupCompaniesHouseOfficer } from '../_shared/companiesHouse.ts';
 import { lookupOpenCorporatesOfficer } from '../_shared/openCorporates.ts';
-import { lookupApolloPhone, lookupHunterEmail } from '../_shared/apolloHunterLookup.ts';
+import { lookupApolloPhone, lookupHunterEmail, lookupHunterOwnerEmail } from '../_shared/apolloHunterLookup.ts';
+import { lookupPlaceContact } from '../_shared/googlePlacesLookup.ts';
 
 const MAX_LEADS = 40;
 
 interface LeadRow {
   id: string; org_id: string; business_name: string;
-  website: string | null; email: string | null; phone: string | null; owner_name: string | null;
+  website: string | null; email: string | null; phone: string | null; owner_name: string | null; city: string | null;
 }
 
 // Deno copy of src/types/index.ts's EnrichableField/EnrichmentResult — keep
 // the two in sync (same convention as templateVars.ts's Deno/browser split).
-type Field = 'email' | 'phone' | 'owner_name';
+type Field = 'email' | 'phone' | 'owner_name' | 'website';
 
 interface EnrichResult {
   lead_id: string;
@@ -27,15 +28,25 @@ interface EnrichResult {
 
 async function enrichOneLead(
   lead: LeadRow,
-  keys: { companiesHouse: string | null; openCorporates: string | null; apollo: string | null; hunter: string | null },
+  keys: { companiesHouse: string | null; openCorporates: string | null; apollo: string | null; hunter: string | null; googlePlaces: string | null },
 ): Promise<EnrichResult | null> {
   const proposed: Partial<Record<Field, string>> = {};
   const source: Partial<Record<Field, string>> = {};
 
+  // 0. Google Places — finds the website (and phone) for a lead that only has a
+  // name, e.g. one created from a walk-in. Every later step keys off the website,
+  // so without this a name-only lead got nothing beyond the Companies House owner.
+  let website = lead.website;
+  if ((!website || !lead.phone) && keys.googlePlaces) {
+    const place = await lookupPlaceContact(lead.business_name, lead.city, keys.googlePlaces);
+    if (place?.website && !website) { proposed.website = place.website; source.website = 'google_places'; website = place.website; }
+    if (place?.phone && !lead.phone) { proposed.phone = place.phone; source.phone = 'google_places'; }
+  }
+
   // 1. Website scrape — free, no key required.
-  const { email: siteEmail, phone: sitePhone } = await scrapeWebsiteContact(lead.website);
+  const { email: siteEmail, phone: sitePhone } = await scrapeWebsiteContact(website);
   if (siteEmail && siteEmail !== lead.email) { proposed.email = siteEmail; source.email = 'website'; }
-  if (sitePhone && sitePhone !== lead.phone) { proposed.phone = sitePhone; source.phone = 'website'; }
+  if (sitePhone && sitePhone !== lead.phone && !proposed.phone) { proposed.phone = sitePhone; source.phone = 'website'; }
 
   // 2. Companies House (UK) — free registration. Skip if the lead already has an owner_name.
   if (!lead.owner_name && keys.companiesHouse) {
@@ -50,12 +61,16 @@ async function enrichOneLead(
   }
 
   // 4. Apollo/Hunter — paid, opt-in, only for fields still blank after 1–3 AND not already on the lead.
-  if (!proposed.email && !lead.email && keys.hunter && lead.website) {
-    const email = await lookupHunterEmail(lead.website, keys.hunter);
+  // The owner's own address first when we know their name (from the lead or step 2),
+  // then whatever Hunter has best for the domain.
+  if (!proposed.email && !lead.email && keys.hunter && website) {
+    const ownerName = proposed.owner_name ?? lead.owner_name;
+    const ownerEmail = ownerName ? await lookupHunterOwnerEmail(website, ownerName, keys.hunter) : null;
+    const email = ownerEmail ?? await lookupHunterEmail(website, keys.hunter);
     if (email && email !== lead.email) { proposed.email = email; source.email = 'hunter'; }
   }
-  if (!proposed.phone && !lead.phone && keys.apollo && lead.website) {
-    const phone = await lookupApolloPhone(lead.website, keys.apollo);
+  if (!proposed.phone && !lead.phone && keys.apollo && website) {
+    const phone = await lookupApolloPhone(website, keys.apollo);
     if (phone && phone !== lead.phone) { proposed.phone = phone; source.phone = 'apollo'; }
   }
 
@@ -98,7 +113,7 @@ Deno.serve(async (req) => {
   // doesn't exist at all. The org-membership check below stays as a
   // defensive second layer.
   const { data: leads, error: leadsErr } = await client
-    .from('leads').select('id, org_id, business_name, website, email, phone, owner_name').in('id', leadIds);
+    .from('leads').select('id, org_id, business_name, website, email, phone, owner_name, city').in('id', leadIds);
   if (leadsErr) return json({ error: leadsErr.message }, 500, headers);
   const resolvedLeads = (leads ?? []) as LeadRow[];
   if (resolvedLeads.length === 0) return json({ results: [] }, 200, headers);
@@ -113,13 +128,14 @@ Deno.serve(async (req) => {
     .select('role').eq('org_id', orgId).eq('user_id', userData.user.id).maybeSingle();
   if (!membership) return json({ error: 'Not a member of this organization' }, 403, headers);
 
-  const [companiesHouse, openCorporates, apollo, hunter] = await Promise.all([
+  const [companiesHouse, openCorporates, apollo, hunter, googlePlaces] = await Promise.all([
     resolveOrgApiKey(service, orgId, 'companies_house'),
     resolveOrgApiKey(service, orgId, 'opencorporates'),
     resolveOrgApiKey(service, orgId, 'apollo'),
     resolveOrgApiKey(service, orgId, 'hunter'),
+    resolveOrgApiKey(service, orgId, 'google_places'),
   ]);
-  const keys = { companiesHouse, openCorporates, apollo, hunter };
+  const keys = { companiesHouse, openCorporates, apollo, hunter, googlePlaces };
 
   const enriched = await runBounded(resolvedLeads, 5, (lead) => enrichOneLead(lead, keys));
   const results = enriched.filter((r): r is EnrichResult => r !== null);

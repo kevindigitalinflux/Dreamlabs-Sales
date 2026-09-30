@@ -109,12 +109,19 @@ function packageChoices(customPackages: string[] | null | undefined): string {
   return (custom.length > 0 ? custom : DEFAULT_PACKAGE_VALUES).join(', ');
 }
 
+/** Today as "2026-09-30 (Wednesday)" so relative dates like "Monday next week" resolve correctly. */
+function todayWithWeekday(): string {
+  const now = new Date();
+  return `${now.toISOString().slice(0, 10)} (${now.toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' })})`;
+}
+
 /**
- * Shared follow-up rule for both note parsers. next_action_* fields are
+ * Shared stage + follow-up rule for both note parsers. These fields are
  * proposals the user confirms or dismisses like every other field, so a
  * sensible default is safe — unlike inventing facts, which the prompts forbid.
  */
-const FOLLOW_UP_GUIDANCE = `FOLLOW-UP: if the note reports that a contact was made (call, email, text, meeting) or an outcome that needs a next step, and does NOT already state a follow-up, ALWAYS propose one: next_action_date = a sensible date (about 3 days after today for an email or text with no reply yet, 1 to 2 days for a lead who sounds interested or asked for something, a few weeks for "not now"), and next_action_note = a short phrase naming the method, reusing the channel the rep just used unless the note implies another (e.g. "Follow up by email"). If the note DOES state a follow-up, use exactly that instead. Do not propose one when the lead is won or lost, or nothing needs following up. This is the one exception to "suggest nothing you are not confident about": the rep reviews and can decline it.`;
+const FOLLOW_UP_GUIDANCE = `STAGE: if the note says the rep visited, called, emailed, texted or left a card with a lead whose stage is new_lead (or with a brand-new lead), set stage to contacted.
+FOLLOW-UP: if the note states a timeframe ("end of this week", "Monday next week", "in a few days"), convert it into a concrete YYYY-MM-DD next_action_date using today's date and weekday (when it gives two options, use the earlier one) and put the method in next_action_note (e.g. "Follow up by email or call"). If the note reports a contact (call, email, text, visit, meeting) or an outcome that needs a next step and does NOT state a follow-up, ALWAYS propose one: next_action_date = a sensible date (about 3 days after today for an email or text with no reply yet, 1 to 2 days for a lead who sounds interested or asked for something, a few weeks for "not now"), and next_action_note = a short phrase naming the method, reusing the channel the rep just used unless the note implies another (e.g. "Follow up by email"). Do not propose a follow-up when the lead is won or lost, or nothing needs following up. These are the exceptions to "suggest nothing you are not confident about": the rep reviews and can decline each one.`;
 
 /** Suggests lead field updates from a note. Throws on failure. */
 export async function parseNotes(input: { note: string; lead: Record<string, unknown>; customPackages?: string[] | null; apiKey: string }): Promise<Record<string, unknown>> {
@@ -124,7 +131,7 @@ stage (one of: new_lead, contacted, audit_booked, proposal_sent, negotiating, wo
 deal_value (number, GBP), package_tier (exactly one of: ${packageChoices(input.customPackages)}; omit it if none clearly fits),
 next_action_date (YYYY-MM-DD), next_action_note (string), pain_point (string),
 rationale (string, ALWAYS present: one sentence explaining the suggestions).
-Suggest nothing you are not confident about. Today is ${new Date().toISOString().slice(0, 10)}.
+Suggest nothing you are not confident about. Today is ${todayWithWeekday()}.
 ${FOLLOW_UP_GUIDANCE}
 
 CURRENT LEAD: ${JSON.stringify(input.lead)}
@@ -167,7 +174,9 @@ For each company/person mentioned, decide one of four action types:
    Output: {"type":"create","extracted":{"business_name":<string>,
    "owner_name":<string or null>,"phone":<string or null>,"email":<string or
    null>,"website":<string or null>,"city":<string or null>,"vertical":<string or
-   null>},"excerpt":<relevant text>,"rationale":<one sentence>}
+   null>},"patch":{<same optional keys as an update's patch: stage, deal_value,
+   package_tier, next_action_date, next_action_note, pain_point; include stage
+   and any follow-up the rep mentioned>},"excerpt":<relevant text>,"rationale":<one sentence>}
 3. "ambiguous" — could plausibly match 2+ leads in LEAD INDEX, or the name is too
    vague to resolve alone. Output: {"type":"ambiguous","mentioned_text":<what was
    said>,"candidate_lead_ids":[<ids from LEAD INDEX>],"excerpt":<relevant text>}
@@ -184,10 +193,10 @@ For each company/person mentioned, decide one of four action types:
 
 Only emit an action for something a genuine business update/mention was made about —
 do not invent actions for names that only appear in passing. Today is
-${new Date().toISOString().slice(0, 10)}. Return a JSON array of actions (empty
+${todayWithWeekday()}. Return a JSON array of actions (empty
 array if nothing found).
 
-For every "update" action, apply this rule to its patch. ${FOLLOW_UP_GUIDANCE}
+For every "update" AND "create" action, apply these rules to its patch. ${FOLLOW_UP_GUIDANCE}
 
 LEAD INDEX: ${JSON.stringify(input.leadIndex)}
 

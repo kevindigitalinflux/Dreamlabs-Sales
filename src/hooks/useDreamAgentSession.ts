@@ -104,10 +104,16 @@ export function useDreamAgentSession() {
       }
 
       if (action.type === 'create' && resolution.status === 'confirmed_create') {
+        // Apply what the rep said happened (e.g. visited → contacted, a follow-up
+        // date) at creation — a new lead has no "before" row for applyLeadUpdate.
+        const stage = action.patch.stage ?? 'new_lead';
         const { data: newLead, error: insertErr } = await supabase.from('leads').insert({
           business_name: action.extracted.business_name, owner_name: action.extracted.owner_name,
           phone: action.extracted.phone, email: action.extracted.email, website: action.extracted.website,
-          city: action.extracted.city, vertical: action.extracted.vertical, stage: 'new_lead',
+          city: action.extracted.city, vertical: action.extracted.vertical, stage,
+          package_tier: action.patch.package_tier ?? null, deal_value: action.patch.deal_value ?? null,
+          next_action_date: action.patch.next_action_date ?? null, next_action_note: action.patch.next_action_note ?? null,
+          last_contacted_at: stage !== 'new_lead' ? new Date().toISOString() : null,
           org_id: currentOrg.id, pipeline_id: resolution.pipeline_id, created_by: session.user.id,
         }).select('id').single();
         if (insertErr) { setError(insertErr.message); continue; }

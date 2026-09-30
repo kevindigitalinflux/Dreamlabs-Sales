@@ -44,6 +44,36 @@ export async function lookupHunterEmail(website: string | null, apiKey: string):
   }
 }
 
+/** "Alan Christopher CLARK" -> { first: "Alan", last: "CLARK" }; null unless there are at least two name parts. */
+export function splitPersonName(fullName: string): { first: string; last: string } | null {
+  const parts = fullName.replace(/^(mr|mrs|ms|miss|dr)\.?\s+/i, '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return null;
+  return { first: parts[0]!, last: parts[parts.length - 1]! };
+}
+
+/**
+ * Hunter email-finder — the address of one NAMED person at a domain (e.g. the
+ * owner found by Companies House), unlike domain-search which returns whoever
+ * Hunter has seen at the company. Only trusts a reasonably confident match
+ * (score >= 50). Returns null on no match, a single-word name, or any error;
+ * never throws, never writes anywhere.
+ */
+export async function lookupHunterOwnerEmail(website: string | null, ownerName: string, apiKey: string): Promise<string | null> {
+  const domain = bareDomain(website ?? '');
+  const name = splitPersonName(ownerName);
+  if (!domain || !name) return null;
+  try {
+    const params = new URLSearchParams({ domain, first_name: name.first, last_name: name.last, api_key: apiKey });
+    const res = await fetchWithTimeout(`https://api.hunter.io/v2/email-finder?${params}`);
+    if (!res.ok) return null;
+    const data = await res.json() as { data?: { email?: string | null; score?: number | null } };
+    const email = data.data?.email;
+    return email && (data.data?.score ?? 0) >= 50 ? email : null;
+  } catch {
+    return null;
+  }
+}
+
 const DECISION_MAKER_TITLE_PATTERN = /owner|founder|chief|ceo|coo|cfo|cto|president|managing director|director/i;
 
 interface HunterEmailEntry {

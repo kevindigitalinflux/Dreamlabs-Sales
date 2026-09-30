@@ -4,7 +4,7 @@ import { formatCurrency, packageLabel, stageInfo } from '../../lib/utils';
 import { Button } from '../ui/Button';
 import { SelectField, Textarea } from '../ui/Input';
 import type { ActionResolution } from '../../hooks/useDreamAgentSession';
-import type { DreamAgentAction, Lead, Pipeline } from '../../types';
+import type { DreamAgentAction, DreamAgentUpdatePatch, Lead, Pipeline } from '../../types';
 
 interface ActionRowProps {
   action: DreamAgentAction;
@@ -25,6 +25,19 @@ interface ActionRowProps {
   onResolve: (resolution: ActionResolution) => void;
   /** Ambiguous rows only: the user chose which lead they meant. */
   onPickLead: (leadId: string) => void;
+}
+
+/** From→to rows for a patch. `lead` is undefined for a lead that doesn't exist yet (a `create`), so every "from" is an em dash. */
+function patchRows(patch: DreamAgentUpdatePatch, lead: Lead | undefined): { label: string; from: string; to: string }[] {
+  const rows: { label: string; from: string; to: string }[] = [];
+  const currentStage = lead?.stage ?? 'new_lead';
+  if (patch.stage && patch.stage !== currentStage) rows.push({ label: 'Stage', from: stageInfo(currentStage).label, to: stageInfo(patch.stage).label });
+  if (patch.deal_value !== undefined) rows.push({ label: 'Deal value', from: lead?.deal_value != null ? formatCurrency(lead.deal_value) : '—', to: formatCurrency(patch.deal_value) });
+  if (patch.package_tier) rows.push({ label: 'Package', from: packageLabel(lead?.package_tier ?? null), to: packageLabel(patch.package_tier) });
+  if (patch.next_action_date) rows.push({ label: 'Next action date', from: lead?.next_action_date ?? '—', to: patch.next_action_date });
+  if (patch.next_action_note) rows.push({ label: 'Next action', from: lead?.next_action_note ?? '—', to: patch.next_action_note });
+  if (patch.pain_point) rows.push({ label: 'Pain point (info only)', from: '—', to: patch.pain_point });
+  return rows;
 }
 
 /** One proposed action from Dream Agent, resolved by the user before it can be
@@ -72,14 +85,7 @@ export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipe
   }
 
   if (action.type === 'update') {
-    const lead = leadsById[action.lead_id];
-    const rows: { label: string; from: string; to: string }[] = [];
-    if (action.patch.stage && lead && action.patch.stage !== lead.stage) rows.push({ label: 'Stage', from: stageInfo(lead.stage).label, to: stageInfo(action.patch.stage).label });
-    if (action.patch.deal_value !== undefined) rows.push({ label: 'Deal value', from: lead?.deal_value != null ? formatCurrency(lead.deal_value) : '—', to: formatCurrency(action.patch.deal_value) });
-    if (action.patch.package_tier) rows.push({ label: 'Package', from: packageLabel(lead?.package_tier ?? null), to: packageLabel(action.patch.package_tier) });
-    if (action.patch.next_action_date) rows.push({ label: 'Next action date', from: lead?.next_action_date ?? '—', to: action.patch.next_action_date });
-    if (action.patch.next_action_note) rows.push({ label: 'Next action', from: lead?.next_action_note ?? '—', to: action.patch.next_action_note });
-    if (action.patch.pain_point) rows.push({ label: 'Pain point (info only)', from: '—', to: action.patch.pain_point });
+    const rows = patchRows(action.patch, leadsById[action.lead_id]);
     const confirmed = resolution.status === 'confirmed_update';
     return (
       <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4">
@@ -112,6 +118,15 @@ export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipe
       <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4">
         <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-cyan" aria-hidden />New lead: {action.extracted.business_name}</p>
         <p className="text-xs text-muted">{[action.extracted.city, action.extracted.phone, action.extracted.email].filter(Boolean).join(' · ') || 'No extra details found'}</p>
+        <ul className="flex flex-col gap-1">
+          {patchRows(action.patch, undefined).map((r) => (
+            <li key={r.label} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface/60 p-2 text-sm">
+              <span className="w-36 text-xs font-semibold text-muted">{r.label}</span>
+              <ArrowRight className="h-3.5 w-3.5 text-muted" aria-hidden />
+              <span className="font-semibold text-success">{r.to}</span>
+            </li>
+          ))}
+        </ul>
         <p className="text-xs text-muted">{action.rationale}</p>
         {needsPipelinePicker && (
           <SelectField label="Pipeline" value={pipelineId} onChange={(e) => onResolve({ status: 'confirmed_create', pipeline_id: e.target.value })}>

@@ -79,6 +79,9 @@ export function sanitizeDreamAgentActions(raw: unknown, validLeadIds: Set<string
           city: sanitizedString(e.city) ?? null,
           vertical: sanitizedString(e.vertical) ?? null,
         },
+        // A new lead usually comes with what happened (visited → contacted, a
+        // follow-up date…), which used to be dropped since only `update` had a patch.
+        patch: sanitizePatch(r.patch, allowedPackages),
         excerpt, rationale,
       });
       continue;

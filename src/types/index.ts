@@ -67,7 +67,7 @@ export interface Lead {
 
 // Kept in sync with supabase/functions/enrich-leads-bulk/index.ts's own
 // Deno-side copy (Field/EnrichResult) — see that file's comment.
-export type EnrichableField = 'email' | 'phone' | 'owner_name';
+export type EnrichableField = 'email' | 'phone' | 'owner_name' | 'website';
 
 export interface EnrichmentResult {
   lead_id: string;
@@ -270,7 +270,7 @@ export interface DreamAgentUpdatePatch {
  * in src/lib/dreamAgentActions.ts). */
 export type DreamAgentAction =
   | { type: 'update'; lead_id: string; business_name: string; patch: DreamAgentUpdatePatch; excerpt: string; rationale: string }
-  | { type: 'create'; extracted: { business_name: string; owner_name: string | null; phone: string | null; email: string | null; website: string | null; city: string | null; vertical: string | null }; excerpt: string; rationale: string }
+  | { type: 'create'; extracted: { business_name: string; owner_name: string | null; phone: string | null; email: string | null; website: string | null; city: string | null; vertical: string | null }; patch: DreamAgentUpdatePatch; excerpt: string; rationale: string }
   | { type: 'ambiguous'; mentioned_text: string; candidate_lead_ids: string[]; excerpt: string }
   | { type: 'update_company_context'; proposed_context: string; excerpt: string; rationale: string };
 
