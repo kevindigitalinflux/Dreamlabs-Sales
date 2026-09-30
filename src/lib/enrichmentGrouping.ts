@@ -71,3 +71,33 @@ export function splitEnrichmentChanges(
   }
   return { patches, additions };
 }
+
+/** Which lead list column holds the additional values for each enrichable field. */
+export const ADDITIONAL_COLUMN = {
+  email: 'additional_emails',
+  phone: 'additional_phones',
+  website: 'additional_websites',
+  owner_name: 'additional_owners',
+} as const satisfies Record<EnrichableField, string>;
+
+type AdditionalColumn = (typeof ADDITIONAL_COLUMN)[EnrichableField];
+type AdditionalLists = Partial<Record<AdditionalColumn, string[]>>;
+
+/**
+ * Turns found-but-kept values into the lead-column patch that stores them:
+ * appended to the lead's existing additional list, skipping any value already
+ * there (ignoring case) so re-running enrichment never piles up duplicates.
+ */
+export function mergeAdditions(
+  lead: Partial<Record<AdditionalColumn, string[] | null>> | undefined,
+  additions: AdditionalDetail[],
+): AdditionalLists {
+  const patch: AdditionalLists = {};
+  for (const { field, value } of additions) {
+    const column = ADDITIONAL_COLUMN[field];
+    const list = patch[column] ?? [...(lead?.[column] ?? [])];
+    if (!list.some((v) => v.trim().toLowerCase() === value.trim().toLowerCase())) list.push(value);
+    patch[column] = list;
+  }
+  return patch;
+}

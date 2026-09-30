@@ -4,6 +4,7 @@ import type { Lead, LeadNote, PackageTier } from '../../types';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import { formatShortDate } from '../../lib/utils';
 import { useOrgPackages } from '../../hooks/useOrgPackages';
+import { AdditionalDetails } from './AdditionalDetails';
 import { Input, SelectField } from '../ui/Input';
 import { Skeleton } from '../ui/Skeleton';
 
@@ -94,6 +95,7 @@ export function ContactInfo({ lead, onSave }: EditableSectionProps) {
         <Input label="Website" type="url" value={form.website} onChange={set('website')} onBlur={() => blurSave('website')} placeholder="https://" />
         {lead.website && <a href={lead.website} target="_blank" rel="noreferrer" aria-label="Open website" className={action}><ExternalLink className="h-4 w-4" aria-hidden /></a>}
       </div>
+      <AdditionalDetails lead={lead} onSave={onSave} />
       <Input label="Address" value={form.address} onChange={set('address')} onBlur={() => blurSave('address')} />
       <div className="flex gap-2">
         <Input label="City" value={form.city} onChange={set('city')} onBlur={() => blurSave('city')} />

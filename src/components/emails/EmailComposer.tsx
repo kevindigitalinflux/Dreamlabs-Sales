@@ -83,6 +83,8 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
           setSelectedRecipients(new Set([draft.decision_maker_candidate_id]));
         } else if (draft.to_email === lead.email) {
           setSelectedRecipients(new Set(['lead']));
+        } else if ((lead.additional_emails ?? []).includes(draft.to_email)) {
+          setSelectedRecipients(new Set([`extra:${draft.to_email}`]));
         }
         // else: the draft's recipient is neither the lead nor a still-known
         // decision-maker (e.g. the candidate row was later removed) — leave
@@ -96,6 +98,11 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
   const recipients: Recipient[] = useMemo(() => {
     const list: Recipient[] = [];
     if (lead.email) list.push({ key: 'lead', email: lead.email, label: `${lead.owner_name ?? lead.business_name} (${lead.email})`, candidateId: null, name: lead.owner_name ?? null });
+    // Extra addresses kept from Fill missing details (never the primary again).
+    for (const extra of lead.additional_emails ?? []) {
+      if (extra.toLowerCase() === lead.email?.toLowerCase()) continue;
+      list.push({ key: `extra:${extra}`, email: extra, label: `${extra} (additional)`, candidateId: null, name: null });
+    }
     for (const dm of decisionMakers) {
       if (!dm.email) continue;
       const name = `${dm.first_name ?? ''} ${dm.last_name ?? ''}`.trim() || null;

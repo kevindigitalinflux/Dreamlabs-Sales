@@ -121,6 +121,7 @@ export function EnrichmentReview({ open, results, leadsById, onClose, onApply }:
                           <span className="text-muted">{existing}</span>
                           <span className="text-[10px] uppercase text-muted">kept</span>
                           <Plus className="h-3.5 w-3.5 text-muted" aria-hidden />
+                          <span className="text-[10px] uppercase text-muted">additional</span>
                         </>
                       ) : (
                         <>
@@ -138,15 +139,23 @@ export function EnrichmentReview({ open, results, leadsById, onClose, onApply }:
           );
         })}
         {results.length > 0 && !summary && (
-          <label className="flex items-start gap-2 rounded-lg bg-surface/60 p-3 text-sm">
-            <input type="checkbox" checked={replaceExisting} onChange={(e) => setReplaceExisting(e.target.checked)} className="mt-0.5 h-4 w-4 accent-violet-500" />
-            <span>
-              <span className="font-semibold">Replace existing details</span>
-              <span className="block text-xs text-muted">
-                Off: blanks are filled in, and anything already on the lead is kept, with the new value saved to the lead's notes. On: found values overwrite what's there.
+          <fieldset className="flex flex-col gap-1 rounded-lg bg-surface/60 p-3 text-sm">
+            <legend className="px-1 text-xs font-semibold text-muted">If a lead already has a value for a field</legend>
+            <label className="flex items-start gap-2">
+              <input type="radio" name="enrich-mode" checked={!replaceExisting} onChange={() => setReplaceExisting(false)} className="mt-0.5 h-4 w-4 accent-violet-500" />
+              <span>
+                <span className="font-semibold">Add as additional details</span>
+                <span className="block text-xs text-muted">Keep what's there and save the new value under the lead's additional emails, phones, websites or owners. Blank fields are filled in.</span>
               </span>
-            </span>
-          </label>
+            </label>
+            <label className="flex items-start gap-2">
+              <input type="radio" name="enrich-mode" checked={replaceExisting} onChange={() => setReplaceExisting(true)} className="mt-0.5 h-4 w-4 accent-violet-500" />
+              <span>
+                <span className="font-semibold">Replace existing details</span>
+                <span className="block text-xs text-muted">Overwrite what's there with the found value.</span>
+              </span>
+            </label>
+          </fieldset>
         )}
         {summary && <p role="status" className="text-sm text-success">{summary}</p>}
         <div className="flex items-center justify-between">

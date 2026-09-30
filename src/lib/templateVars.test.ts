@@ -5,7 +5,7 @@ import type { Lead } from '../types';
 function makeLead(overrides: Partial<Lead>): Lead {
   return {
     id: 'x', business_name: 'Acme Ltd', owner_name: null, phone: null, email: null,
-    website: null, address: null, city: null, postcode: null,
+    website: null, additional_emails: [], additional_phones: [], additional_websites: [], additional_owners: [], address: null, city: null, postcode: null,
     google_rating: null, review_count: null, vertical: null,
     stage: 'new_lead', package_tier: null, deal_value: null,
     assigned_to: null, created_by: null, raw_lead_id: null,

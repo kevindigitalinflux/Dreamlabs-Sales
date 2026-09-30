@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupChangesByLead, splitEnrichmentChanges } from './enrichmentGrouping';
+import { groupChangesByLead, mergeAdditions, splitEnrichmentChanges } from './enrichmentGrouping';
 import type { EnrichableField, EnrichmentResult } from '../types';
 
 function makeResult(overrides: Partial<EnrichmentResult>): EnrichmentResult {
@@ -75,5 +75,23 @@ describe('splitEnrichmentChanges', () => {
       patches: { 'lead-1': { phone: '+44 20 1111 1111' } },
       additions: {},
     });
+  });
+});
+
+describe('mergeAdditions', () => {
+  it('appends to the lead\'s existing additional lists by field', () => {
+    const lead = { additional_emails: ['a@x.com'], additional_phones: [] as string[] };
+    expect(mergeAdditions(lead, [
+      { field: 'email', value: 'b@x.com', source: 'hunter' },
+      { field: 'phone', value: '0207', source: 'google_places' },
+      { field: 'owner_name', value: 'Jane Smith', source: 'companies_house' },
+    ])).toEqual({ additional_emails: ['a@x.com', 'b@x.com'], additional_phones: ['0207'], additional_owners: ['Jane Smith'] });
+  });
+
+  it('skips values already stored (any case) and works with no existing lead data', () => {
+    expect(mergeAdditions({ additional_emails: ['A@x.com'] }, [{ field: 'email', value: 'a@X.com', source: '' }]))
+      .toEqual({ additional_emails: ['A@x.com'] });
+    expect(mergeAdditions(undefined, [{ field: 'website', value: 'https://x.com', source: '' }]))
+      .toEqual({ additional_websites: ['https://x.com'] });
   });
 });

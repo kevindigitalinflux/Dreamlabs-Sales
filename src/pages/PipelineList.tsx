@@ -25,19 +25,13 @@ import { LeadPanel } from '../components/pipeline/LeadPanel';
 import { SharedPipelineBanner } from '../components/pipeline/SharedPipelineBanner';
 import { ViewToggle } from '../components/pipeline/ViewToggle';
 import { PipelineSwitcher } from '../components/layout/PipelineSwitcher';
-import { useAuth } from '../hooks/useAuth';
+import { mergeAdditions } from '../lib/enrichmentGrouping';
 import type { AdditionalDetail } from '../lib/enrichmentGrouping';
+import type { LeadPatch } from '../lib/leadUpdates';
 import type { DecisionMakerCandidate, EnrichableField, EnrichmentResult, Lead, Stage } from '../types';
-
-const ENRICH_LABELS: Record<EnrichableField, string> = { email: 'Email', phone: 'Phone', owner_name: 'Owner', website: 'Website' };
-const ENRICH_SOURCES: Record<string, string> = {
-  website: 'website', companies_house: 'Companies House', opencorporates: 'OpenCorporates',
-  hunter: 'Hunter', apollo: 'Apollo', google_places: 'Google Places',
-};
 
 /** List pipeline view: search, filters, sortable table, side panel (SPEC.md §6). */
 export function PipelineList() {
-  const { session } = useAuth();
   const { leads, loading, error, createLead, updateLead, refresh } = useLeads();
   const { profiles } = useProfiles();
   const { currentPipeline, pipelines } = usePipeline();
@@ -132,21 +126,13 @@ export function PipelineList() {
     const failed: { leadId: string; error: string }[] = [];
     const leadIds = new Set([...Object.keys(patches), ...Object.keys(additions)]);
     for (const leadId of leadIds) {
-      const patch = patches[leadId];
-      const patchErr = patch ? await updateLead(leadId, patch) : null;
-      // Found values kept alongside existing details go in one note so nothing is
-      // lost. ai_summary (not 'general') so it never counts as a human note.
-      const extra = additions[leadId];
-      let noteErr: string | null = null;
-      if (extra && extra.length > 0) {
-        const lines = extra.map((a) => `- ${ENRICH_LABELS[a.field]}: ${a.value}${a.source ? ` (${ENRICH_SOURCES[a.source] ?? a.source})` : ''}`);
-        const { error: insertErr } = await supabase.from('lead_notes').insert({
-          lead_id: leadId, created_by: session?.user.id ?? null, note_type: 'ai_summary',
-          content: `Additional details found (existing details kept):\n${lines.join('\n')}`,
-        });
-        noteErr = insertErr ? insertErr.message : null;
-      }
-      const err = patchErr ?? noteErr;
+      // One update per lead: the field writes (blanks filled / replaced) plus the
+      // found values kept alongside existing ones, stored in the additional_* lists.
+      const patch: LeadPatch = {
+        ...patches[leadId],
+        ...mergeAdditions(leads.find((l) => l.id === leadId), additions[leadId] ?? []),
+      };
+      const err = Object.keys(patch).length > 0 ? await updateLead(leadId, patch) : null;
       if (err) failed.push({ leadId, error: err }); else applied++;
     }
     if (failed.length === 0) setSelected(new Set());

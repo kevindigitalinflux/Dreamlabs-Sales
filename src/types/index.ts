@@ -41,6 +41,11 @@ export interface Lead {
   phone: string | null;
   email: string | null;
   website: string | null;
+  /** Extra values kept alongside the primary email/phone/website/owner (e.g. from Fill missing details). */
+  additional_emails: string[];
+  additional_phones: string[];
+  additional_websites: string[];
+  additional_owners: string[];
   address: string | null;
   city: string | null;
   postcode: string | null;
