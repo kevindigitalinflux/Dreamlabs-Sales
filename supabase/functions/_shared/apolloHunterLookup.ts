@@ -125,3 +125,30 @@ export async function findHunterDecisionMaker(website: string | null, apiKey: st
     return null;
   }
 }
+
+/**
+ * Like findHunterDecisionMaker, but returns up to `limit` people (a business
+ * usually has more than one decision-maker), best first. Same single
+ * domain-search call, so still no extra request or cost. Only named people are
+ * kept: Hunter also returns generic mailboxes (info@, hello@), which have no
+ * first name and are not decision-makers.
+ */
+export async function findHunterDecisionMakers(website: string | null, apiKey: string, limit = 3): Promise<HunterDecisionMakerCandidate[]> {
+  const domain = bareDomain(website ?? '');
+  if (!domain) return [];
+  try {
+    const res = await fetchWithTimeout(`https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${apiKey}`);
+    if (!res.ok) return [];
+    const data = await res.json() as { data?: { emails?: HunterEmailEntry[] } };
+    const named = (data.data?.emails ?? []).filter((e) => e.first_name && e.value);
+    const score = (e: HunterEmailEntry) =>
+      (e.seniority === 'executive' ? 2 : e.seniority === 'senior' ? 1 : 0) * 10
+      + (e.position && DECISION_MAKER_TITLE_PATTERN.test(e.position) ? 5 : 0);
+    return [...named]
+      .sort((a, b) => (score(b) - score(a)) || (b.confidence - a.confidence))
+      .slice(0, limit)
+      .map((e) => ({ firstName: e.first_name ?? null, lastName: e.last_name ?? null, title: e.position ?? null, email: e.value, linkedinUrl: e.linkedin || null }));
+  } catch {
+    return [];
+  }
+}

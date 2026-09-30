@@ -4,8 +4,11 @@ import { corsHeaders, json } from '../_shared/cors.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { runBounded } from '../_shared/concurrency.ts';
 import { bareDomain } from '../_shared/domain.ts';
-import { findHunterDecisionMaker } from '../_shared/apolloHunterLookup.ts';
-import { searchApolloDecisionMaker } from '../_shared/apolloPeopleSearch.ts';
+import { findHunterDecisionMakers } from '../_shared/apolloHunterLookup.ts';
+import { searchApolloDecisionMakers } from '../_shared/apolloPeopleSearch.ts';
+
+// A business usually has more than one decision-maker; keep the best few per source.
+const MAX_PER_SOURCE = 3;
 
 const MAX_LEADS = 40;
 
@@ -69,8 +72,7 @@ Deno.serve(async (req) => {
     const rows: Record<string, unknown>[] = [];
 
     if (hunterKey) {
-      const hunter = await findHunterDecisionMaker(lead.website, hunterKey);
-      if (hunter) {
+      for (const hunter of await findHunterDecisionMakers(lead.website, hunterKey, MAX_PER_SOURCE)) {
         rows.push({
           lead_id: lead.id, source: 'hunter',
           first_name: hunter.firstName, last_name: hunter.lastName, title: hunter.title,
@@ -81,8 +83,7 @@ Deno.serve(async (req) => {
       }
     }
     if (apolloKey) {
-      const apollo = await searchApolloDecisionMaker(domain, apolloKey);
-      if (apollo) {
+      for (const apollo of await searchApolloDecisionMakers(domain, apolloKey, MAX_PER_SOURCE)) {
         rows.push({
           lead_id: lead.id, source: 'apollo', apollo_person_id: apollo.apolloPersonId,
           first_name: apollo.firstName, last_name: apollo.lastNameObfuscated, title: apollo.title,
@@ -95,15 +96,18 @@ Deno.serve(async (req) => {
 
     if (rows.length === 0) return { lead_id: lead.id, candidates: [] as Record<string, unknown>[] };
 
-    // Deliberately omits phone/phone_status: PostgREST's upsert only SETs the
-    // columns present in the payload, so re-running search on a lead with an
-    // in-progress or already-revealed Apollo phone leaves that state
-    // untouched instead of resetting it back to defaults.
-    const { data: upserted, error: upsertErr } = await service
+    // One row per person (Hunter by email, Apollo by person id) via the
+    // generated dedupe_key (migration 039), so re-running never duplicates.
+    // ignoreDuplicates (ON CONFLICT DO NOTHING) rather than an overwriting upsert:
+    // an overwrite resets email_revealed/email on an Apollo contact whose email
+    // was already paid for and revealed. Existing rows are left exactly as they are.
+    const { error: upsertErr } = await service
       .from('decision_maker_candidates')
-      .upsert(rows, { onConflict: 'lead_id,source' })
-      .select('*');
+      .upsert(rows, { onConflict: 'lead_id,dedupe_key', ignoreDuplicates: true });
     if (upsertErr) return { lead_id: lead.id, candidates: [] as Record<string, unknown>[] };
+    // Everyone stored for this lead (new and from earlier runs), not only this run's inserts.
+    const { data: upserted } = await service
+      .from('decision_maker_candidates').select('*').eq('lead_id', lead.id).order('created_at');
 
     // Auto-capture: any candidate with a LinkedIn URL gets a linked
     // linkedin_contacts row immediately, so it shows up in the LinkedIn

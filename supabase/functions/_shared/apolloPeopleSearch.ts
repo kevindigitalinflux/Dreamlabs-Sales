@@ -45,6 +45,38 @@ export async function searchApolloDecisionMaker(domain: string, apiKey: string):
   }
 }
 
+/**
+ * Same free people search as searchApolloDecisionMaker, but returns up to
+ * `limit` decision-makers (still 0 credits: search never reveals contact info).
+ */
+export async function searchApolloDecisionMakers(domain: string, apiKey: string, limit = 3): Promise<ApolloPersonCandidate[]> {
+  try {
+    const params = new URLSearchParams();
+    params.append('q_organization_domains_list[]', domain);
+    for (const seniority of DECISION_MAKER_SENIORITIES) params.append('person_seniorities[]', seniority);
+    params.append('per_page', String(limit));
+    const res = await fetchWithTimeout('https://api.apollo.io/api/v1/mixed_people/api_search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Api-Key': apiKey },
+      body: params.toString(),
+    });
+    if (!res.ok) return [];
+    const data = await res.json() as { people?: { id?: string; first_name?: string; last_name_obfuscated?: string; title?: string | null; linkedin_url?: string | null }[] };
+    return (data.people ?? [])
+      .filter((p) => p.id)
+      .slice(0, limit)
+      .map((p) => ({
+        apolloPersonId: p.id!,
+        firstName: p.first_name ?? null,
+        lastNameObfuscated: p.last_name_obfuscated ?? null,
+        title: p.title ?? null,
+        linkedinUrl: p.linkedin_url || null,
+      }));
+  } catch {
+    return [];
+  }
+}
+
 export interface ApolloRevealResult {
   firstName: string | null;
   lastName: string | null;

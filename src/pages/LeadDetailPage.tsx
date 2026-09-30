@@ -70,7 +70,7 @@ export function LeadDetailPage() {
 
       <Card>
         <h2 className="mb-2 text-[18px] font-bold">Decision Makers</h2>
-        <DecisionMakersCard leadId={lead.id} />
+        <DecisionMakersCard leadId={lead.id} lead={lead} onSave={(patch) => updateLead(patch)} />
       </Card>
 
       <Card>
