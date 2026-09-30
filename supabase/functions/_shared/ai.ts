@@ -167,16 +167,19 @@ For each company/person mentioned, decide one of four action types:
    contacted, audit_booked, proposal_sent, negotiating, won, lost,
    not_now_nurture), deal_value (number, GBP), package_tier (exactly one of
    ${packageChoices(input.customPackages)}; omit it if none clearly fits), next_action_date
-   (YYYY-MM-DD), next_action_note (string), pain_point (string)>},
+   (YYYY-MM-DD), next_action_note (string), pain_point (string), owner_name,
+   phone, email, website, address, city, postcode, vertical (all strings, only what
+   the note states)>},
    "excerpt":<the relevant sentence(s) from the note>,"rationale":<one sentence
    explaining the match and the changes>}
 2. "create" — mentions someone NOT in LEAD INDEX at all, a genuinely new prospect.
    Output: {"type":"create","extracted":{"business_name":<string>,
    "owner_name":<string or null>,"phone":<string or null>,"email":<string or
    null>,"website":<string or null>,"city":<string or null>,"vertical":<string or
-   null>},"patch":{<same optional keys as an update's patch: stage, deal_value,
-   package_tier, next_action_date, next_action_note, pain_point; include stage
-   and any follow-up the rep mentioned>},"excerpt":<relevant text>,"rationale":<one sentence>}
+   null>,"address":<string or null>,"postcode":<string or null>},"patch":{<same optional keys as
+   an update's patch: stage, deal_value, package_tier, next_action_date,
+   next_action_note, pain_point; include stage and any follow-up the rep
+   mentioned. Put contact details in "extracted", not here>},"excerpt":<relevant text>,"rationale":<one sentence>}
 3. "ambiguous" — could plausibly match 2+ leads in LEAD INDEX, or the name is too
    vague to resolve alone. Output: {"type":"ambiguous","mentioned_text":<what was
    said>,"candidate_lead_ids":[<ids from LEAD INDEX>],"excerpt":<relevant text>}
@@ -197,6 +200,8 @@ ${todayWithWeekday()}. Return a JSON array of actions (empty
 array if nothing found).
 
 For every "update" AND "create" action, apply these rules to its patch. ${FOLLOW_UP_GUIDANCE}
+
+BE THOROUGH: fill in as many fields as the note supports, not just stage and follow-up. package_tier: whenever the rep mentions a service the lead wants, was pitched or was quoted, pick the closest allowed value. deal_value: any price or budget mentioned, in GBP. vertical: infer the business type from what they do (e.g. "Estate agent", "Office space provider", "Model agency"). Also capture the contact's name (owner_name), phone, email, website, address, city and postcode when the note gives them. Copy values exactly as written, never invent a phone number, email or address. For an EXISTING lead, only include address, city, postcode and vertical if the note states them; a different email, phone, website or owner name is fine to include, since it is kept as an additional detail and never overwrites.
 
 LEAD INDEX: ${JSON.stringify(input.leadIndex)}
 

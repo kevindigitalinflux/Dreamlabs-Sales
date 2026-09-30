@@ -1,5 +1,6 @@
 import { PACKAGE_TIERS } from './utils';
-import type { DreamAgentAction, DreamAgentUpdatePatch, PackageTier, Stage } from '../types';
+import type { AdditionalDetail } from './enrichmentGrouping';
+import type { DreamAgentAction, DreamAgentUpdatePatch, Lead, PackageTier, Stage } from '../types';
 
 const STAGE_VALUES = new Set<Stage>([
   'new_lead', 'contacted', 'audit_booked', 'proposal_sent',
@@ -33,7 +34,44 @@ function sanitizePatch(raw: unknown, allowedPackages: Set<PackageTier>): DreamAg
   if (nextActionNote !== undefined) patch.next_action_note = nextActionNote;
   const painPoint = sanitizedString(r.pain_point);
   if (painPoint !== undefined) patch.pain_point = painPoint;
+  for (const key of CONTACT_KEYS) {
+    const value = sanitizedString(r[key])?.trim();
+    if (value) patch[key] = value;
+  }
   return patch;
+}
+
+const CONTACT_KEYS = ['owner_name', 'phone', 'email', 'website', 'address', 'city', 'postcode', 'vertical'] as const;
+/** Fields with an additional_* list on the lead: a differing value is kept there, not lost. */
+const ADDITIONAL_CAPABLE = ['owner_name', 'phone', 'email', 'website'] as const;
+
+type ContactKey = (typeof CONTACT_KEYS)[number];
+
+/**
+ * What a note's contact details should do to an EXISTING lead. A note is often
+ * jotted down quickly, so it must never clobber details the lead already has:
+ *  - field blank on the lead                          -> `fill` it in
+ *  - owner/phone/email/website already set, differing -> `additions` (kept as an
+ *    additional detail; the primary value stays)
+ *  - address/city/postcode/vertical already set       -> left alone
+ *  - identical to what's there (any case)             -> nothing
+ * `lead` is undefined only for a brand-new lead, where everything counts as blank.
+ */
+export function splitContactPatch(
+  lead: Lead | undefined,
+  patch: DreamAgentUpdatePatch,
+): { fill: Partial<Record<ContactKey, string>>; additions: AdditionalDetail[] } {
+  const fill: Partial<Record<ContactKey, string>> = {};
+  const additions: AdditionalDetail[] = [];
+  for (const key of CONTACT_KEYS) {
+    const value = patch[key];
+    if (!value) continue;
+    const current = lead?.[key]?.trim() ?? '';
+    if (!current) { fill[key] = value; continue; }
+    if (current.toLowerCase() === value.trim().toLowerCase()) continue;
+    if ((ADDITIONAL_CAPABLE as readonly string[]).includes(key)) additions.push({ field: key as AdditionalDetail['field'], value, source: 'note' });
+  }
+  return { fill, additions };
 }
 
 /**
@@ -78,6 +116,8 @@ export function sanitizeDreamAgentActions(raw: unknown, validLeadIds: Set<string
           website: sanitizedString(e.website) ?? null,
           city: sanitizedString(e.city) ?? null,
           vertical: sanitizedString(e.vertical) ?? null,
+          ...(sanitizedString(e.address) ? { address: sanitizedString(e.address) } : {}),
+          ...(sanitizedString(e.postcode) ? { postcode: sanitizedString(e.postcode) } : {}),
         },
         // A new lead usually comes with what happened (visited → contacted, a
         // follow-up date…), which used to be dropped since only `update` had a patch.

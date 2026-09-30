@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeDreamAgentActions } from './dreamAgentActions';
+import { sanitizeDreamAgentActions, splitContactPatch } from './dreamAgentActions';
+import type { Lead } from '../types';
 
 const VALID_IDS = new Set(['lead-1', 'lead-2']);
 
@@ -61,5 +62,42 @@ describe('sanitizeDreamAgentActions', () => {
   it('returns an empty array for a non-array input', () => {
     expect(sanitizeDreamAgentActions({ not: 'an array' }, VALID_IDS)).toEqual([]);
     expect(sanitizeDreamAgentActions(null, VALID_IDS)).toEqual([]);
+  });
+});
+
+describe('contact details in an update patch', () => {
+  it('keeps trimmed contact fields and drops blanks/non-strings', () => {
+    const raw = [{ type: 'update', lead_id: 'lead-1', business_name: 'Acme', patch: { owner_name: ' Giuseppe Amoruso ', email: 'admin@x.com', phone: '', website: 42, postcode: 'E2 7AA' }, excerpt: 'x', rationale: 'y' }];
+    const [action] = sanitizeDreamAgentActions(raw, VALID_IDS);
+    expect(action).toMatchObject({ patch: { owner_name: 'Giuseppe Amoruso', email: 'admin@x.com', postcode: 'E2 7AA' } });
+    expect((action as unknown as { patch: Record<string, unknown> }).patch).not.toHaveProperty('phone');
+    expect((action as unknown as { patch: Record<string, unknown> }).patch).not.toHaveProperty('website');
+  });
+
+  it('keeps address/postcode on a create action\'s extracted details', () => {
+    const raw = [{ type: 'create', extracted: { business_name: 'Bright Sparks', owner_name: null, phone: null, email: null, website: null, city: 'Bristol', vertical: null, address: '1 High St', postcode: 'BS1 1AA' }, patch: {}, excerpt: 'x', rationale: 'y' }];
+    expect(sanitizeDreamAgentActions(raw, VALID_IDS)[0]).toMatchObject({ extracted: { address: '1 High St', postcode: 'BS1 1AA' } });
+  });
+});
+
+describe('splitContactPatch', () => {
+  const lead = { owner_name: 'Isabella', phone: null, email: 'info@x.com', website: 'https://x.com', address: null, city: 'London', postcode: null, vertical: 'Property' } as unknown as Lead;
+
+  it('fills blanks and keeps a differing email/owner as additional details', () => {
+    expect(splitContactPatch(lead, { phone: '0207', email: 'sally@x.com', owner_name: 'Sally Jones', postcode: 'E2 7AA' })).toEqual({
+      fill: { phone: '0207', postcode: 'E2 7AA' },
+      additions: [
+        { field: 'owner_name', value: 'Sally Jones', source: 'note' },
+        { field: 'email', value: 'sally@x.com', source: 'note' },
+      ],
+    });
+  });
+
+  it('never overwrites an existing address/city/vertical and ignores identical values', () => {
+    expect(splitContactPatch(lead, { city: 'Bristol', vertical: 'Retail', email: 'INFO@x.com', website: 'https://x.com' })).toEqual({ fill: {}, additions: [] });
+  });
+
+  it('treats everything as blank for a brand-new lead', () => {
+    expect(splitContactPatch(undefined, { email: 'a@x.com', city: 'Leeds' })).toEqual({ fill: { email: 'a@x.com', city: 'Leeds' }, additions: [] });
   });
 });

@@ -2,7 +2,8 @@ import { useCallback, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { applyLeadUpdate } from '../lib/leadUpdates';
 import type { LeadPatch } from '../lib/leadUpdates';
-import { sanitizeDreamAgentActions } from '../lib/dreamAgentActions';
+import { sanitizeDreamAgentActions, splitContactPatch } from '../lib/dreamAgentActions';
+import { mergeAdditions } from '../lib/enrichmentGrouping';
 import { useAuth } from './useAuth';
 import { useOrg } from './useOrg';
 import { useOrgPackages } from './useOrgPackages';
@@ -95,7 +96,11 @@ export function useDreamAgentSession() {
 
       if (action.type === 'update' && resolution.status === 'confirmed_update') {
         const { data: before } = await supabase.from('leads').select('*').eq('id', action.lead_id).single();
-        const err = await applyLeadUpdate(action.lead_id, patchToLeadPatch(action.patch), before as Lead | null, session.user.id);
+        // Contact details from the note never overwrite: blanks are filled and a
+        // differing email/phone/website/owner is kept in the lead's additional_* lists.
+        const { fill, additions } = splitContactPatch(before as Lead | null ?? undefined, action.patch);
+        const leadPatch: LeadPatch = { ...patchToLeadPatch(action.patch), ...fill, ...mergeAdditions(before as Lead | null ?? undefined, additions) };
+        const err = await applyLeadUpdate(action.lead_id, leadPatch, before as Lead | null, session.user.id);
         if (err) { setError(err); continue; }
         await supabase.from('lead_notes').insert({
           lead_id: action.lead_id, created_by: session.user.id, note_type: 'ai_summary',
@@ -110,7 +115,8 @@ export function useDreamAgentSession() {
         const { data: newLead, error: insertErr } = await supabase.from('leads').insert({
           business_name: action.extracted.business_name, owner_name: action.extracted.owner_name,
           phone: action.extracted.phone, email: action.extracted.email, website: action.extracted.website,
-          city: action.extracted.city, vertical: action.extracted.vertical, stage,
+          city: action.extracted.city, vertical: action.extracted.vertical,
+          address: action.extracted.address ?? null, postcode: action.extracted.postcode ?? null, stage,
           package_tier: action.patch.package_tier ?? null, deal_value: action.patch.deal_value ?? null,
           next_action_date: action.patch.next_action_date ?? null, next_action_note: action.patch.next_action_note ?? null,
           last_contacted_at: stage !== 'new_lead' ? new Date().toISOString() : null,

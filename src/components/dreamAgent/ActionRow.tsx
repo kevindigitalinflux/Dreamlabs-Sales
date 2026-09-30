@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowRight, Building2, Sparkles } from 'lucide-react';
 import { formatCurrency, packageLabel, stageInfo } from '../../lib/utils';
+import { splitContactPatch } from '../../lib/dreamAgentActions';
 import { Button } from '../ui/Button';
 import { SelectField, Textarea } from '../ui/Input';
 import type { ActionResolution } from '../../hooks/useDreamAgentSession';
@@ -27,9 +28,18 @@ interface ActionRowProps {
   onPickLead: (leadId: string) => void;
 }
 
+const CONTACT_LABELS = { owner_name: 'Owner', phone: 'Phone', email: 'Email', website: 'Website', address: 'Address', city: 'City', postcode: 'Postcode', vertical: 'Business type' };
+const ADDITIONAL_LABELS = { owner_name: 'owner', phone: 'phone', email: 'email', website: 'website' };
+
 /** From→to rows for a patch. `lead` is undefined for a lead that doesn't exist yet (a `create`), so every "from" is an em dash. */
-function patchRows(patch: DreamAgentUpdatePatch, lead: Lead | undefined): { label: string; from: string; to: string }[] {
+function patchRows(patch: DreamAgentUpdatePatch, lead: Lead | undefined, includeContact = false): { label: string; from: string; to: string }[] {
   const rows: { label: string; from: string; to: string }[] = [];
+  if (includeContact) {
+    // Existing leads: blanks are filled, differing email/phone/website/owner are kept as additional.
+    const { fill, additions } = splitContactPatch(lead, patch);
+    for (const [key, value] of Object.entries(fill)) rows.push({ label: CONTACT_LABELS[key as keyof typeof CONTACT_LABELS], from: '—', to: value });
+    for (const a of additions) rows.push({ label: `Additional ${ADDITIONAL_LABELS[a.field]}`, from: '—', to: a.value });
+  }
   const currentStage = lead?.stage ?? 'new_lead';
   if (patch.stage && patch.stage !== currentStage) rows.push({ label: 'Stage', from: stageInfo(currentStage).label, to: stageInfo(patch.stage).label });
   if (patch.deal_value !== undefined) rows.push({ label: 'Deal value', from: lead?.deal_value != null ? formatCurrency(lead.deal_value) : '—', to: formatCurrency(patch.deal_value) });
@@ -85,7 +95,7 @@ export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipe
   }
 
   if (action.type === 'update') {
-    const rows = patchRows(action.patch, leadsById[action.lead_id]);
+    const rows = patchRows(action.patch, leadsById[action.lead_id], true);
     const confirmed = resolution.status === 'confirmed_update';
     return (
       <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4">
@@ -117,7 +127,7 @@ export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipe
     return (
       <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4">
         <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-cyan" aria-hidden />New lead: {action.extracted.business_name}</p>
-        <p className="text-xs text-muted">{[action.extracted.city, action.extracted.phone, action.extracted.email].filter(Boolean).join(' · ') || 'No extra details found'}</p>
+        <p className="text-xs text-muted">{[action.extracted.owner_name, action.extracted.address, action.extracted.city, action.extracted.postcode, action.extracted.phone, action.extracted.email, action.extracted.website, action.extracted.vertical].filter(Boolean).join(' · ') || 'No extra details found'}</p>
         <ul className="flex flex-col gap-1">
           {patchRows(action.patch, undefined).map((r) => (
             <li key={r.label} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface/60 p-2 text-sm">

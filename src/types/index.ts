@@ -267,6 +267,17 @@ export interface DreamAgentUpdatePatch {
   next_action_date?: string;
   next_action_note?: string;
   pain_point?: string;
+  // Details the note states about the lead. For an existing lead these never
+  // overwrite: a blank field is filled, and a different email/phone/website/
+  // owner_name is kept as an additional detail (see splitContactPatch).
+  owner_name?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  address?: string;
+  city?: string;
+  postcode?: string;
+  vertical?: string;
 }
 
 /** One proposed change from parse-session-notes. `lead_id`/`candidate_lead_ids`
@@ -275,7 +286,7 @@ export interface DreamAgentUpdatePatch {
  * in src/lib/dreamAgentActions.ts). */
 export type DreamAgentAction =
   | { type: 'update'; lead_id: string; business_name: string; patch: DreamAgentUpdatePatch; excerpt: string; rationale: string }
-  | { type: 'create'; extracted: { business_name: string; owner_name: string | null; phone: string | null; email: string | null; website: string | null; city: string | null; vertical: string | null }; patch: DreamAgentUpdatePatch; excerpt: string; rationale: string }
+  | { type: 'create'; extracted: { business_name: string; owner_name: string | null; phone: string | null; email: string | null; website: string | null; city: string | null; vertical: string | null; address?: string | null; postcode?: string | null }; patch: DreamAgentUpdatePatch; excerpt: string; rationale: string }
   | { type: 'ambiguous'; mentioned_text: string; candidate_lead_ids: string[]; excerpt: string }
   | { type: 'update_company_context'; proposed_context: string; excerpt: string; rationale: string };
 
