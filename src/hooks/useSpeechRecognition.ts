@@ -12,7 +12,7 @@ interface SpeechRecognitionLike extends EventTarget {
   start: () => void;
   stop: () => void;
   onresult: ((event: SpeechRecognitionResultLike) => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((event: { error?: string }) => void) | null;
   onend: (() => void) | null;
 }
 
@@ -31,6 +31,8 @@ function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
  */
 export function useSpeechRecognition(onResult: (text: string) => void) {
   const [isListening, setIsListening] = useState(false);
+  /** Browser's SpeechRecognition error code (e.g. 'not-allowed' when the mic is blocked), or null. */
+  const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const SpeechRecognitionCtor = getSpeechRecognition();
   const isSupported = SpeechRecognitionCtor !== null;
@@ -45,16 +47,24 @@ export function useSpeechRecognition(onResult: (text: string) => void) {
     if (!SpeechRecognitionCtor || isListening) return;
     const recognition = new SpeechRecognitionCtor();
     recognition.continuous = true;
-    recognition.interimResults = false;
+    // Interim results make words appear live while speaking; with this off the
+    // browser only reports text after each pause, so nothing seems to happen.
+    recognition.interimResults = true;
     recognition.lang = 'en-GB';
     recognition.onresult = (event) => {
       let transcript = '';
       for (let i = 0; i < event.results.length; i += 1) transcript += event.results[i][0].transcript;
       onResult(transcript);
     };
-    recognition.onerror = () => setIsListening(false);
+    // 'no-speech' / 'aborted' are routine (silence, or our own stop()) — only
+    // surface errors the user can act on, like a blocked microphone.
+    recognition.onerror = (event) => {
+      if (event.error && event.error !== 'no-speech' && event.error !== 'aborted') setError(event.error);
+      setIsListening(false);
+    };
     recognition.onend = () => setIsListening(false);
     recognitionRef.current = recognition;
+    setError(null);
     recognition.start();
     setIsListening(true);
   }, [SpeechRecognitionCtor, isListening, onResult]);
@@ -64,5 +74,5 @@ export function useSpeechRecognition(onResult: (text: string) => void) {
     setIsListening(false);
   }, []);
 
-  return { isSupported, isListening, start, stop };
+  return { isSupported, isListening, error, start, stop };
 }

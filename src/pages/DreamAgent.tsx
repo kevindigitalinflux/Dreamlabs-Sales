@@ -36,7 +36,16 @@ export function DreamAgent() {
   const [matchScope, setMatchScope] = useState<string>(currentPipeline?.id ?? '');
   const [leadsById, setLeadsById] = useState<Record<string, Lead>>({});
 
-  const { isSupported: micSupported, isListening, start, stop } = useSpeechRecognition((text) => setDraft(text));
+  // What was already typed when recording started — the transcript is appended
+  // to it rather than replacing it, so typing then dictating loses nothing.
+  const voiceBaseRef = useRef('');
+  const { isSupported: micSupported, isListening, error: micError, start, stop } = useSpeechRecognition(
+    (text) => setDraft(voiceBaseRef.current ? `${voiceBaseRef.current.trimEnd()} ${text}` : text),
+  );
+  function startVoice() {
+    voiceBaseRef.current = draft;
+    start();
+  }
 
   const orgPipelines = pipelines.filter((p) => p.org_id === currentOrg?.id);
   const matchPipelineId = matchScope || null;
@@ -61,6 +70,7 @@ export function DreamAgent() {
 
   async function handleSend() {
     if (!draft.trim()) return;
+    if (isListening) stop();
     const text = draft;
     setDraft('');
     await sendMessage(text, matchPipelineId);
@@ -226,12 +236,31 @@ export function DreamAgent() {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           rows={4}
+          className={isListening ? 'ring-2 ring-violet/60' : ''}
         />
+        {isListening && (
+          <p role="status" className="flex items-center gap-2 text-sm font-semibold text-violet">
+            <span className="h-2.5 w-2.5 rounded-full bg-violet motion-safe:animate-pulse" aria-hidden />
+            Recording. Speak now and your words appear above as you talk.
+          </p>
+        )}
+        {micError && !isListening && (
+          <p role="alert" className="text-sm text-danger">
+            {micError === 'not-allowed' || micError === 'service-not-allowed'
+              ? 'Microphone access is blocked. Allow it in your browser\'s address bar, then try again.'
+              : `Voice input stopped (${micError}). Try again.`}
+          </p>
+        )}
         <div className="flex items-center justify-between">
           {micSupported && (
-            <Button variant={isListening ? 'secondary' : 'ghost'} onClick={() => (isListening ? stop() : start())}>
+            <Button
+              variant={isListening ? 'primary' : 'ghost'}
+              aria-pressed={isListening}
+              className={isListening ? 'ring-2 ring-violet/40 motion-safe:animate-pulse' : ''}
+              onClick={() => (isListening ? stop() : startVoice())}
+            >
               <Mic className="h-4 w-4" aria-hidden />
-              {isListening ? 'Listening…' : 'Voice note'}
+              {isListening ? 'Recording, tap to stop' : 'Voice note'}
             </Button>
           )}
           <Button onClick={() => void handleSend()} disabled={!draft.trim() || loading} loading={loading}>
