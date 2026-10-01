@@ -20,10 +20,12 @@ interface NotesTimelineProps {
   authorName: (id: string | null) => string;
   /** When given, each note (except system stage-change entries) can be edited in place. */
   onEditNote?: (noteId: string, content: string) => Promise<string | null>;
+  /** When given, notes (except system stage-change entries) can be deleted after a confirm. */
+  onDeleteNote?: (noteId: string) => Promise<string | null>;
 }
 
 /** All notes for a lead, newest first, with author + timestamp + type icon. */
-export function NotesTimeline({ notes, loading, authorName, onEditNote }: NotesTimelineProps) {
+export function NotesTimeline({ notes, loading, authorName, onEditNote, onDeleteNote }: NotesTimelineProps) {
   if (loading) {
     return (
       <div className="flex flex-col gap-2">
@@ -42,7 +44,7 @@ export function NotesTimeline({ notes, loading, authorName, onEditNote }: NotesT
             <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-label={note.note_type} />
             <div className="min-w-0 flex-1">
               {onEditNote
-                ? <EditableNote note={note} onSave={onEditNote} />
+                ? <EditableNote note={note} onSave={onEditNote} onDelete={onDeleteNote} />
                 : <p className="whitespace-pre-wrap text-sm">{note.content}</p>}
               <p className="mt-1 text-xs text-muted">
                 {authorName(note.created_by)} · {formatShortDate(note.created_at)} · {note.note_type.replace('_', ' ')}{note.edited_at ? ' · edited' : ''}

@@ -96,6 +96,8 @@ export interface DecisionMakerCandidate {
   phone: string | null;
   phone_status: 'not_requested' | 'pending' | 'revealed' | 'not_found' | 'failed';
   linkedin_url: string | null;
+  /** Set when the user removed this person as not relevant; hidden everywhere and kept so a re-search doesn't re-add them. */
+  dismissed_at: string | null;
   created_at: string;
   updated_at: string;
 }

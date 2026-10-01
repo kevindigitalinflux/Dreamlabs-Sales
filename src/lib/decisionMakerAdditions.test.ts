@@ -7,7 +7,7 @@ function candidate(overrides: Partial<DecisionMakerCandidate>): DecisionMakerCan
     id: 'c1', lead_id: 'lead-1', source: 'hunter', apollo_person_id: null,
     first_name: 'Jane', last_name: 'Smith', name_obfuscated: false, title: 'Director',
     email: 'jane@x.com', email_revealed: true, phone: null, phone_status: 'not_requested',
-    linkedin_url: null, created_at: '', updated_at: '', ...overrides,
+    linkedin_url: null, dismissed_at: null, created_at: '', updated_at: '', ...overrides,
   };
 }
 const lead = (overrides: Partial<Lead> = {}) => ({

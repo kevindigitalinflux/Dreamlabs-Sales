@@ -3,6 +3,7 @@ import { Pencil } from 'lucide-react';
 import type { LeadNote } from '../../types';
 import { Button } from '../ui/Button';
 import { Textarea } from '../ui/Input';
+import { ConfirmDeleteButton } from '../ui/ConfirmDeleteButton';
 
 /**
  * "Stage changed: X → Y" notes are the activity history the pipeline analytics
@@ -17,12 +18,14 @@ interface EditableNoteProps {
   note: LeadNote;
   /** Saves the new text; resolves to an error message, or null on success. */
   onSave: (noteId: string, content: string) => Promise<string | null>;
+  /** When given, the note can be deleted (after a confirm); resolves to an error message or null. */
+  onDelete?: (noteId: string) => Promise<string | null>;
   /** Shorten long notes in compact spaces (the pipeline side card). */
   clamp?: boolean;
 }
 
 /** A note's text with an inline Edit → textarea → Save/Cancel flow. */
-export function EditableNote({ note, onSave, clamp = false }: EditableNoteProps) {
+export function EditableNote({ note, onSave, onDelete, clamp = false }: EditableNoteProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(note.content);
   const [busy, setBusy] = useState(false);
@@ -47,13 +50,16 @@ export function EditableNote({ note, onSave, clamp = false }: EditableNoteProps)
       <div className="min-w-0">
         <p className={`whitespace-pre-wrap text-sm ${clamp ? 'line-clamp-3' : ''}`}>{note.content}</p>
         {isEditableNote(note) && (
-          <button
-            type="button"
-            onClick={startEditing}
-            className="mt-1 flex min-h-8 cursor-pointer items-center gap-1 text-xs font-semibold text-cyan hover:underline"
-          >
-            <Pencil className="h-3 w-3" aria-hidden /> Edit note
-          </button>
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <button
+              type="button"
+              onClick={startEditing}
+              className="flex min-h-8 cursor-pointer items-center gap-1 text-xs font-semibold text-cyan hover:underline"
+            >
+              <Pencil className="h-3 w-3" aria-hidden /> Edit note
+            </button>
+            {onDelete && <ConfirmDeleteButton label="Delete" question="Delete this note?" onConfirm={() => onDelete(note.id)} />}
+          </div>
         )}
       </div>
     );

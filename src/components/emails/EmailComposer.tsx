@@ -78,7 +78,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
     // against the loaded list is what tells us it's still a valid, current
     // recipient (see C1 in the 2026-09-28 final review).
     setSelectedRecipients(draft ? new Set() : new Set(lead.email ? ['lead'] : []));
-    void supabase.from('decision_maker_candidates').select('*').eq('lead_id', lead.id).not('email', 'is', null).then(({ data }) => {
+    void supabase.from('decision_maker_candidates').select('*').eq('lead_id', lead.id).not('email', 'is', null).is('dismissed_at', null).then(({ data }) => {
       if (cancelled) return;
       const dms = (data as DecisionMakerCandidate[]) ?? [];
       setDecisionMakers(dms);

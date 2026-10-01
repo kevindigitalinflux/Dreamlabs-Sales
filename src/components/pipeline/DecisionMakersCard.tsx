@@ -4,6 +4,8 @@ import { supabase } from '../../lib/supabase';
 import { readableInvokeError } from '../../lib/invokeError';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import { additionsFor, additionsPatchFor, alreadyOnLead, candidateName } from '../../lib/decisionMakerAdditions';
+import { dismissDecisionMaker } from '../../lib/dismissDecisionMaker';
+import { ConfirmDeleteButton } from '../ui/ConfirmDeleteButton';
 import type { DecisionMakerCandidate, Lead } from '../../types';
 import { Button } from '../ui/Button';
 
@@ -36,7 +38,7 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void supabase.from('decision_maker_candidates').select('*').eq('lead_id', leadId).order('created_at').then(({ data }) => {
+    void supabase.from('decision_maker_candidates').select('*').eq('lead_id', leadId).is('dismissed_at', null).order('created_at').then(({ data }) => {
       if (!cancelled) { setCandidates((data as DecisionMakerCandidate[]) ?? []); setLoading(false); }
     });
     const channel = supabase
@@ -47,6 +49,8 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
           return;
         }
         const row = payload.new as DecisionMakerCandidate;
+        // A person dismissed (here or in another tab) drops out of the list.
+        if (row.dismissed_at) { setCandidates((prev) => prev.filter((c) => c.id !== row.id)); return; }
         setCandidates((prev) => {
           const exists = prev.some((c) => c.id === row.id);
           return exists ? prev.map((c) => (c.id === row.id ? row : c)) : [...prev, row];
@@ -131,6 +135,17 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
               </div>
             );
           })()}
+          <div className="mt-1">
+            <ConfirmDeleteButton
+              label="Remove"
+              question="Remove this person?"
+              onConfirm={async () => {
+                const err = await dismissDecisionMaker(candidate.id);
+                if (!err) setCandidates((prev) => prev.filter((c) => c.id !== candidate.id));
+                return err;
+              }}
+            />
+          </div>
           {errorByCandidate[candidate.id] && <p role="alert" className="mt-1 text-xs text-danger">{errorByCandidate[candidate.id]}</p>}
         </li>
       ))}

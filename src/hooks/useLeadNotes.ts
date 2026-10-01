@@ -67,5 +67,26 @@ export function useLeadNotes(leadId: string) {
     [refresh],
   );
 
-  return { notes, loading, error, refresh, addNote, updateNote };
+  /**
+   * Deletes a note. Returns an error message or null. A deleted call note also takes
+   * one off the lead's call count, so a duplicate logged by mistake doesn't leave it inflated.
+   */
+  const deleteNote = useCallback(
+    async (noteId: string): Promise<string | null> => {
+      const note = notes.find((n) => n.id === noteId);
+      // .select().single() so a delete RLS silently blocks is reported, not faked as success.
+      const { error: err } = await supabase.from('lead_notes').delete().eq('id', noteId).select().single();
+      if (err) return err.code === 'PGRST116' ? 'You don\'t have permission to delete this note.' : err.message;
+      if (note?.note_type === 'call') {
+        const { data: lead } = await supabase.from('leads').select('call_count').eq('id', leadId).single();
+        const current = (lead as { call_count: number } | null)?.call_count ?? 0;
+        if (current > 0) await supabase.from('leads').update({ call_count: current - 1 }).eq('id', leadId);
+      }
+      await refresh();
+      return null;
+    },
+    [notes, leadId, refresh],
+  );
+
+  return { notes, loading, error, refresh, addNote, updateNote, deleteNote };
 }

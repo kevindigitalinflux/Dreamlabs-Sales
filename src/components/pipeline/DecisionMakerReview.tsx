@@ -3,6 +3,8 @@ import { supabase } from '../../lib/supabase';
 import type { DecisionMakerCandidate, Lead } from '../../types';
 import { readableInvokeError } from '../../lib/invokeError';
 import { additionsFor, additionsPatchFor, alreadyOnLead, candidateName } from '../../lib/decisionMakerAdditions';
+import { dismissDecisionMaker } from '../../lib/dismissDecisionMaker';
+import { ConfirmDeleteButton } from '../ui/ConfirmDeleteButton';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
@@ -49,6 +51,8 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
         setCandidatesByLead((prev) => {
           const list = prev[updated.lead_id];
           if (!list) return prev;
+          // Dismissed elsewhere: drop it from this list too.
+          if (updated.dismissed_at) return { ...prev, [updated.lead_id]: list.filter((c) => c.id !== updated.id) };
           return { ...prev, [updated.lead_id]: list.map((c) => (c.id === updated.id ? updated : c)) };
         });
       })
@@ -172,6 +176,17 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
                         </div>
                       );
                     })()}
+                    <div className="mt-1">
+                      <ConfirmDeleteButton
+                        label="Remove"
+                        question="Remove this person?"
+                        onConfirm={async () => {
+                          const err = await dismissDecisionMaker(candidate.id);
+                          if (!err) setCandidatesByLead((prev) => ({ ...prev, [candidate.lead_id]: (prev[candidate.lead_id] ?? []).filter((c) => c.id !== candidate.id) }));
+                          return err;
+                        }}
+                      />
+                    </div>
                     {errorByCandidate[candidate.id] && <p role="alert" className="mt-1 text-xs text-danger">{errorByCandidate[candidate.id]}</p>}
                   </li>
                 ))}

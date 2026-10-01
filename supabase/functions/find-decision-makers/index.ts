@@ -107,7 +107,7 @@ Deno.serve(async (req) => {
     if (upsertErr) return { lead_id: lead.id, candidates: [] as Record<string, unknown>[] };
     // Everyone stored for this lead (new and from earlier runs), not only this run's inserts.
     const { data: upserted } = await service
-      .from('decision_maker_candidates').select('*').eq('lead_id', lead.id).order('created_at');
+      .from('decision_maker_candidates').select('*').eq('lead_id', lead.id).is('dismissed_at', null).order('created_at');
 
     // Auto-capture: any candidate with a LinkedIn URL gets a linked
     // linkedin_contacts row immediately, so it shows up in the LinkedIn

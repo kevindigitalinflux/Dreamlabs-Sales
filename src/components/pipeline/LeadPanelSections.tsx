@@ -175,11 +175,13 @@ export function PipelineInfo({ lead, onSave }: EditableSectionProps) {
 }
 
 /** Latest-notes preview (last 2) with loading/empty states. */
-export function NotesPreview({ notes, loading, onEditNote }: {
+export function NotesPreview({ notes, loading, onEditNote, onDeleteNote }: {
   notes: LeadNote[];
   loading: boolean;
   /** When given, notes can be edited in place (except system stage-change entries). */
   onEditNote?: (noteId: string, content: string) => Promise<string | null>;
+  /** When given, notes (except system stage-change entries) can be deleted after a confirm. */
+  onDeleteNote?: (noteId: string) => Promise<string | null>;
 }) {
   const [showAll, setShowAll] = useState(false);
   if (loading) return <Skeleton className="h-16 w-full" />;
@@ -191,7 +193,7 @@ export function NotesPreview({ notes, loading, onEditNote }: {
         {visible.map((n) => (
           <li key={n.id} className="rounded-lg bg-surface/60 p-2 text-sm">
             {onEditNote
-              ? <EditableNote note={n} onSave={onEditNote} clamp />
+              ? <EditableNote note={n} onSave={onEditNote} onDelete={onDeleteNote} clamp />
               : <p className="line-clamp-3 whitespace-pre-wrap">{n.content}</p>}
             <p className="mt-1 text-xs text-muted">{formatShortDate(n.created_at)}{n.edited_at ? ' · edited' : ''}</p>
           </li>

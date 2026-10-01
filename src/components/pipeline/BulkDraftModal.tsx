@@ -60,7 +60,7 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
     for (const lead of leadsWithEmail) targets.push({ lead, email: lead.email!, recipientName: null, candidateId: null });
     if (!includeDecisionMakers) return targets;
     const leadIds = leads.map((l) => l.id);
-    const { data } = await supabase.from('decision_maker_candidates').select('*').in('lead_id', leadIds).not('email', 'is', null);
+    const { data } = await supabase.from('decision_maker_candidates').select('*').in('lead_id', leadIds).not('email', 'is', null).is('dismissed_at', null);
     for (const dm of (data as DecisionMakerCandidate[] | null) ?? []) {
       const lead = leads.find((l) => l.id === dm.lead_id);
       if (!lead) continue;
