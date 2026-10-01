@@ -25,7 +25,7 @@ import { EnrollmentControl } from '../components/emails/EnrollmentControl';
 export function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { lead, loading, error, updateLead } = useLead(id ?? 'none');
-  const { notes, loading: notesLoading, addNote } = useLeadNotes(id ?? 'none');
+  const { notes, loading: notesLoading, addNote, updateNote } = useLeadNotes(id ?? 'none');
   const { profiles } = useProfiles();
   const [noteOpen, setNoteOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
@@ -93,7 +93,7 @@ export function LeadDetailPage() {
           <h2 className="text-[18px] font-bold">Notes</h2>
           <Button variant="secondary" onClick={() => setNoteOpen(true)}>Add note</Button>
         </div>
-        <NotesTimeline notes={notes} loading={notesLoading} authorName={authorName} />
+        <NotesTimeline notes={notes} loading={notesLoading} authorName={authorName} onEditNote={updateNote} />
       </Card>
 
       <Card>

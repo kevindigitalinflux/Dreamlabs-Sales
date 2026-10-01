@@ -39,7 +39,7 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
   const { currentOrg } = useOrg();
   const [noteOpen, setNoteOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
-  const { notes, loading: notesLoading, addNote } = useLeadNotes(lead?.id ?? 'none');
+  const { notes, loading: notesLoading, addNote, updateNote } = useLeadNotes(lead?.id ?? 'none');
 
   if (!lead) return null;
   return (
@@ -99,7 +99,7 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
           </Section>
         )}
 
-        <Section title="Recent notes"><NotesPreview notes={notes} loading={notesLoading} /></Section>
+        <Section title="Recent notes"><NotesPreview notes={notes} loading={notesLoading} onEditNote={updateNote} /></Section>
 
         <div className="mt-auto flex flex-col gap-2">
           <Button onClick={() => setNoteOpen(true)}>Log note</Button>

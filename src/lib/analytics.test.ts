@@ -28,7 +28,7 @@ function makeNote(overrides: Partial<LeadNote>): LeadNote {
   return {
     id: crypto.randomUUID(), lead_id: 'lead-1', created_by: null,
     content: '', note_type: 'general', ai_extracted_data: null,
-    created_at: '2026-08-01T00:00:00Z',
+    created_at: '2026-08-01T00:00:00Z', edited_at: null,
     ...overrides,
   };
 }

@@ -49,5 +49,23 @@ export function useLeadNotes(leadId: string) {
     [leadId, session, refresh],
   );
 
-  return { notes, loading, error, refresh, addNote };
+  /**
+   * Changes a note's text and marks it edited. Returns an error message or null.
+   * .select().single() turns a write RLS silently blocks (0 rows matched, e.g. a
+   * view-only shared pipeline) into a real error instead of a fake success.
+   */
+  const updateNote = useCallback(
+    async (noteId: string, content: string): Promise<string | null> => {
+      const text = content.trim();
+      if (!text) return 'A note can\'t be empty.';
+      const { error: err } = await supabase
+        .from('lead_notes').update({ content: text, edited_at: new Date().toISOString() }).eq('id', noteId).select().single();
+      if (err) return err.code === 'PGRST116' ? 'You don\'t have permission to edit this note.' : err.message;
+      await refresh();
+      return null;
+    },
+    [refresh],
+  );
+
+  return { notes, loading, error, refresh, addNote, updateNote };
 }

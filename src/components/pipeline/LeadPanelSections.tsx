@@ -5,6 +5,7 @@ import type { LeadPatch } from '../../lib/leadUpdates';
 import { formatShortDate } from '../../lib/utils';
 import { useOrgPackages } from '../../hooks/useOrgPackages';
 import { AdditionalDetails } from './AdditionalDetails';
+import { EditableNote } from './EditableNote';
 import { Input, SelectField } from '../ui/Input';
 import { Skeleton } from '../ui/Skeleton';
 
@@ -174,17 +175,33 @@ export function PipelineInfo({ lead, onSave }: EditableSectionProps) {
 }
 
 /** Latest-notes preview (last 2) with loading/empty states. */
-export function NotesPreview({ notes, loading }: { notes: LeadNote[]; loading: boolean }) {
+export function NotesPreview({ notes, loading, onEditNote }: {
+  notes: LeadNote[];
+  loading: boolean;
+  /** When given, notes can be edited in place (except system stage-change entries). */
+  onEditNote?: (noteId: string, content: string) => Promise<string | null>;
+}) {
+  const [showAll, setShowAll] = useState(false);
   if (loading) return <Skeleton className="h-16 w-full" />;
   if (notes.length === 0) return <p className="text-sm text-muted">No notes yet.</p>;
+  const visible = showAll ? notes : notes.slice(0, 2);
   return (
-    <ul className="flex flex-col gap-2">
-      {notes.slice(0, 2).map((n) => (
-        <li key={n.id} className="rounded-lg bg-surface/60 p-2 text-sm">
-          <p className="line-clamp-3 whitespace-pre-wrap">{n.content}</p>
-          <p className="mt-1 text-xs text-muted">{formatShortDate(n.created_at)}</p>
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-2">
+        {visible.map((n) => (
+          <li key={n.id} className="rounded-lg bg-surface/60 p-2 text-sm">
+            {onEditNote
+              ? <EditableNote note={n} onSave={onEditNote} clamp />
+              : <p className="line-clamp-3 whitespace-pre-wrap">{n.content}</p>}
+            <p className="mt-1 text-xs text-muted">{formatShortDate(n.created_at)}{n.edited_at ? ' · edited' : ''}</p>
+          </li>
+        ))}
+      </ul>
+      {notes.length > 2 && (
+        <button type="button" onClick={() => setShowAll((s) => !s)} className="min-h-8 cursor-pointer self-start text-xs font-semibold text-cyan hover:underline">
+          {showAll ? 'Show fewer notes' : `Show all ${notes.length} notes`}
+        </button>
+      )}
+    </div>
   );
 }

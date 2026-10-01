@@ -126,6 +126,8 @@ export interface LeadNote {
   note_type: NoteType;
   ai_extracted_data: unknown;
   created_at: string;
+  /** Set when the note's text was changed after it was written. */
+  edited_at: string | null;
 }
 
 export type TemplateType =
