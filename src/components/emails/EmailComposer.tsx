@@ -9,6 +9,8 @@ import { Button } from '../ui/Button';
 import { Input, SelectField, Textarea } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { AttachmentFiles } from './AttachmentFiles';
+import { InsertLink } from './InsertLink';
+import { appendLinkToBody } from '../../lib/emailAttachments';
 import type { EmailAttachment } from '../../lib/emailAttachments';
 
 interface DiffLine { kind: 'same' | 'removed' | 'added'; text: string }
@@ -226,6 +228,12 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
           <p className="text-xs text-warning">No value for: {missing.map((m) => `{{${m}}}`).join(', ')} — those spots are blank, check the draft reads well.</p>
         )}
         <Input label="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
+        {currentOrg && (
+          <div className="flex flex-col gap-4 rounded-lg border border-line p-3">
+            <AttachmentFiles orgId={currentOrg.id} attachments={attachments} onChange={setAttachments} compact />
+            <InsertLink orgId={currentOrg.id} onInsert={(link) => setBody((b) => appendLinkToBody(b, link))} />
+          </div>
+        )}
         {diff && (
           <div className="max-h-48 overflow-y-auto rounded-lg bg-surface/60 p-3 text-xs">
             <p className="mb-1 flex items-center gap-1 font-bold uppercase tracking-wide text-muted"><WandSparkles className="h-3.5 w-3.5" aria-hidden />Template → AI changes</p>
@@ -236,7 +244,6 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
           </div>
         )}
         <Textarea label="Body (plain text — lands in inboxes better)" rows={10} value={body} onChange={(e) => setBody(e.target.value)} />
-        {currentOrg && <AttachmentFiles orgId={currentOrg.id} attachments={attachments} onChange={setAttachments} compact />}
         {msg && (
           <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : msg.kind === 'warn' ? 'text-warning' : 'text-success'}`}>
             {msg.text}

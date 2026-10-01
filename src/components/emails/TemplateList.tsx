@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, Plus, Star } from 'lucide-react';
+import { FileText, Link2, Paperclip, Plus, Star } from 'lucide-react';
 import { useTemplates } from '../../hooks/useTemplates';
 import { useAuth } from '../../hooks/useAuth';
 import { useOrg } from '../../hooks/useOrg';
@@ -35,6 +35,16 @@ export function TemplateList() {
               <div className="flex items-center gap-2">
                 <span className="font-heading text-sm font-bold">{t.name}</span>
                 {t.is_default && <Star className="h-3.5 w-3.5 text-warning" aria-label="Default template" />}
+                {(t.attachments ?? []).length > 0 && (
+                  <span className="flex items-center gap-0.5 text-xs text-muted" title={(t.attachments ?? []).map((a) => a.name).join(', ')}>
+                    <Paperclip className="h-3.5 w-3.5" aria-hidden /> {(t.attachments ?? []).length}
+                  </span>
+                )}
+                {(t.links ?? []).length > 0 && (
+                  <span className="flex items-center gap-0.5 text-xs text-muted" title={(t.links ?? []).map((l) => l.label).join(', ')}>
+                    <Link2 className="h-3.5 w-3.5" aria-hidden /> {(t.links ?? []).length}
+                  </span>
+                )}
               </div>
               <p className="mt-1 truncate text-sm text-muted">{t.subject}</p>
               <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-xs text-muted">{t.body}</p>

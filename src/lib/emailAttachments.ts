@@ -80,3 +80,20 @@ export async function uploadVideo(orgId: string, file: File): Promise<{ url?: st
   if (error) return { error: error.message };
   return { url: supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl };
 }
+
+const LINKS_HEADING = '\n\nLinks:\n';
+
+/**
+ * Adds one link to the end of an email body in the same "Links:" block format the
+ * server appends for templates. If the body already ends with such a block the new
+ * line joins it, so several links read as one tidy list. The body stays plain,
+ * editable text: the user can still reword or delete the line.
+ */
+export function appendLinkToBody(body: string, link: EmailLink): string {
+  const line = link.label === link.url ? link.url : `${link.label}: ${link.url}`;
+  const trimmed = body.trimEnd();
+  const at = trimmed.lastIndexOf(LINKS_HEADING);
+  const endsWithLinksBlock = at !== -1 && !trimmed.slice(at + LINKS_HEADING.length).includes('\n\n');
+  if (endsWithLinksBlock) return `${trimmed}\n${line}`;
+  return `${trimmed}${trimmed ? '\n\n' : ''}Links:\n${line}`;
+}

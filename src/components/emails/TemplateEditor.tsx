@@ -69,6 +69,12 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
       <div className="flex flex-col gap-4">
         <Input label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
         <Input label="Subject" value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} />
+        {currentOrg && (
+          <div className="flex flex-col gap-4 rounded-lg border border-line p-3">
+            <AttachmentFiles orgId={currentOrg.id} attachments={form.attachments} onChange={(attachments) => setForm((f) => ({ ...f, attachments }))} />
+            <LinksEditor orgId={currentOrg.id} links={form.links} onChange={(links) => setForm((f) => ({ ...f, links }))} />
+          </div>
+        )}
         <div className="flex flex-wrap gap-1">
           {TEMPLATE_VARIABLES.map((v) => (
             <button key={v.key} type="button" onClick={() => insertVar(v.key)}
@@ -78,12 +84,6 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
           ))}
         </div>
         <Textarea ref={bodyRef} label="Body" rows={8} value={form.body} onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))} />
-        {currentOrg && (
-          <>
-            <AttachmentFiles orgId={currentOrg.id} attachments={form.attachments} onChange={(attachments) => setForm((f) => ({ ...f, attachments }))} />
-            <LinksEditor orgId={currentOrg.id} links={form.links} onChange={(links) => setForm((f) => ({ ...f, links }))} />
-          </>
-        )}
         {isAdmin && (
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.is_default} onChange={(e) => setForm((f) => ({ ...f, is_default: e.target.checked }))} className="h-4 w-4 accent-violet-500" />

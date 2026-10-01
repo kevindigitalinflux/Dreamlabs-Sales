@@ -123,6 +123,19 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
           <option value="">Choose…</option>
           {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </SelectField>
+        {(() => {
+          const chosen = templates.find((t) => t.id === templateId);
+          if (!chosen) return null;
+          const files = chosen.attachments ?? [];
+          const links = chosen.links ?? [];
+          return (
+            <p className="rounded-lg bg-surface/60 p-2 text-xs text-muted">
+              {files.length === 0 && links.length === 0
+                ? 'This template has no attachments or links. You can add them in Emails, Templates.'
+                : `Every draft will include: ${[...files.map((f) => `📎 ${f.name}`), ...links.map((l) => `🔗 ${l.label}`)].join(', ')}.`}
+            </p>
+          );
+        })()}
         <label className="flex min-h-11 items-center gap-2">
           <input type="checkbox" checked={useAi} onChange={(e) => setUseAi(e.target.checked)} className="h-4 w-4 accent-violet-500" />
           Personalise with AI
