@@ -173,11 +173,18 @@ vite.config.ts
 | `src/hooks/useLeadNotes.ts` | Notes per lead; call notes bump call_count/last_contacted_at |
 | `src/components/ui/Listbox.tsx` | Custom dropdown (not a native `<select>`) — a native select's open option list is browser/OS-rendered and can't be restyled via CSS, so this renders its own, with violet hover/selected to match brand. Accepts the same `<option>`/`<optgroup>` children a native select does. Use this (or `SelectField`, which wraps it with a label) for any new dropdown — never a raw `<select>` |
 | `supabase/functions/admin-users/` | Edge function: invite users, set roles (service-role only) |
+| `src/hooks/useOrgPackages.ts` | The current org's package options (custom list or built-in defaults), the `allowed` set AI suggestions are whitelisted against, and `optionsFor(current)` |
+| `src/hooks/usePersistedState.ts` | `useState` mirrored to sessionStorage, keyed (e.g. per org) — used so Dream Agent survives navigating away |
+| `src/lib/enrichmentGrouping.ts` | Fill-missing-details apply logic: `splitEnrichmentChanges` (fill blanks / add as additional / replace), `mergeAdditions`, `ADDITIONAL_COLUMN` |
+| `src/lib/dreamAgentActions.ts` | Dream Agent action sanitizer + `splitContactPatch` (what a note may do to an existing lead's contact fields — never overwrites) |
+| `src/components/pipeline/AdditionalDetails.tsx` | Removable chips for a lead's `additional_emails/phones/websites/owners` |
+| `src/components/pipeline/EditableNote.tsx` | Inline note editing, shared by the full record and the pipeline card |
+| `supabase/functions/_shared/googlePlacesLookup.ts` | Places website/phone lookup + `placeMatchStrength` name matcher for bulk enrichment |
 | `SPEC.md` | Full product spec — feature detail, schema, routes, design system |
 
 ---
 
-## Current Status (updated 2026-09-23)
+## Current Status (updated 2026-10-01 — newest work is the "Session 2026-09-29 → 2026-10-01" entry at the end of this section)
 **Working:** Cycle 1-2 (single-tenant foundation, full pipeline, email automation incl. AI-personalised
 composer/sequences/review queue) — see prior status below, all still functional. **Cycle 3 (multi-tenant
 foundation) is FULLY COMPLETE** — Tasks 1-12 done, controller-verified, and pushed:
@@ -1326,7 +1333,7 @@ plan's 16 genuinely-new commits onto a fresh `git fetch origin/main`, verified t
 fast-forward. **Lesson: always `git fetch origin/main` and diff against the FETCHED ref, never trust a stale
 local `main`/`git merge-base main HEAD` result, before assuming what is or isn't already merged.**
 
-**Real, unrelated issue found and flagged mid-plan, not yet resolved: Mr Brush & Co's Gemini API key is
+**[RESOLVED 2026-09-30: it was simply an empty prepaid balance, not an account problem — see the 2026-10-01 entry below] Real, unrelated issue found and flagged mid-plan: Mr Brush & Co's Gemini API key is
 returning a live `402 RESOURCE_EXHAUSTED` ("prepayment credits are depleted") from Google — but this is
 NOT explained by real usage.** The key was connected via `org_api_settings` on **2026-09-23** (confirmed via
 `created_at`/`updated_at` on that row) — 6 days before this was discovered — and in that entire window the
@@ -1343,7 +1350,7 @@ that project's actual billing/quota state directly in Google AI Studio / Cloud C
 check against the billing account already linked for Places (`dreamlabs-sales-509612`) in case this Gemini
 key is sitting on one of the suspended/quota-exhausted projects instead.
 
-**Checklist for Kevin, in priority order:**
+**Checklist for Kevin, in priority order (SUPERSEDED 2026-10-01: Gemini resolved, the click-through and the deploy check were done by Kevin while field-testing; remaining items are tracked in "Known gaps" below):**
 1. Investigate the Mr Brush & Co Gemini key per the paragraph above — this is genuinely suspicious given the
    near-zero real usage, not a normal "ran out from use" situation.
 2. **Do one real click-through of the whole decision-makers/LinkedIn feature** — nothing in this plan has
@@ -1359,6 +1366,114 @@ key is sitting on one of the suspended/quota-exhausted projects instead.
 5. `origin/main` is now ahead of what may be deployed — confirm `sales.didreamlabs.com` picked up the new
    deploy (Cloudflare's auto-deploy-on-push has been reliable since the 2026-09-22 fix, should land within
    ~90 seconds of the push, but this hasn't been independently re-confirmed for this specific push).
+
+**Session 2026-09-29 → 2026-10-01: first real field test, then a long polish loop.** Kevin used the platform
+properly for the first time (in-person Mr Brush & Co walk-in sales, leaving cards) and fed issues back in
+batches. Everything below is live on `main` (latest `a85e91d`) and was tested by Kevin on
+sales.didreamlabs.com unless noted. Migrations `037`–`040` are applied live. `npx tsc --noEmit`, `vitest run`
+(103 tests) and `npm run build` were green at every push.
+
+**Resolved: the Mr Brush Gemini "suspicious 402" flagged above was just an empty prepaid balance.** The key had
+never had credit; Kevin topped up £4 (2026-09-30) and every AI feature worked again — not a leak, abuse or
+quota-state problem. Found via the Supabase MCP `query_logs` (`parse-notes`/`parse-session-notes`/`generate-email`
+all logged `Gemini 402 ... prepayment credits are depleted`). The Gemini setup guide in
+`OrganizationSettings.tsx` was rewritten: billing is REQUIRED (prepay top-up or pay-as-you-go) with steps; the old
+"Free, no credit card needed" copy was wrong. **Related UX gap still open:** Log note's AI failure is silent (the
+modal just closes), so a billing problem looks like "the AI ignored my note".
+
+**Per-org packages ("Company profile customization", Settings, below Company context).** Migration `037`:
+`organizations.custom_packages TEXT[]` (NULL = built-in DI Dreamlabs defaults), dropped `leads_package_tier_check`,
+added `GRANT UPDATE (custom_packages)`. A custom package's stored value IS its label; `PackageTier` is now
+`string`. `hooks/useOrgPackages.ts` supplies options/`allowed`/`optionsFor(current)`; `OrgMembership.custom_packages`
+is loaded in `useOrg` (`setOrgPackages` refreshes the cache after a save). Card:
+`components/settings/CompanyProfileCard.tsx` (one package per line; admin-only edit). AI: `ai.ts`'s
+`packageChoices()` puts the org's list into the `parse-notes`/`parse-session-notes` prompts; the client sanitizers
+(`sanitizeSuggestion`, `sanitizeDreamAgentActions`) whitelist against the same set. `{{package_name}}` already falls
+back to the stored value. **Deploy-order gotcha: `useOrg` selects `custom_packages`, so shipping that code before
+the migration would break login for everyone — apply additive migrations first.**
+
+**Dream Agent.** (a) Draft text, conversation and resolutions persist per org in sessionStorage
+(`hooks/usePersistedState.ts`). (b) Choosing a lead in an "ambiguous" row used to only log a note (that action type
+carries no patch); it now sends a "Clarification: …" message through the refinement loop so the AI re-proposes a
+real update (side effect: re-proposing resets other rows to unconfirmed). (c) `create` actions now carry a `patch`
+(stage/follow-up/package/deal value); before, every walk-in lead was created bare at `new_lead`. `confirmAll`
+applies it at insert and sets `last_contacted_at` when stage != new_lead. (d) Prompt rules: STAGE (a visit/call/
+email/card drop ⇒ `contacted`), FOLLOW-UP (stated timeframes become real dates using today's date AND weekday via
+`todayWithWeekday()`, earlier option when two are given; a default follow-up is proposed when a contact is
+reported with none), and BE THOROUGH (package, deal value, vertical, owner/phone/email/website/address/city/
+postcode). (e) Update patches can carry contact fields; `splitContactPatch()` (`lib/dreamAgentActions.ts`) never
+overwrites: blank ⇒ fill, a differing email/phone/website/owner ⇒ the lead's `additional_*` list, address/city/
+postcode/vertical only if blank; every change is a row to confirm. (f) Voice note: `useSpeechRecognition` uses
+interim results (live text) and returns `error` (blocked mic is surfaced); the page appends to typed text
+(`voiceBaseRef`), shows a violet pulsing button + status line, and stops on send. Chrome/Edge only. (g) The 10
+walk-in leads from 2026-09-30 were backfilled by SQL (stage Contacted, follow-ups ≈ Fri 2 Oct, "Stage changed"
+notes logged so the analytics funnel stays consistent).
+
+**Fill missing details.** Root cause of "found nothing": every step after Companies House needed `lead.website`,
+and nothing found a website. New step 0, `_shared/googlePlacesLookup.ts` (legacy Places Text Search + Details, the
+org's `google_places` key): `placeMatchStrength` accepts the same words, the same letters ignoring spacing (8+
+chars, so "The Green House" ≈ "The Greenhouse Ethical Property"), or only a shared distinctive word (strength 1,
+used only if no same-name candidate exists); it logs API status + top result names to the function logs. Site
+scrape/Hunter/Apollo then run on the found website, and Hunter `email-finder` (`lookupHunterOwnerEmail`, needs
+first+last name, score ≥ 50) is tried for the owner before the generic domain email. `website` is now an
+`EnrichableField`. **Add vs replace:** migration `038` adds `leads.additional_emails/phones/websites/owners
+TEXT[] NOT NULL DEFAULT '{}'`; the review modal has a radio, "Add as additional details" (default: blanks are
+filled, differing values go to the additional lists, via `splitEnrichmentChanges` + `mergeAdditions` in
+`lib/enrichmentGrouping.ts`) or "Replace existing details". `components/pipeline/AdditionalDetails.tsx` shows
+removable chips under Contact; additional emails are selectable recipients in `EmailComposer`.
+
+**Multiple decision-makers.** Migration `039` dropped UNIQUE(lead_id, source) and added a generated `dedupe_key`
+(`source:` + apollo_person_id or lower(email)) with UNIQUE(lead_id, dedupe_key) (a plain column unique, because
+PostgREST can't infer an expression/partial index for `onConflict`). `find-decision-makers` keeps up to 3 NAMED
+people per source (`findHunterDecisionMakers`, `searchApolloDecisionMakers`; generic `info@` mailboxes skipped) and
+upserts with `ignoreDuplicates: true`, then re-selects every row for the lead — the old overwriting upsert reset
+already-revealed Apollo emails. `DecisionMakersCard` has an "Add to lead" button per person (name+title →
+`additional_owners`, email → `additional_emails`, phone → `additional_phones`; consent-based, never automatic;
+Apollo contacts only once revealed). Pre-existing one-result rows (incl. a few generic mailboxes) are unchanged.
+The Decision makers section was also added to the pipeline `LeadPanel` (it was full-record only).
+
+**Notes are editable.** Migration `040`: `lead_notes.edited_at`. No policy/grant change was needed (`notes_write`
+is already FOR ALL). `useLeadNotes.updateNote` + `components/pipeline/EditableNote.tsx`, used by `NotesTimeline`
+(full record) and `NotesPreview` (pipeline card, which also gained "Show all N notes"). "Stage changed: …" notes are
+read-only on purpose (the analytics funnel parses them). **Also fixed:** `Listbox` no longer closes when you scroll
+inside its own list (its capture-phase window scroll handler now ignores scrolls from the open panel).
+
+**Ops lessons (read before the next deploy):**
+- *Supabase CLI deploys:* the CLI's own login kept returning 401 even after `supabase login`. What works is a
+  temporary personal access token (Kevin creates one; it auto-expires) kept in the project `.env` as
+  `SUPABASE_ACCESS_TOKEN` (gitignored, never commit/paste it) and passed inline:
+  `SUPABASE_ACCESS_TOKEN="$(grep '^SUPABASE_ACCESS_TOKEN=' .env | cut -d= -f2-)" npx supabase functions deploy <fn…> --project-ref wgomksxelyfkzepbnkdd`.
+- *Cloudflare/wrangler:* a stale `CLOUDFLARE_API_TOKEN` Windows USER environment variable makes wrangler fail
+  ("Invalid access token 9109") and blocks `wrangler login`; bypass per command with
+  `env -u CLOUDFLARE_API_TOKEN npx wrangler …`. **wrangler sees TWO accounts: JM Publicidad's (a client's) and
+  Kevin's (`b4a058618973e9ada0208b7f16df1695`). Always pin `CLOUDFLARE_ACCOUNT_ID` to Kevin's before any
+  `wrangler deploy`.** A manual deploy turned out not to be needed: Cloudflare's auto-build stalled for roughly an
+  hour after two pushes on 2026-09-30, then caught up on its own. To see what is really live, curl
+  `https://sales.didreamlabs.com/`, take the `assets/index-*.js` name, and grep it for a string from the newest
+  feature. The Cloudflare *builds* MCP OAuth fails with "localhost refused" (no listener); unresolved, not needed.
+- *Supabase MCP logs:* `query_logs` — edge function output is `source='function_logs'`, column `event_message`
+  (there is no `body` column). It is flaky ("Backend error"); retry once.
+- *Windows CRLF:* multi-line `sed`/inline-`node` string replacements silently fail to match; use the Edit tool.
+  `python` is not installed.
+- *Permissions:* the auto-mode classifier transiently returns "no verdict" (retry once); a "Production Deploy"
+  denial clears once the user explicitly authorizes that deploy.
+- *Git/worktrees:* the work was done on branch `feat/panel-decision-makers-company-packages` inside the
+  `decision-maker-enrichment` worktree (a live Claude session holds its lock), shipped with
+  `git fetch origin && git push origin HEAD:main` (fast-forward). The old worktrees (`bulk-lead-enrichment`,
+  `decision-maker-enrichment`) are leftovers and the primary checkout's `main` is behind `origin/main`: always
+  `git fetch` before trusting it. Stale `vite` dev servers on ports 5173–5182 from old sessions were stopped
+  (mr-brush-app's were left alone).
+- *Local auth:* Google sign-in on localhost returns to the production URL (the dev port isn't in Supabase's Auth
+  redirect allow-list), so test auth flows on the live site or add `http://localhost:<port>/**` under Auth → URL
+  Configuration. Edge-function CORS (`APP_ORIGINS`) likewise only allows `localhost:5173`.
+
+**Known gaps / candidates for next time:** Log note (`parse-notes`) still only suggests stage/deal/package/next
+action — it does not extract contact fields the way Dream Agent now does; bulk email drafting (`BulkDraftModal`)
+uses each lead's primary email only; CSV export and pipeline fork (`pipelineFork.ts`) don't carry `additional_*`;
+Dream Agent's "This is someone new" ambiguous path has no patch (no stage/follow-up applied); Log note should say
+"AI unavailable" instead of closing silently; Fill missing details does not fetch owner phone numbers (Apollo's
+paid person-phone reveal via Find decision maker is the existing route); Places lookups cost per call beyond the
+legacy free allowance; `draft-linkedin-message` still hardcodes Kevin's own pitch (see the 2026-09-16 note).
 
 ---
 
