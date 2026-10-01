@@ -315,6 +315,7 @@ export function PipelineList() {
         resultsByLead={decisionMakerResults}
         leadsById={leadsById}
         onClose={() => setDecisionMakerReviewOpen(false)}
+        onAddToLead={updateLead}
       />
     </div>
   );

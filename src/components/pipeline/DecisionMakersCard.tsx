@@ -3,37 +3,9 @@ import { ExternalLink } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { readableInvokeError } from '../../lib/invokeError';
 import type { LeadPatch } from '../../lib/leadUpdates';
-import { ADDITIONAL_COLUMN, mergeAdditions } from '../../lib/enrichmentGrouping';
-import type { AdditionalDetail } from '../../lib/enrichmentGrouping';
+import { additionsFor, additionsPatchFor, alreadyOnLead, candidateName } from '../../lib/decisionMakerAdditions';
 import type { DecisionMakerCandidate, Lead } from '../../types';
 import { Button } from '../ui/Button';
-
-function candidateName(c: DecisionMakerCandidate): string {
-  const first = c.first_name ?? '';
-  const last = c.last_name ?? '';
-  const name = `${first} ${last}`.trim();
-  return name || 'Unknown name';
-}
-
-/** What a decision-maker would add to a lead's additional fields: their name (with title), email and phone, whichever are actually known. */
-function additionsFor(c: DecisionMakerCandidate): AdditionalDetail[] {
-  const out: AdditionalDetail[] = [];
-  const name = candidateName(c);
-  // An unrevealed Apollo contact only has an obfuscated last name: nothing real to store yet.
-  if (!c.name_obfuscated && name !== 'Unknown name') out.push({ field: 'owner_name', value: c.title ? `${name} (${c.title})` : name, source: c.source });
-  if (c.email) out.push({ field: 'email', value: c.email, source: c.source });
-  if (c.phone) out.push({ field: 'phone', value: c.phone, source: c.source });
-  return out;
-}
-
-/** True when every value is already on the lead (as its primary field or in its additional list), ignoring case. */
-function alreadyOnLead(lead: Lead, additions: AdditionalDetail[]): boolean {
-  const primary: Record<AdditionalDetail['field'], string | null> = { email: lead.email, phone: lead.phone, website: lead.website, owner_name: lead.owner_name };
-  return additions.every(({ field, value }) => {
-    const v = value.trim().toLowerCase();
-    return (primary[field] ?? '').trim().toLowerCase() === v || (lead[ADDITIONAL_COLUMN[field]] ?? []).some((x) => x.trim().toLowerCase() === v);
-  });
-}
 
 /**
  * Persistent list of every decision-maker candidate found for this lead
@@ -51,7 +23,8 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
   /** Saves this person's name/email/phone into the lead's additional fields (never replacing its primary ones). */
   async function handleAddToLead(candidate: DecisionMakerCandidate) {
     setBusyId(candidate.id);
-    const err = await onSave(mergeAdditions(lead, additionsFor(candidate)));
+    const patch = additionsPatchFor(lead, [candidate]);
+    const err = patch ? await onSave(patch) : null;
     setBusyId(null);
     setErrorByCandidate((prev) => {
       const next = { ...prev };

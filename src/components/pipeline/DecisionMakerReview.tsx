@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { DecisionMakerCandidate, Lead } from '../../types';
 import { readableInvokeError } from '../../lib/invokeError';
+import { additionsFor, additionsPatchFor, alreadyOnLead, candidateName } from '../../lib/decisionMakerAdditions';
+import type { LeadPatch } from '../../lib/leadUpdates';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 
@@ -10,13 +12,8 @@ interface DecisionMakerReviewProps {
   resultsByLead: Record<string, DecisionMakerCandidate[]>;
   leadsById: Record<string, Lead>;
   onClose: () => void;
-}
-
-function candidateName(c: DecisionMakerCandidate): string {
-  const first = c.first_name ?? '';
-  const last = c.last_name ?? '';
-  const name = `${first} ${last}`.trim();
-  return name || 'Unknown name';
+  /** Saves found decision-makers into a lead's additional fields; resolves to an error message or null. */
+  onAddToLead: (leadId: string, patch: LeadPatch) => Promise<string | null>;
 }
 
 /**
@@ -30,10 +27,12 @@ function candidateName(c: DecisionMakerCandidate): string {
  * so a phone number appears the moment Apollo's webhook lands, with no
  * polling.
  */
-export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose }: DecisionMakerReviewProps) {
+export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, onAddToLead }: DecisionMakerReviewProps) {
   const [candidatesByLead, setCandidatesByLead] = useState<Record<string, DecisionMakerCandidate[]>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorByCandidate, setErrorByCandidate] = useState<Record<string, string>>({});
+  const [addingAll, setAddingAll] = useState(false);
+  const [addSummary, setAddSummary] = useState<string | null>(null);
 
   useEffect(() => {
     setCandidatesByLead(resultsByLead);
@@ -77,6 +76,43 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose }:
   }
 
   const leadIds = Object.keys(candidatesByLead);
+
+  /** Adds one person's known name/email/phone to their lead's additional fields, right from the results. */
+  async function handleAddOne(candidate: DecisionMakerCandidate) {
+    const lead = leadsById[candidate.lead_id];
+    const patch = lead ? additionsPatchFor(lead, [candidate]) : null;
+    if (!patch) return;
+    setBusyId(candidate.id);
+    const err = await onAddToLead(candidate.lead_id, patch);
+    setBusyId(null);
+    setErrorByCandidate((prev) => {
+      const next = { ...prev };
+      if (err) next[candidate.id] = err; else delete next[candidate.id];
+      return next;
+    });
+  }
+
+  // Leads that still have someone worth adding (e.g. an unrevealed Apollo contact has nothing yet).
+  const addableLeadIds = leadIds.filter((id) => {
+    const lead = leadsById[id];
+    return lead && additionsPatchFor(lead, candidatesByLead[id] ?? []) !== null;
+  });
+
+  /** One click: add every found decision-maker's known details to all the searched leads. */
+  async function handleAddAll() {
+    setAddingAll(true);
+    setAddSummary(null);
+    let leadsUpdated = 0;
+    let failed = 0;
+    for (const id of addableLeadIds) {
+      const patch = additionsPatchFor(leadsById[id]!, candidatesByLead[id] ?? []);
+      if (!patch) continue;
+      const err = await onAddToLead(id, patch);
+      if (err) failed++; else leadsUpdated++;
+    }
+    setAddingAll(false);
+    setAddSummary(failed === 0 ? `Added to ${leadsUpdated} ${leadsUpdated === 1 ? 'lead' : 'leads'}` : `Added to ${leadsUpdated}, ${failed} failed`);
+  }
 
   return (
     <Modal open={open} onClose={onClose} title="Find decision maker">
@@ -123,6 +159,19 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose }:
                         </Button>
                       </div>
                     )}
+                    {(() => {
+                      const lead = leadsById[candidate.lead_id];
+                      const additions = additionsFor(candidate);
+                      if (!lead || additions.length === 0) return null;
+                      const added = alreadyOnLead(lead, additions);
+                      return (
+                        <div className="mt-1">
+                          <Button variant="secondary" onClick={() => void handleAddOne(candidate)} disabled={added || busyId === candidate.id || addingAll} loading={busyId === candidate.id}>
+                            {added ? 'Added to lead ✓' : 'Add to lead'}
+                          </Button>
+                        </div>
+                      );
+                    })()}
                     {errorByCandidate[candidate.id] && <p role="alert" className="mt-1 text-xs text-danger">{errorByCandidate[candidate.id]}</p>}
                   </li>
                 ))}
@@ -130,8 +179,14 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose }:
             </div>
           );
         })}
-        <div className="flex justify-end">
+        {addSummary && <p role="status" className="text-sm text-success">{addSummary}</p>}
+        <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={onClose}>Close</Button>
+          {leadIds.length > 0 && (
+            <Button onClick={() => void handleAddAll()} disabled={addableLeadIds.length === 0 || addingAll} loading={addingAll}>
+              {addingAll ? 'Adding…' : addableLeadIds.length === 0 ? 'Everything added' : `Add all to leads (${addableLeadIds.length})`}
+            </Button>
+          )}
         </div>
       </div>
     </Modal>
