@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useOrgPackages } from '../../hooks/useOrgPackages';
+import { useVoiceDictation } from '../../hooks/useVoiceDictation';
+import { VoiceButton, VoiceStatus, voiceFieldClass } from '../ui/VoiceControls';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import type { Lead, LeadSuggestion, NoteType } from '../../types';
 import { Button } from '../ui/Button';
@@ -32,8 +34,11 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
   const [busy, setBusy] = useState(false);
   const [aiParse, setAiParse] = useState(true);
   const [suggestion, setSuggestion] = useState<LeadSuggestion | null>(null);
+  // Same dictation as the Dream Agent: live transcript, appended to what's typed.
+  const voice = useVoiceDictation(freeText, setFreeText);
 
   function reset() {
+    voice.stop();
     setTab('debrief');
     setPhase('compose');
     setFreeText('');
@@ -74,6 +79,7 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
 
   async function saveFreeText() {
     if (!freeText.trim()) return setError('Write a note first.');
+    voice.stop();
     setBusy(true);
     const err = await addNote(freeText.trim(), noteType);
     setBusy(false);
@@ -121,7 +127,8 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
           {tab === 'debrief' && <DebriefWizard onSubmit={(c, n) => void saveDebrief(c, n)} onCancel={reset} />}
           {tab === 'free' && (
             <div className="flex flex-col gap-4">
-              <Textarea label="Session notes" value={freeText} onChange={(e) => setFreeText(e.target.value)} placeholder="Paste or type your notes here." rows={6} />
+              <Textarea label="Session notes" value={freeText} onChange={(e) => setFreeText(e.target.value)} placeholder="Paste, type or dictate your notes here." rows={6} className={voiceFieldClass(voice)} />
+              <VoiceStatus voice={voice} />
               <SelectField label="Note type" value={noteType} onChange={(e) => setNoteType(e.target.value as NoteType)}>
                 <option value="call">Call</option>
                 <option value="email">Email</option>
@@ -129,7 +136,10 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
                 <option value="general">General</option>
               </SelectField>
               {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-              <Button onClick={() => void saveFreeText()} disabled={busy} loading={busy}>{busy ? 'Saving…' : 'Save note'}</Button>
+              <div className="flex items-center justify-between">
+                <VoiceButton voice={voice} />
+                <Button onClick={() => void saveFreeText()} disabled={busy} loading={busy}>{busy ? 'Saving…' : 'Save note'}</Button>
+              </div>
             </div>
           )}
         </div>

@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Frown, Meh, Smile } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input, Textarea } from '../ui/Input';
+import { useVoiceDictation } from '../../hooks/useVoiceDictation';
+import { VoiceButton, VoiceStatus, voiceFieldClass } from '../ui/VoiceControls';
 import { StepProgress } from '../ui/StepProgress';
 
 interface DebriefWizardProps {
@@ -27,7 +29,17 @@ export function DebriefWizard({ onSubmit, onCancel }: DebriefWizardProps) {
   const [nextNote, setNextNote] = useState('');
   const [other, setOther] = useState('');
 
+  // One dictation hook bound to whichever text question is on screen; moving to another
+  // question stops recording so words can never land in the wrong field.
+  const dictated = step === 2 ? { value: pain, set: setPain } : step === 3 ? { value: objections, set: setObjections }
+    : step === 4 ? { value: promise, set: setPromise } : step === 6 ? { value: other, set: setOther } : { value: '', set: () => {} };
+  const voice = useVoiceDictation(dictated.value, dictated.set);
+  const stopVoice = voice.stop;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { stopVoice(); }, [step]);
+
   function submit() {
+    voice.stop();
     const compiled = [
       `Call outcome: ${outcome || 'Not recorded'}`,
       pain && `Main pain point:\n${pain}`,
@@ -62,16 +74,23 @@ export function DebriefWizard({ onSubmit, onCancel }: DebriefWizardProps) {
           </div>
         </fieldset>
       )}
-      {step === 2 && <Textarea label="What was their main pain point?" value={pain} onChange={(e) => setPain(e.target.value)} placeholder="e.g. Losing leads because nobody follows up after quotes" />}
-      {step === 3 && <Textarea label="Did they raise any objections?" value={objections} onChange={(e) => setObjections(e.target.value)} placeholder="e.g. Worried about cost; already tried an agency" />}
-      {step === 4 && <Textarea label="What did you promise to follow up with?" value={promise} onChange={(e) => setPromise(e.target.value)} placeholder="e.g. Send the audit booking link by Friday" />}
+      {step === 2 && <Textarea className={voiceFieldClass(voice)} label="What was their main pain point?" value={pain} onChange={(e) => setPain(e.target.value)} placeholder="e.g. Losing leads because nobody follows up after quotes" />}
+      {step === 3 && <Textarea className={voiceFieldClass(voice)} label="Did they raise any objections?" value={objections} onChange={(e) => setObjections(e.target.value)} placeholder="e.g. Worried about cost; already tried an agency" />}
+      {step === 4 && <Textarea className={voiceFieldClass(voice)} label="What did you promise to follow up with?" value={promise} onChange={(e) => setPromise(e.target.value)} placeholder="e.g. Send the audit booking link by Friday" />}
       {step === 5 && (
         <div className="flex flex-col gap-3">
           <Input label="When is the next step?" type="date" value={nextDate} onChange={(e) => setNextDate(e.target.value)} />
           <Input label="What is the next step?" value={nextNote} onChange={(e) => setNextNote(e.target.value)} placeholder="e.g. Call back to book the audit" />
         </div>
       )}
-      {step === 6 && <Textarea label="Add any other notes (optional)" value={other} onChange={(e) => setOther(e.target.value)} />}
+      {step === 6 && <Textarea className={voiceFieldClass(voice)} label="Add any other notes (optional)" value={other} onChange={(e) => setOther(e.target.value)} />}
+
+      {(step === 2 || step === 3 || step === 4 || step === 6) && (
+        <div className="flex flex-col gap-2">
+          <VoiceStatus voice={voice} />
+          <div><VoiceButton voice={voice} /></div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <Button variant="ghost" onClick={() => (step === 1 ? onCancel() : setStep(step - 1))}>
