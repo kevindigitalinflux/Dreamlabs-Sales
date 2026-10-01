@@ -40,7 +40,7 @@ export function NotesTimeline({ notes, loading, authorName, onEditNote }: NotesT
         return (
           <li key={note.id} className="flex gap-3 rounded-lg bg-surface/50 p-3">
             <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-label={note.note_type} />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               {onEditNote
                 ? <EditableNote note={note} onSave={onEditNote} />
                 : <p className="whitespace-pre-wrap text-sm">{note.content}</p>}

@@ -61,7 +61,8 @@ export function EditableNote({ note, onSave, clamp = false }: EditableNoteProps)
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <Textarea label="Edit note" value={draft} onChange={(e) => setDraft(e.target.value)} rows={5} autoFocus />
+      {/* Grows with the note (5 to 16 lines) so a long note is fully visible while editing. */}
+      <Textarea label="Edit note" value={draft} onChange={(e) => setDraft(e.target.value)} rows={Math.min(16, Math.max(5, draft.split('\n').length + 1))} autoFocus />
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       <div className="flex items-center gap-2">
         <Button onClick={() => void save()} disabled={busy || !draft.trim() || draft.trim() === note.content.trim()} loading={busy}>
