@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { sendMail } from '../_shared/smtp.ts';
+import { ATTACHMENT_BUCKET, MAX_TOTAL_ATTACHMENT_BYTES, parseAttachments, safeFilename } from '../_shared/emailAttachments.ts';
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -17,7 +18,7 @@ Deno.serve(async (req) => {
   const user = userData?.user;
   if (!user) return json({ error: 'Not signed in' }, 401, headers);
 
-  const body = (await req.json()) as { to_email?: string; subject?: string; body?: string; lead_id?: string; log_id?: string; decision_maker_candidate_id?: string };
+  const body = (await req.json()) as { to_email?: string; subject?: string; body?: string; lead_id?: string; log_id?: string; decision_maker_candidate_id?: string; attachments?: unknown };
   if (!body.to_email || !body.subject || !body.body) {
     return json({ error: 'to_email, subject and body are required' }, 400, headers);
   }
@@ -55,9 +56,13 @@ Deno.serve(async (req) => {
   // individual owner by design), which any member of the draft's own org may
   // claim and send. A human-created draft (sent_by set) is still strictly
   // owner-only.
+  let draftAttachments: unknown = [];
+  let draftOrgId: string | null = null;
   if (body.log_id) {
-    const { data: log } = await service.from('email_logs').select('sent_by, org_id').eq('id', body.log_id).single();
+    const { data: log } = await service.from('email_logs').select('sent_by, org_id, attachments').eq('id', body.log_id).single();
     if (!log) return json({ error: 'Draft not found' }, 404, headers);
+    draftAttachments = log.attachments;
+    draftOrgId = log.org_id as string | null;
     if (log.sent_by !== null && log.sent_by !== user.id) {
       return json({ error: 'Draft not found' }, 404, headers);
     }
@@ -67,13 +72,41 @@ Deno.serve(async (req) => {
     }
   }
 
+  // What to attach: the caller's explicit list when given (the composer can add/remove
+  // files for one email), otherwise whatever the stored draft carries (bulk release,
+  // sequence drafts). parseAttachments drops anything malformed or of a disallowed type.
+  const attachments = parseAttachments(body.attachments !== undefined ? body.attachments : draftAttachments);
+  // Files are namespaced <org_id>/...; only ever attach ones inside the lead's/draft's own org,
+  // so a crafted request can't make this function mail another organisation's documents.
+  const attachOrgId = orgId ?? draftOrgId;
+  if (attachments.length > 0) {
+    if (!attachOrgId || attachments.some((a) => !a.path.startsWith(`${attachOrgId}/`) || a.path.includes('..'))) {
+      return json({ error: 'Attachment not allowed' }, 400, headers);
+    }
+    if (attachments.reduce((sum, a) => sum + a.size, 0) > MAX_TOTAL_ATTACHMENT_BYTES) {
+      return json({ error: 'Attachments are over the 10 MB limit for one email' }, 400, headers);
+    }
+  }
+
   let status = 'sent';
   let errorMessage: string | null = null;
   let messageId: string | null = null;
   try {
+    // Load every file BEFORE sending: if one can't be read the whole send fails, rather than
+    // quietly sending the email without the price list the lead asked for.
+    const files: { filename: string; contentType: string; content: Uint8Array }[] = [];
+    let loadedBytes = 0;
+    for (const a of attachments) {
+      const { data: blob, error: dlErr } = await service.storage.from(ATTACHMENT_BUCKET).download(a.path);
+      if (dlErr || !blob) throw new Error(`Attachment "${a.name}" could not be loaded`);
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      loadedBytes += bytes.length;
+      if (loadedBytes > MAX_TOTAL_ATTACHMENT_BYTES) throw new Error('Attachments are over the 10 MB limit for one email');
+      files.push({ filename: safeFilename(a.name), contentType: a.type, content: bytes });
+    }
     const result = await sendMail(
       { host: settings.smtp_host, port: settings.smtp_port, user: settings.smtp_user, pass: pass as string, fromName: settings.from_name },
-      { to: body.to_email, subject: body.subject, body: body.body },
+      { to: body.to_email, subject: body.subject, body: body.body, attachments: files },
     );
     messageId = result.messageId;
   } catch (e) {
@@ -85,6 +118,7 @@ Deno.serve(async (req) => {
     lead_id: body.lead_id ?? null, sent_by: user.id, to_email: body.to_email,
     subject: body.subject, body: body.body, status, error_message: errorMessage,
     message_id: messageId, sent_at: new Date().toISOString(),
+    attachments, // what this email actually carried, for the sent-mail history
   };
   // Only touch decision_maker_candidate_id when the caller actually supplied
   // it. Omitting the key entirely (rather than defaulting to null) matters

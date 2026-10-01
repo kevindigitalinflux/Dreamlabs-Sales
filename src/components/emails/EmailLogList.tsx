@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { Mail } from 'lucide-react';
+import { Mail, Paperclip } from 'lucide-react';
 import { useEmailLogs } from '../../hooks/useEmailLogs';
 import { useProfiles } from '../../hooks/useProfiles';
 import { useOrg } from '../../hooks/useOrg';
@@ -176,6 +176,11 @@ export function EmailLogList() {
                       <td colSpan={5} className="whitespace-pre-wrap px-3 py-3 text-sm">
                         <p className="mb-1 text-xs text-muted">To: {log.to_email}</p>
                         {log.body}
+                        {(log.attachments ?? []).length > 0 && (
+                          <p className="mt-2 flex items-center gap-1 text-xs text-muted">
+                            <Paperclip className="h-3 w-3" aria-hidden /> {(log.attachments ?? []).map((a) => a.name).join(', ')}
+                          </p>
+                        )}
                       </td>
                     </tr>
                   )}

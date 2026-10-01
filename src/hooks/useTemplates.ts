@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { useOrg } from './useOrg';
+import type { EmailAttachment, EmailLink } from '../lib/emailAttachments';
 import type { EmailTemplate } from '../types';
 
 export interface TemplateInput {
@@ -9,6 +10,8 @@ export interface TemplateInput {
   subject: string;
   body: string;
   is_default: boolean;
+  attachments: EmailAttachment[];
+  links: EmailLink[];
 }
 
 /** Email templates (defaults + own). RLS scopes visibility; admin may toggle is_default. */

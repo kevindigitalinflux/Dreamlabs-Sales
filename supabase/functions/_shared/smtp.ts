@@ -16,7 +16,7 @@ export interface SmtpConfig {
  */
 export async function sendMail(
   cfg: SmtpConfig,
-  msg: { to: string; subject: string; body: string },
+  msg: { to: string; subject: string; body: string; attachments?: { filename: string; contentType: string; content: Uint8Array }[] },
 ): Promise<{ messageId: string }> {
   const client = new SMTPClient({
     connection: {
@@ -39,6 +39,11 @@ export async function sendMail(
       subject,
       content: msg.body,
       headers: { 'Message-ID': messageId },
+      // denomailer base64-encodes 'binary' attachments itself. Filenames must already be
+      // safe (see safeFilename): it writes them into MIME headers unquoted.
+      ...(msg.attachments && msg.attachments.length > 0
+        ? { attachments: msg.attachments.map((a) => ({ filename: a.filename, contentType: a.contentType, encoding: 'binary' as const, content: a.content })) }
+        : {}),
     });
   } finally {
     try {

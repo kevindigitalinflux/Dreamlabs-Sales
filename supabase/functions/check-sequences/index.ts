@@ -4,6 +4,7 @@ import { draftEmail, draftEmailClaude, generateLeadNotes } from '../_shared/ai.t
 import type { ClaudeModel } from '../_shared/ai.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { buildTemplateVars, substituteVariables } from '../_shared/templateVars.ts';
+import { appendLinks, onlyOrgAttachments, parseAttachments, parseLinks } from '../_shared/emailAttachments.ts';
 
 interface Step { delay_days: number; template_type: string; subject_override: string | null }
 
@@ -261,7 +262,10 @@ Deno.serve(async (req) => {
 
     const { error: insertErr } = await service.from('email_logs').insert({
       lead_id: lead.id, sequence_enrollment_id: enrollment.id, sent_by: enrollment.enrolled_by,
-      to_email: lead.email, subject: finalSubject, body: finalBody, status: 'draft', org_id: orgId,
+      // The template's links go at the end AFTER any AI rewrite (so a URL can't be altered), and its
+      // files are carried on the draft so the human release step sends them too.
+      to_email: lead.email, subject: finalSubject, body: appendLinks(finalBody, parseLinks(template.links)), status: 'draft', org_id: orgId,
+      attachments: onlyOrgAttachments(parseAttachments(template.attachments), orgId),
     });
     if (insertErr) {
       // Don't advance — the next daily run re-picks this enrollment (intended retry).

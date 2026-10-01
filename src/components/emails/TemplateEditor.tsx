@@ -1,10 +1,14 @@
 import { useRef, useState } from 'react';
 import { substituteVariables, TEMPLATE_VARIABLES } from '../../lib/templateVars';
+import { linksBlock } from '../../lib/emailAttachments';
+import { useOrg } from '../../hooks/useOrg';
 import type { TemplateInput } from '../../hooks/useTemplates';
 import type { EmailTemplate } from '../../types';
 import { Button } from '../ui/Button';
 import { Input, Textarea } from '../ui/Input';
 import { Modal } from '../ui/Modal';
+import { AttachmentFiles } from './AttachmentFiles';
+import { LinksEditor } from './LinksEditor';
 
 const SAMPLE_VARS: Record<string, string> = {
   first_name: 'Ana', business_name: 'Shiny Cleaners', owner_name: 'Ana Diaz',
@@ -23,9 +27,11 @@ interface TemplateEditorProps {
 
 /** Modal template editor with variable-insert buttons + live sample preview. */
 export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }: TemplateEditorProps) {
+  const { currentOrg } = useOrg();
   const [form, setForm] = useState<TemplateInput>({
     name: template?.name ?? '', subject: template?.subject ?? '',
     body: template?.body ?? '', is_default: template?.is_default ?? false,
+    attachments: template?.attachments ?? [], links: template?.links ?? [],
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -72,6 +78,12 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
           ))}
         </div>
         <Textarea ref={bodyRef} label="Body" rows={8} value={form.body} onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))} />
+        {currentOrg && (
+          <>
+            <AttachmentFiles orgId={currentOrg.id} attachments={form.attachments} onChange={(attachments) => setForm((f) => ({ ...f, attachments }))} />
+            <LinksEditor orgId={currentOrg.id} links={form.links} onChange={(links) => setForm((f) => ({ ...f, links }))} />
+          </>
+        )}
         {isAdmin && (
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.is_default} onChange={(e) => setForm((f) => ({ ...f, is_default: e.target.checked }))} className="h-4 w-4 accent-violet-500" />
@@ -81,6 +93,10 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
         <div className="rounded-lg bg-surface/60 p-3">
           <p className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Preview (sample lead)</p>
           <p className="whitespace-pre-wrap text-sm">{preview}</p>
+          {form.links.length > 0 && <p className="mt-3 whitespace-pre-wrap text-sm">{linksBlock(form.links)}</p>}
+          {form.attachments.length > 0 && (
+            <p className="mt-3 text-xs text-muted">Attached: {form.attachments.map((a) => a.name).join(', ')}</p>
+          )}
         </div>
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <div className="flex items-center justify-between">

@@ -3,6 +3,7 @@ import { corsHeaders, json } from '../_shared/cors.ts';
 import { draftEmail } from '../_shared/ai.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { buildTemplateVars, substituteVariables } from '../_shared/templateVars.ts';
+import { appendLinks, onlyOrgAttachments, parseAttachments, parseLinks } from '../_shared/emailAttachments.ts';
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -50,21 +51,28 @@ Deno.serve(async (req) => {
   const bodyText = substituteVariables(template.body as string, vars);
   const missing = [...new Set([...subject.missing, ...bodyText.missing])];
 
+  // The template's files travel with the draft, and its links (videos too) go at the very END of
+  // the body, added AFTER any AI rewrite so the model can never drop or alter a URL.
+  const attachments = onlyOrgAttachments(parseAttachments(template.attachments), (lead as { org_id: string }).org_id);
+  const links = parseLinks(template.links);
+  const respond = (subjectText: string, bodyOut: string, aiUsed: boolean) =>
+    json({ subject: subjectText, body: appendLinks(bodyOut, links), ai_used: aiUsed, missing, attachments }, 200, headers);
+
   if (body.use_ai === false) {
-    return json({ subject: subject.text, body: bodyText.text, ai_used: false, missing }, 200, headers);
+    return respond(subject.text, bodyText.text, false);
   }
   const orgId = (lead as { org_id: string }).org_id;
   const apiKey = await resolveOrgApiKey(service, orgId, 'gemini');
   if (!apiKey) {
-    return json({ subject: subject.text, body: bodyText.text, ai_used: false, missing }, 200, headers);
+    return respond(subject.text, bodyText.text, false);
   }
   const { data: org } = await service.from('organizations').select('name, company_context').eq('id', orgId).maybeSingle();
   const orgName = org?.name ?? 'our team';
   try {
     const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: leadForDraft, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, apiKey });
-    return json({ subject: ai.subject, body: ai.body, ai_used: true, missing }, 200, headers);
+    return respond(ai.subject, ai.body, true);
   } catch (e) {
     console.error('draftEmail failed, falling back to plain template:', e);
-    return json({ subject: subject.text, body: bodyText.text, ai_used: false, missing }, 200, headers);
+    return respond(subject.text, bodyText.text, false);
   }
 });

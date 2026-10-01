@@ -8,6 +8,8 @@ import type { DecisionMakerCandidate, Lead } from '../../types';
 import { Button } from '../ui/Button';
 import { Input, SelectField, Textarea } from '../ui/Input';
 import { Modal } from '../ui/Modal';
+import { AttachmentFiles } from './AttachmentFiles';
+import type { EmailAttachment } from '../../lib/emailAttachments';
 
 interface DiffLine { kind: 'same' | 'removed' | 'added'; text: string }
 
@@ -42,7 +44,7 @@ interface EmailComposerProps {
    * recipient instead of defaulting to the lead's own email (see the
    * effect below, which seeds `selectedRecipients` from these fields once
    * `decisionMakers` has loaded). */
-  draft?: { log_id: string; subject: string; body: string; to_email: string; decision_maker_candidate_id: string | null } | null;
+  draft?: { log_id: string; subject: string; body: string; to_email: string; decision_maker_candidate_id: string | null; attachments?: EmailAttachment[] } | null;
 }
 
 type StatusMsg = { kind: 'ok' | 'warn' | 'err'; text: string };
@@ -64,6 +66,8 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
   const [msg, setMsg] = useState<StatusMsg | null>(null);
   const [decisionMakers, setDecisionMakers] = useState<DecisionMakerCandidate[]>([]);
   const [selectedRecipients, setSelectedRecipients] = useState<Set<string>>(new Set(lead.email ? ['lead'] : []));
+  // Files this email carries: the template's (set when it is loaded), a stored draft's own, plus anything added here.
+  const [attachments, setAttachments] = useState<EmailAttachment[]>(draft?.attachments ?? []);
 
   useEffect(() => {
     let cancelled = false;
@@ -142,8 +146,9 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
       return setMsg({ kind: 'err', text });
     }
     setBusy(null);
-    const r = data as { subject: string; body: string; ai_used: boolean; missing: string[]; error?: string };
+    const r = data as { subject: string; body: string; ai_used: boolean; missing: string[]; attachments?: EmailAttachment[]; error?: string };
     if (r.error) return setMsg({ kind: 'err', text: r.error });
+    setAttachments(r.attachments ?? []);
     if (useAi && !r.ai_used) setMsg({ kind: 'warn', text: 'AI unavailable — using the plain template instead.' });
     if (useAi) { setBaseBody(body || null); setShowDiff(true); } else { setBaseBody(r.body); setShowDiff(false); }
     setSubject(r.subject); setBody(r.body); setMissing(r.missing);
@@ -159,7 +164,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
     for (const target of targets) {
       if (asDraft) {
         const { error } = await supabase.from('email_logs').insert({
-          lead_id: lead.id, to_email: target.email, subject, body, status: 'draft',
+          lead_id: lead.id, to_email: target.email, subject, body, status: 'draft', attachments,
           decision_maker_candidate_id: target.candidateId,
           sent_by: (await supabase.auth.getUser()).data.user?.id,
           org_id: currentOrg?.id,
@@ -171,7 +176,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
           to_email: target.email, subject, body, lead_id: lead.id,
-          decision_maker_candidate_id: target.candidateId,
+          decision_maker_candidate_id: target.candidateId, attachments,
           log_id: targets.length === 1 ? draft?.log_id : undefined,
         },
       });
@@ -231,6 +236,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
           </div>
         )}
         <Textarea label="Body (plain text — lands in inboxes better)" rows={10} value={body} onChange={(e) => setBody(e.target.value)} />
+        {currentOrg && <AttachmentFiles orgId={currentOrg.id} attachments={attachments} onChange={setAttachments} compact />}
         {msg && (
           <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : msg.kind === 'warn' ? 'text-warning' : 'text-success'}`}>
             {msg.text}

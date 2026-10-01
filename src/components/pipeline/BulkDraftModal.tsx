@@ -5,6 +5,7 @@ import { useOrg } from '../../hooks/useOrg';
 import { useTemplates } from '../../hooks/useTemplates';
 import { readableInvokeError } from '../../lib/invokeError';
 import { supabase } from '../../lib/supabase';
+import type { EmailAttachment } from '../../lib/emailAttachments';
 import type { DecisionMakerCandidate, Lead } from '../../types';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
@@ -87,12 +88,14 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
         setProgress((p) => p + 1);
         continue;
       }
-      const result = data as { subject?: string; body?: string; error?: string } | null;
+      const result = data as { subject?: string; body?: string; attachments?: EmailAttachment[]; error?: string } | null;
       if (result && !result.error && result.subject && result.body) {
         const { error: insertErr } = await supabase.from('email_logs').insert({
           lead_id: target.lead.id, to_email: target.email, subject: result.subject, body: result.body,
           status: 'draft', sent_by: session.user.id, org_id: currentOrg.id,
           decision_maker_candidate_id: target.candidateId,
+          // The template's files go on each draft so releasing it later sends them too.
+          attachments: result.attachments ?? [],
         });
         if (!insertErr) drafted++;
         else if (!firstFailReason) firstFailReason = insertErr.message;

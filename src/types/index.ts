@@ -1,3 +1,5 @@
+import type { EmailAttachment, EmailLink } from '../lib/emailAttachments';
+
 export type Role = 'admin' | 'contractor' | 'team_member';
 
 export type PlatformRole = 'platform_admin' | 'user';
@@ -143,6 +145,10 @@ export interface EmailTemplate {
   is_default: boolean;
   created_by: string | null;
   created_at: string;
+  /** Files (PDF/PNG/JPEG) attached to every email made from this template. */
+  attachments: EmailAttachment[];
+  /** Links (videos included) appended to the end of the email body. */
+  links: EmailLink[];
 }
 
 export interface SequenceStep {
@@ -190,6 +196,8 @@ export interface EmailLog {
   message_id: string | null;
   sent_at: string;
   decision_maker_candidate_id: string | null;
+  /** Files this draft carries / this sent email carried. */
+  attachments: EmailAttachment[];
 }
 
 export type EmailProvider = 'gmail' | 'outlook' | 'yahoo' | 'smtp';
