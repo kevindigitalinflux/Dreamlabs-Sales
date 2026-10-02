@@ -181,7 +181,7 @@ export function Listbox({ value, onChange, children, id, ariaLabel, disabled, cl
   }
 
   return (
-    <div className={`relative ${fullWidth ? 'w-full' : 'inline-block'}`}>
+    <div className={`relative ${fullWidth ? 'w-full min-w-0' : 'inline-block'}`}>
       <button
         ref={triggerRef}
         type="button"

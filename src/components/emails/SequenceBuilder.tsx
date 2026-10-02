@@ -39,13 +39,16 @@ function StepCard({ index, step, standard, custom, onChange, onRemove }: {
   const missing = ![...standard, ...custom].some((o) => o.value === current);
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }}
-      className="flex items-end gap-2 rounded-lg border border-line bg-surface/40 p-3">
+      className="flex min-w-0 items-end gap-2 rounded-lg border border-line bg-surface/40 p-3">
       <button type="button" {...attributes} {...listeners} aria-label="Reorder step" className="mb-1 flex h-11 w-11 shrink-0 cursor-grab items-center justify-center rounded-lg text-muted hover:bg-surface"><GripVertical className="h-4 w-4" aria-hidden /></button>
-      <div className="w-24">
+      {/* shrink-0 keeps the days box a fixed, readable width however long the template name is. */}
+      <div className="w-24 shrink-0">
         <Input label={index === 0 ? 'Start after (days)' : 'Wait (days)'} type="number" min="0" value={String(step.delay_days)}
           onChange={(e) => onChange({ delay_days: Math.max(0, Number(e.target.value) || 0) })} />
       </div>
-      <div className="flex-1">
+      {/* min-w-0 lets this column shrink below its content so a long template name is truncated
+          inside the card instead of stretching it. */}
+      <div className="min-w-0 flex-1">
         <SelectField label="Template" value={current} onChange={(e) => onChange(stepFieldsFromValue(e.target.value))}>
           <optgroup label="Standard templates">
             {standard.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
