@@ -276,6 +276,8 @@ export interface LeadSuggestion {
   next_action_date?: string;
   next_action_note?: string;
   pain_point?: string;
+  /** A customer profile the AI thinks this lead matches (validated against the org's profiles). */
+  icp_id?: string;
   rationale: string;
 }
 
@@ -291,6 +293,8 @@ export interface DreamAgentUpdatePatch {
   next_action_date?: string;
   next_action_note?: string;
   pain_point?: string;
+  /** A customer profile the AI thinks this lead matches (validated against the org's profiles). */
+  icp_id?: string;
   // Details the note states about the lead. For an existing lead these never
   // overwrite: a blank field is filled, and a different email/phone/website/
   // owner_name is kept as an additional detail (see splitContactPatch).
@@ -320,6 +324,8 @@ export type ScrapeSource = 'google_places' | 'companies_house' | 'csv_upload';
 export interface ScrapeJob {
   id: string;
   org_id: string;
+  /** The customer profile this search was run for; approved leads inherit it. */
+  icp_id: string | null;
   icp_raw_input: string | null;
   icp_params: IcpParams | null;
   pipeline_id: string | null;
@@ -418,6 +424,8 @@ export type AutopilotRunStatus = 'active' | 'completed' | 'cancelled';
 export interface AutopilotRun {
   id: string;
   org_id: string;
+  /** The customer profile this campaign targets; every lead it approves is tagged with it. */
+  icp_id: string | null;
   created_by: string;
   icp_raw_input: string;
   icp_params: IcpParams;

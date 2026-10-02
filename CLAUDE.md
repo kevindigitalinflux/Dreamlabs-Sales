@@ -1543,8 +1543,31 @@ the profile's TOP pain point (first line, bullets stripped; `buildTemplateVars` 
 Deno and browser copies), and the whole profile is added to the `draftEmail`/`draftEmailClaude` prompts as background
 ("IDEAL CUSTOMER PROFILE… never state a fact about this lead that is not in the lead data"). Wired in `generate-email`
 (composer + bulk drafting) and `check-sequences`. `loadIcp` re-checks the profile belongs to the lead's own org because
-those functions use the service role. Not yet used: LinkedIn drafting, `check-replies` auto-drafts, the lead scraper's
-own "ICP" (a separate search-targeting concept, `scrape_jobs.icp_params`). Deleting a profile just un-assigns it.
+those functions use the service role. Deleting a profile just un-assigns it.
+
+**Profiles across the whole platform (2026-10-02, same day).** Kevin asked for the profile to reach every AI layer, so
+it is now used everywhere the AI writes or reads about a lead: `generate-email`, `check-sequences` (draft AND the
+`generateLeadNotes` research pass), `check-replies` auto-drafted replies (lead's profile, else the sequence's),
+`draft-linkedin-message` (the contact's lead's profile), and the note readers: **Log note (`parse-notes`) and the Dream
+Agent (`parse-session-notes`) are given every profile (`formatProfilesForPrompt`, clipped) and may propose `icp_id`**
+for a lead that clearly matches one (sanitised against the org's real profile ids on the client; shown as a
+"Customer profile" row to confirm). Leads get tagged at the source: migration `045` adds `scrape_jobs.icp_id` and
+`autopilot_runs.icp_id`; the Scraper and Autopilot wizards have a profile picker (which also pre-fills the search
+text via `lib/icp.ts`), `scrape-google-places`/`scrape-companies-house` store it on the job after `loadIcp` validates
+the org, `useRawLeadActions.approve` and `run-autopilot`'s auto-approve copy it onto each new lead, and autopilot passes
+it to every scrape it triggers. The pipeline list has a "Customer profile" filter (`filterLeads` `icps`, `NO_PROFILE`)
+and a bulk "Customer profile" action (`BulkProfileModal`) to tag existing leads. Still separate: the scraper's own
+search "ICP" (`scrape_jobs.icp_params`, search filters parsed by `parse-icp`), `parse-csv-leads`, and decision-maker
+targeting don't use profiles yet.
+
+**Tooling trap found 2026-10-02: TypeScript here is v7 (`tsc -v` = 7.0.2), which REFUSES to check named files when a
+`tsconfig.json` exists (error TS5112, easy to miss when filtering output) — so any "syntax check an edge function"
+command of the form `npx tsc --noEmit <file>` silently did nothing.** Use `--ignoreConfig` (e.g. `npx tsc --noEmit
+--ignoreConfig --skipLibCheck --allowImportingTsExtensions --target esnext --module esnext --moduleResolution bundler
+--strict false <file>` and grep for `error TS1xxx`); a deliberately broken file confirmed it works. The deploy bundler
+is the real backstop: it rejected a prompt string where my script had turned a `\n` into a real newline inside a
+single-quoted string, before anything went live. Multi-line `node -e`/heredoc edit scripts also kept tripping bash
+quoting when they contained apostrophes — write the script with the file tool and run it instead.
 
 **Known gaps / candidates for next time:** Log note (`parse-notes`) still only suggests stage/deal/package/next
 action — it does not extract contact fields the way Dream Agent now does; bulk email drafting (`BulkDraftModal`)

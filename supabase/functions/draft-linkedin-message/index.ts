@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { draftEmailClaude } from '../_shared/ai.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
+import { formatIcpContext, loadIcp } from '../_shared/icp.ts';
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -61,10 +62,16 @@ Deno.serve(async (req) => {
 
   try {
     const { data: org } = await service.from('organizations').select('name, company_context').eq('id', contact.org_id).maybeSingle();
+    // The contact's lead (if any) may be pinned to a customer profile; give the AI that context.
+    let icpContext: string | null = null;
+    if (contact.lead_id) {
+      const { data: leadRow } = await service.from('leads').select('icp_id').eq('id', contact.lead_id).maybeSingle();
+      icpContext = formatIcpContext(await loadIcp(service, contact.org_id, (leadRow?.icp_id as string | null) ?? null));
+    }
     const draft = await draftEmailClaude({
       subject: 'LinkedIn DM', body: templateText,
       lead: { full_name: contact.full_name, context_signal: contact.context_signal },
-      notes: [], contractorName, orgName: org?.name ?? 'our team', companyContext: org?.company_context,
+      notes: [], contractorName, orgName: org?.name ?? 'our team', companyContext: org?.company_context, icpContext,
       apiKey, model: 'claude-sonnet-5',
     });
 

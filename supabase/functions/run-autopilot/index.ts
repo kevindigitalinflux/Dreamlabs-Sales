@@ -9,7 +9,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 interface AutopilotRun {
   id: string; org_id: string; created_by: string; icp_raw_input: string; icp_params: Record<string, unknown>;
   source: 'google_places' | 'companies_house'; daily_lead_target: number; ends_at: string;
-  leads_scraped_total: number; outreach_sent_total: number;
+  leads_scraped_total: number; outreach_sent_total: number; icp_id?: string | null;
 }
 
 /** Same rating/review/industry fit check check-sequences applies before an outreach AI pass. */
@@ -92,6 +92,7 @@ async function autoApprove(service: SupabaseClient, run: AutopilotRun, jobId: st
       email: lead.email, website: lead.website, address: lead.address ?? null, city: lead.city,
       postcode: lead.postcode ?? null, google_rating: lead.google_rating ?? null, review_count: lead.review_count ?? null,
       vertical: lead.vertical ?? null, stage: 'new_lead', org_id: run.org_id, pipeline_id: defaultPipeline.id,
+      icp_id: run.icp_id ?? null,
       created_by: null, raw_lead_id: lead.id,
     });
     if (insertErr) { console.error(`autoApprove: failed to insert lead for raw_lead ${lead.id}`, insertErr.message); continue; }
@@ -170,7 +171,7 @@ Deno.serve(async (req) => {
           Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
           'x-cron-secret': cronSecret,
         },
-        body: JSON.stringify({ org_id: r.org_id, icp_raw_input: r.icp_raw_input, icp_params: r.icp_params, max_results: cap }),
+        body: JSON.stringify({ org_id: r.org_id, icp_raw_input: r.icp_raw_input, icp_params: r.icp_params, max_results: cap, icp_id: r.icp_id ?? null }),
       });
       if (!scrapeRes.ok) {
         console.error(`autopilot ${r.id}: scrape trigger failed`, await scrapeRes.text());

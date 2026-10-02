@@ -101,3 +101,14 @@ describe('splitContactPatch', () => {
     expect(splitContactPatch(undefined, { email: 'a@x.com', city: 'Leeds' })).toEqual({ fill: { email: 'a@x.com', city: 'Leeds' }, additions: [] });
   });
 });
+
+describe('customer profile (icp_id) in a patch', () => {
+  it('keeps a profile id that belongs to the org and drops an invented one', () => {
+    const mk = (icp: string) => [{ type: 'update', lead_id: 'lead-1', business_name: 'Acme', patch: { icp_id: icp }, excerpt: 'x', rationale: 'y' }];
+    const allowed = new Set(['real-profile']);
+    const kept = sanitizeDreamAgentActions(mk('real-profile'), VALID_IDS, undefined, allowed)[0] as unknown as { patch: Record<string, unknown> };
+    const dropped = sanitizeDreamAgentActions(mk('made-up'), VALID_IDS, undefined, allowed)[0] as unknown as { patch: Record<string, unknown> };
+    expect(kept.patch.icp_id).toBe('real-profile');
+    expect(dropped.patch).not.toHaveProperty('icp_id');
+  });
+});

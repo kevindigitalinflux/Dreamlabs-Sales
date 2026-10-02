@@ -236,7 +236,7 @@ Deno.serve(async (req) => {
 
       if (!hasAiSummary && compatible) {
         try {
-          const notesText = await generateLeadNotes({ lead, icpParams, apiKey });
+          const notesText = await generateLeadNotes({ lead, icpParams, icpContext, apiKey });
           await service.from('lead_notes').insert({
             lead_id: lead.id, created_by: null, note_type: 'ai_summary', content: notesText,
           });

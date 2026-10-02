@@ -3,6 +3,7 @@ import { ImapFlow } from 'npm:imapflow@1';
 import { json } from '../_shared/cors.ts';
 import { classifyReply, draftEmailClaude } from '../_shared/ai.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
+import { formatIcpContext, loadIcp, resolveIcpId } from '../_shared/icp.ts';
 
 const HEADERS = { 'Content-Type': 'application/json' };
 const BOUNCE_PATTERN = /mailer-daemon|postmaster/i;
@@ -134,8 +135,9 @@ Deno.serve(async (req) => {
           matched++;
 
           const { data: enrollment } = await service.from('sequence_enrollments')
-            .select('sequence:email_sequences(auto_draft_on_reply)').eq('id', sentLog.sequence_enrollment_id).single();
-          const autoDraft = (enrollment as { sequence: { auto_draft_on_reply: boolean } | null } | null)?.sequence?.auto_draft_on_reply;
+            .select('sequence:email_sequences(auto_draft_on_reply, icp_id)').eq('id', sentLog.sequence_enrollment_id).single();
+          const enrolledSequence = (enrollment as { sequence: { auto_draft_on_reply: boolean; icp_id: string | null } | null } | null)?.sequence;
+          const autoDraft = enrolledSequence?.auto_draft_on_reply;
           if (!autoDraft) continue;
 
           const apiKey = await resolveOrgApiKey(service, sentLog.org_id, 'anthropic');
@@ -147,9 +149,11 @@ Deno.serve(async (req) => {
           try {
             const complexity = await classifyReply({ replyBody: bodyText, apiKey });
             const { data: org } = await service.from('organizations').select('name, company_context').eq('id', sentLog.org_id).maybeSingle();
+            // Reply in the voice of the customer profile: the lead's own, else the sequence's.
+            const icpContext = formatIcpContext(await loadIcp(service, sentLog.org_id, resolveIcpId(lead.icp_id as string | null, enrolledSequence?.icp_id)));
             const draft = await draftEmailClaude({
               subject: `Re: ${subject}`, body: `They replied:\n\n${bodyText}\n\nDraft a helpful response.`,
-              lead, notes: noteTexts, contractorName, orgName: org?.name ?? 'our team', companyContext: org?.company_context,
+              lead, notes: noteTexts, contractorName, orgName: org?.name ?? 'our team', companyContext: org?.company_context, icpContext,
               apiKey, model: complexity === 'complex' ? 'claude-sonnet-5' : 'claude-haiku-4-5',
             });
             await service.from('email_logs').insert({

@@ -7,6 +7,7 @@ import { mergeAdditions } from '../lib/enrichmentGrouping';
 import { useAuth } from './useAuth';
 import { useOrg } from './useOrg';
 import { useOrgPackages } from './useOrgPackages';
+import { useIcps } from './useIcps';
 import { usePersistedState } from './usePersistedState';
 import type { DreamAgentAction, DreamAgentUpdatePatch, Lead } from '../types';
 
@@ -35,6 +36,7 @@ export function useDreamAgentSession() {
   const { session } = useAuth();
   const { currentOrg } = useOrg();
   const packages = useOrgPackages();
+  const { icps } = useIcps();
   // Persisted per org so leaving the page (e.g. to look up a lead's name) and
   // coming back doesn't wipe the in-progress conversation or its proposed actions.
   const storageScope = currentOrg?.id ?? 'none';
@@ -63,11 +65,11 @@ export function useDreamAgentSession() {
     if (matchPipelineId) query = query.eq('pipeline_id', matchPipelineId);
     const { data: leadRows } = await query;
     const validIds = new Set((leadRows ?? []).map((l) => l.id as string));
-    const sanitized = sanitizeDreamAgentActions(result.actions, validIds, packages.allowed);
+    const sanitized = sanitizeDreamAgentActions(result.actions, validIds, packages.allowed, new Set(icps.map((p) => p.id)));
     setMessages(nextMessages);
     setActions(sanitized);
     setResolutions(Object.fromEntries(sanitized.map((_, i) => [i, { status: 'pending' } as ActionResolution])));
-  }, [currentOrg, messages, packages]);
+  }, [currentOrg, messages, packages, icps]);
 
   const resolveAction = useCallback((index: number, resolution: ActionResolution) => {
     setResolutions((prev) => ({ ...prev, [index]: resolution }));
@@ -80,6 +82,7 @@ export function useDreamAgentSession() {
     if (patch.stage) result.stage = patch.stage;
     if (patch.deal_value !== undefined) result.deal_value = patch.deal_value;
     if (patch.package_tier) result.package_tier = patch.package_tier;
+    if (patch.icp_id) result.icp_id = patch.icp_id;
     if (patch.next_action_date) result.next_action_date = patch.next_action_date;
     if (patch.next_action_note) result.next_action_note = patch.next_action_note;
     return result;
@@ -118,6 +121,7 @@ export function useDreamAgentSession() {
           city: action.extracted.city, vertical: action.extracted.vertical,
           address: action.extracted.address ?? null, postcode: action.extracted.postcode ?? null, stage,
           package_tier: action.patch.package_tier ?? null, deal_value: action.patch.deal_value ?? null,
+          icp_id: action.patch.icp_id ?? null,
           next_action_date: action.patch.next_action_date ?? null, next_action_note: action.patch.next_action_note ?? null,
           last_contacted_at: stage !== 'new_lead' ? new Date().toISOString() : null,
           org_id: currentOrg.id, pipeline_id: resolution.pipeline_id, created_by: session.user.id,

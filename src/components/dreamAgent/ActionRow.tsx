@@ -26,14 +26,17 @@ interface ActionRowProps {
   onResolve: (resolution: ActionResolution) => void;
   /** Ambiguous rows only: the user chose which lead they meant. */
   onPickLead: (leadId: string) => void;
+  /** Customer profile id to name, so a proposed profile reads as a name. */
+  icpNames?: Record<string, string>;
 }
 
 const CONTACT_LABELS = { owner_name: 'Owner', phone: 'Phone', email: 'Email', website: 'Website', address: 'Address', city: 'City', postcode: 'Postcode', vertical: 'Business type' };
 const ADDITIONAL_LABELS = { owner_name: 'owner', phone: 'phone', email: 'email', website: 'website' };
 
 /** From→to rows for a patch. `lead` is undefined for a lead that doesn't exist yet (a `create`), so every "from" is an em dash. */
-function patchRows(patch: DreamAgentUpdatePatch, lead: Lead | undefined, includeContact = false): { label: string; from: string; to: string }[] {
+function patchRows(patch: DreamAgentUpdatePatch, lead: Lead | undefined, includeContact = false, icpNames: Record<string, string> = {}): { label: string; from: string; to: string }[] {
   const rows: { label: string; from: string; to: string }[] = [];
+  if (patch.icp_id && patch.icp_id !== lead?.icp_id) rows.push({ label: 'Customer profile', from: (lead?.icp_id && icpNames[lead.icp_id]) || '—', to: icpNames[patch.icp_id] ?? patch.icp_id });
   if (includeContact) {
     // Existing leads: blanks are filled, differing email/phone/website/owner are kept as additional.
     const { fill, additions } = splitContactPatch(lead, patch);
@@ -56,7 +59,7 @@ function patchRows(patch: DreamAgentUpdatePatch, lead: Lead | undefined, include
  * a candidate picker plus "this is someone new", which itself becomes a create-like
  * picker step rather than guessing a pipeline; `update_company_context` shows an
  * editable textarea pre-filled with the AI's proposed merge. */
-export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipelineId, needsPipelinePicker, isOrgAdmin, onResolve, onPickLead }: ActionRowProps) {
+export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipelineId, needsPipelinePicker, isOrgAdmin, onResolve, onPickLead, icpNames = {} }: ActionRowProps) {
   const [promotedToNew, setPromotedToNew] = useState(false);
   const [editedContext, setEditedContext] = useState(
     action.type === 'update_company_context' ? action.proposed_context : '',
@@ -95,7 +98,7 @@ export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipe
   }
 
   if (action.type === 'update') {
-    const rows = patchRows(action.patch, leadsById[action.lead_id], true);
+    const rows = patchRows(action.patch, leadsById[action.lead_id], true, icpNames);
     const confirmed = resolution.status === 'confirmed_update';
     return (
       <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4">
@@ -129,7 +132,7 @@ export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipe
         <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-cyan" aria-hidden />New lead: {action.extracted.business_name}</p>
         <p className="text-xs text-muted">{[action.extracted.owner_name, action.extracted.address, action.extracted.city, action.extracted.postcode, action.extracted.phone, action.extracted.email, action.extracted.website, action.extracted.vertical].filter(Boolean).join(' · ') || 'No extra details found'}</p>
         <ul className="flex flex-col gap-1">
-          {patchRows(action.patch, undefined).map((r) => (
+          {patchRows(action.patch, undefined, false, icpNames).map((r) => (
             <li key={r.label} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface/60 p-2 text-sm">
               <span className="w-36 text-xs font-semibold text-muted">{r.label}</span>
               <ArrowRight className="h-3.5 w-3.5 text-muted" aria-hidden />

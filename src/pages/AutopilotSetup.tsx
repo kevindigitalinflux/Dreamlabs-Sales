@@ -9,6 +9,9 @@ import { StepProgress } from '../components/ui/StepProgress';
 import { Textarea, Input, SelectField } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { IcpSelect } from '../components/emails/IcpSelect';
+import { useIcps } from '../hooks/useIcps';
+import { searchTextFromIcp } from '../lib/icp';
 import type { IcpParams, ScrapeSource } from '../types';
 
 const DURATIONS = [1, 7, 14, 21, 30] as const;
@@ -22,6 +25,8 @@ export function AutopilotSetup() {
   const [step, setStep] = useState(1);
   const [rawInput, setRawInput] = useState('');
   const [icp, setIcp] = useState<IcpParams | null>(null);
+  const { icps } = useIcps();
+  const [icpId, setIcpId] = useState<string | null>(null);
   const [source, setSource] = useState<ScrapeSource>('google_places');
   const [dailyLeadTarget, setDailyLeadTarget] = useState(10);
   const [dailyOutreachTarget, setDailyOutreachTarget] = useState(20);
@@ -57,7 +62,7 @@ export function AutopilotSetup() {
     const err = await createRun({
       icp_raw_input: rawInput, icp_params: icp, source, daily_lead_target: dailyLeadTarget,
       daily_outreach_target: dailyOutreachTarget, duration_days: duration, ramp_up_enabled: rampUp,
-      max_total_spend_cents: spendCap ? Math.round(Number(spendCap) * 100) : null,
+      max_total_spend_cents: spendCap ? Math.round(Number(spendCap) * 100) : null, icp_id: icpId,
     });
     setBusy(false);
     if (err) return setError(err);
@@ -79,6 +84,13 @@ export function AutopilotSetup() {
         <Card>
           <div className="flex flex-col gap-3">
             <p className="font-semibold">Describe your ideal customer</p>
+            <IcpSelect
+              icps={icps}
+              value={icpId}
+              onChange={(id) => { setIcpId(id); const p = icps.find((x) => x.id === id); if (p && !rawInput.trim()) setRawInput(searchTextFromIcp(p)); }}
+              label="Target one of your customer profiles (optional)"
+              hint="Every lead autopilot finds and approves is tagged with this profile, so its emails use the profile's pain points and context. Picking one also fills the description below if it is empty."
+            />
             <Textarea label="ICP description" value={rawInput} onChange={(e) => setRawInput(e.target.value)} placeholder="Commercial cleaning companies in London, 10-30 staff" />
             <Button onClick={() => void parseIcp()} disabled={busy || !rawInput.trim()} loading={busy}>{busy ? 'Reading…' : 'Continue'}</Button>
           </div>

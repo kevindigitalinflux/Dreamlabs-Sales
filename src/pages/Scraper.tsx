@@ -11,6 +11,9 @@ import { Input, SelectField, Textarea } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
+import { IcpSelect } from '../components/emails/IcpSelect';
+import { useIcps } from '../hooks/useIcps';
+import { searchTextFromIcp } from '../lib/icp';
 import type { IcpParams, ScrapeSource } from '../types';
 
 const TOTAL_STEPS = 4;
@@ -26,6 +29,8 @@ export function Scraper() {
   const [step, setStep] = useState(1);
   const [rawInput, setRawInput] = useState('');
   const [icp, setIcp] = useState<IcpParams | null>(null);
+  const { icps } = useIcps();
+  const [icpId, setIcpId] = useState<string | null>(null);
   const [source, setSource] = useState<ScrapeSource>('google_places');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +69,7 @@ export function Scraper() {
     }
     const functionName = source === 'google_places' ? 'scrape-google-places' : 'scrape-companies-house';
     const { data, error: err } = await supabase.functions.invoke(functionName, {
-      body: { org_id: currentOrg.id, icp_raw_input: rawInput, icp_params: icp, pipeline_id: targetPipelineId || null },
+      body: { org_id: currentOrg.id, icp_raw_input: rawInput, icp_params: icp, pipeline_id: targetPipelineId || null, icp_id: icpId },
     });
     setBusy(false);
     if (err) return setError(err.message);
@@ -89,6 +94,13 @@ export function Scraper() {
         <Card>
           <div className="flex flex-col gap-3">
             <p className="font-semibold">Describe your ideal customer</p>
+            <IcpSelect
+              icps={icps}
+              value={icpId}
+              onChange={(id) => { setIcpId(id); const p = icps.find((x) => x.id === id); if (p && !rawInput.trim()) setRawInput(searchTextFromIcp(p)); }}
+              label="Search for one of your customer profiles (optional)"
+              hint="Leads you approve from this search are tagged with the profile, so emails to them use its pain points and context. Picking one also fills the description below if it is empty."
+            />
             <Textarea
               label="ICP description"
               value={rawInput}

@@ -60,3 +60,30 @@ export function formatIcpContext(icp: IdealCustomerProfile | null): string | nul
     .join('\n\n');
   return `${icp.name}${body ? `\n\n${body}` : ''}`;
 }
+
+/** All of an org's profiles, A to Z. */
+export async function loadOrgIcps(service: SupabaseClient, orgId: string): Promise<IdealCustomerProfile[]> {
+  const { data } = await service.from('ideal_customer_profiles').select('*').eq('org_id', orgId).order('name');
+  return (data as IdealCustomerProfile[] | null) ?? [];
+}
+
+/**
+ * Every profile as one compact block for an AI prompt, so a note-reading AI can both
+ * understand what the rep is talking about and say which profile a lead belongs to (by
+ * `id`). Each field is clipped so a long profile can't bloat the prompt. Null when there
+ * are no profiles, so callers can skip the section entirely.
+ */
+export function formatProfilesForPrompt(icps: IdealCustomerProfile[]): string | null {
+  if (icps.length === 0) return null;
+  const clip = (s: string | null, max = 300) => {
+    const t = (s ?? '').replace(/\s+/g, ' ').trim();
+    return t.length > max ? `${t.slice(0, max)}…` : t;
+  };
+  return icps.map((p) => {
+    const lines = [`- id: ${p.id}`, `  name: ${p.name}`];
+    if (clip(p.summary)) lines.push(`  who they are: ${clip(p.summary)}`);
+    if (clip(p.pain_points)) lines.push(`  pain points: ${clip(p.pain_points)}`);
+    if (clip(p.goals)) lines.push(`  want: ${clip(p.goals)}`);
+    return lines.join('\n');
+  }).join('\n');
+}

@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
+import { loadIcp } from '../_shared/icp.ts';
 import { runBounded } from '../_shared/concurrency.ts';
 import { scrapeWebsiteContact } from '../_shared/websiteContact.ts';
 
@@ -164,7 +165,7 @@ Deno.serve(async (req) => {
     callerId = userData.user.id;
   }
 
-  const body = (await req.json()) as { org_id?: string; icp_raw_input?: string; icp_params?: IcpParams; max_results?: number; pipeline_id?: string };
+  const body = (await req.json()) as { org_id?: string; icp_raw_input?: string; icp_params?: IcpParams; max_results?: number; pipeline_id?: string; icp_id?: string };
   const orgId = String(body.org_id ?? '');
   if (!orgId || !body.icp_params) return json({ error: 'org_id and icp_params are required' }, 400, headers);
 
@@ -185,6 +186,8 @@ Deno.serve(async (req) => {
     org_id: orgId, created_by: callerId, icp_raw_input: body.icp_raw_input ?? null,
     icp_params: body.icp_params, sources: ['google_places'], status: 'pending',
     pipeline_id: body.pipeline_id ?? null,
+    // The customer profile this search is for (validated as this org's own), inherited by approved leads.
+    icp_id: (await loadIcp(service, orgId, body.icp_id ?? null))?.id ?? null,
   }).select('id').single();
   if (jobErr || !job) return json({ error: jobErr?.message ?? 'Could not create job' }, 500, headers);
 

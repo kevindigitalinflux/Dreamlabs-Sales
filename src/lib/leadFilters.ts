@@ -1,14 +1,19 @@
 import { isOverdue, STAGES } from './utils';
 import type { Lead, Stage } from '../types';
 
+/** Filter value meaning "leads with no customer profile". */
+export const NO_PROFILE = '__none__';
+
 export interface LeadFilters {
   search: string;
   stages: Stage[];
   assignees: string[];
   overdueOnly: boolean;
+  /** Customer profile ids (or NO_PROFILE). Empty/absent means all. */
+  icps?: string[];
 }
 
-/** Applies search + stage + assignee + overdue filters. Empty arrays mean "all". */
+/** Applies search + stage + assignee + customer profile + overdue filters. Empty arrays mean "all". */
 export function filterLeads(leads: Lead[], filters: LeadFilters, today: Date = new Date()): Lead[] {
   const q = filters.search.trim().toLowerCase();
   return leads.filter((lead) => {
@@ -18,6 +23,7 @@ export function filterLeads(leads: Lead[], filters: LeadFilters, today: Date = n
     }
     if (filters.stages.length > 0 && !filters.stages.includes(lead.stage)) return false;
     if (filters.assignees.length > 0 && (!lead.assigned_to || !filters.assignees.includes(lead.assigned_to))) return false;
+    if (filters.icps && filters.icps.length > 0 && !filters.icps.includes(lead.icp_id ?? NO_PROFILE)) return false;
     if (filters.overdueOnly && !isOverdue(lead.next_action_date, today)) return false;
     return true;
   });

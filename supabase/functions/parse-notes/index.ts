@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { parseNotes } from '../_shared/ai.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
+import { formatIcpContext, formatProfilesForPrompt, loadOrgIcps } from '../_shared/icp.ts';
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -33,8 +34,12 @@ Deno.serve(async (req) => {
   if (!apiKey) return json({ suggestion: null, error: 'AI unavailable' }, 200, headers);
   const { data: org } = await service.from('organizations').select('custom_packages').eq('id', orgId).maybeSingle();
   const customPackages = (org?.custom_packages as string[] | null) ?? null;
+  // Every profile this org has (so the AI can say which one the lead matches) and the lead's own, in full.
+  const orgIcps = await loadOrgIcps(service, orgId);
+  const profilesBlock = formatProfilesForPrompt(orgIcps);
+  const icpContext = formatIcpContext(orgIcps.find((p) => p.id === (lead as { icp_id?: string | null }).icp_id) ?? null);
   try {
-    const suggestion = await parseNotes({ note: String(body.note ?? ''), lead: lead as Record<string, unknown>, customPackages, apiKey });
+    const suggestion = await parseNotes({ note: String(body.note ?? ''), lead: lead as Record<string, unknown>, customPackages, icpContext, profilesBlock, apiKey });
     return json({ suggestion }, 200, headers);
   } catch (e) {
     console.error('parse-notes failed:', e);

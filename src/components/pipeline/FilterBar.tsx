@@ -1,7 +1,8 @@
 import { AlertCircle, Search } from 'lucide-react';
 import { STAGES } from '../../lib/utils';
+import { NO_PROFILE } from '../../lib/leadFilters';
 import type { LeadFilters } from '../../lib/leadFilters';
-import type { Profile } from '../../types';
+import type { IdealCustomerProfile, Profile } from '../../types';
 import type { Stage } from '../../types';
 import { MultiSelect } from '../ui/MultiSelect';
 import { useOrg } from '../../hooks/useOrg';
@@ -10,10 +11,12 @@ interface FilterBarProps {
   filters: LeadFilters;
   onChange: (filters: LeadFilters) => void;
   profiles: Profile[];
+  /** The org's customer profiles; the profile filter only shows when there are some. */
+  icps?: IdealCustomerProfile[];
 }
 
 /** Search + stage/assignee multi-selects + overdue toggle (SPEC.md §6 list view). */
-export function FilterBar({ filters, onChange, profiles }: FilterBarProps) {
+export function FilterBar({ filters, onChange, profiles, icps = [] }: FilterBarProps) {
   const { currentOrg } = useOrg();
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -34,6 +37,14 @@ export function FilterBar({ filters, onChange, profiles }: FilterBarProps) {
         selected={filters.stages}
         onChange={(stages) => onChange({ ...filters, stages: stages as Stage[] })}
       />
+      {icps.length > 0 && (
+        <MultiSelect
+          label="Customer profile"
+          options={[...icps.map((p) => ({ value: p.id, label: p.name })), { value: NO_PROFILE, label: 'No profile' }]}
+          selected={filters.icps ?? []}
+          onChange={(selectedIcps) => onChange({ ...filters, icps: selectedIcps })}
+        />
+      )}
       {currentOrg?.role === 'admin' && (
         <MultiSelect
           label="Assigned to"

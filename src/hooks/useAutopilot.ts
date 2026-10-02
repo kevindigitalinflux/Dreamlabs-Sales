@@ -16,7 +16,7 @@ export function estimateCostCents(dailyOutreachTarget: number, durationDays: num
 export interface CreateRunInput {
   icp_raw_input: string; icp_params: IcpParams; source: ScrapeSource;
   daily_lead_target: number; daily_outreach_target: number; duration_days: 1 | 7 | 14 | 21 | 30;
-  ramp_up_enabled: boolean; max_total_spend_cents: number | null;
+  ramp_up_enabled: boolean; max_total_spend_cents: number | null; icp_id?: string | null;
 }
 
 /** The current org's active autopilot run (if any), plus its blocklist. */
@@ -49,7 +49,7 @@ export function useAutopilot() {
       icp_raw_input: input.icp_raw_input, icp_params: input.icp_params, source: input.source,
       daily_lead_target: input.daily_lead_target, daily_outreach_target: input.daily_outreach_target,
       duration_days: input.duration_days, ramp_up_enabled: input.ramp_up_enabled,
-      max_total_spend_cents: input.max_total_spend_cents, ends_at: endsAt,
+      max_total_spend_cents: input.max_total_spend_cents, ends_at: endsAt, icp_id: input.icp_id ?? null,
       estimated_cost_low_cents: low, estimated_cost_high_cents: high,
     });
     if (error) return error.message;

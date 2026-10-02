@@ -127,16 +127,22 @@ const FOLLOW_UP_GUIDANCE = `STAGE: if the note says the rep visited, called, ema
 FOLLOW-UP: if the note states a timeframe ("end of this week", "Monday next week", "in a few days"), convert it into a concrete YYYY-MM-DD next_action_date using today's date and weekday (when it gives two options, use the earlier one) and put the method in next_action_note (e.g. "Follow up by email or call"). If the note reports a contact (call, email, text, visit, meeting) or an outcome that needs a next step and does NOT state a follow-up, ALWAYS propose one: next_action_date = a sensible date (about 3 days after today for an email or text with no reply yet, 1 to 2 days for a lead who sounds interested or asked for something, a few weeks for "not now"), and next_action_note = a short phrase naming the method, reusing the channel the rep just used unless the note implies another (e.g. "Follow up by email"). Do not propose a follow-up when the lead is won or lost, or nothing needs following up. These are the exceptions to "suggest nothing you are not confident about": the rep reviews and can decline each one.`;
 
 /** Suggests lead field updates from a note. Throws on failure. */
-export async function parseNotes(input: { note: string; lead: Record<string, unknown>; customPackages?: string[] | null; apiKey: string }): Promise<Record<string, unknown>> {
+export async function parseNotes(input: { note: string; lead: Record<string, unknown>; customPackages?: string[] | null; icpContext?: string | null; profilesBlock?: string | null; apiKey: string }): Promise<Record<string, unknown>> {
   return await geminiJson(
 `You extract CRM field updates from a sales call note. Compare the note against the current lead and output ONLY fields that should change, as JSON with any of these keys:
 stage (one of: new_lead, contacted, audit_booked, proposal_sent, negotiating, won, lost, not_now_nurture),
 deal_value (number, GBP), package_tier (exactly one of: ${packageChoices(input.customPackages)}; omit it if none clearly fits),
-next_action_date (YYYY-MM-DD), next_action_note (string), pain_point (string),
+next_action_date (YYYY-MM-DD), next_action_note (string), pain_point (string),${input.profilesBlock ? ' icp_id (exactly one of the profile ids listed under CUSTOMER PROFILES below; omit it unless one clearly fits),' : ''}
 rationale (string, ALWAYS present: one sentence explaining the suggestions).
 Suggest nothing you are not confident about. Today is ${todayWithWeekday()}.
 ${FOLLOW_UP_GUIDANCE}
-
+${input.profilesBlock ? `
+CUSTOMER PROFILES (the kinds of customer this org sells to). Use them to understand the note, and to choose icp_id for a lead that clearly matches one. Never invent an id:
+${input.profilesBlock}
+` : ''}${input.icpContext ? `
+THIS LEAD'S PROFILE IN FULL (background for reading the note):
+${input.icpContext}
+` : ''}
 CURRENT LEAD: ${JSON.stringify(input.lead)}
 NOTE:
 ${input.note}`,
@@ -154,8 +160,8 @@ ${input.note}`,
  * failure.
  */
 export async function parseSessionNotes(input: {
-  messages: string[]; leadIndex: { id: string; business_name: string; city: string | null; stage: string }[];
-  currentCompanyContext: string | null; customPackages?: string[] | null; apiKey: string;
+  messages: string[]; leadIndex: { id: string; business_name: string; city: string | null; stage: string; icp_id?: string | null }[];
+  currentCompanyContext: string | null; customPackages?: string[] | null; profilesBlock?: string | null; apiKey: string;
 }): Promise<unknown> {
   return await geminiJson(
 `You extract CRM actions from a sales rep's session notes. The rep may mention
@@ -172,7 +178,7 @@ For each company/person mentioned, decide one of four action types:
    ${packageChoices(input.customPackages)}; omit it if none clearly fits), next_action_date
    (YYYY-MM-DD), next_action_note (string), pain_point (string), owner_name,
    phone, email, website, address, city, postcode, vertical (all strings, only what
-   the note states)>},
+   the note states), icp_id (a profile id from CUSTOMER PROFILES, only if one clearly fits)>},
    "excerpt":<the relevant sentence(s) from the note>,"rationale":<one sentence
    explaining the match and the changes>}
 2. "create" — mentions someone NOT in LEAD INDEX at all, a genuinely new prospect.
@@ -181,7 +187,7 @@ For each company/person mentioned, decide one of four action types:
    null>,"website":<string or null>,"city":<string or null>,"vertical":<string or
    null>,"address":<string or null>,"postcode":<string or null>},"patch":{<same optional keys as
    an update's patch: stage, deal_value, package_tier, next_action_date,
-   next_action_note, pain_point; include stage and any follow-up the rep
+   next_action_note, pain_point, icp_id; include stage and any follow-up the rep
    mentioned. Put contact details in "extracted", not here>},"excerpt":<relevant text>,"rationale":<one sentence>}
 3. "ambiguous" — could plausibly match 2+ leads in LEAD INDEX, or the name is too
    vague to resolve alone. Output: {"type":"ambiguous","mentioned_text":<what was
@@ -206,7 +212,10 @@ For every "update" AND "create" action, apply these rules to its patch. ${FOLLOW
 
 BE THOROUGH: fill in as many fields as the note supports, not just stage and follow-up. package_tier: whenever the rep mentions a service the lead wants, was pitched or was quoted, pick the closest allowed value. deal_value: any price or budget mentioned, in GBP. vertical: infer the business type from what they do (e.g. "Estate agent", "Office space provider", "Model agency"). Also capture the contact's name (owner_name), phone, email, website, address, city and postcode when the note gives them. Copy values exactly as written, never invent a phone number, email or address. For an EXISTING lead, only include address, city, postcode and vertical if the note states them; a different email, phone, website or owner name is fine to include, since it is kept as an additional detail and never overwrites.
 
-LEAD INDEX: ${JSON.stringify(input.leadIndex)}
+${input.profilesBlock ? `CUSTOMER PROFILES (the kinds of customer this org sells to). Use them to understand what the rep describes, and set icp_id on an update or create for a lead that clearly matches one (the lead index shows each lead's current icp_id). Never invent an id:
+${input.profilesBlock}
+
+` : ''}LEAD INDEX: ${JSON.stringify(input.leadIndex)}
 
 CURRENT COMPANY CONTEXT (empty if nothing set yet): ${input.currentCompanyContext ?? '(none set)'}
 
@@ -245,7 +254,7 @@ SAMPLE ROWS: ${JSON.stringify(input.sampleRows)}`,
  * yet — see check-sequences). Throws on failure, same contract as draftEmail.
  */
 export async function generateLeadNotes(input: {
-  lead: Record<string, unknown>; icpParams: Record<string, unknown> | null; apiKey: string;
+  lead: Record<string, unknown>; icpParams: Record<string, unknown> | null; icpContext?: string | null; apiKey: string;
 }): Promise<string> {
   const text = await claudeText(
 `You are a sales researcher. Given this business's data (and the ICP it was found against, if any),
@@ -253,6 +262,10 @@ write 2-4 short bullet-style personalization talking points a salesperson could 
 a likely pain point implied by its rating/review count, a plausible angle from its industry/location.
 Do not invent facts not present in the data. Plain text bullets, one per line, no preamble.
 
+${input.icpContext ? `
+CUSTOMER PROFILE this lead is most like (use it to choose the angle and the pain point most likely to land):
+${input.icpContext}
+` : ''}
 LEAD: ${JSON.stringify(input.lead)}
 ICP: ${JSON.stringify(input.icpParams)}`,
     'claude-sonnet-5', input.apiKey, 300,

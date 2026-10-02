@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterLeads, sortLeads } from './leadFilters';
+import { NO_PROFILE, filterLeads, sortLeads } from './leadFilters';
 import type { Lead } from '../types';
 
 const TODAY = new Date(2026, 6, 12);
@@ -73,5 +73,22 @@ describe('sortLeads', () => {
     const copy = [...leads];
     sortLeads(leads, 'business_name', 'asc');
     expect(leads).toEqual(copy);
+  });
+});
+
+describe('filterLeads by customer profile', () => {
+  const leads = [
+    makeLead({ business_name: 'A', icp_id: 'pm' }),
+    makeLead({ business_name: 'B', icp_id: 'airbnb' }),
+    makeLead({ business_name: 'C', icp_id: null }),
+  ];
+  it('keeps everything when no profile is selected', () => {
+    expect(filterLeads(leads, { ...NONE, icps: [] }, TODAY)).toHaveLength(3);
+    expect(filterLeads(leads, NONE, TODAY)).toHaveLength(3);
+  });
+  it('filters to the chosen profiles, and "no profile" finds untagged leads', () => {
+    expect(filterLeads(leads, { ...NONE, icps: ['pm'] }, TODAY).map((l) => l.business_name)).toEqual(['A']);
+    expect(filterLeads(leads, { ...NONE, icps: ['pm', 'airbnb'] }, TODAY).map((l) => l.business_name)).toEqual(['A', 'B']);
+    expect(filterLeads(leads, { ...NONE, icps: [NO_PROFILE] }, TODAY).map((l) => l.business_name)).toEqual(['C']);
   });
 });

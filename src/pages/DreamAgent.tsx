@@ -4,6 +4,7 @@ import { Send, Sparkles, Upload } from 'lucide-react';
 import { parseCsv } from '../lib/csv';
 import { useDreamAgentSession } from '../hooks/useDreamAgentSession';
 import { useVoiceDictation } from '../hooks/useVoiceDictation';
+import { useIcps } from '../hooks/useIcps';
 import { VoiceButton, VoiceStatus, voiceFieldClass } from '../components/ui/VoiceControls';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { usePipeline } from '../hooks/usePipeline';
@@ -39,6 +40,8 @@ export function DreamAgent() {
 
   // Shared with the note dialog: live transcript, appended to what's already typed.
   const voice = useVoiceDictation(draft, setDraft);
+  const { icps } = useIcps();
+  const icpNames = Object.fromEntries(icps.map((p) => [p.id, p.name]));
 
   const orgPipelines = pipelines.filter((p) => p.org_id === currentOrg?.id);
   const matchPipelineId = matchScope || null;
@@ -205,6 +208,7 @@ export function DreamAgent() {
             needsPipelinePicker={!matchPipelineId}
             isOrgAdmin={currentOrg?.role === 'admin'}
             onResolve={(resolution) => resolveAction(i, resolution)}
+            icpNames={icpNames}
             onPickLead={(leadId) => action.type === 'ambiguous' && void handleClarify(action.mentioned_text, leadId)}
           />
         ))}

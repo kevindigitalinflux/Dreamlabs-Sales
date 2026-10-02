@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useOrgPackages } from '../../hooks/useOrgPackages';
+import { useIcps } from '../../hooks/useIcps';
 import { useVoiceDictation } from '../../hooks/useVoiceDictation';
 import { VoiceButton, VoiceStatus, voiceFieldClass } from '../ui/VoiceControls';
 import type { LeadPatch } from '../../lib/leadUpdates';
@@ -24,6 +25,7 @@ type Phase = 'compose' | 'next-action' | 'suggest';
 /** Log-note dialog: guided debrief OR free text, then a "set your next action" prompt. */
 export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: NoteComposerProps) {
   const packages = useOrgPackages();
+  const { icps } = useIcps();
   const [tab, setTab] = useState<'debrief' | 'free'>('debrief');
   const [phase, setPhase] = useState<Phase>('compose');
   const [freeText, setFreeText] = useState('');
@@ -57,7 +59,7 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
     const { data } = await supabase.functions.invoke('parse-notes', { body: { lead_id: lead.id, note: noteText } });
     setBusy(false);
     const raw = (data as { suggestion?: unknown } | null)?.suggestion;
-    const clean = raw ? sanitizeSuggestion(raw, packages.allowed) : null;
+    const clean = raw ? sanitizeSuggestion(raw, packages.allowed, new Set(icps.map((p) => p.id))) : null;
     if (clean) {
       setSuggestion(clean);
       setPhase('suggest');
@@ -103,6 +105,7 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
     <Modal open={open} onClose={reset} title={title}>
       {phase === 'suggest' && suggestion ? (
         <SuggestionDiff
+          icps={icps}
           lead={lead}
           suggestion={suggestion}
           onApply={(patch) => { void onUpdateLead(patch).then(() => reset()); }}

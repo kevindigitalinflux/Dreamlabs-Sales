@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { parseSessionNotes } from '../_shared/ai.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
+import { formatProfilesForPrompt, loadOrgIcps } from '../_shared/icp.ts';
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -26,11 +27,11 @@ Deno.serve(async (req) => {
   // (and therefore every lead_id the AI can ever reference) is already scoped to
   // exactly what they're allowed to see. Whole-platform mode omits the pipeline
   // filter but still can't cross an org boundary, since org_id is fixed here.
-  let query = client.from('leads').select('id, business_name, city, stage, pipeline_id').eq('org_id', orgId);
+  let query = client.from('leads').select('id, business_name, city, stage, pipeline_id, icp_id').eq('org_id', orgId);
   if (body.pipeline_id) query = query.eq('pipeline_id', body.pipeline_id);
   const { data: leads, error: leadsErr } = await query;
   if (leadsErr) return json({ actions: [], error: leadsErr.message }, 400, headers);
-  const leadIndex = (leads ?? []).map((l) => ({ id: l.id as string, business_name: l.business_name as string, city: l.city as string | null, stage: l.stage as string }));
+  const leadIndex = (leads ?? []).map((l) => ({ id: l.id as string, business_name: l.business_name as string, city: l.city as string | null, stage: l.stage as string, icp_id: (l.icp_id as string | null) ?? null }));
 
   // Same RLS-scoped client as the lead index above — any org member can read
   // this via organizations_member_read, needed so the AI can propose a coherent
@@ -51,7 +52,8 @@ Deno.serve(async (req) => {
   if (!apiKey) return json({ actions: [], error: 'AI unavailable' }, 200, headers);
 
   try {
-    const actions = await parseSessionNotes({ messages, leadIndex, currentCompanyContext, customPackages, apiKey });
+    const profilesBlock = formatProfilesForPrompt(await loadOrgIcps(service, orgId));
+    const actions = await parseSessionNotes({ messages, leadIndex, currentCompanyContext, customPackages, profilesBlock, apiKey });
     return json({ actions }, 200, headers);
   } catch (e) {
     console.error('parse-session-notes failed:', e);

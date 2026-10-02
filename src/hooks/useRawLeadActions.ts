@@ -4,7 +4,7 @@ import { useAuth } from './useAuth';
 import type { RawLead } from '../types';
 
 /** Approve/reject/skip a raw_leads row, plus the two paid enrichment actions. */
-export function useRawLeadActions(jobOrgId?: string, pipelineId?: string) {
+export function useRawLeadActions(jobOrgId?: string, pipelineId?: string, jobIcpId?: string | null) {
   const { session } = useAuth();
 
   const approve = useCallback(async (lead: RawLead): Promise<string | null> => {
@@ -15,6 +15,7 @@ export function useRawLeadActions(jobOrgId?: string, pipelineId?: string) {
       email: lead.email, website: lead.website, address: lead.address, city: lead.city,
       postcode: lead.postcode, google_rating: lead.google_rating, review_count: lead.review_count,
       vertical: lead.vertical, stage: 'new_lead', org_id: jobOrgId, pipeline_id: pipelineId,
+      icp_id: jobIcpId ?? null, // inherited from the search this lead was found by
       created_by: session?.user.id, raw_lead_id: lead.id,
     });
     if (insertErr) return insertErr.message;
@@ -22,7 +23,7 @@ export function useRawLeadActions(jobOrgId?: string, pipelineId?: string) {
       status: 'approved', approved_by: session?.user.id, approved_at: new Date().toISOString(),
     }).eq('id', lead.id);
     return updateErr ? updateErr.message : null;
-  }, [jobOrgId, pipelineId, session]);
+  }, [jobOrgId, pipelineId, jobIcpId, session]);
 
   const reject = useCallback(async (lead: RawLead): Promise<string | null> => {
     const { error } = await supabase.from('raw_leads').update({ status: 'rejected' }).eq('id', lead.id);

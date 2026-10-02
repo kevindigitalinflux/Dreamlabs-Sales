@@ -22,12 +22,14 @@ function sanitizedString(value: unknown): string | undefined {
   return typeof value === 'string' ? value.slice(0, MAX_TEXT_LEN) : undefined;
 }
 
-function sanitizePatch(raw: unknown, allowedPackages: Set<PackageTier>): DreamAgentUpdatePatch {
+function sanitizePatch(raw: unknown, allowedPackages: Set<PackageTier>, allowedIcpIds: Set<string>): DreamAgentUpdatePatch {
   if (typeof raw !== 'object' || raw === null) return {};
   const r = raw as Record<string, unknown>;
   const patch: DreamAgentUpdatePatch = {};
   if (typeof r.stage === 'string' && STAGE_VALUES.has(r.stage as Stage)) patch.stage = r.stage as Stage;
   if (typeof r.package_tier === 'string' && allowedPackages.has(r.package_tier)) patch.package_tier = r.package_tier;
+  // Only a real profile id from this org; an invented one is dropped.
+  if (typeof r.icp_id === 'string' && allowedIcpIds.has(r.icp_id)) patch.icp_id = r.icp_id;
   if (typeof r.deal_value === 'number' && Number.isFinite(r.deal_value) && r.deal_value >= 0) patch.deal_value = r.deal_value;
   if (typeof r.next_action_date === 'string' && isValidDateOnly(r.next_action_date)) patch.next_action_date = r.next_action_date;
   const nextActionNote = sanitizedString(r.next_action_note);
@@ -81,7 +83,7 @@ export function splitContactPatch(
  * to the AI in the lead index; any lead_id/candidate id outside that set is
  * dropped, never trusted — the AI is never a source of truth for which leads exist.
  */
-export function sanitizeDreamAgentActions(raw: unknown, validLeadIds: Set<string>, allowedPackages: Set<PackageTier> = DEFAULT_PACKAGE_VALUES): DreamAgentAction[] {
+export function sanitizeDreamAgentActions(raw: unknown, validLeadIds: Set<string>, allowedPackages: Set<PackageTier> = DEFAULT_PACKAGE_VALUES, allowedIcpIds: Set<string> = new Set()): DreamAgentAction[] {
   if (!Array.isArray(raw)) return [];
   const actions: DreamAgentAction[] = [];
 
@@ -95,7 +97,7 @@ export function sanitizeDreamAgentActions(raw: unknown, validLeadIds: Set<string
       if (businessName === undefined) continue;
       const excerpt = sanitizedString(r.excerpt) ?? '';
       const rationale = sanitizedString(r.rationale) ?? '';
-      actions.push({ type: 'update', lead_id: r.lead_id, business_name: businessName, patch: sanitizePatch(r.patch, allowedPackages), excerpt, rationale });
+      actions.push({ type: 'update', lead_id: r.lead_id, business_name: businessName, patch: sanitizePatch(r.patch, allowedPackages, allowedIcpIds), excerpt, rationale });
       continue;
     }
 
@@ -121,7 +123,7 @@ export function sanitizeDreamAgentActions(raw: unknown, validLeadIds: Set<string
         },
         // A new lead usually comes with what happened (visited → contacted, a
         // follow-up date…), which used to be dropped since only `update` had a patch.
-        patch: sanitizePatch(r.patch, allowedPackages),
+        patch: sanitizePatch(r.patch, allowedPackages, allowedIcpIds),
         excerpt, rationale,
       });
       continue;

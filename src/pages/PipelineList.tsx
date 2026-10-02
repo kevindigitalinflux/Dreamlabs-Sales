@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
-import { Download, Inbox, PenLine, Plus, Radar, Trash2, UserSearch } from 'lucide-react';
+import { Download, Inbox, PenLine, Plus, Radar, Tag, Trash2, UserSearch } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLeads } from '../hooks/useLeads';
 import { useProfiles } from '../hooks/useProfiles';
@@ -17,6 +17,8 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { Listbox } from '../components/ui/Listbox';
 import { AddLeadWizard } from '../components/pipeline/AddLeadWizard';
 import { BulkDraftModal } from '../components/pipeline/BulkDraftModal';
+import { BulkProfileModal } from '../components/pipeline/BulkProfileModal';
+import { useIcps } from '../hooks/useIcps';
 import { EnrichmentReview } from '../components/pipeline/EnrichmentReview';
 import { DecisionMakerReview } from '../components/pipeline/DecisionMakerReview';
 import { FilterBar } from '../components/pipeline/FilterBar';
@@ -41,7 +43,9 @@ export function PipelineList() {
   const urlStage = searchParams.get('stage');
   const initialStages = STAGES.some((s) => s.value === urlStage) ? [urlStage as Stage] : [];
 
-  const [filters, setFilters] = useState<LeadFilters>({ search: '', stages: initialStages, assignees: [], overdueOnly: false });
+  const [filters, setFilters] = useState<LeadFilters>({ search: '', stages: initialStages, assignees: [], overdueOnly: false, icps: [] });
+  const { icps } = useIcps();
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('business_name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -235,6 +239,12 @@ export function PipelineList() {
             <PenLine className="h-4 w-4" aria-hidden />
             Draft emails
           </Button>
+          {icps.length > 0 && (
+            <Button variant="secondary" onClick={() => setProfileModalOpen(true)}>
+              <Tag className="h-4 w-4" aria-hidden />
+              Customer profile
+            </Button>
+          )}
           <Button variant="secondary" onClick={() => void handleFindDecisionMaker()} disabled={findingDecisionMakers} loading={findingDecisionMakers}>
             <UserSearch className="h-4 w-4" aria-hidden />
             {findingDecisionMakers ? 'Searching…' : 'Find decision maker'}
@@ -266,7 +276,7 @@ export function PipelineList() {
         </div>
       )}
 
-      <FilterBar filters={filters} onChange={setFilters} profiles={profiles.filter((p) => p.role === 'contractor')} />
+      <FilterBar filters={filters} onChange={setFilters} profiles={profiles.filter((p) => p.role === 'contractor')} icps={icps} />
 
       {loading && <Skeleton className="h-64 w-full" />}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
@@ -303,6 +313,14 @@ export function PipelineList() {
         leadsById={leadsById}
         onClose={() => setReviewOpen(false)}
         onApply={handleApplyEnrichment}
+      />
+      <BulkProfileModal
+        open={profileModalOpen}
+        leads={[...selected].map((id) => leadsById[id]).filter((l): l is Lead => l !== undefined)}
+        icps={icps}
+        onClose={() => setProfileModalOpen(false)}
+        onAssign={(leadId, icpId) => updateLead(leadId, { icp_id: icpId })}
+        onDone={() => setSelected(new Set())}
       />
       <BulkDraftModal
         open={draftModalOpen}

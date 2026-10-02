@@ -29,7 +29,7 @@ export function ScraperJob() {
   const { job, rawLeads, loading, refresh } = useScrapeJob(id!);
   const { pipelines } = usePipeline();
   const [pipelineId, setPipelineId] = useState('');
-  const { approve, reject, skip, enrichWithApollo, enrichWithHunter } = useRawLeadActions(job?.org_id, pipelineId);
+  const { approve, reject, skip, enrichWithApollo, enrichWithHunter } = useRawLeadActions(job?.org_id, pipelineId, job?.icp_id);
   const { settings } = useOrgApiSettings();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null);

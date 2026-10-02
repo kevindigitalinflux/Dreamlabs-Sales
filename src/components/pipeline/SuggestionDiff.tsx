@@ -1,6 +1,6 @@
 import { ArrowRight, Sparkles } from 'lucide-react';
 import { formatCurrency, packageLabel, PACKAGE_TIERS, stageInfo, STAGES } from '../../lib/utils';
-import type { PackageTier } from '../../types';
+import type { IdealCustomerProfile, PackageTier } from '../../types';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import type { Lead, LeadSuggestion } from '../../types';
 import { Button } from '../ui/Button';
@@ -24,9 +24,10 @@ function sanitizedString(value: unknown): string | undefined {
  * Unknown shapes, out-of-range enums, and malformed values are dropped field-by-field
  * rather than rejecting the whole suggestion — a partially-useful suggestion is still useful.
  * Returns null only when `raw` isn't a plausible suggestion object at all.
- * `allowedPackages` is the current org's package list (defaults to the built-in one).
+ * `allowedPackages` is the current org's package list (defaults to the built-in one);
+ * `allowedIcpIds` the ids of its customer profiles, so an invented id is dropped.
  */
-export function sanitizeSuggestion(raw: unknown, allowedPackages: Set<PackageTier> = DEFAULT_PACKAGE_VALUES): LeadSuggestion | null {
+export function sanitizeSuggestion(raw: unknown, allowedPackages: Set<PackageTier> = DEFAULT_PACKAGE_VALUES, allowedIcpIds: Set<string> = new Set()): LeadSuggestion | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const r = raw as Record<string, unknown>;
 
@@ -35,6 +36,7 @@ export function sanitizeSuggestion(raw: unknown, allowedPackages: Set<PackageTie
   if (typeof r.stage === 'string' && STAGE_VALUES.has(r.stage as Lead['stage'])) {
     suggestion.stage = r.stage as LeadSuggestion['stage'];
   }
+  if (typeof r.icp_id === 'string' && allowedIcpIds.has(r.icp_id)) suggestion.icp_id = r.icp_id;
   if (typeof r.package_tier === 'string' && allowedPackages.has(r.package_tier)) {
     suggestion.package_tier = r.package_tier as LeadSuggestion['package_tier'];
   }
@@ -59,11 +61,15 @@ interface SuggestionDiffProps {
   suggestion: LeadSuggestion;
   onApply: (patch: LeadPatch) => void;
   onDismiss: () => void;
+  /** The org's customer profiles, to show a suggested profile by name. */
+  icps?: IdealCustomerProfile[];
 }
 
 /** Current → suggested field diff for parse-notes output. Nothing applies without the click. */
-export function SuggestionDiff({ lead, suggestion, onApply, onDismiss }: SuggestionDiffProps) {
+export function SuggestionDiff({ lead, suggestion, onApply, onDismiss, icps = [] }: SuggestionDiffProps) {
   const rows: { label: string; from: string; to: string }[] = [];
+  const icpName = (id: string | null | undefined) => (id ? (icps.find((p) => p.id === id)?.name ?? '—') : '—');
+  if (suggestion.icp_id && suggestion.icp_id !== lead.icp_id) rows.push({ label: 'Customer profile', from: icpName(lead.icp_id), to: icpName(suggestion.icp_id) });
   if (suggestion.stage && suggestion.stage !== lead.stage) rows.push({ label: 'Stage', from: stageInfo(lead.stage).label, to: stageInfo(suggestion.stage).label });
   if (suggestion.deal_value !== undefined && suggestion.deal_value !== lead.deal_value) rows.push({ label: 'Deal value', from: lead.deal_value !== null ? formatCurrency(lead.deal_value) : '—', to: formatCurrency(suggestion.deal_value) });
   if (suggestion.package_tier && suggestion.package_tier !== lead.package_tier) rows.push({ label: 'Package', from: packageLabel(lead.package_tier), to: packageLabel(suggestion.package_tier) });
@@ -76,6 +82,7 @@ export function SuggestionDiff({ lead, suggestion, onApply, onDismiss }: Suggest
     if (suggestion.stage) patch.stage = suggestion.stage;
     if (suggestion.deal_value !== undefined) patch.deal_value = suggestion.deal_value;
     if (suggestion.package_tier) patch.package_tier = suggestion.package_tier;
+    if (suggestion.icp_id) patch.icp_id = suggestion.icp_id;
     if (suggestion.next_action_date) patch.next_action_date = suggestion.next_action_date;
     if (suggestion.next_action_note) patch.next_action_note = suggestion.next_action_note;
     onApply(patch);
