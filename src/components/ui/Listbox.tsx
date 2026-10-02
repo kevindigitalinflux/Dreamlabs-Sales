@@ -189,6 +189,7 @@ export function Listbox({ value, onChange, children, id, ariaLabel, disabled, cl
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
+        title={typeof selected?.label === 'string' ? selected.label : undefined}
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
         onKeyDown={handleTriggerKeyDown}
@@ -254,6 +255,8 @@ function ListboxOption({ opt, selected, highlighted, onSelect, onHover }: {
       role="option"
       aria-selected={selected}
       aria-disabled={opt.disabled}
+      // Long names are cut off with an ellipsis; hovering shows the whole thing.
+      title={typeof opt.label === 'string' ? opt.label : undefined}
       onMouseEnter={onHover}
       onClick={() => !opt.disabled && onSelect()}
       className={`flex min-h-9 cursor-pointer items-center justify-between gap-2 rounded-md px-2 text-sm ${
