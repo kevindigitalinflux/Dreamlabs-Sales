@@ -8,6 +8,8 @@ import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 import { Skeleton } from '../ui/Skeleton';
 import { TemplateEditor } from './TemplateEditor';
+import { CategoryBadge, CategoryFilter } from './CategoryControls';
+import { distinctCategories, matchesCategory, normalizeCategory } from '../../lib/categories';
 
 /** Template library: defaults first, then own; click to edit (own or admin), New to create. */
 export function TemplateList() {
@@ -15,6 +17,7 @@ export function TemplateList() {
   const { session } = useAuth();
   const { currentOrg } = useOrg();
   const [editing, setEditing] = useState<EmailTemplate | null | 'new'>(null);
+  const [categoryFilter, setCategoryFilter] = useState('');
 
   const canEdit = (t: EmailTemplate) => currentOrg?.role === 'admin' || t.created_by === session?.user.id;
 
@@ -23,18 +26,25 @@ export function TemplateList() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="self-end">
-        <Button onClick={() => setEditing('new')}><Plus className="h-4 w-4" aria-hidden />New template</Button>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <CategoryFilter
+          value={categoryFilter}
+          onChange={setCategoryFilter}
+          categories={distinctCategories(templates)}
+          hasUncategorised={templates.some((t) => normalizeCategory(t.category) === null)}
+        />
+        <Button className="ml-auto" onClick={() => setEditing('new')}><Plus className="h-4 w-4" aria-hidden />New template</Button>
       </div>
       {templates.length === 0 && <EmptyState icon={FileText} title="No templates yet" hint="Create your first template to draft emails faster." />}
       <ul className="grid gap-3 md:grid-cols-2">
-        {templates.map((t) => (
+        {templates.filter((t) => matchesCategory(t, categoryFilter)).map((t) => (
           <li key={t.id}>
             <button type="button" onClick={() => canEdit(t) ? setEditing(t) : undefined}
               className={`w-full rounded-xl border border-line bg-card p-4 text-left ${canEdit(t) ? 'cursor-pointer hover:bg-surface/50' : 'cursor-default'}`}>
               <div className="flex items-center gap-2">
                 <span className="font-heading text-sm font-bold">{t.name}</span>
                 {t.is_default && <Star className="h-3.5 w-3.5 text-warning" aria-label="Default template" />}
+                <CategoryBadge category={t.category} />
                 {(t.attachments ?? []).length > 0 && (
                   <span className="flex items-center gap-0.5 text-xs text-muted" title={(t.attachments ?? []).map((a) => a.name).join(', ')}>
                     <Paperclip className="h-3.5 w-3.5" aria-hidden /> {(t.attachments ?? []).length}

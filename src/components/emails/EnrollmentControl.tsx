@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pause, Play, Repeat, XCircle } from 'lucide-react';
 import { useEnrollments } from '../../hooks/useEnrollments';
 import { useSequences } from '../../hooks/useSequences';
+import { categoryLabel, compareByCategory } from '../../lib/categories';
 import { formatShortDate } from '../../lib/utils';
 import type { Lead } from '../../types';
 import { Button } from '../ui/Button';
@@ -33,7 +34,7 @@ export function EnrollmentControl({ lead }: { lead: Lead }) {
           <div className="flex-1">
             <SelectField label="Enroll in sequence" value={picked} onChange={(e) => setPicked(e.target.value)}>
               <option value="">Choose…</option>
-              {sequences.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {[...sequences].sort(compareByCategory).map((s) => <option key={s.id} value={s.id}>{categoryLabel(s.name, s.category)}</option>)}
             </SelectField>
           </div>
           <Button onClick={() => picked && void run(() => enroll(picked))} disabled={busy || !picked || !lead.email} loading={busy}>

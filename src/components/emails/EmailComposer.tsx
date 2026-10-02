@@ -10,6 +10,7 @@ import { Input, SelectField, Textarea } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { AttachmentFiles } from './AttachmentFiles';
 import { InsertLink } from './InsertLink';
+import { categoryLabel, compareByCategory } from '../../lib/categories';
 import { appendLinkToBody } from '../../lib/emailAttachments';
 import type { EmailAttachment } from '../../lib/emailAttachments';
 
@@ -216,7 +217,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
         )}
         <SelectField label="Template" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
           <option value="">Choose…</option>
-          {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          {[...templates].sort(compareByCategory).map((t) => <option key={t.id} value={t.id}>{categoryLabel(t.name, t.category)}</option>)}
         </SelectField>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={() => void generate(false)} disabled={busy !== null} loading={busy === 'load'}>{busy === 'load' ? 'Loading…' : 'Use template'}</Button>

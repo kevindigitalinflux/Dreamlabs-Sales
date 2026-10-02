@@ -6,6 +6,9 @@ import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Plus, Trash2 } from 'lucide-react';
 import { timelineLabel } from '../../lib/sequenceMath';
 import { useTemplates } from '../../hooks/useTemplates';
+import { useCategories } from '../../hooks/useCategories';
+import { categoryLabel, compareByCategory, normalizeCategory } from '../../lib/categories';
+import { CategoryField } from './CategoryControls';
 import type { SequenceInput } from '../../hooks/useSequences';
 import { stepFieldsFromValue, stepTemplateValue } from '../../lib/sequenceSteps';
 import type { EmailSequence, SequenceStep } from '../../types';
@@ -70,15 +73,17 @@ function StepCard({ index, step, standard, custom, onChange, onRemove }: {
 export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }: SequenceBuilderProps) {
   const { templates } = useTemplates();
   const standardOptions: TemplateOption[] = templates.filter((t) => t.is_default && t.template_type !== 'custom')
-    .map((t) => ({ value: `type:${t.template_type}`, label: t.name }));
+    .sort(compareByCategory).map((t) => ({ value: `type:${t.template_type}`, label: categoryLabel(t.name, t.category) }));
   // Templates created in Emails, Templates all have the generic type 'custom', so a step
   // has to point at them by id; they were missing from this list entirely before.
   const customOptions: TemplateOption[] = templates.filter((t) => t.template_type === 'custom')
-    .map((t) => ({ value: `id:${t.id}`, label: t.name }));
+    .sort(compareByCategory).map((t) => ({ value: `id:${t.id}`, label: categoryLabel(t.name, t.category) }));
   const [form, setForm] = useState<SequenceInput>({
     name: sequence?.name ?? '', description: sequence?.description ?? null,
     steps: sequence?.steps ?? [], is_default: sequence?.is_default ?? false,
+    category: sequence?.category ?? '',
   });
+  const categorySuggestions = useCategories();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -98,7 +103,7 @@ export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }
     if (!form.name.trim()) return setError('Give the sequence a name.');
     if (form.steps.length === 0) return setError('Add at least one step.');
     setBusy(true);
-    const err = await onSave(form, sequence?.id);
+    const err = await onSave({ ...form, category: normalizeCategory(form.category) }, sequence?.id);
     setBusy(false);
     if (err) return setError(err);
     onClose();
@@ -108,6 +113,7 @@ export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }
     <Modal open onClose={onClose} title={sequence ? `Edit — ${sequence.name}` : 'New sequence'}>
       <div className="flex flex-col gap-4">
         <Input label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+        <CategoryField value={form.category ?? ''} onChange={(category) => setForm((f) => ({ ...f, category }))} suggestions={categorySuggestions} />
         <Input label="Description (optional)" value={form.description ?? ''} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value || null }))} />
         <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={form.steps.map((_, i) => `step-${i}`)} strategy={verticalListSortingStrategy}>

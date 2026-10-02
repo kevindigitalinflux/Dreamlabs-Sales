@@ -5,6 +5,7 @@ import { useOrg } from '../../hooks/useOrg';
 import { useTemplates } from '../../hooks/useTemplates';
 import { readableInvokeError } from '../../lib/invokeError';
 import { supabase } from '../../lib/supabase';
+import { categoryLabel, compareByCategory } from '../../lib/categories';
 import type { EmailAttachment } from '../../lib/emailAttachments';
 import type { DecisionMakerCandidate, Lead } from '../../types';
 import { Button } from '../ui/Button';
@@ -121,7 +122,7 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
         )}
         <SelectField label="Template" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
           <option value="">Choose…</option>
-          {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          {[...templates].sort(compareByCategory).map((t) => <option key={t.id} value={t.id}>{categoryLabel(t.name, t.category)}</option>)}
         </SelectField>
         {(() => {
           const chosen = templates.find((t) => t.id === templateId);

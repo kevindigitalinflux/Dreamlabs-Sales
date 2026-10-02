@@ -151,6 +151,8 @@ export interface EmailTemplate {
   attachments: EmailAttachment[];
   /** Links (videos included) appended to the end of the email body. */
   links: EmailLink[];
+  /** Free-text grouping (e.g. 'Property managers'); null = uncategorised. */
+  category: string | null;
 }
 
 export interface SequenceStep {
@@ -167,6 +169,8 @@ export interface EmailSequence {
   description: string | null;
   steps: SequenceStep[];
   is_default: boolean;
+  /** Free-text grouping (e.g. 'Property managers'); null = uncategorised. */
+  category: string | null;
   auto_draft_on_reply: boolean;
   created_by: string | null;
   created_at: string;

@@ -12,6 +12,7 @@ export interface TemplateInput {
   is_default: boolean;
   attachments: EmailAttachment[];
   links: EmailLink[];
+  category: string | null;
 }
 
 /** Email templates (defaults + own). RLS scopes visibility; admin may toggle is_default. */

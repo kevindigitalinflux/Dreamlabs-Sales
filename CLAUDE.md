@@ -1520,6 +1520,16 @@ re-select; `lib/dismissDecisionMaker.ts` also marks the person's `linkedin_conta
 leads" straight from the Find decision maker results. The note-edit textarea on the full record was a narrow strip
 (its flex column had no `flex-1`); fixed and now grows with the note.
 
+**Categories for templates and sequences (2026-10-02).** Migration `043`: nullable free-text `category` on
+`email_templates` and `email_sequences` (purely organisational, nothing server-side reads it). Rules live in
+`lib/categories.ts` (tested): `normalizeCategory`, `categoryLabel` (puts the category FIRST, "Property managers · Intro
+email", so it survives truncation), `compareByCategory` (groups A–Z case-insensitively, uncategorised last),
+`distinctCategories`, `matchesCategory`. `components/emails/CategoryControls.tsx` has `CategoryField` (type-ahead from
+categories already in use, via `hooks/useCategories.ts`, templates and sequences share one vocabulary),
+`CategoryFilter` and `CategoryBadge`. The category shows as a tag and filter on `TemplateList`/`SequenceList`, and in
+every picker: `EmailComposer`, `BulkDraftModal`, `EnrollmentControl` and the `SequenceBuilder` step dropdowns. Renaming or
+merging a category is not built (edit each item); the seeded default templates/sequences are uncategorised.
+
 **Known gaps / candidates for next time:** Log note (`parse-notes`) still only suggests stage/deal/package/next
 action — it does not extract contact fields the way Dream Agent now does; bulk email drafting (`BulkDraftModal`)
 uses each lead's primary email only and can't add one-off attachments (only the template's); `check-replies`'

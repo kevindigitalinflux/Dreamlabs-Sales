@@ -9,6 +9,8 @@ import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 import { Skeleton } from '../ui/Skeleton';
 import { SequenceBuilder } from './SequenceBuilder';
+import { CategoryBadge, CategoryFilter } from './CategoryControls';
+import { distinctCategories, matchesCategory, normalizeCategory } from '../../lib/categories';
 
 /** Sequence library: defaults first, then own; click to edit (own or admin), New to create. */
 export function SequenceList() {
@@ -16,6 +18,7 @@ export function SequenceList() {
   const { session } = useAuth();
   const { currentOrg } = useOrg();
   const [editing, setEditing] = useState<EmailSequence | null | 'new'>(null);
+  const [categoryFilter, setCategoryFilter] = useState('');
 
   const canEdit = (s: EmailSequence) => currentOrg?.role === 'admin' || s.created_by === session?.user.id;
 
@@ -24,18 +27,25 @@ export function SequenceList() {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="self-end">
-        <Button onClick={() => setEditing('new')}><Plus className="h-4 w-4" aria-hidden />New sequence</Button>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <CategoryFilter
+          value={categoryFilter}
+          onChange={setCategoryFilter}
+          categories={distinctCategories(sequences)}
+          hasUncategorised={sequences.some((s) => normalizeCategory(s.category) === null)}
+        />
+        <Button className="ml-auto" onClick={() => setEditing('new')}><Plus className="h-4 w-4" aria-hidden />New sequence</Button>
       </div>
       {sequences.length === 0 && <EmptyState icon={ListOrdered} title="No sequences yet" hint="Create your first sequence to automate follow-ups." />}
       <ul className="grid gap-3 md:grid-cols-2">
-        {sequences.map((s) => (
+        {sequences.filter((s) => matchesCategory(s, categoryFilter)).map((s) => (
           <li key={s.id}>
             <button type="button" onClick={() => canEdit(s) ? setEditing(s) : undefined}
               className={`w-full rounded-xl border border-line bg-card p-4 text-left ${canEdit(s) ? 'cursor-pointer hover:bg-surface/50' : 'cursor-default'}`}>
               <div className="flex items-center gap-2">
                 <span className="font-heading text-sm font-bold">{s.name}</span>
                 {s.is_default && <Star className="h-3.5 w-3.5 text-warning" aria-label="Default sequence" />}
+                <CategoryBadge category={s.category} />
               </div>
               {s.description && <p className="mt-1 truncate text-sm text-muted">{s.description}</p>}
               <p className="mt-2 text-xs text-muted">{s.steps.length} {s.steps.length === 1 ? 'step' : 'steps'}</p>

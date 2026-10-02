@@ -2,6 +2,9 @@ import { useRef, useState } from 'react';
 import { substituteVariables, TEMPLATE_VARIABLES } from '../../lib/templateVars';
 import { linksBlock } from '../../lib/emailAttachments';
 import { useOrg } from '../../hooks/useOrg';
+import { useCategories } from '../../hooks/useCategories';
+import { normalizeCategory } from '../../lib/categories';
+import { CategoryField } from './CategoryControls';
 import type { TemplateInput } from '../../hooks/useTemplates';
 import type { EmailTemplate } from '../../types';
 import { Button } from '../ui/Button';
@@ -32,7 +35,9 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
     name: template?.name ?? '', subject: template?.subject ?? '',
     body: template?.body ?? '', is_default: template?.is_default ?? false,
     attachments: template?.attachments ?? [], links: template?.links ?? [],
+    category: template?.category ?? '',
   });
+  const categorySuggestions = useCategories();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -48,7 +53,7 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
   async function handleSave() {
     if (!form.name.trim() || !form.subject.trim() || !form.body.trim()) return setError('Name, subject and body are all required.');
     setBusy(true);
-    const err = await onSave(form, template?.id);
+    const err = await onSave({ ...form, category: normalizeCategory(form.category) }, template?.id);
     setBusy(false);
     if (err) return setError(err);
     onClose();
@@ -68,6 +73,7 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
     <Modal open onClose={onClose} title={template ? `Edit — ${template.name}` : 'New template'}>
       <div className="flex flex-col gap-4">
         <Input label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+        <CategoryField value={form.category ?? ''} onChange={(category) => setForm((f) => ({ ...f, category }))} suggestions={categorySuggestions} />
         <Input label="Subject" value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} />
         {currentOrg && (
           <div className="flex flex-col gap-4 rounded-lg border border-line p-3">
