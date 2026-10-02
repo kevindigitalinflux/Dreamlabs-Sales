@@ -11,6 +11,7 @@ import { Input, Textarea } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { Skeleton } from '../components/ui/Skeleton';
 import { CompanyProfileCard } from '../components/settings/CompanyProfileCard';
+import { IdealCustomerProfilesCard } from '../components/settings/IdealCustomerProfilesCard';
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
@@ -176,6 +177,7 @@ export function Settings() {
         </div>
       </Card>
       {currentOrg && <CompanyContextCard orgId={currentOrg.id} orgName={currentOrg.name} isOrgAdmin={currentOrg.role === 'admin'} />}
+      {currentOrg && <IdealCustomerProfilesCard isOrgAdmin={currentOrg.role === 'admin'} />}
       <CompanyProfileCard />
       <Link to="/settings/email" className="block rounded-xl border border-line bg-card p-5 hover:bg-surface/50">
         <h2 className="text-[18px] font-bold">Email sending</h2>

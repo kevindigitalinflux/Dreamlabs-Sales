@@ -5,7 +5,7 @@ import type { Lead } from '../types';
 function makeLead(overrides: Partial<Lead>): Lead {
   return {
     id: 'x', business_name: 'Acme Ltd', owner_name: null, phone: null, email: null,
-    website: null, additional_emails: [], additional_phones: [], additional_websites: [], additional_owners: [], address: null, city: null, postcode: null,
+    website: null, additional_emails: [], additional_phones: [], additional_websites: [], additional_owners: [], icp_id: null, address: null, city: null, postcode: null,
     google_rating: null, review_count: null, vertical: null,
     stage: 'new_lead', package_tier: null, deal_value: null,
     assigned_to: null, created_by: null, raw_lead_id: null,
@@ -56,6 +56,12 @@ describe('buildTemplateVars', () => {
   it('extracts pain_point from a debrief note when present', () => {
     const notes = ['Call outcome: Positive\n\nMain pain point:\nNo online booking\n\nObjections:\nCost'];
     expect(buildTemplateVars(lead, 'Kevin', notes).pain_point).toBe('No online booking');
+  });
+  it('falls back to the customer profile\'s pain point only when the lead has none noted', () => {
+    const notes = ['Main pain point:\nNo online booking'];
+    expect(buildTemplateVars(lead, 'Kevin', notes, 'Chasing late rent').pain_point).toBe('No online booking');
+    expect(buildTemplateVars(lead, 'Kevin', [], 'Chasing late rent').pain_point).toBe('Chasing late rent');
+    expect(buildTemplateVars(lead, 'Kevin', [], null).pain_point).toBeNull();
   });
   it('leaves unresolvable vars null', () => {
     const v = buildTemplateVars(makeLead({}), 'Kevin');

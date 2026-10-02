@@ -1530,6 +1530,22 @@ categories already in use, via `hooks/useCategories.ts`, templates and sequences
 every picker: `EmailComposer`, `BulkDraftModal`, `EnrollmentControl` and the `SequenceBuilder` step dropdowns. Renaming or
 merging a category is not built (edit each item); the seeded default templates/sequences are uncategorised.
 
+**Ideal customer profiles (2026-10-02).** Kevin wanted `{{pain_point}}` and the AI to speak to a specific kind of
+customer. Migration `044`: `ideal_customer_profiles` (org-scoped: `name`, `summary`, `pain_points` one per line,
+`goals`, `objections`, `messaging_notes`, `extra_context`; unique per org on `lower(name)`; RLS = any member reads,
+org admins write, same split as `company_context`) plus nullable `icp_id` (`ON DELETE SET NULL`) on `email_templates`,
+`email_sequences` and `leads`. UI: Settings → "Ideal customer profiles" directly under Company context
+(`components/settings/IdealCustomerProfilesCard.tsx` + `IcpEditor.tsx`, `hooks/useIcps.ts`; non-admins read only), and
+an `IcpSelect` ("Customer profile") in the template editor, sequence builder and the lead card's Pipeline section.
+**Which profile applies: the lead's own, else the template's, else the sequence's** (`resolveIcpId` in
+`_shared/icp.ts`). It does two things: `{{pain_point}}` uses the lead's own noted pain point first and falls back to
+the profile's TOP pain point (first line, bullets stripped; `buildTemplateVars` gained an `icpPainPoint` arg in both the
+Deno and browser copies), and the whole profile is added to the `draftEmail`/`draftEmailClaude` prompts as background
+("IDEAL CUSTOMER PROFILE… never state a fact about this lead that is not in the lead data"). Wired in `generate-email`
+(composer + bulk drafting) and `check-sequences`. `loadIcp` re-checks the profile belongs to the lead's own org because
+those functions use the service role. Not yet used: LinkedIn drafting, `check-replies` auto-drafts, the lead scraper's
+own "ICP" (a separate search-targeting concept, `scrape_jobs.icp_params`). Deleting a profile just un-assigns it.
+
 **Known gaps / candidates for next time:** Log note (`parse-notes`) still only suggests stage/deal/package/next
 action — it does not extract contact fields the way Dream Agent now does; bulk email drafting (`BulkDraftModal`)
 uses each lead's primary email only and can't add one-off attachments (only the template's); `check-replies`'

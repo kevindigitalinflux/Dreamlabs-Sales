@@ -74,13 +74,16 @@ async function claudeJson(prompt: string, model: ClaudeModel, apiKey: string, ma
 
 /** Personalises an already-variable-substituted draft using lead context + notes. Throws on failure. */
 export async function draftEmail(input: {
-  subject: string; body: string; lead: Record<string, unknown>; notes: string[]; contractorName: string; orgName: string; companyContext?: string | null; apiKey: string;
+  subject: string; body: string; lead: Record<string, unknown>; notes: string[]; contractorName: string; orgName: string; companyContext?: string | null; icpContext?: string | null; apiKey: string;
 }): Promise<{ subject: string; body: string }> {
   const result = await geminiJson(
 `${orgDescriptionLine(input.orgName, input.companyContext)}
 Personalise this follow-up email using the lead data and call notes. Keep it plain text, warm, brief, UK English.
 Do not invent facts not present in the data. Keep any URLs intact. ${DASH_GUARDRAIL_LINE} Return JSON: {"subject": string, "body": string}.
-
+${input.icpContext ? `
+IDEAL CUSTOMER PROFILE for this lead (who they are most like). Use it to choose which pain points, goals and objections to speak to, and the wording and tone that will resonate with them. Use it as background, not as text to quote, and never state a fact about this lead that is not in the lead data:
+${input.icpContext}
+` : ''}
 LEAD: ${JSON.stringify(input.lead)}
 RECENT CALL NOTES (newest first): ${JSON.stringify(input.notes)}
 SENDER NAME: ${input.contractorName}
@@ -265,7 +268,7 @@ ICP: ${JSON.stringify(input.icpParams)}`,
  */
 export async function draftEmailClaude(input: {
   subject: string; body: string; lead: Record<string, unknown>; notes: string[];
-  contractorName: string; orgName: string; companyContext?: string | null; apiKey: string; model: ClaudeModel;
+  contractorName: string; orgName: string; companyContext?: string | null; icpContext?: string | null; apiKey: string; model: ClaudeModel;
 }): Promise<{ subject: string; body: string }> {
   const result = await claudeJson(
 `${orgDescriptionLine(input.orgName, input.companyContext)}
@@ -273,7 +276,10 @@ Personalise this outreach email using the lead data and any notes (which may inc
 personalization talking points from an earlier research pass — use them as real context, not as
 text to quote verbatim). Keep it plain text, warm, brief, UK English. Do not invent facts not
 present in the data. Keep any URLs intact. ${DASH_GUARDRAIL_LINE} Return JSON: {"subject": string, "body": string}.
-
+${input.icpContext ? `
+IDEAL CUSTOMER PROFILE for this lead (who they are most like). Use it to choose which pain points, goals and objections to speak to, and the wording and tone that will resonate with them. Use it as background, not as text to quote, and never state a fact about this lead that is not in the lead data:
+${input.icpContext}
+` : ''}
 LEAD: ${JSON.stringify(input.lead)}
 NOTES (newest first): ${JSON.stringify(input.notes)}
 SENDER NAME: ${input.contractorName}

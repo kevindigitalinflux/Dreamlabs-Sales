@@ -32,11 +32,16 @@ export function substituteVariables(
   return { text: out, missing: [...missing] };
 }
 
-/** Builds the variable map for a lead. `notes` = latest note contents, newest first. */
+/**
+ * Builds the variable map for a lead. `notes` = latest note contents, newest first.
+ * `icpPainPoint` is the applicable customer profile's top pain point: {{pain_point}} uses the
+ * lead's own noted pain point first and only falls back to this when there is none.
+ */
 export function buildTemplateVars(
   lead: Lead,
   contractorName: string,
   notes: string[] = [],
+  icpPainPoint: string | null = null,
 ): Record<string, string | null> {
   const painPoint = notes
     .map((n) => /Main pain point:\n([^\n]+)/.exec(n)?.[1]?.trim() ?? null)
@@ -49,7 +54,7 @@ export function buildTemplateVars(
     package_name: lead.package_tier ? packageLabel(lead.package_tier) : null,
     deal_value: lead.deal_value !== null ? formatCurrency(lead.deal_value) : null,
     contractor_name: contractorName,
-    pain_point: painPoint,
+    pain_point: painPoint ?? icpPainPoint,
     cal_link: null,
     unsubscribe_url: `${import.meta.env.VITE_APP_URL ?? ''}/unsubscribe/${lead.id}`,
   };

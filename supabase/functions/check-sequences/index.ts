@@ -5,6 +5,7 @@ import type { ClaudeModel } from '../_shared/ai.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { buildTemplateVars, substituteVariables } from '../_shared/templateVars.ts';
 import { appendLinks, onlyOrgAttachments, parseAttachments, parseLinks } from '../_shared/emailAttachments.ts';
+import { formatIcpContext, loadIcp, resolveIcpId, topPainPoint } from '../_shared/icp.ts';
 
 interface Step { delay_days: number; template_type: string; template_id?: string | null; subject_override: string | null }
 
@@ -65,7 +66,7 @@ Deno.serve(async (req) => {
   for (const row of due ?? []) {
     const enrollment = row as Record<string, unknown> & {
       id: string; current_step: number; enrolled_by: string | null;
-      sequence: { steps: Step[]; auto_draft_on_reply: boolean } | null;
+      sequence: { steps: Step[]; auto_draft_on_reply: boolean; icp_id?: string | null } | null;
       lead: Record<string, unknown> | null;
     };
     const steps = enrollment.sequence?.steps ?? [];
@@ -180,7 +181,11 @@ Deno.serve(async (req) => {
       .order('created_at', { ascending: false }).limit(5);
     const noteTexts = (notesRows ?? []).map((n) => (n as { content: string }).content);
 
-    const vars = buildTemplateVars(lead, contractorName, noteTexts);
+    // Customer profile: the lead's own, else the step's template's, else the sequence's. Supplies
+    // {{pain_point}} when the lead has none noted, and context for the AI draft.
+    const icp = await loadIcp(service, orgId, resolveIcpId(lead.icp_id as string | null, template.icp_id as string | null, enrollment.sequence?.icp_id));
+    const icpContext = formatIcpContext(icp);
+    const vars = buildTemplateVars(lead, contractorName, noteTexts, topPainPoint(icp));
     const subject = substituteVariables((step.subject_override ?? template.subject) as string, vars);
     const bodyText = substituteVariables(template.body as string, vars);
 
@@ -245,7 +250,7 @@ Deno.serve(async (req) => {
       try {
         const { data: org } = await service.from('organizations').select('name, company_context').eq('id', orgId).maybeSingle();
         const orgName = org?.name ?? 'our team';
-        const ai = await draftEmailClaude({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, apiKey, model });
+        const ai = await draftEmailClaude({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, icpContext, apiKey, model });
         finalSubject = ai.subject; finalBody = ai.body;
         const ap = autopilotByOrg.get(orgId);
         if (ap) {
@@ -264,7 +269,7 @@ Deno.serve(async (req) => {
           const orgName = org?.name ?? 'our team';
           // Only the first 3 (of up to 5 fetched) — preserves the exact original
           // note-count this path saw before the outreach gates needed a wider window.
-          const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts.slice(0, 3), contractorName, orgName, companyContext: org?.company_context, apiKey });
+          const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts.slice(0, 3), contractorName, orgName, companyContext: org?.company_context, icpContext, apiKey });
           finalSubject = ai.subject; finalBody = ai.body;
         } catch (e) {
           console.error(`AI draft failed for enrollment ${enrollment.id}, using plain template:`, e);

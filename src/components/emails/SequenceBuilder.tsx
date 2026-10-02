@@ -7,6 +7,8 @@ import { GripVertical, Plus, Trash2 } from 'lucide-react';
 import { timelineLabel } from '../../lib/sequenceMath';
 import { useTemplates } from '../../hooks/useTemplates';
 import { useCategories } from '../../hooks/useCategories';
+import { useIcps } from '../../hooks/useIcps';
+import { IcpSelect } from './IcpSelect';
 import { categoryLabel, compareByCategory, normalizeCategory } from '../../lib/categories';
 import { CategoryField } from './CategoryControls';
 import type { SequenceInput } from '../../hooks/useSequences';
@@ -81,8 +83,9 @@ export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }
   const [form, setForm] = useState<SequenceInput>({
     name: sequence?.name ?? '', description: sequence?.description ?? null,
     steps: sequence?.steps ?? [], is_default: sequence?.is_default ?? false,
-    category: sequence?.category ?? '',
+    category: sequence?.category ?? '', icp_id: sequence?.icp_id ?? null,
   });
+  const { icps } = useIcps();
   const categorySuggestions = useCategories();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -114,6 +117,12 @@ export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }
       <div className="flex flex-col gap-4">
         <Input label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
         <CategoryField value={form.category ?? ''} onChange={(category) => setForm((f) => ({ ...f, category }))} suggestions={categorySuggestions} />
+        <IcpSelect
+          icps={icps}
+          value={form.icp_id}
+          onChange={(icp_id) => setForm((f) => ({ ...f, icp_id }))}
+          hint="The default customer profile for this sequence's emails. A step whose template has its own profile uses that instead, and a lead's own profile always wins."
+        />
         <Input label="Description (optional)" value={form.description ?? ''} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value || null }))} />
         <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={form.steps.map((_, i) => `step-${i}`)} strategy={verticalListSortingStrategy}>

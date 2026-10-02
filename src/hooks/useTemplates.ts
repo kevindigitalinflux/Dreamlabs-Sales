@@ -13,6 +13,7 @@ export interface TemplateInput {
   attachments: EmailAttachment[];
   links: EmailLink[];
   category: string | null;
+  icp_id: string | null;
 }
 
 /** Email templates (defaults + own). RLS scopes visibility; admin may toggle is_default. */

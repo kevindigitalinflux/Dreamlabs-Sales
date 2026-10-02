@@ -4,6 +4,8 @@ import type { Lead, LeadNote, PackageTier } from '../../types';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import { formatShortDate } from '../../lib/utils';
 import { useOrgPackages } from '../../hooks/useOrgPackages';
+import { useIcps } from '../../hooks/useIcps';
+import { IcpSelect } from '../emails/IcpSelect';
 import { AdditionalDetails } from './AdditionalDetails';
 import { EditableNote } from './EditableNote';
 import { Input, SelectField } from '../ui/Input';
@@ -115,6 +117,7 @@ export function PipelineInfo({ lead, onSave }: EditableSectionProps) {
   const [reviews, setReviews] = useState(lead.review_count?.toString() ?? '');
   const { status, setStatus, save } = useSectionSave(onSave);
   const packages = useOrgPackages();
+  const { icps } = useIcps();
 
   useEffect(() => {
     setDealValue(lead.deal_value?.toString() ?? '');
@@ -153,6 +156,13 @@ export function PipelineInfo({ lead, onSave }: EditableSectionProps) {
         <option value="">Not set</option>
         {packages.optionsFor(lead.package_tier).map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
       </SelectField>
+      <IcpSelect
+        icps={icps}
+        value={lead.icp_id}
+        onChange={(icp_id) => void save({ icp_id })}
+        label="Customer profile"
+        hint="Emails to this lead use this profile's pain points and context, ahead of the template's."
+      />
       <Input label="Deal value (£)" type="number" min="0" value={dealValue} onChange={(e) => setDealValue(e.target.value)} onBlur={() => saveNumber('deal_value', dealValue, lead.deal_value)} />
       <Input label="Vertical" value={vertical} onChange={(e) => setVertical(e.target.value)} onBlur={() => { if (vertical.trim() !== (lead.vertical ?? '')) void save({ vertical: vertical.trim() || null }); }} placeholder="e.g. Commercial cleaning" />
       <div className="flex gap-2">

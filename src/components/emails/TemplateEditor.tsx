@@ -3,6 +3,8 @@ import { substituteVariables, TEMPLATE_VARIABLES } from '../../lib/templateVars'
 import { linksBlock } from '../../lib/emailAttachments';
 import { useOrg } from '../../hooks/useOrg';
 import { useCategories } from '../../hooks/useCategories';
+import { useIcps } from '../../hooks/useIcps';
+import { IcpSelect } from './IcpSelect';
 import { normalizeCategory } from '../../lib/categories';
 import { CategoryField } from './CategoryControls';
 import type { TemplateInput } from '../../hooks/useTemplates';
@@ -35,8 +37,9 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
     name: template?.name ?? '', subject: template?.subject ?? '',
     body: template?.body ?? '', is_default: template?.is_default ?? false,
     attachments: template?.attachments ?? [], links: template?.links ?? [],
-    category: template?.category ?? '',
+    category: template?.category ?? '', icp_id: template?.icp_id ?? null,
   });
+  const { icps } = useIcps();
   const categorySuggestions = useCategories();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -74,6 +77,12 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
       <div className="flex flex-col gap-4">
         <Input label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
         <CategoryField value={form.category ?? ''} onChange={(category) => setForm((f) => ({ ...f, category }))} suggestions={categorySuggestions} />
+        <IcpSelect
+          icps={icps}
+          value={form.icp_id}
+          onChange={(icp_id) => setForm((f) => ({ ...f, icp_id }))}
+          hint="Who this template is written for. {{pain_point}} uses their top pain point when a lead has none noted, and the AI is given the whole profile so the email resonates."
+        />
         <Input label="Subject" value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} />
         {currentOrg && (
           <div className="flex flex-col gap-4 rounded-lg border border-line p-3">

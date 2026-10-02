@@ -43,6 +43,8 @@ export interface Lead {
   phone: string | null;
   email: string | null;
   website: string | null;
+  /** The ideal customer profile this lead is most like; overrides its template's/sequence's profile when drafting. */
+  icp_id: string | null;
   /** Extra values kept alongside the primary email/phone/website/owner (e.g. from Fill missing details). */
   additional_emails: string[];
   additional_phones: string[];
@@ -153,6 +155,8 @@ export interface EmailTemplate {
   links: EmailLink[];
   /** Free-text grouping (e.g. 'Property managers'); null = uncategorised. */
   category: string | null;
+  /** The ideal customer profile this template is written for (see lib/icp). */
+  icp_id: string | null;
 }
 
 export interface SequenceStep {
@@ -171,6 +175,8 @@ export interface EmailSequence {
   is_default: boolean;
   /** Free-text grouping (e.g. 'Property managers'); null = uncategorised. */
   category: string | null;
+  /** Default customer profile for steps whose template has none of its own. */
+  icp_id: string | null;
   auto_draft_on_reply: boolean;
   created_by: string | null;
   created_at: string;
@@ -441,4 +447,19 @@ export interface OutreachBlocklistEntry {
   reason: string | null;
   created_by: string | null;
   created_at: string;
+}
+
+/** An org's ideal customer profile: who it sells to, and what resonates with them (migration 044). */
+export interface IdealCustomerProfile {
+  id: string;
+  org_id: string;
+  name: string;
+  summary: string | null;
+  pain_points: string | null;
+  goals: string | null;
+  objections: string | null;
+  messaging_notes: string | null;
+  extra_context: string | null;
+  created_at: string;
+  updated_at: string;
 }

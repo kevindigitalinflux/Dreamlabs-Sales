@@ -4,6 +4,7 @@ import { draftEmail } from '../_shared/ai.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { buildTemplateVars, substituteVariables } from '../_shared/templateVars.ts';
 import { appendLinks, onlyOrgAttachments, parseAttachments, parseLinks } from '../_shared/emailAttachments.ts';
+import { formatIcpContext, loadIcp, resolveIcpId, topPainPoint } from '../_shared/icp.ts';
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -46,7 +47,10 @@ Deno.serve(async (req) => {
   const { data: profile } = await client.from('profiles').select('full_name, email').eq('id', userData.user.id).single();
   const contractorName = (profile?.full_name ?? profile?.email ?? 'The Dreamlabs team').split(' ')[0]!;
 
-  const vars = buildTemplateVars(leadForDraft, contractorName, noteTexts);
+  // The customer profile that applies: the lead's own, else the template's. It supplies {{pain_point}}
+  // when the lead has no noted pain point, and context for the AI step below.
+  const icp = await loadIcp(service, (lead as { org_id: string }).org_id, resolveIcpId((lead as { icp_id?: string | null }).icp_id, template.icp_id as string | null));
+  const vars = buildTemplateVars(leadForDraft, contractorName, noteTexts, topPainPoint(icp));
   const subject = substituteVariables(template.subject as string, vars);
   const bodyText = substituteVariables(template.body as string, vars);
   const missing = [...new Set([...subject.missing, ...bodyText.missing])];
@@ -69,7 +73,7 @@ Deno.serve(async (req) => {
   const { data: org } = await service.from('organizations').select('name, company_context').eq('id', orgId).maybeSingle();
   const orgName = org?.name ?? 'our team';
   try {
-    const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: leadForDraft, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, apiKey });
+    const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: leadForDraft, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, icpContext: formatIcpContext(icp), apiKey });
     return respond(ai.subject, ai.body, true);
   } catch (e) {
     console.error('draftEmail failed, falling back to plain template:', e);

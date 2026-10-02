@@ -10,6 +10,7 @@ export interface SequenceInput {
   steps: SequenceStep[];
   is_default: boolean;
   category: string | null;
+  icp_id: string | null;
 }
 
 /** Email sequences (defaults + own), RLS-scoped like templates. */

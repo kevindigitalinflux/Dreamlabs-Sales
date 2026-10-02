@@ -47,11 +47,17 @@ export function substituteVariables(
   return { text: out, missing: [...missing] };
 }
 
-/** Builds the variable map for a lead. `notes` = latest note contents, newest first. */
+/**
+ * Builds the variable map for a lead. `notes` = latest note contents, newest first.
+ * `icpPainPoint` is the applicable customer profile's top pain point: {{pain_point}} uses the
+ * lead's own noted pain point first and only falls back to this when there is none.
+ * (Keep in sync with src/lib/templateVars.ts.)
+ */
 export function buildTemplateVars(
   lead: Record<string, unknown>,
   contractorName: string,
   notes: string[] = [],
+  icpPainPoint: string | null = null,
 ): Record<string, string | null> {
   const ownerName = lead.owner_name as string | null;
   const businessName = lead.business_name as string;
@@ -68,7 +74,7 @@ export function buildTemplateVars(
     package_name: packageTier ? packageLabel(packageTier) : null,
     deal_value: dealValue !== null ? formatCurrency(dealValue) : null,
     contractor_name: contractorName,
-    pain_point: painPoint,
+    pain_point: painPoint ?? icpPainPoint,
     cal_link: null,
     unsubscribe_url: `${(Deno.env.get('APP_ORIGINS') ?? 'http://localhost:5173').split(',')[0]}/unsubscribe/${lead.id as string}`,
   };
