@@ -178,13 +178,17 @@ vite.config.ts
 | `src/lib/enrichmentGrouping.ts` | Fill-missing-details apply logic: `splitEnrichmentChanges` (fill blanks / add as additional / replace), `mergeAdditions`, `ADDITIONAL_COLUMN` |
 | `src/lib/dreamAgentActions.ts` | Dream Agent action sanitizer + `splitContactPatch` (what a note may do to an existing lead's contact fields — never overwrites) |
 | `src/components/pipeline/AdditionalDetails.tsx` | Removable chips for a lead's `additional_emails/phones/websites/owners` |
-| `src/components/pipeline/EditableNote.tsx` | Inline note editing, shared by the full record and the pipeline card |
+| `src/components/pipeline/EditableNote.tsx` | Inline note editing + confirm-delete, shared by the full record and the pipeline card |
+| `src/lib/emailAttachments.ts` | Email attachment/link/video rules (types, limits, validation, upload, `appendLinkToBody`); mirrored server-side in `supabase/functions/_shared/emailAttachments.ts` |
+| `src/lib/sequenceSteps.ts` | Encodes a sequence step's template as `type:<kind>` (built-in) or `id:<uuid>` (a user's own template) |
+| `src/hooks/useVoiceDictation.ts` | The one dictation implementation (live transcript, appends to typed text); UI in `components/ui/VoiceControls.tsx` |
+| `src/lib/decisionMakerAdditions.ts` | What a decision-maker adds to a lead's additional fields, and whether it's already there |
 | `supabase/functions/_shared/googlePlacesLookup.ts` | Places website/phone lookup + `placeMatchStrength` name matcher for bulk enrichment |
 | `SPEC.md` | Full product spec — feature detail, schema, routes, design system |
 
 ---
 
-## Current Status (updated 2026-10-01 — newest work is the "Session 2026-09-29 → 2026-10-01" entry at the end of this section)
+## Current Status (updated 2026-10-02 — newest work is the "Session 2026-10-01 → 2026-10-02" entry at the end of this section, after "Session 2026-09-29 → 2026-10-01")
 **Working:** Cycle 1-2 (single-tenant foundation, full pipeline, email automation incl. AI-personalised
 composer/sequences/review queue) — see prior status below, all still functional. **Cycle 3 (multi-tenant
 foundation) is FULLY COMPLETE** — Tasks 1-12 done, controller-verified, and pushed:
@@ -1467,9 +1471,60 @@ inside its own list (its capture-phase window scroll handler now ignores scrolls
   redirect allow-list), so test auth flows on the live site or add `http://localhost:<port>/**` under Auth → URL
   Configuration. Edge-function CORS (`APP_ORIGINS`) likewise only allows `localhost:5173`.
 
+**Session 2026-10-01 → 2026-10-02: email attachments/links/videos, voice + delete polish, sequence templates.**
+Everything is on `main` (latest code commit `a408b3d`), migrations `041`/`042` are applied live, edge functions
+`send-email`, `generate-email`, `check-sequences`, `find-decision-makers` are deployed, 118 tests green.
+
+**Email templates can carry PDFs/images, links and videos** (a lead asked Kevin for a price list). Migration `041`:
+`email_templates.attachments` + `.links` and `email_logs.attachments` (all JSONB), plus two Storage buckets whose
+size/type limits are enforced by the bucket itself: `email-attachments` (PRIVATE; PDF/PNG/JPEG; 10 MB per file) and
+`email-media` (public read so recipients can open the link; MP4/MOV/WebM; 50 MB, Supabase Free's per-file ceiling).
+Objects live at `<org_id>/<uuid>/<name>` and storage policies only let members of that org insert/read/delete.
+How it flows: a template's files + links → `generate-email` returns `attachments` and appends the links block AFTER
+any AI rewrite (so the model can never alter a URL; `appendLinks` in `_shared/emailAttachments.ts`) → drafts store
+`email_logs.attachments` (composer, `BulkDraftModal`, `check-sequences` all do) → `send-email` takes an explicit
+`attachments` list or reads the draft's, validates it (allowed types only; every path must sit under the lead's/
+draft's OWN org folder; ≤ 10 MB total), downloads every file BEFORE sending (a missing file fails the send rather
+than silently omitting the price list), attaches via denomailer `encoding: 'binary'`, and records what was attached
+on the sent row. **denomailer writes attachment filenames into MIME headers unquoted, so `safeFilename()` sanitises
+them.** A shared (org-less) default template's files uploaded by another org are dropped at draft time
+(`onlyOrgAttachments`). UI: `AttachmentFiles`, `LinksEditor` (template editor), `InsertLink` (composer: appends a
+link/uploaded-video URL to the body via `appendLinkToBody`), 📎/🔗 badges on `TemplateList`, a "this template
+includes…" line in `BulkDraftModal`, paperclip names in the email history. Videos are links, never attachments;
+longer than 50 MB means pasting a YouTube/Vimeo/Drive link. Removing a file from a template only detaches it (drafts
+already made from it still point at the stored copy). Lessons: the first version put these controls BELOW the long
+Body box inside scrolling dialogs, where Kevin could not see them (the code was live) — they now sit directly under
+Subject. **A real SMTP send carrying an attachment was never run by me (needs Kevin's mailbox); he tested to his own
+addresses.** Shared lib: `lib/emailAttachments.ts` (mirrored in `_shared/emailAttachments.ts`, keep in sync).
+
+**Sequences can use your own templates.** Steps pointed at a template by `template_type` (a fixed set of built-in
+kinds), and the step picker only listed `is_default && type !== 'custom'`, so every template created in Emails →
+Templates (all `custom`) was invisible there. `SequenceStep.template_id` is new: the picker (`SequenceBuilder`) has
+"Standard templates" (value `type:<kind>`) and "Your templates" (value `id:<uuid>`), encoded by `lib/sequenceSteps.ts`;
+`check-sequences` loads a step's template by id (this org or org-less) and skips with a clear reason if it was
+deleted; type-based steps behave exactly as before. UI fix: a long template name stretched the step card and squeezed
+the wait-days box because the flex column had no `min-w-0` (also added to `Listbox`'s full-width wrapper).
+
+**Voice notes when logging a note.** `hooks/useVoiceDictation.ts` + `components/ui/VoiceControls.tsx` (button, status
+line, ring) are now the one implementation, used by the Dream Agent, the `NoteComposer` Free text tab, and each text
+question of `DebriefWizard` (changing question stops recording so words can't land in the wrong field).
+
+**Deleting.** `components/ui/ConfirmDeleteButton.tsx` (two-step "sure?"). Notes: `useLeadNotes.deleteNote`
+(stage-change notes protected; deleting a `call` note decrements `leads.call_count`). Decision-makers: "Remove" is a
+SOFT dismiss — migration `042` adds `dismissed_at`, narrows `authenticated`'s UPDATE on the table to that one column
+(REVOKE + column GRANT) and adds a `can_edit_lead` UPDATE policy — because `find-decision-makers` inserts with
+`ON CONFLICT DO NOTHING` (migration 039's dedupe_key), so a hard delete would let the next search re-add the person.
+Dismissed rows are filtered in the lead card, search results, `EmailComposer`, `BulkDraftModal` and the function's own
+re-select; `lib/dismissDecisionMaker.ts` also marks the person's `linkedin_contacts`/`linkedin_drafts` skipped.
+`lib/decisionMakerAdditions.ts` (shared by the card and `DecisionMakerReview`) powers "Add to lead" and "Add all to
+leads" straight from the Find decision maker results. The note-edit textarea on the full record was a narrow strip
+(its flex column had no `flex-1`); fixed and now grows with the note.
+
 **Known gaps / candidates for next time:** Log note (`parse-notes`) still only suggests stage/deal/package/next
 action — it does not extract contact fields the way Dream Agent now does; bulk email drafting (`BulkDraftModal`)
-uses each lead's primary email only; CSV export and pipeline fork (`pipelineFork.ts`) don't carry `additional_*`;
+uses each lead's primary email only and can't add one-off attachments (only the template's); `check-replies`'
+auto-drafts carry no attachments; templates a user created are private to them (RLS), so shared sequences list only
+the templates the viewer can see; CSV export and pipeline fork (`pipelineFork.ts`) don't carry `additional_*`;
 Dream Agent's "This is someone new" ambiguous path has no patch (no stage/follow-up applied); Log note should say
 "AI unavailable" instead of closing silently; Fill missing details does not fetch owner phone numbers (Apollo's
 paid person-phone reveal via Find decision maker is the existing route); Places lookups cost per call beyond the
