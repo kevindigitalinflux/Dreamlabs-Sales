@@ -7,7 +7,8 @@ import { GripVertical, Plus, Trash2 } from 'lucide-react';
 import { timelineLabel } from '../../lib/sequenceMath';
 import { useTemplates } from '../../hooks/useTemplates';
 import type { SequenceInput } from '../../hooks/useSequences';
-import type { EmailSequence, SequenceStep, TemplateType } from '../../types';
+import { stepFieldsFromValue, stepTemplateValue } from '../../lib/sequenceSteps';
+import type { EmailSequence, SequenceStep } from '../../types';
 import { Button } from '../ui/Button';
 import { Input, SelectField } from '../ui/Input';
 import { Modal } from '../ui/Modal';
@@ -20,14 +21,22 @@ interface SequenceBuilderProps {
   onClose: () => void;
 }
 
-function StepCard({ index, step, templates, onChange, onRemove }: {
+interface TemplateOption { value: string; label: string }
+
+function StepCard({ index, step, standard, custom, onChange, onRemove }: {
   index: number;
   step: SequenceStep;
-  templates: { template_type: TemplateType; name: string }[];
+  /** Built-in kinds (initial follow-up, second chase…), referenced by type. */
+  standard: TemplateOption[];
+  /** The user's own templates, referenced by id. */
+  custom: TemplateOption[];
   onChange: (patch: Partial<SequenceStep>) => void;
   onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: `step-${index}` });
+  const current = stepTemplateValue(step);
+  // A step can point at a template that has since been deleted; keep it visible rather than blank.
+  const missing = ![...standard, ...custom].some((o) => o.value === current);
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }}
       className="flex items-end gap-2 rounded-lg border border-line bg-surface/40 p-3">
@@ -37,8 +46,16 @@ function StepCard({ index, step, templates, onChange, onRemove }: {
           onChange={(e) => onChange({ delay_days: Math.max(0, Number(e.target.value) || 0) })} />
       </div>
       <div className="flex-1">
-        <SelectField label="Template" value={step.template_type} onChange={(e) => onChange({ template_type: e.target.value as TemplateType })}>
-          {templates.map((t) => <option key={t.template_type} value={t.template_type}>{t.name}</option>)}
+        <SelectField label="Template" value={current} onChange={(e) => onChange(stepFieldsFromValue(e.target.value))}>
+          <optgroup label="Standard templates">
+            {standard.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </optgroup>
+          {custom.length > 0 && (
+            <optgroup label="Your templates">
+              {custom.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </optgroup>
+          )}
+          {missing && <option value={current}>(template no longer available)</option>}
         </SelectField>
       </div>
       <button type="button" onClick={onRemove} aria-label="Remove step" className="mb-1 flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-muted hover:text-danger"><Trash2 className="h-4 w-4" aria-hidden /></button>
@@ -49,8 +66,12 @@ function StepCard({ index, step, templates, onChange, onRemove }: {
 /** Sequence builder: named steps with day delays, drag-reorder, timeline preview. */
 export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }: SequenceBuilderProps) {
   const { templates } = useTemplates();
-  const defaultTemplates = templates.filter((t) => t.is_default && t.template_type !== 'custom')
-    .map((t) => ({ template_type: t.template_type, name: t.name }));
+  const standardOptions: TemplateOption[] = templates.filter((t) => t.is_default && t.template_type !== 'custom')
+    .map((t) => ({ value: `type:${t.template_type}`, label: t.name }));
+  // Templates created in Emails, Templates all have the generic type 'custom', so a step
+  // has to point at them by id; they were missing from this list entirely before.
+  const customOptions: TemplateOption[] = templates.filter((t) => t.template_type === 'custom')
+    .map((t) => ({ value: `id:${t.id}`, label: t.name }));
   const [form, setForm] = useState<SequenceInput>({
     name: sequence?.name ?? '', description: sequence?.description ?? null,
     steps: sequence?.steps ?? [], is_default: sequence?.is_default ?? false,
@@ -89,7 +110,7 @@ export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }
           <SortableContext items={form.steps.map((_, i) => `step-${i}`)} strategy={verticalListSortingStrategy}>
             <ol className="flex flex-col gap-2">
               {form.steps.map((s, i) => (
-                <StepCard key={`step-${i}`} index={i} step={s} templates={defaultTemplates}
+                <StepCard key={`step-${i}`} index={i} step={s} standard={standardOptions} custom={customOptions}
                   onChange={(patch) => setStep(i, patch)}
                   onRemove={() => setForm((f) => ({ ...f, steps: f.steps.filter((_, j) => j !== i) }))} />
               ))}

@@ -6,7 +6,7 @@ import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { buildTemplateVars, substituteVariables } from '../_shared/templateVars.ts';
 import { appendLinks, onlyOrgAttachments, parseAttachments, parseLinks } from '../_shared/emailAttachments.ts';
 
-interface Step { delay_days: number; template_type: string; subject_override: string | null }
+interface Step { delay_days: number; template_type: string; template_id?: string | null; subject_override: string | null }
 
 // Deno copy of advanceEnrollment from src/lib/sequenceMath.ts — keep in sync.
 function advance(currentStep: number, steps: Step[], now: Date) {
@@ -141,14 +141,26 @@ Deno.serve(async (req) => {
     // Org-scoped template first (the new cold_outreach_*/jv_pitch_* templates are
     // seeded per-org), falling back to the global org_id=null default that every
     // pre-existing cycle-2 template type still uses exclusively.
-    const { data: templates } = await service
-      .from('email_templates').select('*')
-      .eq('template_type', step.template_type).eq('is_default', true)
-      .or(`org_id.eq.${orgId},org_id.is.null`);
-    const template = (templates ?? []).find((t) => (t as { org_id: string | null }).org_id === orgId)
-      ?? (templates ?? []).find((t) => (t as { org_id: string | null }).org_id === null)
-      ?? null;
-    if (!template) { skipped.push({ id: enrollment.id, reason: `no default template ${step.template_type}` }); continue; }
+    // A step that names a specific template (the user's own, all of which share the generic
+    // type 'custom') is looked up by id, limited to this org or the shared (org-less) set.
+    // Otherwise it's one of the built-in kinds and is found by type, as before.
+    let template: Record<string, unknown> | null = null;
+    if (step.template_id) {
+      const { data: own } = await service
+        .from('email_templates').select('*').eq('id', step.template_id)
+        .or(`org_id.eq.${orgId},org_id.is.null`).maybeSingle();
+      template = own ?? null;
+      if (!template) { skipped.push({ id: enrollment.id, reason: `template ${step.template_id} not found (deleted?)` }); continue; }
+    } else {
+      const { data: templates } = await service
+        .from('email_templates').select('*')
+        .eq('template_type', step.template_type).eq('is_default', true)
+        .or(`org_id.eq.${orgId},org_id.is.null`);
+      template = (templates ?? []).find((t) => (t as { org_id: string | null }).org_id === orgId)
+        ?? (templates ?? []).find((t) => (t as { org_id: string | null }).org_id === null)
+        ?? null;
+      if (!template) { skipped.push({ id: enrollment.id, reason: `no default template ${step.template_type}` }); continue; }
+    }
 
     // enrolled_by is null for every auto-enrolled outreach lead (the
     // system-generated convention this cycle establishes) — only look up a

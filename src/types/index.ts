@@ -156,6 +156,8 @@ export interface EmailTemplate {
 export interface SequenceStep {
   delay_days: number;
   template_type: TemplateType;
+  /** Set when the step uses one of the user's own (custom) templates; see lib/sequenceSteps.ts. */
+  template_id?: string | null;
   subject_override: string | null;
 }
 
