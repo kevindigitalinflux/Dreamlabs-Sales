@@ -6,6 +6,7 @@ import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { buildTemplateVars, substituteVariables } from '../_shared/templateVars.ts';
 import { appendLinks, onlyOrgAttachments, parseAttachments, parseLinks } from '../_shared/emailAttachments.ts';
 import { formatIcpContext, loadIcp, resolveIcpId, topPainPoint } from '../_shared/icp.ts';
+import { applyCustomVariables, loadCustomVariables } from '../_shared/customVariables.ts';
 
 interface Step { delay_days: number; template_type: string; template_id?: string | null; subject_override: string | null }
 
@@ -185,7 +186,11 @@ Deno.serve(async (req) => {
     // {{pain_point}} when the lead has none noted, and context for the AI draft.
     const icp = await loadIcp(service, orgId, resolveIcpId(lead.icp_id as string | null, template.icp_id as string | null, enrollment.sequence?.icp_id));
     const icpContext = formatIcpContext(icp);
-    const vars = buildTemplateVars(lead, contractorName, noteTexts, topPainPoint(icp));
+    // Built-ins, then the enrolling user's own placeholders and the company-wide ones (system-enrolled leads get company-wide only).
+    const vars = applyCustomVariables(
+      buildTemplateVars(lead, contractorName, noteTexts, topPainPoint(icp)),
+      await loadCustomVariables(service, orgId, enrollment.enrolled_by),
+    );
     const subject = substituteVariables((step.subject_override ?? template.subject) as string, vars);
     const bodyText = substituteVariables(template.body as string, vars);
 

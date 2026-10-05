@@ -1560,6 +1560,29 @@ and a bulk "Customer profile" action (`BulkProfileModal`) to tag existing leads.
 search "ICP" (`scrape_jobs.icp_params`, search filters parsed by `parse-icp`), `parse-csv-leads`, and decision-maker
 targeting don't use profiles yet.
 
+**Custom placeholders + per-recipient emails (2026-10-05).** (1) Users can define their own `{{placeholders}}` (Kevin
+wanted a Google Meet link). Migration `046` `custom_variables` (`key` slug `^[a-z][a-z0-9_]{0,39}$`, `label`, `value`,
+`user_id` NULL = company-wide/admin-managed, else that user's own; RLS: read company-wide + OWN personal only, write own,
+admins write company-wide). Because an email has one sender, a placeholder is filled from the SENDER's values:
+`loadCustomVariables(service, orgId, userId)` (`_shared/customVariables.ts`) returns company-wide then the sender's
+personal overrides (the signed-in user in `generate-email`, `enrollment.enrolled_by` in `check-sequences`; system-
+enrolled gets company-wide only), and `applyCustomVariables` only fills a blank/missing key and NEVER overrides a built-in
+with a value (`RESERVED_KEYS`; `cal_link`/`audit_date` are deliberately definable since nothing fills them). Mirrored in
+`src/lib/customVariables.ts` (tested). UI: Settings → "Custom placeholders" (`CustomPlaceholdersCard`, `PlaceholderRow`,
+`PlaceholderAddForm`, `hooks/useCustomVariables.ts`) right under Company profile customization; the template editor shows
+them as insert buttons and previews their real values. A name can't change after creation (templates reference it). The
+composer's "No value for {{x}}" warning now points at this screen. (2) **The composer wrote ONE email and saved/sent that
+same text to every ticked recipient**; it now keeps a draft per recipient (`lib/composerDrafts.ts`: `RecipientDraft`,
+`patchDraft`, `firstIncompleteDraft`, `unionMissing`), generates one tailored email each in parallel (decision-makers by
+name AND job title: `generate-email` takes `recipient_title`, `draftEmail` tells the AI to write to that role and not
+assume they own the business), shows each as a `RecipientDraftCard` when 2+ are ticked, and saves/sends each person's own
+text. Single-recipient looks as before; a draft opened from the review queue is held under `SEED_KEY` until its recipient
+resolves. **Bulk drafting** (`BulkDraftModal`, `lib/bulkDraftTargets.ts` tested): the "include decision-makers" box used
+to default OFF and only looked people up at Generate time, so a lead with several decision-makers silently got one email.
+Now people are looked up on open, "Also write to decision-makers and other contacts" auto-ticks when any exist (decision-
+makers + `additional_emails`, de-duplicated per lead, ignoring case), the exact list is previewed, titles are passed, and 3
+emails are written at a time.
+
 **Tooling trap found 2026-10-02: TypeScript here is v7 (`tsc -v` = 7.0.2), which REFUSES to check named files when a
 `tsconfig.json` exists (error TS5112, easy to miss when filtering output) — so any "syntax check an edge function"
 command of the form `npx tsc --noEmit <file>` silently did nothing.** Use `--ignoreConfig` (e.g. `npx tsc --noEmit

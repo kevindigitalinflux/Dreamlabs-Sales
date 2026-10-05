@@ -4,6 +4,7 @@ import { linksBlock } from '../../lib/emailAttachments';
 import { useOrg } from '../../hooks/useOrg';
 import { useCategories } from '../../hooks/useCategories';
 import { useIcps } from '../../hooks/useIcps';
+import { useCustomVariables } from '../../hooks/useCustomVariables';
 import { IcpSelect } from './IcpSelect';
 import { normalizeCategory } from '../../lib/categories';
 import { CategoryField } from './CategoryControls';
@@ -40,6 +41,9 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
     category: template?.category ?? '', icp_id: template?.icp_id ?? null,
   });
   const { icps } = useIcps();
+  const { personal, companyWide, values: customValues } = useCustomVariables();
+  // Distinct names, personal ones first: the buttons offer what this user can actually fill.
+  const customKeys = [...new Set([...personal, ...companyWide].map((v) => v.key))];
   const categorySuggestions = useCategories();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -70,7 +74,7 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
     onClose();
   }
 
-  const preview = substituteVariables(form.body, SAMPLE_VARS).text;
+  const preview = substituteVariables(form.body, { ...SAMPLE_VARS, ...customValues }).text;
 
   return (
     <Modal open onClose={onClose} title={template ? `Edit — ${template.name}` : 'New template'}>
@@ -97,7 +101,14 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
               {v.label}
             </button>
           ))}
+          {customKeys.map((key) => (
+            <button key={key} type="button" onClick={() => insertVar(key)} title={`Your value: ${customValues[key] ?? ''}`}
+              className="min-h-11 cursor-pointer rounded-md border border-violet/50 px-3 text-xs text-offwhite hover:border-cyan hover:text-cyan">
+              {`{{${key}}}`}
+            </button>
+          ))}
         </div>
+        <p className="-mt-2 text-xs text-muted">Need another placeholder, like a meeting link? Add your own in Settings, Custom placeholders.</p>
         <Textarea ref={bodyRef} label="Body" rows={8} value={form.body} onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))} />
         {isAdmin && (
           <label className="flex items-center gap-2 text-sm">
