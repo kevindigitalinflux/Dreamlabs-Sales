@@ -61,7 +61,9 @@ interface SelectFieldProps {
 export function SelectField({ label, value, onChange, children, disabled, className = '', showGroupInValue = false }: SelectFieldProps) {
   const id = useId();
   return (
-    <div className="flex w-full flex-col gap-1.5">
+    // min-w-0: as an item in a flex row this must be allowed to shrink below its text width, or a
+    // long option name stretches the row (and pushes sibling buttons out of view) instead of being truncated.
+    <div className="flex w-full min-w-0 flex-col gap-1.5">
       <label htmlFor={id} className="text-xs font-semibold text-muted">{label}</label>
       <Listbox id={id} value={value} onChange={onChange} disabled={disabled} showGroupInValue={showGroupInValue} className={`text-base ${className}`}>
         {children}

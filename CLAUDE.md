@@ -1503,7 +1503,9 @@ Templates (all `custom`) was invisible there. `SequenceStep.template_id` is new:
 "Standard templates" (value `type:<kind>`) and "Your templates" (value `id:<uuid>`), encoded by `lib/sequenceSteps.ts`;
 `check-sequences` loads a step's template by id (this org or org-less) and skips with a clear reason if it was
 deleted; type-based steps behave exactly as before. UI fix: a long template name stretched the step card and squeezed
-the wait-days box because the flex column had no `min-w-0` (also added to `Listbox`'s full-width wrapper).
+the wait-days box because the flex column had no `min-w-0` (also added to `Listbox`'s full-width wrapper). It recurred in
+`EnrollmentControl` (2026-10-06: a long sequence name pushed the Enroll button off-screen), so `SelectField`'s root now has
+`min-w-0` too: **any dropdown placed in a flex row must be able to shrink, or a long option name stretches the row.**
 
 **Voice notes when logging a note.** `hooks/useVoiceDictation.ts` + `components/ui/VoiceControls.tsx` (button, status
 line, ring) are now the one implementation, used by the Dream Agent, the `NoteComposer` Free text tab, and each text
