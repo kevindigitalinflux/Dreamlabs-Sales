@@ -43,7 +43,8 @@ async function geminiJson(prompt: string, apiKey: string): Promise<unknown> {
   return JSON.parse(text);
 }
 
-async function claudeText(prompt: string, model: ClaudeModel, apiKey: string, maxTokens: number): Promise<string> {
+/** Calls Claude once; returns the text and why it stopped ('max_tokens' means the reply was cut off). */
+async function claudeCall(prompt: string, model: ClaudeModel, apiKey: string, maxTokens: number): Promise<{ text: string; stopReason: string | null }> {
   const res = await fetch(ANTHROPIC_URL, {
     method: 'POST',
     headers: {
@@ -57,19 +58,43 @@ async function claudeText(prompt: string, model: ClaudeModel, apiKey: string, ma
     }),
   });
   if (!res.ok) throw new Error(`Claude ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  const data = await res.json() as { content?: { type: string; text?: string }[] };
+  const data = await res.json() as { content?: { type: string; text?: string }[]; stop_reason?: string };
   const text = data.content?.find((b) => b.type === 'text')?.text;
   if (!text) throw new Error('Claude returned no content');
-  return text;
+  return { text, stopReason: data.stop_reason ?? null };
 }
 
+async function claudeText(prompt: string, model: ClaudeModel, apiKey: string, maxTokens: number): Promise<string> {
+  return (await claudeCall(prompt, model, apiKey, maxTokens)).text;
+}
+
+/** Pulls the JSON object/array out of a reply that may have fences or stray text around it. */
+function parseJsonReply(text: string): unknown {
+  const cleaned = text.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+  try { return JSON.parse(cleaned); } catch (first) {
+    const start = cleaned.search(/[{[]/);
+    const end = Math.max(cleaned.lastIndexOf('}'), cleaned.lastIndexOf(']'));
+    if (start >= 0 && end > start) return JSON.parse(cleaned.slice(start, end + 1));
+    throw first;
+  }
+}
+
+/**
+ * Asks Claude for JSON. A reply can come back unusable (cut off at the token limit, or not valid
+ * JSON); that is intermittent, so retry once with a bigger budget before giving up with a plain
+ * message, instead of surfacing a raw "Unterminated string in JSON" parse error.
+ */
 async function claudeJson(prompt: string, model: ClaudeModel, apiKey: string, maxTokens: number): Promise<unknown> {
-  const text = await claudeText(
-    `${prompt}\n\nRespond with ONLY valid JSON, no other text, no markdown code fences.`,
-    model, apiKey, maxTokens,
-  );
-  const cleaned = text.trim().replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-  return JSON.parse(cleaned);
+  const full = `${prompt}\n\nRespond with ONLY valid JSON, no other text, no markdown code fences.`;
+  let budget = maxTokens;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const { text, stopReason } = await claudeCall(full, model, apiKey, budget);
+    if (stopReason !== 'max_tokens') {
+      try { return parseJsonReply(text); } catch { /* fall through to retry */ }
+    }
+    budget *= 2;
+  }
+  throw new Error('The AI reply was cut off or malformed twice in a row. Please try again.');
 }
 
 /** Personalises an already-variable-substituted draft using lead context + notes. Throws on failure. */
