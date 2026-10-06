@@ -1621,3 +1621,5 @@ legacy free allowance; `draft-linkedin-message` still hardcodes Kevin's own pitc
 - `.env` — never commit, never paste contents into chat
 - RLS policies on all tables — do not disable, even temporarily for debugging
 - The `role` column on `profiles` — only the service role key may write this column; never expose role assignment to the client
+
+**Manual sequence position (2026-10-06).** `EnrollmentControl` lets a user choose where a lead is in a sequence: a "Start at step" picker when enrolling, and once enrolled a "Next step to draft" dropdown plus Back/Skip buttons and a "draft straight away" checkbox (`EnrollmentPosition.tsx`, `StepOptions.tsx`). `moveToStep()` in `lib/sequenceMath.ts` (tested) sets `current_step` (the step drafted next) and `next_send_at`; paused enrollments stay paused. No migration or edge-function change. Completed enrollments aren't loaded by `useEnrollments`, so they can't be revived from here.

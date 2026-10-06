@@ -7,13 +7,18 @@ import { formatShortDate } from '../../lib/utils';
 import type { Lead } from '../../types';
 import { Button } from '../ui/Button';
 import { SelectField } from '../ui/Input';
+import { EnrollmentPosition } from './EnrollmentPosition';
+import { useStepOptions } from './StepOptions';
 import { Skeleton } from '../ui/Skeleton';
 
 /** Enroll a lead in a sequence, or manage the active enrollment (SPEC §7). */
 export function EnrollmentControl({ lead }: { lead: Lead }) {
-  const { enrollment, loading, enroll, setStatus } = useEnrollments(lead.id);
+  const { enrollment, loading, enroll, setStatus, goToStep } = useEnrollments(lead.id);
   const { sequences } = useSequences();
   const [picked, setPicked] = useState('');
+  const [startStep, setStartStep] = useState('1');
+  const pickedSteps = sequences.find((s) => s.id === picked)?.steps ?? [];
+  const startOptions = useStepOptions(pickedSteps);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -34,15 +39,18 @@ export function EnrollmentControl({ lead }: { lead: Lead }) {
           {/* min-w-0 lets this column shrink below its content, so a long sequence name is
               cut off with "…" inside the box instead of pushing the Enroll button out of view. */}
           <div className="min-w-0 flex-1">
-            <SelectField label="Enroll in sequence" value={picked} onChange={(e) => setPicked(e.target.value)} showGroupInValue>
+            <SelectField label="Enroll in sequence" value={picked} onChange={(e) => { setPicked(e.target.value); setStartStep('1'); }} showGroupInValue>
               <option value="">Choose…</option>
               {categorisedOptions(sequences, (s) => ({ value: s.id }))}
             </SelectField>
           </div>
-          <Button className="shrink-0" onClick={() => picked && void run(() => enroll(picked))} disabled={busy || !picked || !lead.email} loading={busy}>
+          <Button className="shrink-0" onClick={() => picked && void run(() => enroll(picked, Number(startStep)))} disabled={busy || !picked || !lead.email} loading={busy}>
             <Repeat className="h-4 w-4" aria-hidden />Enroll
           </Button>
         </div>
+        {pickedSteps.length > 1 && (
+          <SelectField label="Start at step" value={startStep} onChange={(e) => setStartStep(e.target.value)}>{startOptions}</SelectField>
+        )}
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       </div>
     );
@@ -53,12 +61,13 @@ export function EnrollmentControl({ lead }: { lead: Lead }) {
     <div className="flex flex-col gap-2">
       <p className="break-words text-sm">
         <span className="font-semibold">{enrollment.sequence.name}</span>
-        <span className="text-muted"> — step {enrollment.current_step} of {total}</span>
+        <span className="text-muted"> — next draft is step {enrollment.current_step} of {total}</span>
       </p>
       <p className="text-xs text-muted">
         {enrollment.status === 'paused' ? 'Paused' : enrollment.next_send_at ? `Next draft ${formatShortDate(enrollment.next_send_at)}` : 'Finishing'}
         {' · drafts land in your review queue — nothing sends itself'}
       </p>
+      <EnrollmentPosition sequence={enrollment.sequence} currentStep={enrollment.current_step} busy={busy} onMove={(step, now) => void run(() => goToStep(step, now))} />
       <div className="flex flex-wrap gap-2">
         {enrollment.status === 'active'
           ? <Button variant="secondary" onClick={() => void run(() => setStatus('paused'))} disabled={busy} loading={busy}><Pause className="h-4 w-4" aria-hidden />Pause</Button>

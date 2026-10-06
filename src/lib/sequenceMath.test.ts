@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advanceEnrollment, nextSendAtFor, timelineLabel } from './sequenceMath';
+import { advanceEnrollment, moveToStep, nextSendAtFor, timelineLabel } from './sequenceMath';
 import type { SequenceStep } from '../types';
 
 const steps: SequenceStep[] = [
@@ -41,5 +41,16 @@ describe('timelineLabel', () => {
   });
   it('empty steps', () => {
     expect(timelineLabel([])).toBe('No steps yet');
+  });
+});
+
+describe('moveToStep', () => {
+  it('waits the target step delay unless immediate', () => {
+    expect(moveToStep(steps, 3, T0, false)).toEqual({ current_step: 3, next_send_at: '2026-07-24T06:00:00.000Z' });
+    expect(moveToStep(steps, 3, T0, true)).toEqual({ current_step: 3, next_send_at: T0.toISOString() });
+  });
+  it('clamps out-of-range steps', () => {
+    expect(moveToStep(steps, 0, T0, true).current_step).toBe(1);
+    expect(moveToStep(steps, 9, T0, true).current_step).toBe(3);
   });
 });

@@ -34,3 +34,19 @@ export function timelineLabel(steps: SequenceStep[]): string {
   let total = 0;
   return steps.map((s) => { total += s.delay_days; return `Day ${total}`; }).join(' → ');
 }
+
+/**
+ * Manually put an enrollment at a chosen 1-based step (clamped into range). The step is the one
+ * the engine drafts next: `immediate` makes it due now, otherwise it waits that step's usual
+ * `delay_days` from now. Status is left to the caller so a paused enrollment stays paused.
+ */
+export function moveToStep(
+  steps: SequenceStep[],
+  step: number,
+  now: Date,
+  immediate: boolean,
+): { current_step: number; next_send_at: string } {
+  const target = Math.min(Math.max(Math.round(step), 1), Math.max(steps.length, 1));
+  const delay = immediate ? 0 : (steps[target - 1]?.delay_days ?? 0);
+  return { current_step: target, next_send_at: addDays(now, delay).toISOString() };
+}
