@@ -9,6 +9,12 @@ import { Input, SelectField, Textarea } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 
+/** Which lead (company) a contact came from, shown under their name. */
+function LeadSource({ lead, leadId }: { lead: { business_name: string } | null; leadId: string | null }) {
+  const text = lead ? `From lead: ${lead.business_name}` : leadId ? 'From a lead you can’t view' : 'Added manually (no lead)';
+  return <span className="block break-words text-xs text-muted">{text}</span>;
+}
+
 /** LinkedIn contacts + drafts review queue (SPEC.md §2 Channel 2). */
 export function LinkedinOutreach() {
   const { contacts, drafts, loading, addContact, draftFor, approve, skip, markSent } = useLinkedinOutreach();
@@ -19,6 +25,7 @@ export function LinkedinOutreach() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [pipelineFilter, setPipelineFilter] = useState(''); // '' = all, 'unlinked' = no lead_id, else a pipeline id
+  const [leadFilter, setLeadFilter] = useState(''); // '' = every lead in the chosen pipeline, else a lead id
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkDrafting, setBulkDrafting] = useState(false);
 
@@ -72,13 +79,20 @@ export function LinkedinOutreach() {
   // the contact row entirely rather than leaving a dangling lead_id — the
   // RLS-invisible case is the only real source of a null join with a
   // non-null lead_id today.
-  function matchesSearchAndPipeline(fullName: string, leadId: string | null, lead: { business_name: string; pipeline_id: string } | null): boolean {
+  function matchesSearchAndPipeline(fullName: string, leadId: string | null, lead: { id: string; business_name: string; pipeline_id: string } | null): boolean {
     const q = search.trim().toLowerCase();
     if (q && !fullName.toLowerCase().includes(q) && !(lead?.business_name.toLowerCase().includes(q))) return false;
     if (pipelineFilter === 'unlinked') return leadId === null;
     if (pipelineFilter && lead?.pipeline_id !== pipelineFilter) return false;
+    if (leadFilter && lead?.id !== leadFilter) return false;
     return true;
   }
+
+  // Leads in the chosen pipeline that have at least one LinkedIn contact, for the second dropdown.
+  const pipelineLeads = pipelineFilter && pipelineFilter !== 'unlinked'
+    ? [...new Map(contacts.filter((c) => c.lead?.pipeline_id === pipelineFilter).map((c) => [c.lead!.id, c.lead!.business_name])).entries()]
+        .sort((a, b) => a[1].localeCompare(b[1]))
+    : [];
 
   const filteredPendingContacts = pendingContacts.filter((c) => matchesSearchAndPipeline(c.full_name, c.lead_id, c.lead));
   const filteredDrafts = drafts.filter((d) => matchesSearchAndPipeline(d.contact.full_name, d.contact.lead_id, d.contact.lead));
@@ -107,11 +121,17 @@ export function LinkedinOutreach() {
       </header>
       <div className="flex flex-wrap items-end gap-3">
         <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Contact or company name" className="max-w-xs" />
-        <SelectField label="Pipeline" value={pipelineFilter} onChange={(e) => setPipelineFilter(e.target.value)} className="max-w-xs">
+        <SelectField label="Pipeline" value={pipelineFilter} onChange={(e) => { setPipelineFilter(e.target.value); setLeadFilter(''); }} className="max-w-xs">
           <option value="">All</option>
           <option value="unlinked">Unlinked</option>
           {orgPipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </SelectField>
+        {pipelineLeads.length > 0 && (
+          <SelectField label="Lead" value={leadFilter} onChange={(e) => setLeadFilter(e.target.value)} className="max-w-xs">
+            <option value="">All leads</option>
+            {pipelineLeads.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </SelectField>
+        )}
       </div>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
@@ -141,7 +161,10 @@ export function LinkedinOutreach() {
               <div key={c.id} className="flex items-center justify-between rounded-lg bg-surface/50 p-3">
                 <label className="flex min-h-11 cursor-pointer items-center gap-2">
                   <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} className="h-4 w-4 accent-violet-500" />
-                  <span className="font-semibold">{c.full_name}</span>
+                  <span className="min-w-0">
+                    <span className="block font-semibold">{c.full_name}</span>
+                    <LeadSource lead={c.lead} leadId={c.lead_id} />
+                  </span>
                 </label>
                 <Button variant="secondary" onClick={() => void (async () => { setBusy(c.id); setError(await draftFor(c.id)); setBusy(null); })()} disabled={busy === c.id} loading={busy === c.id}>
                   <Sparkles className="h-4 w-4" aria-hidden /> {busy === c.id ? 'Drafting…' : 'Draft message'}
@@ -161,7 +184,10 @@ export function LinkedinOutreach() {
           <Card key={d.id}>
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
-                <p className="font-semibold">{d.contact.full_name}</p>
+                <div className="min-w-0">
+                  <p className="font-semibold">{d.contact.full_name}</p>
+                  <LeadSource lead={d.contact.lead} leadId={d.contact.lead_id} />
+                </div>
                 {d.contact.linkedin_url && (
                   <a href={d.contact.linkedin_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-sm text-cyan">
                     Open profile <ExternalLink className="h-3.5 w-3.5" aria-hidden />

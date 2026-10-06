@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useOrg } from './useOrg';
 import { useAuth } from './useAuth';
+import { readableInvokeError } from '../lib/invokeError';
 import type { LinkedinContact, LinkedinDraft } from '../types';
 
 export interface LeadSummary { id: string; business_name: string; pipeline_id: string }
@@ -48,7 +49,8 @@ export function useLinkedinOutreach() {
 
   const draftFor = useCallback(async (contactId: string): Promise<string | null> => {
     const { data, error } = await supabase.functions.invoke('draft-linkedin-message', { body: { contact_id: contactId } });
-    if (error) return error.message;
+    // supabase-js only says "non-2xx"; unwrap the function's own reason (missing key, AI error…).
+    if (error) return readableInvokeError(error);
     const err = (data as { error?: string }).error;
     if (err) return err;
     await refresh();
