@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useOrg } from './useOrg';
 import { useAuth } from './useAuth';
+import { dismissDecisionMaker } from '../lib/dismissDecisionMaker';
 import { readableInvokeError } from '../lib/invokeError';
 import type { LinkedinContact, LinkedinDraft } from '../types';
 
 export interface LeadSummary { id: string; business_name: string; pipeline_id: string }
-export type ContactWithLead = LinkedinContact & { lead: LeadSummary | null };
+/** `candidate` is the decision-maker record the contact was captured from; it carries their job title. */
+export type ContactWithLead = LinkedinContact & { lead: LeadSummary | null; candidate: { title: string | null } | null };
 export type DraftWithContact = LinkedinDraft & { contact: ContactWithLead };
 
 /** LinkedIn contacts + their drafts for the current org, each joined to its
@@ -22,11 +24,11 @@ export function useLinkedinOutreach() {
   const refresh = useCallback(async () => {
     if (!currentOrg) return;
     const [contactsRes, draftsRes] = await Promise.all([
-      supabase.from('linkedin_contacts').select('*, lead:leads(id, business_name, pipeline_id)').eq('org_id', currentOrg.id).order('created_at', { ascending: false }),
+      supabase.from('linkedin_contacts').select('*, lead:leads(id, business_name, pipeline_id), candidate:decision_maker_candidates(title)').eq('org_id', currentOrg.id).order('created_at', { ascending: false }),
       // Include 'approved' so a draft stays visible (with its "Mark as
       // sent" action available) after approval — otherwise it drops out of
       // this query the moment it's approved and its button can never render.
-      supabase.from('linkedin_drafts').select('*, contact:linkedin_contacts(*, lead:leads(id, business_name, pipeline_id))').eq('org_id', currentOrg.id).in('status', ['draft', 'approved']).order('created_at', { ascending: false }),
+      supabase.from('linkedin_drafts').select('*, contact:linkedin_contacts(*, lead:leads(id, business_name, pipeline_id), candidate:decision_maker_candidates(title))').eq('org_id', currentOrg.id).in('status', ['draft', 'approved']).order('created_at', { ascending: false }),
     ]);
     setContacts((contactsRes.data as ContactWithLead[] | null) ?? []);
     setDrafts((draftsRes.data as DraftWithContact[] | null) ?? []);
@@ -101,5 +103,20 @@ export function useLinkedinOutreach() {
     return null;
   }, [session, refresh]);
 
-  return { contacts, drafts, loading, addContact, draftFor, approve, skip, markSent };
+  /**
+   * Deletes a contact and its drafts. One captured from a decision-maker search is first dismissed
+   * there too, otherwise the next "Find decision maker" run would quietly re-add them.
+   */
+  const deleteContact = useCallback(async (contact: ContactWithLead): Promise<string | null> => {
+    if (contact.decision_maker_candidate_id) {
+      const dismissErr = await dismissDecisionMaker(contact.decision_maker_candidate_id);
+      if (dismissErr) return dismissErr;
+    }
+    const { error } = await supabase.from('linkedin_contacts').delete().eq('id', contact.id).select().single();
+    if (error) return error.code === 'PGRST116' ? "You don't have permission to delete this contact." : error.message;
+    await refresh();
+    return null;
+  }, [refresh]);
+
+  return { contacts, drafts, loading, addContact, draftFor, approve, skip, markSent, deleteContact };
 }

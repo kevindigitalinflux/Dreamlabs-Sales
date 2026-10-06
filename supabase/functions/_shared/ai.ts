@@ -300,7 +300,8 @@ SENDER NAME: ${input.contractorName}
 DRAFT SUBJECT: ${input.subject}
 DRAFT BODY:
 ${input.body}`,
-    input.model, input.apiKey, 600,
+    // 600 was too tight: a longer LinkedIn/email body got cut off mid-string and the JSON failed to parse.
+    input.model, input.apiKey, 1500,
   ) as { subject?: string; body?: string };
   if (!result.subject || !result.body) throw new Error('Claude draft missing fields');
   return { subject: stripAiPunctuation(result.subject), body: stripAiPunctuation(result.body) };

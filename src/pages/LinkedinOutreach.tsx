@@ -8,16 +8,11 @@ import { Card } from '../components/ui/Card';
 import { Input, SelectField, Textarea } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
-
-/** Which lead (company) a contact came from, shown under their name. */
-function LeadSource({ lead, leadId }: { lead: { business_name: string } | null; leadId: string | null }) {
-  const text = lead ? `From lead: ${lead.business_name}` : leadId ? 'From a lead you can’t view' : 'Added manually (no lead)';
-  return <span className="block break-words text-xs text-muted">{text}</span>;
-}
+import { DeleteContactButton, LeadSource } from '../components/linkedin/LinkedinContactParts';
 
 /** LinkedIn contacts + drafts review queue (SPEC.md §2 Channel 2). */
 export function LinkedinOutreach() {
-  const { contacts, drafts, loading, addContact, draftFor, approve, skip, markSent } = useLinkedinOutreach();
+  const { contacts, drafts, loading, addContact, draftFor, approve, skip, markSent, deleteContact } = useLinkedinOutreach();
   const { pipelines } = usePipeline();
   const { currentOrg } = useOrg();
   const [form, setForm] = useState({ full_name: '', linkedin_url: '', context_signal: '' });
@@ -163,12 +158,15 @@ export function LinkedinOutreach() {
                   <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} className="h-4 w-4 accent-violet-500" />
                   <span className="min-w-0">
                     <span className="block font-semibold">{c.full_name}</span>
-                    <LeadSource lead={c.lead} leadId={c.lead_id} />
+                    <LeadSource contact={c} />
                   </span>
                 </label>
-                <Button variant="secondary" onClick={() => void (async () => { setBusy(c.id); setError(await draftFor(c.id)); setBusy(null); })()} disabled={busy === c.id} loading={busy === c.id}>
-                  <Sparkles className="h-4 w-4" aria-hidden /> {busy === c.id ? 'Drafting…' : 'Draft message'}
-                </Button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button variant="secondary" onClick={() => void (async () => { setBusy(c.id); setError(await draftFor(c.id)); setBusy(null); })()} disabled={busy === c.id} loading={busy === c.id}>
+                    <Sparkles className="h-4 w-4" aria-hidden /> {busy === c.id ? 'Drafting…' : 'Draft message'}
+                  </Button>
+                  <DeleteContactButton onDelete={() => deleteContact(c)} onError={setError} />
+                </div>
               </div>
             ))}
           </div>
@@ -186,7 +184,7 @@ export function LinkedinOutreach() {
               <div className="flex items-center justify-between">
                 <div className="min-w-0">
                   <p className="font-semibold">{d.contact.full_name}</p>
-                  <LeadSource lead={d.contact.lead} leadId={d.contact.lead_id} />
+                  <LeadSource contact={d.contact} />
                 </div>
                 {d.contact.linkedin_url && (
                   <a href={d.contact.linkedin_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-sm text-cyan">
@@ -195,7 +193,7 @@ export function LinkedinOutreach() {
                 )}
               </div>
               <p className="whitespace-pre-wrap text-sm">{d.message}</p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {d.status === 'draft' && (
                   <>
                     <Button onClick={() => void (async () => { setBusy(d.id); setError(await approve(d.id)); setBusy(null); })()} disabled={busy === d.id} loading={busy === d.id}><CheckCircle2 className="h-4 w-4" aria-hidden /> Approve</Button>
@@ -205,6 +203,7 @@ export function LinkedinOutreach() {
                 {d.status === 'approved' && (
                   <Button onClick={() => void (async () => { setBusy(d.id); setError(await markSent(d)); setBusy(null); })()} disabled={busy === d.id} loading={busy === d.id}>Mark as sent</Button>
                 )}
+                <DeleteContactButton onDelete={() => deleteContact(d.contact)} onError={setError} />
               </div>
             </div>
           </Card>
