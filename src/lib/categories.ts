@@ -55,3 +55,30 @@ export function matchesCategory(item: { category?: string | null }, filter: stri
   if (filter === UNCATEGORISED) return cat === null;
   return cat !== null && cat.toLowerCase() === filter.toLowerCase();
 }
+
+/** A run of items under one category heading; `label` null means the uncategorised ones. */
+export interface CategoryGroup<T> { label: string | null; items: T[] }
+
+/**
+ * Splits items into one group per category (A to Z, case-insensitive, keeping the first
+ * spelling seen), each sorted by name, with the uncategorised items last as a group whose
+ * label is null. Used by every template/sequence picker so a long list reads as a few
+ * headed sections instead of one wall of names.
+ */
+export function groupByCategory<T extends { name: string; category?: string | null }>(items: T[]): CategoryGroup<T>[] {
+  const byCategory = new Map<string, CategoryGroup<T>>();
+  const uncategorised: T[] = [];
+  for (const item of items) {
+    const cat = normalizeCategory(item.category);
+    if (!cat) { uncategorised.push(item); continue; }
+    const key = cat.toLowerCase();
+    if (!byCategory.has(key)) byCategory.set(key, { label: cat, items: [] });
+    byCategory.get(key)!.items.push(item);
+  }
+  const byName = (a: T, b: T) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  const groups = [...byCategory.values()]
+    .sort((a, b) => a.label!.localeCompare(b.label!, undefined, { sensitivity: 'base' }))
+    .map((g) => ({ ...g, items: [...g.items].sort(byName) }));
+  if (uncategorised.length > 0) groups.push({ label: null, items: uncategorised.sort(byName) });
+  return groups;
+}

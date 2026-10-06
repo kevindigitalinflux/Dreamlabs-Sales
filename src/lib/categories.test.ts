@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { UNCATEGORISED, categoryLabel, compareByCategory, distinctCategories, matchesCategory, normalizeCategory } from './categories';
+import { UNCATEGORISED, categoryLabel, compareByCategory, distinctCategories, groupByCategory, matchesCategory, normalizeCategory } from './categories';
 
 describe('normalizeCategory', () => {
   it('trims, collapses spaces, and turns blank into null', () => {
@@ -40,5 +40,29 @@ describe('distinctCategories / matchesCategory', () => {
     expect(matchesCategory({ category: 'Airbnb' }, UNCATEGORISED)).toBe(false);
     expect(matchesCategory({ category: 'airbnb' }, 'Airbnb')).toBe(true);
     expect(matchesCategory({ category: null }, 'Airbnb')).toBe(false);
+  });
+});
+
+describe('groupByCategory', () => {
+  const items = [
+    { name: 'Zeta' }, { name: 'Beta follow-up', category: 'property managers' }, { name: 'Alpha intro', category: 'Property Managers' },
+    { name: 'Host intro', category: 'Airbnb hosts' }, { name: 'Another' },
+  ];
+
+  it('makes one group per category (any case), sorted A to Z, items sorted by name', () => {
+    const groups = groupByCategory(items);
+    expect(groups.map((g) => g.label)).toEqual(['Airbnb hosts', 'property managers', null]);
+    expect(groups[1]!.items.map((i) => i.name)).toEqual(['Alpha intro', 'Beta follow-up']);
+  });
+
+  it('puts the uncategorised items last, as a group with a null label', () => {
+    const groups = groupByCategory(items);
+    expect(groups[groups.length - 1]).toEqual({ label: null, items: [{ name: 'Another' }, { name: 'Zeta' }] });
+  });
+
+  it('has no null group when everything is categorised, and just one when nothing is', () => {
+    expect(groupByCategory([{ name: 'A', category: 'X' }]).map((g) => g.label)).toEqual(['X']);
+    expect(groupByCategory([{ name: 'B' }, { name: 'A' }])).toEqual([{ label: null, items: [{ name: 'A' }, { name: 'B' }] }]);
+    expect(groupByCategory([])).toEqual([]);
   });
 });

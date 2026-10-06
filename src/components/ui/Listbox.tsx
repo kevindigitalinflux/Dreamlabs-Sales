@@ -7,6 +7,8 @@ interface FlatOption {
   value: string;
   label: ReactNode;
   disabled?: boolean;
+  /** The <optgroup> label this option sits under, if any. */
+  group?: string;
 }
 
 interface GroupedOption {
@@ -35,7 +37,7 @@ function parseChildren(children: ReactNode): ParsedOption[] {
       Children.forEach(el.props.children, (opt) => {
         if (isValidElement(opt) && opt.type === 'option') {
           const optEl = opt as ReactElement<{ value?: string; children?: ReactNode; disabled?: boolean }>;
-          options.push({ value: String(optEl.props.value ?? ''), label: optEl.props.children, disabled: optEl.props.disabled });
+          options.push({ value: String(optEl.props.value ?? ''), label: optEl.props.children, disabled: optEl.props.disabled, group: el.props.label ?? '' });
         }
       });
       result.push({ groupLabel: el.props.label ?? '', options });
@@ -60,6 +62,8 @@ interface ListboxProps {
    * form layout). Set false for an inline switcher that should size to its
    * own content instead — e.g. the top-bar pipeline/org switchers. */
   fullWidth?: boolean;
+  /** When the chosen option sits under a group heading, show "Group · Option" in the closed box so the heading isn't lost once the list is shut. */
+  showGroupInValue?: boolean;
 }
 
 /**
@@ -80,7 +84,7 @@ interface ListboxProps {
  * sidebar (its flex-stretched height no longer matched the now-taller
  * document). Portaling avoids the mismatch entirely.
  */
-export function Listbox({ value, onChange, children, id, ariaLabel, disabled, className = '', fullWidth = true }: ListboxProps) {
+export function Listbox({ value, onChange, children, id, ariaLabel, disabled, className = '', fullWidth = true, showGroupInValue = false }: ListboxProps) {
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
   const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null);
@@ -90,6 +94,7 @@ export function Listbox({ value, onChange, children, id, ariaLabel, disabled, cl
   const parsed = parseChildren(children);
   const flat = flatten(parsed);
   const selected = flat.find((o) => o.value === value);
+  const triggerText = showGroupInValue && selected?.group && typeof selected.label === 'string' ? `${selected.group} · ${selected.label}` : selected?.label;
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -189,13 +194,13 @@ export function Listbox({ value, onChange, children, id, ariaLabel, disabled, cl
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
-        title={typeof selected?.label === 'string' ? selected.label : undefined}
+        title={typeof triggerText === 'string' ? triggerText : undefined}
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
         onKeyDown={handleTriggerKeyDown}
         className={`flex min-h-11 ${fullWidth ? 'w-full' : ''} cursor-pointer items-center justify-between gap-2 rounded-lg border border-line bg-surface py-2 pl-3 pr-3 text-left text-offwhite outline-none hover:border-violet/60 focus:border-violet disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       >
-        <span className="truncate">{selected?.label ?? ''}</span>
+        <span className="truncate">{triggerText ?? ''}</span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-muted transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} aria-hidden />
       </button>
       {open && coords && createPortal(
@@ -217,10 +222,11 @@ export function Listbox({ value, onChange, children, id, ariaLabel, disabled, cl
           {parsed.map((o, gi) =>
             isGroup(o) ? (
               <Fragment key={`group-${gi}`}>
-                <li role="presentation" className="px-2 pb-1 pt-2 text-xs font-semibold text-muted">{o.groupLabel}</li>
+                <li role="presentation" className="px-2 pb-1 pt-3 text-[11px] font-bold uppercase tracking-wide text-muted first:pt-1">{o.groupLabel}</li>
                 {o.options.map((opt) => (
                   <ListboxOption
                     key={opt.value}
+                    indent
                     opt={opt}
                     selected={opt.value === value}
                     highlighted={flat.indexOf(opt) === highlighted}
@@ -247,8 +253,10 @@ export function Listbox({ value, onChange, children, id, ariaLabel, disabled, cl
   );
 }
 
-function ListboxOption({ opt, selected, highlighted, onSelect, onHover }: {
+function ListboxOption({ opt, selected, highlighted, onSelect, onHover, indent = false }: {
   opt: FlatOption; selected: boolean; highlighted: boolean; onSelect: () => void; onHover: () => void;
+  /** Sits under a group heading, so it is nudged right of it. */
+  indent?: boolean;
 }) {
   return (
     <li
@@ -259,7 +267,7 @@ function ListboxOption({ opt, selected, highlighted, onSelect, onHover }: {
       title={typeof opt.label === 'string' ? opt.label : undefined}
       onMouseEnter={onHover}
       onClick={() => !opt.disabled && onSelect()}
-      className={`flex min-h-9 cursor-pointer items-center justify-between gap-2 rounded-md px-2 text-sm ${
+      className={`flex min-h-9 cursor-pointer items-center justify-between gap-2 rounded-md ${indent ? 'pl-4 pr-2' : 'px-2'} text-sm ${
         opt.disabled ? 'cursor-not-allowed opacity-50' : ''
       } ${highlighted ? 'bg-violet/20 text-offwhite' : 'text-offwhite'} ${selected ? 'font-semibold' : ''}`}
     >

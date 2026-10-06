@@ -49,6 +49,8 @@ interface SelectFieldProps {
   children: ReactNode;
   disabled?: boolean;
   className?: string;
+  /** Show a chosen option's group heading too ("Group · Option") in the closed box. */
+  showGroupInValue?: boolean;
 }
 
 /** Labelled dropdown, 44px tall — a custom-rendered listbox (not a native
@@ -56,12 +58,12 @@ interface SelectFieldProps {
  * hover/selected styling, which a native select's OS-rendered popup can't be
  * given via CSS. Accepts the same <option>/<optgroup> children a native
  * select would. */
-export function SelectField({ label, value, onChange, children, disabled, className = '' }: SelectFieldProps) {
+export function SelectField({ label, value, onChange, children, disabled, className = '', showGroupInValue = false }: SelectFieldProps) {
   const id = useId();
   return (
     <div className="flex w-full flex-col gap-1.5">
       <label htmlFor={id} className="text-xs font-semibold text-muted">{label}</label>
-      <Listbox id={id} value={value} onChange={onChange} disabled={disabled} className={`text-base ${className}`}>
+      <Listbox id={id} value={value} onChange={onChange} disabled={disabled} showGroupInValue={showGroupInValue} className={`text-base ${className}`}>
         {children}
       </Listbox>
     </div>

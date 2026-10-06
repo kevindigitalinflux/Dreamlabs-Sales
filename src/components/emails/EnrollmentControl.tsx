@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pause, Play, Repeat, XCircle } from 'lucide-react';
 import { useEnrollments } from '../../hooks/useEnrollments';
 import { useSequences } from '../../hooks/useSequences';
-import { categoryLabel, compareByCategory } from '../../lib/categories';
+import { categorisedOptions } from '../ui/CategorisedOptions';
 import { formatShortDate } from '../../lib/utils';
 import type { Lead } from '../../types';
 import { Button } from '../ui/Button';
@@ -32,9 +32,9 @@ export function EnrollmentControl({ lead }: { lead: Lead }) {
         {!lead.email && <p className="text-xs text-warning">Add an email address to this lead first — sequences draft emails.</p>}
         <div className="flex items-end gap-2">
           <div className="flex-1">
-            <SelectField label="Enroll in sequence" value={picked} onChange={(e) => setPicked(e.target.value)}>
+            <SelectField label="Enroll in sequence" value={picked} onChange={(e) => setPicked(e.target.value)} showGroupInValue>
               <option value="">Choose…</option>
-              {[...sequences].sort(compareByCategory).map((s) => <option key={s.id} value={s.id}>{categoryLabel(s.name, s.category)}</option>)}
+              {categorisedOptions(sequences, (s) => ({ value: s.id }))}
             </SelectField>
           </div>
           <Button onClick={() => picked && void run(() => enroll(picked))} disabled={busy || !picked || !lead.email} loading={busy}>

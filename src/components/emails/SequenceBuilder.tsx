@@ -9,7 +9,7 @@ import { useTemplates } from '../../hooks/useTemplates';
 import { useCategories } from '../../hooks/useCategories';
 import { useIcps } from '../../hooks/useIcps';
 import { IcpSelect } from './IcpSelect';
-import { categoryLabel, compareByCategory, normalizeCategory } from '../../lib/categories';
+import { groupByCategory, normalizeCategory } from '../../lib/categories';
 import { CategoryField } from './CategoryControls';
 import type { SequenceInput } from '../../hooks/useSequences';
 import { stepFieldsFromValue, stepTemplateValue } from '../../lib/sequenceSteps';
@@ -26,22 +26,41 @@ interface SequenceBuilderProps {
   onClose: () => void;
 }
 
-interface TemplateOption { value: string; label: string }
+/**
+ * One template a step can use. `kind` standard = a built-in kind (initial follow-up, second
+ * chase…) referenced by type; custom = one of the user's own, referenced by id.
+ */
+interface StepOption { value: string; name: string; category: string | null; kind: 'standard' | 'custom' }
 
-function StepCard({ index, step, standard, custom, onChange, onRemove }: {
+/**
+ * The step dropdown's groups: one heading per category (standard and own templates together,
+ * so everything for "Property managers" is in one place), then whatever has no category under
+ * the two older headings, "Standard templates" and "Your templates".
+ */
+function stepOptionGroups(options: StepOption[]): React.ReactNode[] {
+  const opt = (o: StepOption) => <option key={o.value} value={o.value}>{o.name}</option>;
+  const out: React.ReactNode[] = [];
+  for (const g of groupByCategory(options)) {
+    if (g.label) { out.push(<optgroup key={g.label} label={g.label}>{g.items.map(opt)}</optgroup>); continue; }
+    const standard = g.items.filter((o) => o.kind === 'standard');
+    const own = g.items.filter((o) => o.kind === 'custom');
+    if (standard.length > 0) out.push(<optgroup key="__standard" label="Standard templates">{standard.map(opt)}</optgroup>);
+    if (own.length > 0) out.push(<optgroup key="__own" label="Your templates">{own.map(opt)}</optgroup>);
+  }
+  return out;
+}
+
+function StepCard({ index, step, options, onChange, onRemove }: {
   index: number;
   step: SequenceStep;
-  /** Built-in kinds (initial follow-up, second chase…), referenced by type. */
-  standard: TemplateOption[];
-  /** The user's own templates, referenced by id. */
-  custom: TemplateOption[];
+  options: StepOption[];
   onChange: (patch: Partial<SequenceStep>) => void;
   onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: `step-${index}` });
   const current = stepTemplateValue(step);
   // A step can point at a template that has since been deleted; keep it visible rather than blank.
-  const missing = ![...standard, ...custom].some((o) => o.value === current);
+  const missing = !options.some((o) => o.value === current);
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }}
       className="flex min-w-0 items-end gap-2 rounded-lg border border-line bg-surface/40 p-3">
@@ -54,15 +73,8 @@ function StepCard({ index, step, standard, custom, onChange, onRemove }: {
       {/* min-w-0 lets this column shrink below its content so a long template name is truncated
           inside the card instead of stretching it. */}
       <div className="min-w-0 flex-1">
-        <SelectField label="Template" value={current} onChange={(e) => onChange(stepFieldsFromValue(e.target.value))}>
-          <optgroup label="Standard templates">
-            {standard.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </optgroup>
-          {custom.length > 0 && (
-            <optgroup label="Your templates">
-              {custom.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </optgroup>
-          )}
+        <SelectField label="Template" value={current} onChange={(e) => onChange(stepFieldsFromValue(e.target.value))} showGroupInValue>
+          {stepOptionGroups(options)}
           {missing && <option value={current}>(template no longer available)</option>}
         </SelectField>
       </div>
@@ -74,12 +86,14 @@ function StepCard({ index, step, standard, custom, onChange, onRemove }: {
 /** Sequence builder: named steps with day delays, drag-reorder, timeline preview. */
 export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }: SequenceBuilderProps) {
   const { templates } = useTemplates();
-  const standardOptions: TemplateOption[] = templates.filter((t) => t.is_default && t.template_type !== 'custom')
-    .sort(compareByCategory).map((t) => ({ value: `type:${t.template_type}`, label: categoryLabel(t.name, t.category) }));
-  // Templates created in Emails, Templates all have the generic type 'custom', so a step
-  // has to point at them by id; they were missing from this list entirely before.
-  const customOptions: TemplateOption[] = templates.filter((t) => t.template_type === 'custom')
-    .sort(compareByCategory).map((t) => ({ value: `id:${t.id}`, label: categoryLabel(t.name, t.category) }));
+  // Templates created in Emails, Templates all have the generic type 'custom', so a step has to
+  // point at those by id; the built-in kinds are referenced by type.
+  const stepOptions: StepOption[] = [
+    ...templates.filter((t) => t.is_default && t.template_type !== 'custom')
+      .map((t): StepOption => ({ value: `type:${t.template_type}`, name: t.name, category: t.category, kind: 'standard' })),
+    ...templates.filter((t) => t.template_type === 'custom')
+      .map((t): StepOption => ({ value: `id:${t.id}`, name: t.name, category: t.category, kind: 'custom' })),
+  ];
   const [form, setForm] = useState<SequenceInput>({
     name: sequence?.name ?? '', description: sequence?.description ?? null,
     steps: sequence?.steps ?? [], is_default: sequence?.is_default ?? false,
@@ -128,7 +142,7 @@ export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }
           <SortableContext items={form.steps.map((_, i) => `step-${i}`)} strategy={verticalListSortingStrategy}>
             <ol className="flex flex-col gap-2">
               {form.steps.map((s, i) => (
-                <StepCard key={`step-${i}`} index={i} step={s} standard={standardOptions} custom={customOptions}
+                <StepCard key={`step-${i}`} index={i} step={s} options={stepOptions}
                   onChange={(patch) => setStep(i, patch)}
                   onRemove={() => setForm((f) => ({ ...f, steps: f.steps.filter((_, j) => j !== i) }))} />
               ))}

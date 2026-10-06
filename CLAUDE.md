@@ -1529,6 +1529,15 @@ categories already in use, via `hooks/useCategories.ts`, templates and sequences
 `CategoryFilter` and `CategoryBadge`. The category shows as a tag and filter on `TemplateList`/`SequenceList`, and in
 every picker: `EmailComposer`, `BulkDraftModal`, `EnrollmentControl` and the `SequenceBuilder` step dropdowns. Renaming or
 merging a category is not built (edit each item); the seeded default templates/sequences are uncategorised.
+**Pickers are grouped by category (2026-10-06):** the first version only sorted by category and prefixed the name, which
+still read as one long list. Now `groupByCategory` (`lib/categories.ts`, tested) + `components/ui/CategorisedOptions.tsx`
+(`categorisedOptions(items, toOption)`) render one `<optgroup>` heading per category, A–Z, items by name, uncategorised
+last under "Uncategorised" (a plain flat list when nothing has a category yet), in `EmailComposer`, `BulkDraftModal` and
+`EnrollmentControl`; `SequenceBuilder`'s step dropdown (`stepOptionGroups`) merges standard + own templates under each
+category and keeps the older "Standard templates"/"Your templates" headings for the uncategorised ones. `Listbox` gained
+`showGroupInValue` (via `SelectField`) so a chosen option still shows "Category · Name" in the closed box, group headings
+are bolder/uppercase, and options under a heading are indented. Listbox's `parseChildren` only sees direct
+`<option>`/`<optgroup>` children (arrays are fine, fragments and wrapper components are not).
 
 **Ideal customer profiles (2026-10-02).** Kevin wanted `{{pain_point}}` and the AI to speak to a specific kind of
 customer. Migration `044`: `ideal_customer_profiles` (org-scoped: `name`, `summary`, `pain_points` one per line,

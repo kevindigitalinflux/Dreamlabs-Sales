@@ -11,7 +11,7 @@ import { Modal } from '../ui/Modal';
 import { AttachmentFiles } from './AttachmentFiles';
 import { InsertLink } from './InsertLink';
 import { RecipientDraftCard } from './RecipientDraftCard';
-import { categoryLabel, compareByCategory } from '../../lib/categories';
+import { categorisedOptions } from '../ui/CategorisedOptions';
 import { BLANK_DRAFT, SEED_KEY, firstIncompleteDraft, patchDraft, unionMissing } from '../../lib/composerDrafts';
 import type { RecipientDraft } from '../../lib/composerDrafts';
 import { appendLinkToBody } from '../../lib/emailAttachments';
@@ -267,9 +267,9 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
             )}
           </div>
         )}
-        <SelectField label="Template" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+        <SelectField label="Template" value={templateId} onChange={(e) => setTemplateId(e.target.value)} showGroupInValue>
           <option value="">Choose…</option>
-          {[...templates].sort(compareByCategory).map((t) => <option key={t.id} value={t.id}>{categoryLabel(t.name, t.category)}</option>)}
+          {categorisedOptions(templates, (t) => ({ value: t.id }))}
         </SelectField>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => void generate(false)} disabled={busy !== null} loading={busy === 'load'}>

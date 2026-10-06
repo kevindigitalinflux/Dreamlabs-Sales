@@ -5,7 +5,7 @@ import { useOrg } from '../../hooks/useOrg';
 import { useTemplates } from '../../hooks/useTemplates';
 import { readableInvokeError } from '../../lib/invokeError';
 import { supabase } from '../../lib/supabase';
-import { categoryLabel, compareByCategory } from '../../lib/categories';
+import { categorisedOptions } from '../ui/CategorisedOptions';
 import { buildBulkTargets, countOtherContacts } from '../../lib/bulkDraftTargets';
 import type { BulkTarget } from '../../lib/bulkDraftTargets';
 import type { EmailAttachment } from '../../lib/emailAttachments';
@@ -121,9 +121,9 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
   return (
     <Modal open={open} onClose={onClose} title="Draft emails">
       <div className="flex flex-col gap-4">
-        <SelectField label="Template" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+        <SelectField label="Template" value={templateId} onChange={(e) => setTemplateId(e.target.value)} showGroupInValue>
           <option value="">Choose…</option>
-          {[...templates].sort(compareByCategory).map((t) => <option key={t.id} value={t.id}>{categoryLabel(t.name, t.category)}</option>)}
+          {categorisedOptions(templates, (t) => ({ value: t.id }))}
         </SelectField>
         {(() => {
           const chosen = templates.find((t) => t.id === templateId);
