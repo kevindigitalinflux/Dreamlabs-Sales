@@ -9,17 +9,23 @@ import { NeedsInputReview } from './NeedsInputReview';
 interface NeedsInputRowProps {
   row: ResolvedRunLeadRow;
   /** Called after the review closes so the status page can re-derive the row; carries any follow-up error to show. */
-  onChanged: (followUpError: string | null) => void;
+  onChanged: (followUpError: string | null, sentConfirmed: boolean) => void;
+  /** Re-runs the draft status lookup. */
+  onRetry: () => void;
 }
 
 /** The action on a "Needs your input" row: review and send the parked draft, or open the lead when there is none. */
-export function NeedsInputRow({ row, onChanged }: NeedsInputRowProps) {
+export function NeedsInputRow({ row, onChanged, onRetry }: NeedsInputRowProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<{ lead: Lead; log: EmailLog } | null>(null);
 
   if (row.resolution === 'discarded' || row.resolution === 'no_draft' || !row.email_log_id) {
     return <Link to={`/pipeline/leads/${row.lead_id}`} className="text-sm font-semibold text-cyan hover:underline">Open lead to handle it</Link>;
+  }
+  if (row.resolution === 'checking') return <span className="text-sm text-muted">Checking draft...</span>;
+  if (row.resolution === 'lookup_failed') {
+    return <Button variant="secondary" onClick={onRetry}>Could not check this draft, try again</Button>;
   }
   const logId = row.email_log_id;
 
@@ -31,9 +37,14 @@ export function NeedsInputRow({ row, onChanged }: NeedsInputRowProps) {
       supabase.from('leads').select('*').eq('id', row.lead_id).maybeSingle(),
     ]);
     setLoading(false);
+    if (logRes.data && !['draft', 'failed'].includes((logRes.data as EmailLog).status)) {
+      setError('This email was already sent.');
+      onChanged(null, false);
+      return;
+    }
     if (logRes.error || leadRes.error || !logRes.data || !leadRes.data) {
       setError(logRes.error?.message ?? leadRes.error?.message ?? 'The draft or the lead is no longer available.');
-      onChanged(null);
+      onChanged(null, false);
       return;
     }
     setSession({ log: logRes.data as EmailLog, lead: leadRes.data as Lead });
@@ -48,7 +59,7 @@ export function NeedsInputRow({ row, onChanged }: NeedsInputRowProps) {
           lead={session.lead}
           log={session.log}
           sequenceId={row.sequence_id}
-          onDone={(err) => { setSession(null); onChanged(err); }}
+          onDone={(err, sent) => { setSession(null); onChanged(err, sent); }}
         />
       )}
     </div>

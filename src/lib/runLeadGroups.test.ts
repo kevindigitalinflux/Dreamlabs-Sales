@@ -87,13 +87,17 @@ describe('needs-input resolution', () => {
     expect(countRunLeads(out)).toEqual({ sent: 1, needs_input: 3, skipped: 1, not_reached: 0, failed: 0, queued: 0 });
   });
 
-  it('keeps drafts open when the status lookup failed', () => {
-    const out = applyDraftResolution([ni('a', 'l-sent'), ni('b', 'l-gone'), ni('d', null)], new Map(), true);
-    expect(out.map((r) => [r.id, r.status, r.reason, r.resolution])).toEqual([
-      ['a', 'needs_input', 'Unfilled placeholder', 'open'],
-      ['b', 'needs_input', 'Unfilled placeholder', 'open'],
+  it('offers no action while the lookup is checking or failed, and never counts those as sent', () => {
+    const rows = [ni('a', 'l-sent'), ni('b', 'l-gone'), ni('d', null)];
+    const checking = applyDraftResolution(rows, new Map(), 'checking');
+    expect(checking.map((r) => [r.id, r.status, r.reason, r.resolution])).toEqual([
+      ['a', 'needs_input', 'Unfilled placeholder', 'checking'],
+      ['b', 'needs_input', 'Unfilled placeholder', 'checking'],
       ['d', 'needs_input', 'Unfilled placeholder', 'no_draft'],
     ]);
+    const failed = applyDraftResolution(rows, new Map([['l-sent', 'sent']]), 'failed');
+    expect(failed.map((r) => r.resolution)).toEqual(['lookup_failed', 'lookup_failed', 'no_draft']);
+    expect(countRunLeads(failed)).toEqual({ sent: 0, needs_input: 3, skipped: 0, not_reached: 0, failed: 0, queued: 0 });
   });
 
   it('counts only needs-input rows whose draft is still open', () => {

@@ -24,7 +24,8 @@ export function SelectedRunSection({ run, refresh, stopRun }: SelectedRunSection
   const draftIds = leads.rows.filter((r) => r.status === 'needs_input' && r.email_log_id).map((r) => r.email_log_id as string);
   const drafts = useDraftStatuses(draftIds);
   const [followUpError, setFollowUpError] = useState<string | null>(null);
-  const rows = applyDraftResolution(leads.rows, drafts.statuses, drafts.error !== null || !drafts.ready);
+  const lookup = drafts.error !== null ? 'failed' : drafts.ready ? 'ready' : 'checking';
+  const rows = applyDraftResolution(leads.rows, drafts.statuses, lookup);
 
   return (
     <div className="flex flex-col gap-4">
@@ -39,7 +40,15 @@ export function SelectedRunSection({ run, refresh, stopRun }: SelectedRunSection
         loading={leads.loading}
         error={leads.error}
         renderNeedsInputAction={(row) => (
-          <NeedsInputRow row={row} onChanged={(err) => { setFollowUpError(err); void drafts.refresh(); window.dispatchEvent(new Event(NEEDS_INPUT_CHANGED_EVENT)); }} />
+          <NeedsInputRow
+            row={row}
+            onChanged={(err, sent) => {
+              setFollowUpError(err);
+              void drafts.refresh();
+              if (sent) window.dispatchEvent(new Event(NEEDS_INPUT_CHANGED_EVENT));
+            }}
+            onRetry={() => void drafts.refresh()}
+          />
         )}
       />
     </div>

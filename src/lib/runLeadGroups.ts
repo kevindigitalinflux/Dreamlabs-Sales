@@ -119,7 +119,10 @@ export function formatWindowDate(value: string): string {
 const OPEN_LOG_STATUSES = ['draft', 'failed'];
 
 /** How a "needs input" row stands, judged from its draft email's current status. */
-export type NeedsInputResolution = 'open' | 'no_draft' | 'sent' | 'discarded';
+export type NeedsInputResolution = 'open' | 'checking' | 'lookup_failed' | 'no_draft' | 'sent' | 'discarded';
+
+/** State of the draft status lookup: loaded, still loading, or failed. */
+export type DraftLookup = 'ready' | 'checking' | 'failed';
 
 /**
  * Where a needs-input row stands. `logStatuses` maps email log id to its current status;
@@ -140,17 +143,19 @@ export function needsInputResolution(
  * Derives the displayed state of run rows without writing anything: a needs-input row whose draft
  * was sent by the user shows as sent ("Sent by you after review"), and one whose draft was removed
  * says so. Every row gets a `resolution` ('open' for rows that are not needs-input).
- * If the status lookup failed (`lookupFailed`), nothing can be concluded, so needs-input rows with a draft
- * stay 'open' (never 'discarded' or 'sent') and the action remains available.
+ * While the lookup is `checking` or `failed`, nothing can be concluded: needs-input rows with a draft become
+ * 'checking' or 'lookup_failed' (never 'open', 'discarded' or 'sent'), so no send action is offered.
  */
 export function applyDraftResolution<T extends { status: string; reason: string | null; email_log_id: string | null }>(
   rows: T[],
   logStatuses: ReadonlyMap<string, string>,
-  lookupFailed = false,
+  lookup: DraftLookup = 'ready',
 ): (T & { resolution: NeedsInputResolution })[] {
   return rows.map((row) => {
     if (row.status !== 'needs_input') return { ...row, resolution: 'open' as const };
-    const resolution = lookupFailed && row.email_log_id ? 'open' : needsInputResolution(row, logStatuses);
+    const resolution: NeedsInputResolution = row.email_log_id && lookup !== 'ready'
+      ? (lookup === 'failed' ? 'lookup_failed' : 'checking')
+      : needsInputResolution(row, logStatuses);
     if (resolution === 'sent') return { ...row, status: 'sent', reason: 'Sent by you after review', resolution };
     if (resolution === 'discarded') return { ...row, reason: 'Draft was discarded', resolution };
     return { ...row, resolution };
