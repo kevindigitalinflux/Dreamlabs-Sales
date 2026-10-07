@@ -23,7 +23,7 @@ export interface PipelineContext {
   deadlineMs: number;
   /**
    * MUST be called immediately before SMTP. Sets send_started_at (and email_log_id when known) on the run-lead row.
-   * Rejects if the marker could not be saved: do NOT send in that case. A row stuck `working` after this call is
+   * Rejects if the marker could not be saved: do NOT send in that case, and if reserveSend() had already succeeded you MUST call releaseSend() before returning. A row stuck `working` after this call is
    * marked failed ("Interrupted during send"), never requeued.
    */
   markSendStarted(emailLogId?: string): Promise<void>;

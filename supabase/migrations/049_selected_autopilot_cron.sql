@@ -65,7 +65,9 @@ CREATE POLICY "autopilot_runs_insert" ON autopilot_runs FOR INSERT
               AND status = 'active' AND outreach_sent_total = 0 AND actual_ai_cost_cents = 0);
 CREATE POLICY "autopilot_runs_update" ON autopilot_runs FOR UPDATE
   USING (is_org_member(org_id)) WITH CHECK (is_org_member(org_id));
-CREATE POLICY "autopilot_runs_delete" ON autopilot_runs FOR DELETE USING (is_org_member(org_id));
+-- Only the creator or an org admin may delete a run (createSelectedRun rolls back its own run this way).
+CREATE POLICY "autopilot_runs_delete" ON autopilot_runs FOR DELETE
+  USING (is_org_member(org_id) AND (created_by = auth.uid() OR is_org_admin(org_id)));
 
 -- 3b. Browsers may only change status / cancel_reason (the Stop button), and only to 'cancelled'.
 REVOKE UPDATE ON autopilot_runs FROM authenticated;
@@ -93,10 +95,15 @@ CREATE POLICY "autopilot_run_leads_insert" ON autopilot_run_leads FOR INSERT
   WITH CHECK (
     is_org_member(org_id) AND status = 'queued'
     AND reason IS NULL AND email_log_id IS NULL AND sequence_id IS NULL AND claimed_at IS NULL AND send_started_at IS NULL
-    AND EXISTS (SELECT 1 FROM autopilot_runs r WHERE r.id = autopilot_run_leads.run_id AND r.org_id = autopilot_run_leads.org_id)
+    AND EXISTS (SELECT 1 FROM autopilot_runs r WHERE r.id = autopilot_run_leads.run_id AND r.org_id = autopilot_run_leads.org_id
+                AND r.created_by = auth.uid() AND r.status = 'active' AND r.mode = 'selected')
     AND EXISTS (SELECT 1 FROM leads l WHERE l.id = autopilot_run_leads.lead_id AND l.org_id = autopilot_run_leads.org_id)
   );
 REVOKE UPDATE, DELETE ON autopilot_run_leads FROM authenticated;
+
+-- Defence in depth: anon never writes either table.
+REVOKE INSERT, UPDATE, DELETE ON autopilot_runs FROM anon;
+REVOKE INSERT, UPDATE, DELETE ON autopilot_run_leads FROM anon;
 
 -- 4 ---------------------------------------------------------------------------
 SELECT cron.schedule(

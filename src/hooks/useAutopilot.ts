@@ -84,7 +84,7 @@ export function useAutopilot() {
       org_id: currentOrg.id, created_by: session.user.id, mode: 'selected', status: 'active',
       window_start: input.windowStart, window_end: input.windowEnd, timezone: input.timeZone,
       window_date: localDateString(new Date(), input.timeZone), daily_send_cap: input.dailySendCap,
-      max_total_spend_cents: input.maxTotalSpendCents, started_at: new Date().toISOString(),
+      max_total_spend_cents: input.maxTotalSpendCents,
     }).select().single();
     if (runErr || !runRow) return { error: runErr ? mapRunInsertError(runErr) : 'Could not create the run', runId: null, notice: null };
     const runId = (runRow as AutopilotRun).id;
@@ -105,7 +105,7 @@ export function useAutopilot() {
 
   const stopRun = useCallback(async (): Promise<string | null> => {
     if (!run) return 'No active run';
-    const { error } = await supabase.from('autopilot_runs').update({ status: 'cancelled', cancel_reason: 'stopped by user' }).eq('id', run.id);
+    const { error } = await supabase.from('autopilot_runs').update({ status: 'cancelled', cancel_reason: 'stopped by user' }).eq('id', run.id).eq('status', 'active'); // a run that already finished is simply already stopped
     if (error) return error.message;
     await refresh();
     return null;

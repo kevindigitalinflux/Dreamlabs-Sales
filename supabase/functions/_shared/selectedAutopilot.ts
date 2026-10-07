@@ -65,7 +65,8 @@ async function finishRun(service: SupabaseClient, runId: string, decision: RunDe
 
 async function cancelRun(service: SupabaseClient, runId: string, reason: string): Promise<void> {
   await markQueuedNotReached(service, runId, reason);
-  await service.from('autopilot_runs').update({ status: 'cancelled', cancel_reason: reason }).eq('id', runId).eq('status', 'active');
+  const { error } = await service.from('autopilot_runs').update({ status: 'cancelled', cancel_reason: reason }).eq('id', runId).eq('status', 'active');
+  if (error) console.error('cancel run failed');
 }
 
 /** Cheap per-lead checks, then the (12b) pipeline. Never trusts the row's own org_id. */
@@ -96,7 +97,9 @@ export async function precheckLead(service: SupabaseClient, run: SelectedRun, ro
 async function recordOutcome(service: SupabaseClient, run: SelectedRun, row: RunLeadRow, raw: PipelineOutcome): Promise<void> {
   const out: PipelineOutcome = OUTCOMES.has((raw as { outcome?: string })?.outcome ?? '') ? raw : { outcome: 'failed', reason: 'Unknown pipeline outcome' };
   const reason = out.outcome === 'sent' ? null : String(out.reason ?? '').slice(0, 300) || null;
-  const saved = await updateRow(service, row.id, { status: out.outcome, reason, email_log_id: out.emailLogId ?? null, sequence_id: out.sequenceId ?? null });
+  const saved = await updateRow(service, row.id, { status: out.outcome, reason,
+    // Never overwrite the links with null: markSendStarted may already have saved email_log_id.
+    ...(out.emailLogId ? { email_log_id: out.emailLogId } : {}), ...(out.sequenceId ? { sequence_id: out.sequenceId } : {}) });
   if (!saved) await updateRow(service, row.id, { status: 'failed', reason: 'Could not save the result of this lead' });
   const cost = Math.max(0, Math.round(Number(out.costCents ?? 0)) || 0);
   if (cost) {
@@ -141,15 +144,33 @@ async function claimOne(service: SupabaseClient, runId: string): Promise<RunLead
   return null;
 }
 
-/** Rows stuck `working` >10min: requeue if no send began, otherwise fail (never requeue a possibly-sent row). */
+type StuckRow = { id: string; claimed_at: string | null; send_started_at: string | null };
+
+/** Applies the stuck-row decision. On a live run a never-sent row is requeued; on an ended run it becomes not_reached. A row whose send began is always failed. */
+async function applyStuck(service: SupabaseClient, rows: StuckRow[], runEnded: boolean): Promise<void> {
+  const now = new Date();
+  for (const r of rows) {
+    const action = stuckRowAction(r, now);
+    if (action === 'ignore') continue;
+    const patch = action === 'fail'
+      ? { status: 'failed', reason: STUCK_SEND_REASON }
+      : runEnded ? { status: 'not_reached', reason: 'Run ended before this lead was processed' } : { status: 'queued', claimed_at: null };
+    const { error } = await service.from('autopilot_run_leads').update({ ...patch, updated_at: nowIso() }).eq('id', r.id).eq('status', 'working');
+    if (error) console.error('recover stuck row failed');
+  }
+}
+
+/** Rows stuck in working >10min on this active run. */
 async function recoverStuckRows(service: SupabaseClient, runId: string): Promise<void> {
   const { data } = await service.from('autopilot_run_leads').select('id, claimed_at, send_started_at').eq('run_id', runId).eq('status', 'working');
-  const now = new Date();
-  for (const r of (data ?? []) as { id: string; claimed_at: string | null; send_started_at: string | null }[]) {
-    const action = stuckRowAction(r, now);
-    if (action === 'requeue') await service.from('autopilot_run_leads').update({ status: 'queued', claimed_at: null, updated_at: nowIso() }).eq('id', r.id).eq('status', 'working');
-    if (action === 'fail') await service.from('autopilot_run_leads').update({ status: 'failed', reason: STUCK_SEND_REASON, updated_at: nowIso() }).eq('id', r.id).eq('status', 'working');
-  }
+  await applyStuck(service, (data ?? []) as StuckRow[], false);
+}
+
+/** Rows stuck in working on runs that are no longer active (window closed, then the worker died). */
+async function recoverEndedRunRows(service: SupabaseClient): Promise<void> {
+  const { data } = await service.from('autopilot_run_leads').select('id, claimed_at, send_started_at, autopilot_runs!inner(status)')
+    .eq('status', 'working').neq('autopilot_runs.status', 'active');
+  await applyStuck(service, (data ?? []) as StuckRow[], true);
 }
 
 /** Fresh read of the run and row counts, then the pure decision. `run` is null when the run is gone or no longer an active selected run. */
@@ -193,6 +214,7 @@ export async function processRun(service: SupabaseClient, run: SelectedRun, star
 
 /** Tick: every active selected run once. One run's failure never stops the others. */
 export async function runTick(service: SupabaseClient, startedAt: number): Promise<number> {
+  try { await recoverEndedRunRows(service); } catch { console.error('recover ended runs failed'); }
   const { data: runs } = await service.from('autopilot_runs').select('*').eq('status', 'active').eq('mode', 'selected');
   let n = 0;
   for (const r of (runs ?? []) as SelectedRun[]) {
