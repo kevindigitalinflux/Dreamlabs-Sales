@@ -86,7 +86,7 @@ describe('pickRecipient', () => {
       { id: 'b', title: 'Director', email: 'b@x.com' },
       { id: 'c', title: 'Owner', email: 'c@x.com' },
     ]);
-    expect(r?.candidateId).toBe('b');
+    expect(r?.candidateId).toBe('c');
     const none = pickRecipient(null, [
       { id: 'a', title: null, email: 'a@x.com' },
       { id: 'b', title: 'Clerk', email: 'b@x.com' },
@@ -105,7 +105,7 @@ describe('pickRecipient', () => {
   });
 
   it('rejects implausible emails', () => {
-    for (const bad of ['nope', 'a@b', 'a b@c.com', '@c.com', 'a@', 'a@.com', 'a@c.', 'a@@c.com', 'a@c..com']) {
+    for (const bad of ['a@b.c', 'a,b@c.com', '<a@b.com>', 'mailto:a@b.com', 'a@b.com;', 'a@b.c0m', 'nope', 'a@b', 'a b@c.com', '@c.com', 'a@', 'a@.com', 'a@c.', 'a@@c.com', 'a@c..com']) {
       expect(pickRecipient(null, [{ id: 'a', title: 'Owner', email: bad }])).toBeNull();
     }
   });
@@ -141,5 +141,73 @@ describe('pickRecipient', () => {
       candidateId: 'a',
     });
     expect(pickRecipient('  Lead@X.com ', [])).toEqual({ email: 'lead@x.com', candidateId: null });
+  });
+
+  it('accepts plus-addressing, subdomains and uppercase', () => {
+    for (const ok of ['a+tag@b.com', 'a@mail.b.co.uk', 'A@B.COM']) {
+      expect(pickRecipient(null, [{ id: 'a', title: null, email: ok }])?.email).toBe(ok.toLowerCase());
+    }
+  });
+
+  const rank = (...titles: (string | null)[]) =>
+    pickRecipient(
+      null,
+      titles.map((title, i) => ({ id: String(i), title, email: `p${i}@x.com` })),
+    )?.candidateId;
+
+  it('ranks an owner above an earlier-listed manager', () => {
+    expect(rank('Manager', 'Owner')).toBe('1');
+  });
+
+  it('ranks a managing director above a director', () => {
+    expect(rank('Director', 'Managing Director')).toBe('1');
+  });
+
+  it('ranks a director above a head or manager', () => {
+    expect(rank('Head of Sales', 'Director')).toBe('1');
+  });
+
+  it('does not match head or manager inside other words', () => {
+    expect(rank('Headteacher', 'Overhead Crane Operator', 'Manager')).toBe('2');
+    expect(rank('Overhead Crane Operator', 'Headteacher')).toBe('0');
+  });
+
+  it('demotes assistant and account managers below real head/manager titles', () => {
+    expect(rank('Assistant Manager', 'Head of Sales')).toBe('1');
+    expect(rank('Account Manager', 'Manager')).toBe('1');
+  });
+
+  it('ranks a non-executive director below a director', () => {
+    expect(rank('Non-Executive Director', 'Director')).toBe('1');
+  });
+
+  it('keeps input order within a tier', () => {
+    expect(rank('Manager', 'Head of Ops')).toBe('0');
+  });
+
+  it('keeps candidateId when a candidate email equals the lead email', () => {
+    expect(
+      pickRecipient('a@x.com', [{ id: 'c1', title: 'Owner', email: 'A@x.com' }]),
+    ).toEqual({ email: 'a@x.com', candidateId: 'c1' });
+  });
+
+  it('lets the first of duplicate candidates win', () => {
+    const r = pickRecipient(null, [
+      { id: 'first', title: 'Owner', email: 'd@x.com' },
+      { id: 'second', title: 'Owner', email: 'd@x.com' },
+    ]);
+    expect(r?.candidateId).toBe('first');
+  });
+
+  it('treats an omitted dismissed_at as not dismissed', () => {
+    expect(pickRecipient(null, [{ id: 'a', title: null, email: 'a@x.com' }])?.candidateId).toBe('a');
+  });
+});
+
+describe('whitespace-only ids', () => {
+  it('are treated as missing', () => {
+    expect(pickSequence({ ...base, enrolledSequenceId: '  ', aiPickedId: 's2' })).toBe('s2');
+    expect(pickSequence({ ...base, aiPickedId: '  ', icpId: 'icpA' })).toBe('s1');
+    expect(pickSequence({ ...base, icpId: '  ' })).toBeNull();
   });
 });

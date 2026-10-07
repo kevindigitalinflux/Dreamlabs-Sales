@@ -2,8 +2,13 @@
 // into and which address an email goes to. No imports, so it runs in both
 // Deno (edge functions) and Vitest.
 
-const SENIORITY = /(owner|founder|managing director|ceo|chief executive|director|head|manager)/i;
-const PLAUSIBLE_EMAIL = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
+const TIER_1 = /\b(owner|founder|co-founder|managing director|ceo|chief executive)\b/i;
+const TIER_2 = /\bdirector\b/i;
+const TIER_3 = /\b(head|manager)\b/i;
+// Titles that look senior but are not the decision-maker: dropped to the last tier.
+const DEMOTED = /\b(assistant|deputy|associate|account|non-executive|non executive)\b/i;
+// No whitespace or <>,;: anywhere, a dotted domain, and a TLD of 2+ letters.
+const PLAUSIBLE_EMAIL = /^[^\s@<>,;:]+@([^\s@<>,;:.]+\.)+[a-z]{2,}$/i;
 
 /** Empty or whitespace-only strings count as missing. */
 function clean(value: string | null | undefined): string | null {
@@ -17,6 +22,16 @@ function validEmail(value: string | null | undefined): string | null {
   return v && PLAUSIBLE_EMAIL.test(v) ? v : null;
 }
 
+/** Seniority tier of a job title: 1 (best) to 4 (everything else, demoted titles). */
+function tierOf(title: string | null): number {
+  const t = title ?? '';
+  if (DEMOTED.test(t)) return 4;
+  if (TIER_1.test(t)) return 1;
+  if (TIER_2.test(t)) return 2;
+  if (TIER_3.test(t)) return 3;
+  return 4;
+}
+
 /**
  * Chooses the sequence to enrol a lead in.
  * 1. The sequence the lead is already enrolled in wins, even if it is no longer
@@ -24,7 +39,7 @@ function validEmail(value: string | null | undefined): string | null {
  * 2. Otherwise the AI's pick, only if it is a real id in `sequences`.
  * 3. Otherwise the first sequence whose `icp_id` equals the lead's `icpId`
  *    (skipped when the lead has no icp, so null never matches null).
- * 4. Otherwise null. Empty-string ids are treated as null.
+ * 4. Otherwise null. Empty or whitespace-only ids are treated as null.
  */
 export function pickSequence(input: {
   enrolledSequenceId: string | null;
@@ -45,10 +60,12 @@ export function pickSequence(input: {
 
 /**
  * Chooses who an email goes to. Candidates with a plausible email (and not
- * dismissed) are ranked by seniority of title, keeping input order for ties;
- * otherwise falls back to the lead's own email if valid, else null.
- * Emails are returned trimmed and lowercased; `candidateId` is null when the
- * lead's own email is used.
+ * dismissed) are ranked by tiered seniority of title: owner/founder/MD/CEO,
+ * then director, then head/manager, then everyone else (assistant, deputy,
+ * associate, account and non-executive titles are demoted to the last tier).
+ * Ties keep input order. Otherwise falls back to the lead's own email if
+ * valid, else null. Emails are returned trimmed and lowercased; `candidateId`
+ * is null when the lead's own email is used.
  */
 export function pickRecipient(
   leadEmail: string | null,
@@ -59,12 +76,15 @@ export function pickRecipient(
     dismissed_at?: string | null;
   }[],
 ): { email: string; candidateId: string | null } | null {
-  const usable = candidates
-    .filter((c) => c.dismissed_at == null)
-    .map((c) => ({ id: c.id, email: validEmail(c.email), senior: SENIORITY.test(c.title ?? '') }))
-    .filter((c): c is { id: string; email: string; senior: boolean } => c.email !== null);
-
-  const best = usable.find((c) => c.senior) ?? usable[0];
+  let best: { id: string; email: string; tier: number } | null = null;
+  for (const c of candidates) {
+    if (c.dismissed_at != null) continue;
+    const email = validEmail(c.email);
+    if (!email) continue;
+    const tier = tierOf(c.title);
+    // Strictly better only, so the first of equal tiers (input order) wins.
+    if (!best || tier < best.tier) best = { id: c.id, email, tier };
+  }
   if (best) return { email: best.email, candidateId: best.id };
 
   const own = validEmail(leadEmail);
