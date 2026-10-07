@@ -1,7 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
-import { sendMail } from '../_shared/smtp.ts';
-import { ATTACHMENT_BUCKET, MAX_TOTAL_ATTACHMENT_BYTES, parseAttachments, safeFilename } from '../_shared/emailAttachments.ts';
+import { sendLeadEmail } from '../_shared/sendLeadEmail.ts';
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -27,18 +26,11 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
-  const { data: settings } = await service
-    .from('user_email_settings').select('*').eq('user_id', user.id).maybeSingle();
-  if (!settings?.is_verified) return json({ error: 'Set up and verify your email in Settings → Email sending first' }, 400, headers);
-  const { data: pass } = await service.rpc('app_get_smtp_secret', { uid: user.id });
-  if (!pass) return json({ error: 'No stored email password — re-save your settings' }, 400, headers);
 
   let orgId: string | null = null;
-  let leadStage: string | null = null;
   if (body.lead_id) {
-    const { data: lead } = await service.from('leads').select('org_id, stage').eq('id', body.lead_id).maybeSingle();
-    orgId = (lead as { org_id: string; stage: string } | null)?.org_id ?? null;
-    leadStage = (lead as { org_id: string; stage: string } | null)?.stage ?? null;
+    const { data: lead } = await service.from('leads').select('org_id').eq('id', body.lead_id).maybeSingle();
+    orgId = (lead as { org_id: string } | null)?.org_id ?? null;
   }
   if (!orgId && !body.log_id) return json({ error: 'lead_id is required to send a new email' }, 400, headers);
   // The caller supplies lead_id directly, and we later write to that lead
@@ -56,13 +48,9 @@ Deno.serve(async (req) => {
   // individual owner by design), which any member of the draft's own org may
   // claim and send. A human-created draft (sent_by set) is still strictly
   // owner-only.
-  let draftAttachments: unknown = [];
-  let draftOrgId: string | null = null;
   if (body.log_id) {
-    const { data: log } = await service.from('email_logs').select('sent_by, org_id, attachments').eq('id', body.log_id).single();
+    const { data: log } = await service.from('email_logs').select('sent_by, org_id').eq('id', body.log_id).single();
     if (!log) return json({ error: 'Draft not found' }, 404, headers);
-    draftAttachments = log.attachments;
-    draftOrgId = log.org_id as string | null;
     if (log.sent_by !== null && log.sent_by !== user.id) {
       return json({ error: 'Draft not found' }, 404, headers);
     }
@@ -72,101 +60,19 @@ Deno.serve(async (req) => {
     }
   }
 
-  // What to attach: the caller's explicit list when given (the composer can add/remove
-  // files for one email), otherwise whatever the stored draft carries (bulk release,
-  // sequence drafts). parseAttachments drops anything malformed or of a disallowed type.
-  const attachments = parseAttachments(body.attachments !== undefined ? body.attachments : draftAttachments);
-  // Files are namespaced <org_id>/...; only ever attach ones inside the lead's/draft's own org,
-  // so a crafted request can't make this function mail another organisation's documents.
-  const attachOrgId = orgId ?? draftOrgId;
-  if (attachments.length > 0) {
-    if (!attachOrgId || attachments.some((a) => !a.path.startsWith(`${attachOrgId}/`) || a.path.includes('..'))) {
-      return json({ error: 'Attachment not allowed' }, 400, headers);
-    }
-    if (attachments.reduce((sum, a) => sum + a.size, 0) > MAX_TOTAL_ATTACHMENT_BYTES) {
-      return json({ error: 'Attachments are over the 10 MB limit for one email' }, 400, headers);
-    }
+  const result = await sendLeadEmail(service, {
+    senderId: user.id,
+    to: body.to_email,
+    subject: body.subject,
+    body: body.body,
+    leadId: body.lead_id,
+    logId: body.log_id,
+    decisionMakerCandidateId: body.decision_maker_candidate_id,
+    attachments: body.attachments,
+  });
+  if (!result.ok) {
+    const warning = result.warning;
+    return json({ error: result.error, ...(result.logId !== undefined ? { log_id: result.logId } : {}), ...(warning ? { warning } : {}) }, result.status ?? 400, headers);
   }
-
-  let status = 'sent';
-  let errorMessage: string | null = null;
-  let messageId: string | null = null;
-  try {
-    // Load every file BEFORE sending: if one can't be read the whole send fails, rather than
-    // quietly sending the email without the price list the lead asked for.
-    const files: { filename: string; contentType: string; content: Uint8Array }[] = [];
-    let loadedBytes = 0;
-    for (const a of attachments) {
-      const { data: blob, error: dlErr } = await service.storage.from(ATTACHMENT_BUCKET).download(a.path);
-      if (dlErr || !blob) throw new Error(`Attachment "${a.name}" could not be loaded`);
-      const bytes = new Uint8Array(await blob.arrayBuffer());
-      loadedBytes += bytes.length;
-      if (loadedBytes > MAX_TOTAL_ATTACHMENT_BYTES) throw new Error('Attachments are over the 10 MB limit for one email');
-      files.push({ filename: safeFilename(a.name), contentType: a.type, content: bytes });
-    }
-    const result = await sendMail(
-      { host: settings.smtp_host, port: settings.smtp_port, user: settings.smtp_user, pass: pass as string, fromName: settings.from_name },
-      { to: body.to_email, subject: body.subject, body: body.body, attachments: files },
-    );
-    messageId = result.messageId;
-  } catch (e) {
-    status = 'failed';
-    errorMessage = e instanceof Error ? e.message : String(e);
-  }
-
-  const row: Record<string, unknown> = {
-    lead_id: body.lead_id ?? null, sent_by: user.id, to_email: body.to_email,
-    subject: body.subject, body: body.body, status, error_message: errorMessage,
-    message_id: messageId, sent_at: new Date().toISOString(),
-    attachments, // what this email actually carried, for the sent-mail history
-  };
-  // Only touch decision_maker_candidate_id when the caller actually supplied
-  // it. Omitting the key entirely (rather than defaulting to null) matters
-  // on the update path: ReleaseQueue's bulk release calls this with log_id
-  // only, and this update runs against an EXISTING row that may already
-  // carry real attribution set at draft time — always writing `?? null`
-  // here silently wiped it on every bulk release (see I1 in the
-  // 2026-09-28 final review).
-  if (body.decision_maker_candidate_id !== undefined) {
-    row.decision_maker_candidate_id = body.decision_maker_candidate_id;
-  }
-  if (orgId) row.org_id = orgId; // omitted on update-only calls where org_id is already set on the existing row
-  let logId = body.log_id ?? null;
-  let logFailed = false;
-  if (logId) {
-    // Matches the ownership check above: a claimed system-generated draft's
-    // existing row still has sent_by = null at this point (row.sent_by above
-    // is the NEW value being written), so an `.eq('sent_by', user.id)` filter
-    // here would match zero rows and silently no-op the update — the email
-    // would send but the log would stay stuck on 'draft' forever.
-    const { error: logErr } = await service.from('email_logs').update(row).eq('id', logId).or(`sent_by.is.null,sent_by.eq.${user.id}`);
-    if (logErr) {
-      console.error('email_logs update failed:', logErr.message);
-      logFailed = true;
-    }
-  } else {
-    const { data: inserted, error: logErr } = await service.from('email_logs').insert(row).select('id').single();
-    if (logErr) {
-      console.error('email_logs insert failed:', logErr.message);
-      logFailed = true;
-    }
-    logId = (inserted as { id: string } | null)?.id ?? null;
-  }
-
-  // Best-effort: update the lead's last-contacted timestamp on every
-  // successful send through this function (manual, sequence, or bulk
-  // release) — and advance a brand-new lead to "contacted" specifically,
-  // never touching any other stage so a reply to an already-advanced lead
-  // is never silently reset backward. A failure here must not turn a
-  // successful send into an error response — the email already sent and
-  // logged either way.
-  if (status === 'sent' && body.lead_id) {
-    const leadUpdate: Record<string, unknown> = { last_contacted_at: new Date().toISOString() };
-    if (leadStage === 'new_lead') leadUpdate.stage = 'contacted';
-    await service.from('leads').update(leadUpdate).eq('id', body.lead_id);
-  }
-
-  const warning = logFailed ? 'Email sent but logging failed' : undefined;
-  if (status === 'failed') return json({ error: 'Send failed: ' + errorMessage, log_id: logId, ...(warning ? { warning } : {}) }, 400, headers);
-  return json({ ok: true, log_id: logId, ...(warning ? { warning } : {}) }, 200, headers);
+  return json({ ok: true, log_id: result.logId, ...(result.warning ? { warning: result.warning } : {}) }, 200, headers);
 });
