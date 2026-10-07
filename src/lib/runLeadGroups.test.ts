@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countRunLeads, groupKeyFor, groupRunLeads, runFinishNote, runStatusLabel } from './runLeadGroups';
+import { countRunLeads, formatWindowDate, RUN_LEAD_GROUP_ORDER, groupKeyFor, groupRunLeads, runFinishNote, runStatusLabel } from './runLeadGroups';
 
 const row = (id: string, status: string, updated_at = '2026-10-08T10:00:00Z', reason: string | null = null) => ({ id, status, updated_at, reason });
 
@@ -16,8 +16,15 @@ describe('runLeadGroups', () => {
   });
 
   it('handles an empty list', () => {
-    expect(groupRunLeads([]).every((g) => g.rows.length === 0)).toBe(true);
-    expect(countRunLeads([]).sent).toBe(0);
+    expect(groupRunLeads([]).map((g) => [g.key, g.rows.length])).toEqual(RUN_LEAD_GROUP_ORDER.map((k) => [k, 0]));
+    expect(countRunLeads([])).toEqual({ sent: 0, needs_input: 0, skipped: 0, not_reached: 0, failed: 0, queued: 0 });
+  });
+
+  it('formats a calendar date without time zone shifts', () => {
+    expect(formatWindowDate('2026-10-08')).toBe('Thu 8 Oct 2026');
+    expect(formatWindowDate('2026-01-01')).toBe('Thu 1 Jan 2026');
+    expect(formatWindowDate('2026-13-45')).toBe('2026-13-45');
+    expect(formatWindowDate('soon')).toBe('soon');
   });
 
   it('puts an unknown status in the still-queued group, never sent', () => {

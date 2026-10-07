@@ -33,7 +33,7 @@ export function AutopilotStatus() {
       {notice && <p role="status" className="text-sm text-warning">{notice}</p>}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
-      {!run && !selected.run && (
+      {!run && selected.run?.status !== 'active' && (
         <EmptyState
           icon={Rocket}
           title="No autopilot run active"

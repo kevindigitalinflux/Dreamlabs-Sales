@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router';
 import { useAutopilotRunLeads } from '../../hooks/useAutopilotRunLeads';
 import type { RunLeadRow } from '../../hooks/useAutopilotRunLeads';
 import type { AutopilotRun } from '../../types';
@@ -19,6 +20,9 @@ export function SelectedRunSection({ run, refresh, stopRun, renderNeedsInputActi
   return (
     <div className="flex flex-col gap-4">
       <RunHeader run={run} rows={leads.rows} onStop={stopRun} />
+      {run.status !== 'active' && (
+        <Link to="/outreach/autopilot/new" className="text-sm font-semibold text-cyan hover:underline">Start a new run</Link>
+      )}
       <RunLeadGroups rows={leads.rows} loading={leads.loading} error={leads.error} renderNeedsInputAction={renderNeedsInputAction} />
     </div>
   );

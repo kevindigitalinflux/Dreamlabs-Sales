@@ -3,14 +3,14 @@ import { XCircle } from 'lucide-react';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
-import { runFinishNote, runStatusLabel } from '../../lib/runLeadGroups';
+import { formatWindowDate, runFinishNote, runStatusLabel } from '../../lib/runLeadGroups';
 import type { AutopilotRun } from '../../types';
 
 const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 interface RunHeaderProps {
   run: AutopilotRun;
-  /** Whether any row ended because the finish time passed (used for the finish note). */
+  /** The run's lead rows (status and reason), used to work out why the run ended. */
   rows: { status: string; reason: string | null }[];
   onStop: () => Promise<string | null>;
 }
@@ -22,7 +22,10 @@ export function RunHeader({ run, rows, onStop }: RunHeaderProps) {
   const note = runFinishNote(run, rows);
   const active = run.status === 'active';
 
-  const stop = async () => { setBusy(true); setError(await onStop()); setBusy(false); };
+  const stop = async () => {
+    setBusy(true);
+    try { setError(await onStop()); } catch (e) { setError(e instanceof Error ? e.message : 'Could not stop the run'); } finally { setBusy(false); }
+  };
 
   return (
     <Card>
@@ -33,7 +36,7 @@ export function RunHeader({ run, rows, onStop }: RunHeaderProps) {
         </div>
         {run.window_start && run.window_end && (
           <p className="text-sm text-muted">
-            Sending {run.window_start} to {run.window_end}{run.timezone ? ` (${run.timezone})` : ''}{run.window_date ? ` on ${run.window_date}` : ''}
+            Sending {run.window_start} to {run.window_end}{run.timezone ? ` (${run.timezone})` : ''}{run.window_date ? ` on ${formatWindowDate(run.window_date)}` : ''}
           </p>
         )}
         <p className="text-sm text-muted">

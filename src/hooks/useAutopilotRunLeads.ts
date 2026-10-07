@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { AutopilotRunLead } from '../types';
 
@@ -8,6 +8,7 @@ export type RunLeadRow = AutopilotRunLead & { lead: { id: string; business_name:
 /**
  * The leads of one selected-mode run, realtime-subscribed. `onChange` runs after every refetch
  * caused by a realtime event, so the caller can refresh the run's counters too.
+ * Late responses after the run id changes or the component unmounts are ignored.
  */
 export function useAutopilotRunLeads(runId: string | null, onChange?: () => void) {
   const [rows, setRows] = useState<RunLeadRow[]>([]);
@@ -16,30 +17,35 @@ export function useAutopilotRunLeads(runId: string | null, onChange?: () => void
   const onChangeRef = useRef(onChange);
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
-  const refresh = useCallback(async () => {
-    if (!runId) return;
-    const { data, error: err } = await supabase
-      .from('autopilot_run_leads')
-      .select('*, lead:leads(id, business_name)')
-      .eq('run_id', runId)
-      .order('updated_at');
-    if (err) setError(err.message);
-    else { setRows((data as RunLeadRow[] | null) ?? []); setError(null); }
-    setLoading(false);
-  }, [runId]);
-
   useEffect(() => {
-    if (!runId) { setRows([]); setLoading(false); return; }
+    setRows([]);
+    setError(null);
+    if (!runId) { setLoading(false); return; }
+    let active = true;
     setLoading(true);
-    void refresh();
+
+    const load = async (): Promise<boolean> => {
+      const { data, error: err } = await supabase
+        .from('autopilot_run_leads')
+        .select('*, lead:leads(id, business_name)')
+        .eq('run_id', runId)
+        .order('updated_at');
+      if (!active) return false;
+      if (err) setError(err.message);
+      else { setRows((data as RunLeadRow[] | null) ?? []); setError(null); }
+      setLoading(false);
+      return true;
+    };
+
+    void load();
     const channel = supabase
       .channel(`autopilot-run-leads-${runId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'autopilot_run_leads', filter: `run_id=eq.${runId}` }, () => {
-        void refresh().then(() => onChangeRef.current?.());
+        void load().then((ok) => { if (ok && active) onChangeRef.current?.(); });
       })
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
-  }, [runId, refresh]);
+    return () => { active = false; void supabase.removeChannel(channel); };
+  }, [runId]);
 
-  return { rows, loading, error, refresh };
+  return { rows, loading, error };
 }

@@ -81,3 +81,21 @@ export function runFinishNote(
   }
   return null;
 }
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * Formats a stored calendar date ('YYYY-MM-DD') as e.g. 'Wed 8 Oct 2026'.
+ * Uses the date parts only (UTC-safe, no time zone conversion); returns the input unchanged if it is not a valid date.
+ */
+export function formatWindowDate(value: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return value;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return value;
+  return `${WEEKDAYS[date.getUTCDay()]} ${d} ${MONTHS[mo - 1]} ${y}`;
+}
