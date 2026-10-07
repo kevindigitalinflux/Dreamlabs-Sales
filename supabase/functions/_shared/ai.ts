@@ -27,7 +27,7 @@ function orgDescriptionLine(orgName: string, companyContext: string | null | und
     : `You are a sales assistant for ${orgName}.`;
 }
 
-async function geminiJson(prompt: string, apiKey: string): Promise<unknown> {
+export async function geminiJson(prompt: string, apiKey: string): Promise<unknown> {
   const res = await fetch(`${GEMINI_URL}/${AI_MODEL}:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -41,6 +41,38 @@ async function geminiJson(prompt: string, apiKey: string): Promise<unknown> {
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error('Gemini returned no content');
   return JSON.parse(text);
+}
+
+/**
+ * One Gemini call with Google Search grounding. Gemini does not allow a JSON response mime
+ * type together with the search tool, so this asks for plain text. Returns the first
+ * candidate's text and the de-duplicated source URIs. No key means an empty result without
+ * calling out. Throws on an HTTP error (callers that must not fail wrap it).
+ */
+export async function geminiGroundedSearch(prompt: string, apiKey: string): Promise<{ text: string; sources: string[] }> {
+  if (!apiKey) return { text: '', sources: [] };
+  const res = await fetch(`${GEMINI_URL}/${AI_MODEL}:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      tools: [{ google_search: {} }],
+      generationConfig: { temperature: 0.3 },
+    }),
+  });
+  if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json() as {
+    candidates?: {
+      content?: { parts?: { text?: string }[] };
+      groundingMetadata?: { groundingChunks?: { web?: { uri?: string } }[] };
+    }[];
+  };
+  const candidate = data.candidates?.[0];
+  const text = candidate?.content?.parts?.[0]?.text ?? '';
+  const uris = (candidate?.groundingMetadata?.groundingChunks ?? [])
+    .map((c) => c.web?.uri)
+    .filter((u): u is string => typeof u === 'string' && u.length > 0);
+  return { text, sources: [...new Set(uris)] };
 }
 
 /** Calls Claude once; returns the text and why it stopped ('max_tokens' means the reply was cut off). */

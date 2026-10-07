@@ -36,7 +36,7 @@ function extractPhone(html: string): string | null {
 // against DNS rebinding (a public hostname resolving to a private IP at
 // fetch time) — Deno's edge runtime doesn't expose a pre-fetch DNS resolve
 // step here, so this is a static check on the literal URL, not the network.
-function isPrivateOrLoopbackHost(hostname: string): boolean {
+export function isPrivateOrLoopbackHost(hostname: string): boolean {
   const host = hostname.toLowerCase();
   if (host === 'localhost' || host.endsWith('.localhost') || host === '0.0.0.0' || host === '::1') return true;
   const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
@@ -52,7 +52,7 @@ function isPrivateOrLoopbackHost(hostname: string): boolean {
   return false;
 }
 
-function parseSafeWebsiteUrl(website: string): URL | null {
+export function parseSafeWebsiteUrl(website: string): URL | null {
   let url: URL;
   try {
     url = new URL(website);
