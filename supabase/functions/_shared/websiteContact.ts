@@ -30,39 +30,9 @@ function extractPhone(html: string): string | null {
   return plain ? plain[1].trim() : null;
 }
 
-// Blocks the direct SSRF vectors (loopback, RFC1918 ranges, link-local incl.
-// the 169.254.169.254 cloud metadata address, and non-http(s) schemes like
-// file:// or gopher://) for a caller-supplied website URL. Does not defend
-// against DNS rebinding (a public hostname resolving to a private IP at
-// fetch time) — Deno's edge runtime doesn't expose a pre-fetch DNS resolve
-// step here, so this is a static check on the literal URL, not the network.
-export function isPrivateOrLoopbackHost(hostname: string): boolean {
-  const host = hostname.toLowerCase();
-  if (host === 'localhost' || host.endsWith('.localhost') || host === '0.0.0.0' || host === '::1') return true;
-  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
-  if (ipv4) {
-    const a = Number(ipv4[1]);
-    const b = Number(ipv4[2]);
-    if (a === 10 || a === 127 || a === 0) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-  }
-  if (host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:')) return true;
-  return false;
-}
-
-export function parseSafeWebsiteUrl(website: string): URL | null {
-  let url: URL;
-  try {
-    url = new URL(website);
-  } catch {
-    return null;
-  }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-  if (isPrivateOrLoopbackHost(url.hostname)) return null;
-  return url;
-}
+// SSRF host guard lives in hostGuard.ts (pure, import-free); re-exported so existing imports keep working.
+import { isPrivateOrLoopbackHost, parseSafeWebsiteUrl } from './hostGuard.ts';
+export { isPrivateOrLoopbackHost, parseSafeWebsiteUrl };
 
 /**
  * Best-effort: fetch a business website and pull a plausible contact email
