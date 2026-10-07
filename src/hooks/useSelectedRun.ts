@@ -64,8 +64,10 @@ export function useSelectedRun() {
   const stopRun = useCallback(async (): Promise<string | null> => {
     const current = runRef.current;
     if (!current || current.org_id !== orgId) return 'No run to stop';
+    const token = tokenRef.current;
     const { error: err } = await supabase.from('autopilot_runs')
       .update({ status: 'cancelled', cancel_reason: 'stopped by user' }).eq('id', current.id).eq('status', 'active');
+    if (token !== tokenRef.current) return null;
     if (err) return err.message;
     await refresh();
     return null;

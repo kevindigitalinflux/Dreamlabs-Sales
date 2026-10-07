@@ -85,9 +85,25 @@ export function runFinishNote(
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+function isLeapYear(y: number): boolean {
+  return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+}
+
+function daysInMonth(y: number, m: number): number {
+  return [31, isLeapYear(y) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+}
+
+/** Day of week (0 = Sunday) of a Gregorian calendar date, by pure arithmetic (no Date, so no time zone). */
+export function weekdayIndex(y: number, m: number, d: number): number {
+  const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+  const yy = m < 3 ? y - 1 : y;
+  return (yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) + t[m - 1] + d) % 7;
+}
+
 /**
- * Formats a stored calendar date ('YYYY-MM-DD') as e.g. 'Wed 8 Oct 2026'.
- * Uses the date parts only (UTC-safe, no time zone conversion); returns the input unchanged if it is not a valid date.
+ * Formats a stored calendar date ('YYYY-MM-DD') as e.g. 'Thu 8 Oct 2026'.
+ * Pure arithmetic on the date parts, so the result never depends on the machine time zone;
+ * returns the input unchanged if it is not a valid date.
  */
 export function formatWindowDate(value: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -95,7 +111,6 @@ export function formatWindowDate(value: string): string {
   const y = Number(m[1]);
   const mo = Number(m[2]);
   const d = Number(m[3]);
-  const date = new Date(Date.UTC(y, mo - 1, d));
-  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return value;
-  return `${WEEKDAYS[date.getUTCDay()]} ${d} ${MONTHS[mo - 1]} ${y}`;
+  if (mo < 1 || mo > 12 || d < 1 || d > daysInMonth(y, mo)) return value;
+  return `${WEEKDAYS[weekdayIndex(y, mo, d)]} ${d} ${MONTHS[mo - 1]} ${y}`;
 }

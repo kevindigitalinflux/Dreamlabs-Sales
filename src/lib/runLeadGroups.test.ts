@@ -20,11 +20,19 @@ describe('runLeadGroups', () => {
     expect(countRunLeads([])).toEqual({ sent: 0, needs_input: 0, skipped: 0, not_reached: 0, failed: 0, queued: 0 });
   });
 
-  it('formats a calendar date without time zone shifts', () => {
+  it('formats known calendar dates with the right weekday (pure arithmetic, no time zone)', () => {
     expect(formatWindowDate('2026-10-08')).toBe('Thu 8 Oct 2026');
-    expect(formatWindowDate('2026-01-01')).toBe('Thu 1 Jan 2026');
-    expect(formatWindowDate('2026-13-45')).toBe('2026-13-45');
-    expect(formatWindowDate('soon')).toBe('soon');
+    expect(formatWindowDate('2026-03-29')).toBe('Sun 29 Mar 2026');
+    expect(formatWindowDate('2024-02-29')).toBe('Thu 29 Feb 2024');
+    expect(formatWindowDate('2026-12-31')).toBe('Thu 31 Dec 2026');
+    expect(formatWindowDate('2027-01-01')).toBe('Fri 1 Jan 2027');
+    expect(formatWindowDate('2000-02-29')).toBe('Tue 29 Feb 2000');
+  });
+
+  it('returns invalid dates unchanged', () => {
+    for (const bad of ['2026-13-45', '2026-02-29', '2026-04-31', '2026-00-10', '2026-10-00', 'soon', '2026-1-1', '']) {
+      expect(formatWindowDate(bad)).toBe(bad);
+    }
   });
 
   it('puts an unknown status in the still-queued group, never sent', () => {
