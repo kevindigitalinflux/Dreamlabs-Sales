@@ -9,7 +9,7 @@ export const AI_MODEL = 'gemini-3.6-flash';
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 export type ClaudeModel = 'claude-sonnet-5' | 'claude-haiku-4-5';
 
-const DASH_GUARDRAIL_LINE =
+export const DASH_GUARDRAIL_LINE =
   'Never use em-dashes or hyphens as sentence punctuation — use commas or periods instead.';
 
 /**
@@ -27,9 +27,11 @@ function orgDescriptionLine(orgName: string, companyContext: string | null | und
     : `You are a sales assistant for ${orgName}.`;
 }
 
-export async function geminiJson(prompt: string, apiKey: string): Promise<unknown> {
+/** `timeoutMs` is optional; when set, the whole call (including reading the reply) is aborted after it. */
+export async function geminiJson(prompt: string, apiKey: string, timeoutMs?: number): Promise<unknown> {
   const res = await fetch(`${GEMINI_URL}/${AI_MODEL}:generateContent?key=${apiKey}`, {
     method: 'POST',
+    signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
@@ -49,10 +51,11 @@ export async function geminiJson(prompt: string, apiKey: string): Promise<unknow
  * candidate's text and the de-duplicated source URIs. No key means an empty result without
  * calling out. Throws on an HTTP error (callers that must not fail wrap it).
  */
-export async function geminiGroundedSearch(prompt: string, apiKey: string): Promise<{ text: string; sources: string[] }> {
+export async function geminiGroundedSearch(prompt: string, apiKey: string, timeoutMs = 25000): Promise<{ text: string; sources: string[] }> {
   if (!apiKey) return { text: '', sources: [] };
   const res = await fetch(`${GEMINI_URL}/${AI_MODEL}:generateContent?key=${apiKey}`, {
     method: 'POST',
+    signal: AbortSignal.timeout(timeoutMs),
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
@@ -68,7 +71,7 @@ export async function geminiGroundedSearch(prompt: string, apiKey: string): Prom
     }[];
   };
   const candidate = data.candidates?.[0];
-  const text = candidate?.content?.parts?.[0]?.text ?? '';
+  const text = (candidate?.content?.parts ?? []).map((p) => p.text ?? '').join('');
   const uris = (candidate?.groundingMetadata?.groundingChunks ?? [])
     .map((c) => c.web?.uri)
     .filter((u): u is string => typeof u === 'string' && u.length > 0);
