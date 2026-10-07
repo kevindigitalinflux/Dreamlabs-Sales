@@ -5,7 +5,8 @@ import { corsHeaders, json } from '../_shared/cors.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { loadIcp } from '../_shared/icp.ts';
 import { runBounded } from '../_shared/concurrency.ts';
-import { fetchFirstOfficer } from '../_shared/companiesHouse.ts';
+import { fetchActiveOfficers } from '../_shared/companiesHouse.ts';
+import { lookupCompanyContacts } from '../_shared/registryContacts.ts';
 
 interface IcpParams {
   industry: string | null; location: string | null; city: string | null;
@@ -37,18 +38,32 @@ async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: strin
       return seen.some((s) => s.business_name.toLowerCase() === businessName.toLowerCase());
     }
 
-    const owners = await runBounded(companies, 5, (c) => fetchFirstOfficer(c.company_number, apiKey));
+    const googlePlaces = await resolveOrgApiKey(service, orgId, 'google_places');
+    const city = icp.city ?? null;
+    const found = await runBounded(companies, 5, async (c) => {
+      const [officers, contacts] = await Promise.all([
+        fetchActiveOfficers(c.company_number, apiKey),
+        lookupCompanyContacts({ business_name: c.title, city }, { googlePlaces }),
+      ]);
+      return { officers, contacts };
+    });
 
     const rows = companies.map((c, i) => ({
       scrape_job_id: jobId,
       business_name: c.title,
-      owner_name: owners[i],
+      // Kept for backward compatibility: the first officer's "First Last".
+      owner_name: found[i]!.officers[0]
+        ? [found[i]!.officers[0]!.first_name, found[i]!.officers[0]!.last_name].filter(Boolean).join(' ') || null
+        : null,
+      website: found[i]!.contacts.website,
+      email: found[i]!.contacts.email,
+      phone: found[i]!.contacts.phone,
       address: c.address_snippet ?? null,
       city: icp.city ?? null,
       vertical: icp.industry,
       source: 'companies_house',
       source_id: c.company_number,
-      raw_data: { company: c },
+      raw_data: { company: c, officers: found[i]!.officers },
       status: isDuplicate(c.title) ? 'duplicate' : 'pending',
     }));
 

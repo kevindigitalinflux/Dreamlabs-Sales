@@ -1,5 +1,7 @@
 import { isFuzzyNameMatch } from './fuzzyMatch.ts';
 import { fetchWithTimeout } from './fetchWithTimeout.ts';
+import { mapCompaniesHouseOfficers } from './registryOfficers.ts';
+import type { RegistryOfficer } from './registryOfficers.ts';
 
 /**
  * Companies House returns officer names as "SURNAME, Forename Middlename".
@@ -27,6 +29,23 @@ export async function fetchFirstOfficer(companyNumber: string, apiKey: string): 
     return rawName ? normalizeOfficerName(rawName) : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Active, non-corporate officers of a company as decision-maker candidates
+ * (directors first, max 5). Returns [] on any error — never throws.
+ */
+export async function fetchActiveOfficers(companyNumber: string, apiKey: string): Promise<RegistryOfficer[]> {
+  try {
+    const res = await fetchWithTimeout(`https://api.company-information.service.gov.uk/company/${companyNumber}/officers`, {
+      headers: { Authorization: 'Basic ' + btoa(`${apiKey}:`) },
+    });
+    if (!res.ok) return [];
+    const data = await res.json() as { items?: { name?: string; officer_role?: string; resigned_on?: string }[] };
+    return mapCompaniesHouseOfficers(data.items ?? []);
+  } catch {
+    return [];
   }
 }
 
