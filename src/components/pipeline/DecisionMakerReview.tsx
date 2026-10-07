@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import type { DecisionMakerCandidate, Lead } from '../../types';
 import { readableInvokeError } from '../../lib/invokeError';
 import { additionsFor, additionsPatchFor, alreadyOnLead, candidateName } from '../../lib/decisionMakerAdditions';
+import { candidateSourceLabel, hasNoContactDetails } from '../../lib/candidateSource';
 import { dismissDecisionMaker } from '../../lib/dismissDecisionMaker';
 import { ConfirmDeleteButton } from '../ui/ConfirmDeleteButton';
 import type { LeadPatch } from '../../lib/leadUpdates';
@@ -133,12 +134,15 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
                 {candidates.map((candidate) => (
                   <li key={candidate.id} className="rounded bg-surface/60 p-2 text-sm">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] uppercase text-muted">{candidate.source}</span>
+                      <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] uppercase text-muted">{candidateSourceLabel(candidate.source)}</span>
                       <span className="font-semibold">{candidateName(candidate)}</span>
                       {candidate.title && <span className="text-muted">— {candidate.title}</span>}
                     </div>
                     {candidate.source === 'hunter' && (
                       <p className="mt-1 text-success">{candidate.email}</p>
+                    )}
+                    {hasNoContactDetails(candidate) && candidate.source !== 'apollo' && (
+                      <p className="mt-1 text-xs text-muted">No contact details found yet.</p>
                     )}
                     {candidate.source === 'apollo' && (
                       <div className="mt-1 flex flex-wrap items-center gap-2">

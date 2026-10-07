@@ -5,6 +5,7 @@ import { readableInvokeError } from '../../lib/invokeError';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import { additionsFor, additionsPatchFor, alreadyOnLead, candidateName } from '../../lib/decisionMakerAdditions';
 import { dismissDecisionMaker } from '../../lib/dismissDecisionMaker';
+import { candidateSourceLabel, hasNoContactDetails } from '../../lib/candidateSource';
 import { ConfirmDeleteButton } from '../ui/ConfirmDeleteButton';
 import type { DecisionMakerCandidate, Lead } from '../../types';
 import { Button } from '../ui/Button';
@@ -90,7 +91,7 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
       {candidates.map((candidate) => (
         <li key={candidate.id} className="rounded-lg bg-surface/60 p-2 text-sm">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] uppercase text-muted">{candidate.source}</span>
+            <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] uppercase text-muted">{candidateSourceLabel(candidate.source)}</span>
             <span className="font-semibold">{candidateName(candidate)}</span>
             {candidate.title && <span className="text-muted">— {candidate.title}</span>}
             {candidate.linkedin_url && (
@@ -100,6 +101,9 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
             )}
           </div>
           {candidate.source === 'hunter' && <p className="mt-1 text-success">{candidate.email}</p>}
+          {hasNoContactDetails(candidate) && candidate.source !== 'apollo' && (
+            <p className="mt-1 text-xs text-muted">No contact details found yet — use "Find decision maker" to look them up.</p>
+          )}
           {candidate.source === 'apollo' && (
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <Button
