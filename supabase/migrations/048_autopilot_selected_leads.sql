@@ -47,6 +47,7 @@ CREATE TABLE autopilot_run_leads (
   UNIQUE (run_id, lead_id)
 );
 CREATE INDEX idx_autopilot_run_leads_run ON autopilot_run_leads(run_id, status);
+CREATE INDEX idx_autopilot_run_leads_lead ON autopilot_run_leads(lead_id);
 ALTER TABLE autopilot_run_leads ENABLE ROW LEVEL SECURITY;
 -- Same shape as autopilot_runs_org_member (migration 006); 009 did not touch this table.
 CREATE POLICY "autopilot_run_leads_org_member" ON autopilot_run_leads FOR ALL
