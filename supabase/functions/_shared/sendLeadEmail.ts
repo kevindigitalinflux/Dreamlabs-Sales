@@ -4,6 +4,31 @@ import { ATTACHMENT_BUCKET, MAX_TOTAL_ATTACHMENT_BYTES, parseAttachments, safeFi
 // deno-lint-ignore no-explicit-any
 type ServiceClient = any;
 
+export interface SenderMailbox {
+  // deno-lint-ignore no-explicit-any
+  settings: any;
+  pass: string;
+}
+
+/**
+ * The sender-mailbox gate: the sender's user_email_settings must be verified
+ * and a Vault SMTP password must be stored. The ONLY place the two gate
+ * messages live. send-email calls this first (before any lead/draft lookup,
+ * as it always did) so the error order is unchanged; sendLeadEmail calls it
+ * itself when no `mailbox` is supplied.
+ */
+export async function loadSenderMailbox(
+  service: ServiceClient,
+  senderId: string,
+): Promise<({ ok: true } & SenderMailbox) | { ok: false; error: string; status: number }> {
+  const { data: settings } = await service
+    .from('user_email_settings').select('*').eq('user_id', senderId).maybeSingle();
+  if (!settings?.is_verified) return { ok: false, error: 'Set up and verify your email in Settings → Email sending first', status: 400 };
+  const { data: pass } = await service.rpc('app_get_smtp_secret', { uid: senderId });
+  if (!pass) return { ok: false, error: 'No stored email password — re-save your settings', status: 400 };
+  return { ok: true, settings, pass: pass as string };
+}
+
 export interface SendLeadEmailInput {
   /** The user whose mailbox (user_email_settings + Vault password) sends this email. Also written to email_logs.sent_by. */
   senderId: string;
@@ -22,6 +47,13 @@ export interface SendLeadEmailInput {
   decisionMakerCandidateId?: string | null;
   /** Explicit attachment list; when undefined the stored draft's attachments are used. */
   attachments?: unknown;
+  /** Already-loaded mailbox from loadSenderMailbox; loaded here when omitted. */
+  mailbox?: SenderMailbox;
+  /** Already-read lead org_id/stage (null = lead not found); the lead is read here when undefined. */
+  orgId?: string | null;
+  leadStage?: string | null;
+  /** Already-read draft row; the draft is read here when omitted and logId is set. */
+  draft?: { org_id: string | null; attachments: unknown };
 }
 
 export type SendLeadEmailResult =
@@ -58,15 +90,17 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
   const { senderId } = input;
   const leadId = input.leadId ?? null;
 
-  const { data: settings } = await service
-    .from('user_email_settings').select('*').eq('user_id', senderId).maybeSingle();
-  if (!settings?.is_verified) return { ok: false, error: 'Set up and verify your email in Settings → Email sending first', status: 400 };
-  const { data: pass } = await service.rpc('app_get_smtp_secret', { uid: senderId });
-  if (!pass) return { ok: false, error: 'No stored email password — re-save your settings', status: 400 };
+  let mailbox = input.mailbox;
+  if (!mailbox) {
+    const gate = await loadSenderMailbox(service, senderId);
+    if (!gate.ok) return gate;
+    mailbox = gate;
+  }
+  const { settings, pass } = mailbox;
 
-  let orgId: string | null = null;
-  let leadStage: string | null = null;
-  if (leadId) {
+  let orgId: string | null = input.orgId ?? null;
+  let leadStage: string | null = input.leadStage ?? null;
+  if (leadId && input.orgId === undefined) {
     const { data: lead } = await service.from('leads').select('org_id, stage').eq('id', leadId).maybeSingle();
     orgId = (lead as { org_id: string; stage: string } | null)?.org_id ?? null;
     leadStage = (lead as { org_id: string; stage: string } | null)?.stage ?? null;
@@ -78,11 +112,14 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
   let draftAttachments: unknown = [];
   let draftOrgId: string | null = null;
   if (input.logId) {
-    const { data: log } = await service.from('email_logs').select('org_id, attachments').eq('id', input.logId).single();
-    if (log) {
-      draftAttachments = log.attachments;
-      draftOrgId = log.org_id as string | null;
+    let log = input.draft;
+    if (!log) {
+      const { data } = await service.from('email_logs').select('org_id, attachments').eq('id', input.logId).single();
+      log = data ?? undefined;
     }
+    if (!log) return { ok: false, error: 'Draft not found', status: 404 };
+    draftAttachments = log.attachments;
+    draftOrgId = log.org_id as string | null;
   }
 
   // What to attach: the caller's explicit list when given (the composer can add/remove
@@ -118,7 +155,7 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
       files.push({ filename: safeFilename(a.name), contentType: a.type, content: bytes });
     }
     const result = await sendMail(
-      { host: settings.smtp_host, port: settings.smtp_port, user: settings.smtp_user, pass: pass as string, fromName: settings.from_name },
+      { host: settings.smtp_host, port: settings.smtp_port, user: settings.smtp_user, pass, fromName: settings.from_name },
       { to: input.to, subject: input.subject, body: input.body, attachments: files },
     );
     messageId = result.messageId;

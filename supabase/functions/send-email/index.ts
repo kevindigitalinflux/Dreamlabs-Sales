@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
-import { sendLeadEmail } from '../_shared/sendLeadEmail.ts';
+import { loadSenderMailbox, sendLeadEmail } from '../_shared/sendLeadEmail.ts';
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -26,11 +26,15 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
+  const mailbox = await loadSenderMailbox(service, user.id);
+  if (!mailbox.ok) return json({ error: mailbox.error }, mailbox.status, headers);
 
   let orgId: string | null = null;
+  let leadStage: string | null = null;
   if (body.lead_id) {
-    const { data: lead } = await service.from('leads').select('org_id').eq('id', body.lead_id).maybeSingle();
-    orgId = (lead as { org_id: string } | null)?.org_id ?? null;
+    const { data: lead } = await service.from('leads').select('org_id, stage').eq('id', body.lead_id).maybeSingle();
+    orgId = (lead as { org_id: string; stage: string } | null)?.org_id ?? null;
+    leadStage = (lead as { org_id: string; stage: string } | null)?.stage ?? null;
   }
   if (!orgId && !body.log_id) return json({ error: 'lead_id is required to send a new email' }, 400, headers);
   // The caller supplies lead_id directly, and we later write to that lead
@@ -48,9 +52,11 @@ Deno.serve(async (req) => {
   // individual owner by design), which any member of the draft's own org may
   // claim and send. A human-created draft (sent_by set) is still strictly
   // owner-only.
+  let draft: { org_id: string | null; attachments: unknown } | undefined;
   if (body.log_id) {
-    const { data: log } = await service.from('email_logs').select('sent_by, org_id').eq('id', body.log_id).single();
+    const { data: log } = await service.from('email_logs').select('sent_by, org_id, attachments').eq('id', body.log_id).single();
     if (!log) return json({ error: 'Draft not found' }, 404, headers);
+    draft = { org_id: log.org_id as string | null, attachments: log.attachments };
     if (log.sent_by !== null && log.sent_by !== user.id) {
       return json({ error: 'Draft not found' }, 404, headers);
     }
@@ -69,6 +75,10 @@ Deno.serve(async (req) => {
     logId: body.log_id,
     decisionMakerCandidateId: body.decision_maker_candidate_id,
     attachments: body.attachments,
+    mailbox,
+    orgId,
+    leadStage,
+    draft,
   });
   if (!result.ok) {
     const warning = result.warning;
