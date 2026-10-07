@@ -91,3 +91,17 @@ Test count correction: the first commit had 32 rules tests, not 33. After this r
 - The 14 day per address guard also blocks a legitimate second lead at the same business address; it parks as skipped with a plain reason.
 - Greeting for the lead's own address uses the lead's owner name, which may be a different person than the mailbox owner (e.g. info@); that is unchanged behaviour from check-sequences.
 - `APP_PUBLIC_URL` secret must be set; deployed functions read secrets on next cold start.
+
+---
+
+# Fix round 2 (commit "fix: autopilot link/domain checks, places-derived recipients, step-sent guard")
+
+Checks: rules tests 80/80, full suite 510/510, `npx tsc --noEmit` clean, `--ignoreConfig` syntax check clean on all touched Deno files. No client src files changed, so no build.
+
+1. Bare domains: `unexpectedLinksOrAddresses(templateText, finalText, allowed, ownWebsite?)` now extracts, in order, https URLs, email addresses (URLs removed first), then bare domains (`label(.label)+.tld`, 2+ letter TLD, optional `www.` and path) from what is left, so an email's domain part is never counted twice. `e.g.`, `i.e.`, `a.m.`, `p.m.` and `1.5` never match. A token is allowed only if it appears in the filled template text or the allowed list (appended links, attachment names, unsubscribe URL), compared case-insensitively with trailing punctuation and `www.` trimmed (paths compared exactly); or it is only the host of an allowed URL or the domain part of an allowed address; or it equals the registrable domain of the lead's own website (not if that is a free-mail domain). `draft.ts` passes the lead's website and attachment names. Known side effect: an unusual token such as `Dr.Smith` or `Node.js` also parks the draft (safe side).
+2. Places-derived website: `placesDerivedWebsiteBlock` (pure, tested for candidate, foundEmail and leadEmail) parks with `Found a website and contact; please confirm they belong to this business before sending` for ANY recipient when the lead had no website and it was filled from `google_places` in this run. Fill-blank patches stay saved. Checked before the found-email domain rule in `recipient.ts`. Note the decision is the same for all three kinds, as requested.
+3. Step-sent guard: `lastMinuteCheck` counts sent `email_logs` linked to the current enrolment id; `stepAlreadySent(count, current_step)` (count >= current_step) blocks with `This step was already sent to this address`, failing closed on a read error. The 14 day same-lead exemption still applies only while this guard passes. New fact `stepAlreadySent` in `firstSendBlock` (order: after enrolment changed, before opted-out address).
+4. Suffixes and free mail: added `net.uk, sch.uk, nhs.uk, net.au, org.au` to the multi-part list (`com.au, co.nz, co.za` were already there); new `FREE_MAIL_DOMAINS` denylist (the 18 requested domains); a website or recipient on a free-mail domain never counts as a match.
+5. `firstSendBlock`: one test per block reason (each alone yields that reason).
+
+Redeploy: no new functions beyond round 1's list; `run-selected-autopilot` bundle changes again (rules, recipient, draft, send).

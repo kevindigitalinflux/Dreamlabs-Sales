@@ -4,6 +4,7 @@ import {
   placeholderReason, plainReason, recipientVarOverrides, senderFirstName, unfilledPlaceholderNames, recipientLabel, unexpectedLinksOrAddresses,
   withUnsubscribeLine, isUsableUnsubscribeUrl, hasStrayPlaceholder, emailMatchesWebsiteDomain, canSendToFoundEmail, firstSendBlock, sameEnrolment,
 } from '../../supabase/functions/_shared/selectedLeadPipelineRules';
+import { stepAlreadySent, placesDerivedWebsiteBlock, FREE_MAIL_DOMAINS } from '../../supabase/functions/_shared/selectedLeadPipelineRules';
 import { publicAppUrl } from '../../supabase/functions/_shared/appUrl';
 import { replySenderMatches } from '../../supabase/functions/_shared/replyMatch';
 import { RESEARCH_FALLBACK_NOTE, formatResearchNote, isEmptyResearch } from '../../supabase/functions/_shared/researchPages';
@@ -137,7 +138,7 @@ describe('canSendToFoundEmail', () => {
 });
 
 describe('firstSendBlock and sameEnrolment', () => {
-  const ok = { leadFound: true, sameOrg: true, ineligibleReason: null, recipientBlocked: false, enrolmentChanged: false, recentlyEmailed: false, optedOutLeadHasAddress: false, candidateRemoved: false };
+  const ok = { leadFound: true, sameOrg: true, ineligibleReason: null, recipientBlocked: false, enrolmentChanged: false, stepAlreadySent: false, recentlyEmailed: false, optedOutLeadHasAddress: false, candidateRemoved: false };
   const reasonFor = (c: string) => `code:${c}`;
   it('passes when everything is fine', () => { expect(firstSendBlock(ok, reasonFor)).toBeNull(); });
   it('reports the highest priority failure first', () => {
@@ -145,6 +146,19 @@ describe('firstSendBlock and sameEnrolment', () => {
     expect(firstSendBlock({ ...ok, recipientBlocked: true, recentlyEmailed: true }, reasonFor)).toBe('code:blocked');
     expect(firstSendBlock({ ...ok, recentlyEmailed: true, candidateRemoved: true }, reasonFor)).toBe('This address was emailed in the last 14 days');
     expect(firstSendBlock({ ...ok, leadFound: false, sameOrg: false }, reasonFor)).toBe('Lead no longer exists');
+  });
+  it.each([
+    [{ leadFound: false }, 'Lead no longer exists'],
+    [{ sameOrg: false }, 'Lead is not in this organization'],
+    [{ ineligibleReason: 'paused' }, 'code:paused'],
+    [{ recipientBlocked: true }, 'code:blocked'],
+    [{ enrolmentChanged: true }, 'Sequence status changed while this lead was being processed'],
+    [{ stepAlreadySent: true }, 'This step was already sent to this address'],
+    [{ optedOutLeadHasAddress: true }, 'This address belongs to a lead that opted out'],
+    [{ recentlyEmailed: true }, 'This address was emailed in the last 14 days'],
+    [{ candidateRemoved: true }, 'The chosen decision maker was removed'],
+  ])('each reason alone yields that reason (%o)', (patch, expected) => {
+    expect(firstSendBlock({ ...ok, ...patch }, reasonFor)).toBe(expected);
   });
   it('compares enrolments by id and step', () => {
     expect(sameEnrolment(null, null)).toBe(true);
@@ -264,5 +278,72 @@ describe('plainReason', () => {
   it('truncates and falls back', () => {
     expect(plainReason('a'.repeat(500))).toHaveLength(300);
     expect(plainReason('   ')).toBe('Unexpected error');
+  });
+});
+
+describe('unexpectedLinksOrAddresses bare domains', () => {
+  const tpl = 'Hi Sam, we help firms like yours. Visit acme.com for details.';
+  it('flags www and bare domains and paths that are not in the template', () => {
+    expect(unexpectedLinksOrAddresses(tpl, 'See www.evil.com', [])).toEqual(['evil.com']);
+    expect(unexpectedLinksOrAddresses(tpl, 'See evil.com/offer today', [])).toEqual(['evil.com/offer']);
+  });
+  it('allows a bare domain that is in the template, including at the end of a sentence', () => {
+    expect(unexpectedLinksOrAddresses(tpl, 'Please visit acme.com.', [])).toEqual([]);
+    expect(unexpectedLinksOrAddresses(tpl, 'Please visit WWW.ACME.COM, thanks', [])).toEqual([]);
+  });
+  it('does not flag abbreviations or version numbers', () => {
+    expect(unexpectedLinksOrAddresses('x', 'Call at 9 a.m. or 5 p.m., e.g. Monday, i.e. soon, version 1.5', [])).toEqual([]);
+  });
+  it('allows the lead own registrable domain but not its free mail domain', () => {
+    expect(unexpectedLinksOrAddresses('x', 'I saw your site at theirco.co.uk', [], 'https://www.theirco.co.uk/about')).toEqual([]);
+    expect(unexpectedLinksOrAddresses('x', 'I saw gmail.com', [], 'gmail.com')).toEqual(['gmail.com']);
+    expect(unexpectedLinksOrAddresses('x', 'I saw other.co.uk', [], 'theirco.co.uk')).toEqual(['other.co.uk']);
+  });
+  it('does not double count the domain part of an email address', () => {
+    expect(unexpectedLinksOrAddresses('x', 'Write to bob@evil.test', [])).toEqual(['bob@evil.test']);
+    expect(unexpectedLinksOrAddresses('Mail sales@acme.com', 'Mail sales@acme.com', [])).toEqual([]);
+  });
+  it('allows the bare host of an allowed URL and the unsubscribe URL', () => {
+    expect(unexpectedLinksOrAddresses('x', 'More at acme.co and https://app.example.com/unsubscribe/1', ['https://acme.co/price', 'https://app.example.com/unsubscribe/1'])).toEqual([]);
+  });
+  it('allows attachment names passed as allowed text', () => {
+    expect(unexpectedLinksOrAddresses('x', 'See price-list.pdf', ['price-list.pdf'])).toEqual([]);
+  });
+});
+
+describe('placesDerivedWebsiteBlock', () => {
+  const reason = 'Found a website and contact; please confirm they belong to this business before sending';
+  it.each(['candidate', 'foundEmail', 'leadEmail'] as const)('parks any recipient kind (%s) when Places supplied the website this run', (recipientKind) => {
+    expect(placesDerivedWebsiteBlock({ websiteWasOnLead: false, websiteSource: 'google_places', recipientKind })).toBe(reason);
+  });
+  it('does not park when the website was already on the lead or came from elsewhere', () => {
+    expect(placesDerivedWebsiteBlock({ websiteWasOnLead: true, websiteSource: 'google_places', recipientKind: 'candidate' })).toBeNull();
+    expect(placesDerivedWebsiteBlock({ websiteWasOnLead: false, websiteSource: 'hunter', recipientKind: 'candidate' })).toBeNull();
+    expect(placesDerivedWebsiteBlock({ websiteWasOnLead: false, websiteSource: undefined, recipientKind: 'leadEmail' })).toBeNull();
+  });
+});
+
+describe('stepAlreadySent', () => {
+  it('is true once sent emails reach the current step', () => {
+    expect(stepAlreadySent(0, 1)).toBe(false);
+    expect(stepAlreadySent(1, 2)).toBe(false);
+    expect(stepAlreadySent(2, 2)).toBe(true);
+    expect(stepAlreadySent(1, 1)).toBe(true);
+    expect(stepAlreadySent(0, 0)).toBe(false);
+  });
+});
+
+describe('free mail and suffixes', () => {
+  it('free mail never counts as a domain match', () => {
+    expect(emailMatchesWebsiteDomain('a@gmail.com', 'gmail.com')).toBe(false);
+    expect(emailMatchesWebsiteDomain('a@btinternet.com', 'www.btinternet.com')).toBe(false);
+    expect(FREE_MAIL_DOMAINS.has('hotmail.co.uk')).toBe(true);
+  });
+  it('knows more multi part suffixes', () => {
+    expect(emailMatchesWebsiteDomain('a@clinic.nhs.uk', 'www.clinic.nhs.uk')).toBe(true);
+    expect(emailMatchesWebsiteDomain('a@other.nhs.uk', 'clinic.nhs.uk')).toBe(false);
+    expect(emailMatchesWebsiteDomain('a@shop.net.au', 'shop.net.au')).toBe(true);
+    expect(emailMatchesWebsiteDomain('a@b.co.za', 'x.co.za')).toBe(false);
+    expect(emailMatchesWebsiteDomain('a@school.sch.uk', 'school.sch.uk')).toBe(true);
   });
 });

@@ -2,7 +2,7 @@
 import { pickRecipient } from '../autopilotChoices.ts';
 import { enrichOneLead, type EnrichLeadRow } from '../enrichLead.ts';
 import { findAndStoreDecisionMakers } from '../findDecisionMakers.ts';
-import { canSendToFoundEmail, fillBlankPatch } from '../selectedLeadPipelineRules.ts';
+import { canSendToFoundEmail, fillBlankPatch, placesDerivedWebsiteBlock } from '../selectedLeadPipelineRules.ts';
 import type { PipelineContext } from '../selectedLeadPipeline.ts';
 import { loadCandidates } from './load.ts';
 import { TIMEOUT_REASON, raceDeadline, type CandidateRow, type Lead, type OrgKeys, type Stop } from './types.ts';
@@ -53,12 +53,15 @@ export async function ensureRecipient(ctx: PipelineContext, keys: OrgKeys): Prom
     recipient = pickRecipient((lead.email as string | null) ?? null, candidates);
   }
   if (!recipient) return { stop: { outcome: 'skipped', reason: NO_EMAIL } };
-  // An address found unattended in this run is only used if it belongs to the lead's own website (the patch stays saved).
-  if (!recipient.candidateId && appliedEmail && recipient.email.toLowerCase() === appliedEmail) {
-    const websiteWasOnLead = typeof ctx.lead.website === 'string' && ctx.lead.website.trim() !== '';
-    if (!canSendToFoundEmail({ email: recipient.email, website: (lead.website as string | null) ?? null, websiteWasOnLead, websiteSource })) {
-      return { stop: { outcome: 'needs_input', reason: CONFIRM_FOUND } };
-    }
+  // Anything found from a website that Google Places supplied in this run is unconfirmed, whoever the recipient is.
+  // The fill-blank patches stay saved; a person confirms before anything is sent.
+  const websiteWasOnLead = typeof ctx.lead.website === 'string' && ctx.lead.website.trim() !== '';
+  const foundEmail = !recipient.candidateId && !!appliedEmail && recipient.email.toLowerCase() === appliedEmail;
+  const placesReason = placesDerivedWebsiteBlock({ websiteWasOnLead, websiteSource, recipientKind: recipient.candidateId ? 'candidate' : foundEmail ? 'foundEmail' : 'leadEmail' });
+  if (placesReason) return { stop: { outcome: 'needs_input', reason: placesReason } };
+  // An address found unattended in this run is only used if it belongs to the lead's own website.
+  if (foundEmail && !canSendToFoundEmail({ email: recipient.email, website: (lead.website as string | null) ?? null, websiteWasOnLead, websiteSource })) {
+    return { stop: { outcome: 'needs_input', reason: CONFIRM_FOUND } };
   }
   return { lead, candidates, recipient };
 }

@@ -65,7 +65,7 @@ export async function buildDraft(ctx: PipelineContext, i: DraftInput, progress: 
     }), ctx.deadlineMs);
     const aiSubject = stripAiPunctuation(ai.subject);
     const aiBody = stripAiPunctuation(ai.body);
-    const unexpected = unexpectedLinksOrAddresses(`${subject.text} ${body.text}`, `${aiSubject} ${aiBody}`, [unsubscribeUrl, ...links.map((l) => l.url)]);
+    const unexpected = unexpectedLinksOrAddresses(`${subject.text} ${body.text}`, `${aiSubject} ${aiBody}`, [unsubscribeUrl, ...links.map((l) => l.url), ...attachments.map((a) => a.name)], (i.lead.website as string | null) ?? null);
     return { ...finish(aiSubject, aiBody), attachments, missing, aiFailed: false, unexpected, unsubscribeOk };
   } catch {
     console.error('autopilot: AI draft failed, keeping the plain template for review');

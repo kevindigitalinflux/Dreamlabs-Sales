@@ -145,26 +145,50 @@ export function plainReason(raw: string, fallback = 'Unexpected error'): string 
 
 const URL_RE = /https?:\/\/[^\s<>"']+/gi;
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9-]+(?:\.[A-Z0-9-]+)*\.[A-Z]{2,}/gi;
+// A bare domain: labels joined by dots with a 2+ letter TLD, optionally www. and a path. "e.g." and "a.m." and "1.5" never match.
+const DOMAIN_RE = /(?<![\w@./-])(?:[a-z0-9-]+\.)+[a-z]{2,24}(?![\w-])(?:\/[^\s<>"']*)?/gi;
 const trimEnd = (s: string) => s.replace(/[.,;:!?)\]}>]+$/g, '');
+const domainKey = (token: string) => trimEnd(token).toLowerCase().replace(/^www\./, '').replace(/\/+$/, '');
+
+/** Splits text into URLs, then email addresses, then bare domains (each pass removes what it found, so nothing is counted twice). */
+function extractTokens(text: string): { urls: string[]; emails: string[]; domains: string[] } {
+  const urls = [...text.matchAll(URL_RE)].map((m) => trimEnd(m[0]).toLowerCase());
+  const noUrls = text.replace(URL_RE, ' ');
+  const emails = [...noUrls.matchAll(EMAIL_RE)].map((m) => m[0].toLowerCase());
+  const rest = noUrls.replace(EMAIL_RE, ' ');
+  const domains = [...rest.matchAll(DOMAIN_RE)].map((m) => domainKey(m[0]));
+  return { urls, emails, domains };
+}
+
+const hostOf = (url: string): string => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; } };
 
 /**
- * Web addresses and email addresses in `finalText` that appear in neither `templateText` (the filled template)
- * nor `allowed` (appended links, the unsubscribe URL). URLs are compared exactly after trimming trailing
- * punctuation, ignoring case. Used to stop an AI rewrite from inventing a link or contact address.
+ * Web addresses, email addresses and bare domains (acme.com, www.acme.com, acme.com/offer) in `finalText` that are not
+ * allowed. Allowed: anything that appears in `templateText` or `allowed` (appended links, attachment names, the
+ * unsubscribe URL), compared case-insensitively with trailing punctuation trimmed (URLs and paths exactly); a bare
+ * domain that is only the host of an allowed URL or the domain part of an allowed address; and the registrable domain of
+ * the lead's own website. Used to stop an AI rewrite from adding a link or contact address (mail clients make bare
+ * domains clickable too).
  */
-export function unexpectedLinksOrAddresses(templateText: string, finalText: string, allowed: string[]): string[] {
-  const known = new Set<string>();
+export function unexpectedLinksOrAddresses(templateText: string, finalText: string, allowed: string[], ownWebsite?: string | null): string[] {
+  const known = { urls: new Set<string>(), emails: new Set<string>(), domains: new Set<string>() };
   for (const t of [templateText, ...allowed]) {
-    for (const m of t.matchAll(URL_RE)) known.add(trimEnd(m[0]).toLowerCase());
-    for (const m of t.matchAll(EMAIL_RE)) known.add(m[0].toLowerCase());
+    const x = extractTokens(t);
+    x.urls.forEach((u) => { known.urls.add(u); known.domains.add(hostOf(u)); });
+    x.emails.forEach((e) => { known.emails.add(e); known.domains.add(e.split('@')[1] ?? ''); });
+    x.domains.forEach((d) => known.domains.add(d));
     const bare = trimEnd(t.trim()).toLowerCase();
-    if (/^https?:\/\//.test(bare)) known.add(bare);
+    if (/^https?:\/\//.test(bare)) { known.urls.add(bare); known.domains.add(hostOf(bare)); }
   }
+  const own = ownWebsite?.trim()
+    ? registrableDomain(hostOf(/^[a-z][a-z0-9+.-]*:\/\//i.test(ownWebsite.trim()) ? ownWebsite.trim() : `https://${ownWebsite.trim()}`))
+    : null;
+  const ownOk = own && !FREE_MAIL_DOMAINS.has(own) ? own : null;
+  const final = extractTokens(finalText);
   const bad = new Set<string>();
-  const urlSpans = [...finalText.matchAll(URL_RE)].map((m) => trimEnd(m[0]).toLowerCase());
-  for (const u of urlSpans) if (!known.has(u)) bad.add(u);
-  // Emails inside an allowed URL are not separate addresses; look at the text with URLs removed.
-  for (const m of finalText.replace(URL_RE, ' ').matchAll(EMAIL_RE)) if (!known.has(m[0].toLowerCase())) bad.add(m[0].toLowerCase());
+  for (const u of final.urls) if (!known.urls.has(u)) bad.add(u);
+  for (const e of final.emails) if (!known.emails.has(e)) bad.add(e);
+  for (const d of final.domains) if (!known.domains.has(d) && d !== ownOk) bad.add(d);
   return [...bad];
 }
 
@@ -184,7 +208,10 @@ export function hasStrayPlaceholder(text: string): boolean {
   return /\[[A-Za-z][A-Za-z _.-]{0,30}\]/.test(text) || /(^|[^{])\{[A-Za-z_][\w .-]{0,30}\}(?!\})/.test(text);
 }
 
-const MULTI_PART_SUFFIXES = new Set(['co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'ltd.uk', 'plc.uk', 'me.uk', 'com.au', 'co.nz', 'co.za', 'com.br', 'co.in', 'co.jp', 'com.mx']);
+const MULTI_PART_SUFFIXES = new Set(['co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'ltd.uk', 'plc.uk', 'me.uk', 'net.uk', 'sch.uk', 'nhs.uk', 'com.au', 'net.au', 'org.au', 'co.nz', 'co.za', 'com.br', 'co.in', 'co.jp', 'com.mx']);
+
+/** Mailbox providers: an address or website on one of these never proves a business domain match. */
+export const FREE_MAIL_DOMAINS = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'hotmail.co.uk', 'yahoo.com', 'yahoo.co.uk', 'icloud.com', 'me.com', 'aol.com', 'proton.me', 'protonmail.com', 'live.com', 'live.co.uk', 'btinternet.com', 'sky.com', 'talktalk.net', 'virginmedia.com']);
 
 /** Registrable domain: www removed, last two labels, three for known suffixes like co.uk. Null for an unusable host. */
 export function registrableDomain(host: string): string | null {
@@ -202,7 +229,7 @@ export function emailMatchesWebsiteDomain(email: string, website: string | null 
   try { host = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(w) ? w : `https://${w}`).hostname; } catch { return false; }
   const a = registrableDomain(email.split('@')[1] ?? '');
   const b = registrableDomain(host);
-  return !!a && !!b && a === b;
+  return !!a && !!b && a === b && !FREE_MAIL_DOMAINS.has(a);
 }
 
 /**
@@ -221,6 +248,8 @@ export interface SendGateFacts {
   ineligibleReason: string | null;
   recipientBlocked: boolean;
   enrolmentChanged: boolean;
+  /** The current sequence step was already sent (sent emails linked to this enrolment >= its current step). */
+  stepAlreadySent: boolean;
   recentlyEmailed: boolean;
   optedOutLeadHasAddress: boolean;
   candidateRemoved: boolean;
@@ -233,6 +262,7 @@ export function firstSendBlock(f: SendGateFacts, reasonFor: (code: string) => st
   if (f.ineligibleReason) return reasonFor(f.ineligibleReason);
   if (f.recipientBlocked) return reasonFor('blocked');
   if (f.enrolmentChanged) return 'Sequence status changed while this lead was being processed';
+  if (f.stepAlreadySent) return 'This step was already sent to this address';
   if (f.optedOutLeadHasAddress) return 'This address belongs to a lead that opted out';
   if (f.recentlyEmailed) return 'This address was emailed in the last 14 days';
   if (f.candidateRemoved) return 'The chosen decision maker was removed';
@@ -244,4 +274,24 @@ export function sameEnrolment(started: { id?: string; current_step?: number } | 
   if (!started && !fresh) return true;
   if (!started || !fresh) return false;
   return started.id === fresh.id && started.current_step === fresh.current_step;
+}
+
+/** True when the enrolment's current step has already been sent: sent emails linked to it are at least its current step number. */
+export function stepAlreadySent(sentLinkedCount: number, currentStep: number): boolean {
+  return sentLinkedCount >= Math.max(1, currentStep);
+}
+
+export type RecipientKind = 'candidate' | 'foundEmail' | 'leadEmail';
+
+/**
+ * A website filled from Google Places during THIS run (the lead had none) is a weak match, and everything found from it
+ * (the decision maker search runs on its domain, the scraped email) is unconfirmed. For any kind of recipient, the lead is
+ * parked. Returns the reason, or null when the website was already on the lead or came from another source.
+ */
+export function placesDerivedWebsiteBlock(p: { websiteWasOnLead: boolean; websiteSource: string | null | undefined; recipientKind: RecipientKind }): string | null {
+  void p.recipientKind;
+  if (!p.websiteWasOnLead && p.websiteSource === 'google_places') {
+    return 'Found a website and contact; please confirm they belong to this business before sending';
+  }
+  return null;
 }

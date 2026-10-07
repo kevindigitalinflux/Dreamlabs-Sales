@@ -3,7 +3,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { classifyLead, endOfLocalDay, localDateString, type EligibilityEnrollment, type EligibilityLead } from '../autopilotEligibility.ts';
 import { sendLeadEmail } from '../sendLeadEmail.ts';
 import { skipReasonFor } from '../selectedAutopilotRules.ts';
-import { firstSendBlock, followUpNote, isRecipientBlocked, nextEnrollmentState, plainReason, sameEnrolment } from '../selectedLeadPipelineRules.ts';
+import { firstSendBlock, followUpNote, isRecipientBlocked, nextEnrollmentState, plainReason, sameEnrolment, stepAlreadySent } from '../selectedLeadPipelineRules.ts';
 import type { PipelineContext, PipelineOutcome } from '../selectedLeadPipeline.ts';
 import type { Draft } from './draft.ts';
 import type { Lead, Progress, SequenceRow } from './types.ts';
@@ -52,6 +52,14 @@ export async function lastMinuteCheck(ctx: PipelineContext, recipient: Recipient
   const { count: optedOut, error: ooErr } = await service.from('leads').select('id', { count: 'exact', head: true })
     .eq('org_id', ctx.run.org_id).eq('opted_out', true).neq('id', ctx.lead.id).ilike('email', escapeLike(recipient.email));
   if (ooErr) return failed('opt outs for this address');
+  // Has this enrolment's current step already been sent? (the advance may not have landed)
+  let stepSent = false;
+  if (ctx.enrollment?.id) {
+    const { count: linked, error: lErr } = await service.from('email_logs').select('id', { count: 'exact', head: true })
+      .eq('sequence_enrollment_id', ctx.enrollment.id).eq('status', 'sent');
+    if (lErr) return failed('which steps were already sent');
+    stepSent = stepAlreadySent(linked ?? 0, ctx.enrollment.current_step ?? 1);
+  }
   let candidateRemoved = false;
   if (recipient.candidateId) {
     const { data: cand, error: cErr } = await service.from('decision_maker_candidates').select('dismissed_at').eq('id', recipient.candidateId).maybeSingle();
@@ -65,8 +73,8 @@ export async function lastMinuteCheck(ctx: PipelineContext, recipient: Recipient
     leadFound: !!lead, sameOrg: lead?.org_id === ctx.run.org_id,
     ineligibleReason: verdict && !verdict.eligible ? verdict.reason : null,
     recipientBlocked: isRecipientBlocked(recipient.email, blocked),
-    enrolmentChanged: !sameEnrolment(ctx.enrollment, enrollment),
-    // Earlier steps of this lead's own sequence are expected; anything else sent to this address is not.
+    enrolmentChanged: !sameEnrolment(ctx.enrollment, enrollment), stepAlreadySent: stepSent,
+    // Earlier steps of this lead's own sequence are expected (stepAlreadySent above catches a replay); anything else sent to this address is not.
     recentlyEmailed: ((sent ?? []) as { lead_id: string | null }[]).some((r) => !(ctx.enrollment && r.lead_id === ctx.lead.id)),
     optedOutLeadHasAddress: (optedOut ?? 0) > 0, candidateRemoved,
   }, skipReasonFor);
