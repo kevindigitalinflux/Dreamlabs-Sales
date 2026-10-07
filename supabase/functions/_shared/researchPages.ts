@@ -113,3 +113,12 @@ export function formatResearchNote(parts: { website: string | null; web: string 
   }
   return blocks.join('\n\n');
 }
+
+/** The fixed note leadResearch stores when the AI could not write a summary. It is not real research. */
+export const RESEARCH_FALLBACK_NOTE = 'Research gathered; no summary could be written.';
+
+/** True when a research result holds nothing worth saving as a note: blank, or only the fixed fallback note. */
+export function isEmptyResearch(result: { summary: string }): boolean {
+  const s = result.summary.trim();
+  return s === '' || s.includes(RESEARCH_FALLBACK_NOTE);
+}

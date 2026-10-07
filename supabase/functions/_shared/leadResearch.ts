@@ -2,7 +2,7 @@
 import { DASH_GUARDRAIL_LINE, geminiGroundedSearch, geminiJson } from './ai.ts';
 import { cancelBody, readCapped } from './cappedBody.ts';
 import { runBounded } from './concurrency.ts';
-import { formatResearchNote, pickResearchLinks, stripToText } from './researchPages.ts';
+import { RESEARCH_FALLBACK_NOTE, formatResearchNote, pickResearchLinks, stripToText } from './researchPages.ts';
 import { stripAiPunctuation } from './textGuardrails.ts';
 import { parseSafeWebsiteUrl, resolveSafeRedirect } from './hostGuard.ts';
 
@@ -18,7 +18,6 @@ const COMBINED_TEXT_CHARS = 9000;
 const OVERALL_DEADLINE_MS = 40_000;
 const AI_TIMEOUT_MS = 25_000;
 const MIN_AI_BUDGET_MS = 2_000;
-const FALLBACK_NOTE = 'Research gathered; no summary could be written.';
 
 export interface ResearchResult { summary: string; sources: string[]; costCents: number }
 
@@ -181,7 +180,7 @@ ${neutralise(web.text.slice(0, 4000)) || '(none)'}
     }
 
     // Never store raw scraped text as the summary: if no summary could be written, say so plainly.
-    const summary = formatResearchNote({ website: bullets ?? FALLBACK_NOTE, web: null, sources });
+    const summary = formatResearchNote({ website: bullets ?? RESEARCH_FALLBACK_NOTE, web: null, sources });
     return { summary, sources, costCents: RESEARCH_COST_CENTS };
   } catch {
     return { summary: '', sources: [], costCents: RESEARCH_COST_CENTS };
