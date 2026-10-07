@@ -75,12 +75,16 @@ export function senderFirstName(fullName: string | null | undefined): string | n
   return fullName?.trim().split(/\s+/)[0] || null;
 }
 
-/** True when the address or its domain is on the blocklist (entries trimmed and lower-cased, like classifyLead). */
+/** True when the address, its domain or any parent domain is on the blocklist (entries trimmed and lower-cased). */
 export function isRecipientBlocked(email: string, blocked: Set<string>): boolean {
   const norm = new Set([...blocked].map((b) => b.trim().toLowerCase()));
   const e = email.trim().toLowerCase();
   const domain = e.split('@')[1];
-  return norm.has(e) || (!!domain && norm.has(domain));
+  if (norm.has(e)) return true;
+  // A domain entry also blocks every subdomain: sub.evil.com is blocked by evil.com (parents down to two labels).
+  const labels = (domain ?? '').split('.').filter(Boolean);
+  for (let i = 0; i + 2 <= labels.length; i++) if (norm.has(labels.slice(i).join('.'))) return true;
+  return false;
 }
 
 export interface TemplateLike { id: string; org_id: string | null; template_type: string; is_default: boolean }
@@ -144,14 +148,23 @@ export function plainReason(raw: string, fallback = 'Unexpected error'): string 
 }
 
 const URL_RE = /https?:\/\/[^\s<>"']+/gi;
-const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9-]+(?:\.[A-Z0-9-]+)*\.[A-Z]{2,}/gi;
-// A bare domain: labels joined by dots with a 2+ letter TLD, optionally www. and a path. "e.g." and "a.m." and "1.5" never match.
-const DOMAIN_RE = /(?<![\w@./-])(?:[a-z0-9-]+\.)+[a-z]{2,24}(?![\w-])(?:\/[^\s<>"']*)?/gi;
-const trimEnd = (s: string) => s.replace(/[.,;:!?)\]}>]+$/g, '');
-const domainKey = (token: string) => trimEnd(token).toLowerCase().replace(/^www\./, '').replace(/\/+$/, '');
+// Bounded quantifiers keep matching linear on very long input (local part max 64, labels max 63).
+const EMAIL_RE = /[A-Z0-9._%+-]{1,64}@[A-Z0-9-]{1,63}(?:\.[A-Z0-9-]{1,63}){0,10}\.[A-Z]{2,24}/gi;
+// A bare domain: labels joined by dots with a 2+ letter TLD, optionally www. and a path. "e.g.", "a.m.", "1.5", "9.30am" never match.
+// URLs and emails are removed first, so a domain after "...", "//", "/" or "@" is still caught.
+const DOMAIN_RE = /(?<![\w-])(?:[a-z0-9-]{1,63}\.){1,10}[a-z]{2,24}(?![\w-])(?:\/[^\s<>"']*)?/gi;
+const TRAILING = new Set(['.', ',', ';', ':', '!', '?', ')', ']', '}', '>']);
+/** Removes trailing punctuation with a bounded loop from the end (linear, unlike an end-anchored regex). */
+const trimEnd = (s: string): string => { let i = s.length; while (i > 0 && TRAILING.has(s[i - 1]!)) i--; return s.slice(0, i); };
+const trimSlashes = (s: string): string => { let i = s.length; while (i > 0 && s[i - 1] === '/') i--; return s.slice(0, i); };
+const domainKey = (token: string) => trimSlashes(trimEnd(token).toLowerCase().replace(/^www\./, ''));
+/** NFKC (fullwidth forms to ASCII), ideographic full stops to dots, then zero width characters and soft hyphens removed. */
+const normalise = (text: string): string =>
+  text.normalize('NFKC').replace(/[。｡．]/g, '.').replace(/[​‌‍⁠﻿­]/g, '');
 
 /** Splits text into URLs, then email addresses, then bare domains (each pass removes what it found, so nothing is counted twice). */
-function extractTokens(text: string): { urls: string[]; emails: string[]; domains: string[] } {
+function extractTokens(raw: string): { urls: string[]; emails: string[]; domains: string[] } {
+  const text = normalise(raw);
   const urls = [...text.matchAll(URL_RE)].map((m) => trimEnd(m[0]).toLowerCase());
   const noUrls = text.replace(URL_RE, ' ');
   const emails = [...noUrls.matchAll(EMAIL_RE)].map((m) => m[0].toLowerCase());
@@ -211,7 +224,7 @@ export function hasStrayPlaceholder(text: string): boolean {
 const MULTI_PART_SUFFIXES = new Set(['co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'ltd.uk', 'plc.uk', 'me.uk', 'net.uk', 'sch.uk', 'nhs.uk', 'com.au', 'net.au', 'org.au', 'co.nz', 'co.za', 'com.br', 'co.in', 'co.jp', 'com.mx']);
 
 /** Mailbox providers: an address or website on one of these never proves a business domain match. */
-export const FREE_MAIL_DOMAINS = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'hotmail.co.uk', 'yahoo.com', 'yahoo.co.uk', 'icloud.com', 'me.com', 'aol.com', 'proton.me', 'protonmail.com', 'live.com', 'live.co.uk', 'btinternet.com', 'sky.com', 'talktalk.net', 'virginmedia.com']);
+export const FREE_MAIL_DOMAINS = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'hotmail.co.uk', 'yahoo.com', 'yahoo.co.uk', 'icloud.com', 'me.com', 'aol.com', 'proton.me', 'protonmail.com', 'live.com', 'live.co.uk', 'btinternet.com', 'sky.com', 'talktalk.net', 'virginmedia.com', 'ymail.com', 'msn.com', 'gmx.com', 'gmx.co.uk', 'ntlworld.com', 'outlook.co.uk', 'googlemail.co.uk', 'mail.com', 'zoho.com', 'fastmail.com', 'hey.com']);
 
 /** Registrable domain: www removed, last two labels, three for known suffixes like co.uk. Null for an unusable host. */
 export function registrableDomain(host: string): string | null {

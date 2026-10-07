@@ -105,3 +105,16 @@ Checks: rules tests 80/80, full suite 510/510, `npx tsc --noEmit` clean, `--igno
 5. `firstSendBlock`: one test per block reason (each alone yields that reason).
 
 Redeploy: no new functions beyond round 1's list; `run-selected-autopilot` bundle changes again (rules, recipient, draft, send).
+
+---
+
+# Fix round 3 (commit "fix: harden autopilot link check, blocklist subdomains, free-mail list")
+
+Only `_shared/selectedLeadPipelineRules.ts` and its test changed. Checks: rules tests 101/101, full suite 531/531, `tsc --noEmit` clean, syntax check clean.
+
+1. Link check: `DOMAIN_RE` lookbehind is now `(?<![\w-])`, so `...evil.com`, `//evil.com`, `@evil.com`, `/evil.com` are caught (URLs and emails are removed first). Text is normalised before extraction (NFKC, ideographic and halfwidth full stops to `.`, zero width U+200B/C/D, U+2060, U+FEFF and soft hyphen U+00AD removed), so `evil。com`, `evil．com`, fullwidth letters and zero width or soft hyphen splits are caught; the same normalisation is applied to the template so a template domain written with zero width characters still matches. Still ignored: `e.g.`, `i.e.`, `a.m.`, `p.m.`, `1.5`, `9.30am`, `10.30am`, `U.K.`, `Ph.D.` (all tested).
+2. Linear time: `EMAIL_RE` is bounded (`{1,64}` local part, `{1,63}` labels, at most 10 labels); `DOMAIN_RE` labels bounded `{1,63}` x `{1,10}`; end-anchored punctuation regexes replaced by bounded loops (`trimEnd`, `trimSlashes`). Perf tests (each under 200 ms): 60 KB of `a`, of `.`, of `a.`, `http://` plus 60 KB of dots, 60 KB of `a` then `@`, and 60 KB of commas.
+3. `isRecipientBlocked`: a domain entry blocks the recipient's domain and every parent domain down to two labels (`evil.com` blocks `sub.evil.com`, case-insensitive); exact-email entries still work; look-alikes such as `notevil.com` are not blocked.
+4. `FREE_MAIL_DOMAINS` gained ymail.com, msn.com, gmx.com, gmx.co.uk, ntlworld.com, outlook.co.uk, googlemail.co.uk, mail.com, zoho.com, fastmail.com, hey.com (tested).
+
+Redeploy: `run-selected-autopilot` only (no other function imports this file's changed behaviour).

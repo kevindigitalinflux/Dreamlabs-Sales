@@ -347,3 +347,52 @@ describe('free mail and suffixes', () => {
     expect(emailMatchesWebsiteDomain('a@school.sch.uk', 'school.sch.uk')).toBe(true);
   });
 });
+
+describe('unexpectedLinksOrAddresses hardening', () => {
+  it.each([
+    ['dots before the domain', 'Visit ...evil.com now'],
+    ['double slash', 'Go //evil.com/x'],
+    ['at sign', 'Go @evil.com'],
+    ['single slash', 'Go /evil.com'],
+    ['ideographic full stop', 'Visit evil。com'],
+    ['fullwidth full stop', 'Visit evil．com'],
+    ['fullwidth letters', 'Visit ｅｖｉｌ.com'],
+    ['zero width split', 'Visit ev​il.c‍om'],
+    ['soft hyphen split', 'Visit evi­l.com'],
+  ])('catches %s', (_n, text) => {
+    expect(unexpectedLinksOrAddresses('x', text, []).length).toBeGreaterThan(0);
+  });
+  it.each(['at 9.30am', 'at 10.30am', 'in the U.K. today', 'Dr Smith Ph.D. said', 'e.g. Monday', 'i.e. soon', '5 a.m. or 6 p.m.', 'version 1.5'])('still ignores %s', (text) => {
+    expect(unexpectedLinksOrAddresses('x', text, [])).toEqual([]);
+  });
+  it('still allows a template domain written with zero width characters', () => {
+    expect(unexpectedLinksOrAddresses('Visit acme.com', 'Visit ac​me.com', [])).toEqual([]);
+  });
+  it('is fast on very long input', () => {
+    for (const text of ['a'.repeat(60000), '.'.repeat(60000), 'a.'.repeat(30000), `http://${'.'.repeat(60000)}`, `${'a'.repeat(60000)}@`, `x ${','.repeat(60000)}`]) {
+      const t0 = performance.now();
+      unexpectedLinksOrAddresses('x', text, []);
+      expect(performance.now() - t0).toBeLessThan(200);
+    }
+  });
+});
+
+describe('isRecipientBlocked subdomains', () => {
+  it('a domain entry blocks its subdomains but not look-alikes', () => {
+    const b = new Set(['Evil.com', 'bob@acme.co.uk']);
+    expect(isRecipientBlocked('x@sub.evil.com', b)).toBe(true);
+    expect(isRecipientBlocked('x@a.b.EVIL.com', b)).toBe(true);
+    expect(isRecipientBlocked('x@notevil.com', b)).toBe(false);
+    expect(isRecipientBlocked('bob@acme.co.uk', b)).toBe(true);
+    expect(isRecipientBlocked('sue@acme.co.uk', b)).toBe(false);
+  });
+});
+
+describe('more free mail domains', () => {
+  it('are denied', () => {
+    for (const d of ['ymail.com', 'msn.com', 'gmx.co.uk', 'hey.com', 'fastmail.com']) {
+      expect(FREE_MAIL_DOMAINS.has(d)).toBe(true);
+      expect(emailMatchesWebsiteDomain(`a@${d}`, d)).toBe(false);
+    }
+  });
+});
