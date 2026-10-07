@@ -16,30 +16,29 @@ export async function fetchLogStatuses(ids: string[]): Promise<{ statuses: Map<s
 
 /**
  * Current status of the given email logs, so parked autopilot drafts can be shown as sent or discarded.
- * Late responses for an earlier id list are ignored. `ready` is false until the first load for the ids finishes.
+ * Late responses for an earlier id list are ignored. `ready` is false until a load for the current id set has finished; a refresh keeps the previous result visible.
  */
 export function useDraftStatuses(ids: string[]) {
   const key = [...new Set(ids)].sort().join(',');
   const [statuses, setStatuses] = useState<Map<string, string>>(new Map());
-  const [ready, setReady] = useState(key === '');
+  const [loadedKey, setLoadedKey] = useState<string | null>(key === '' ? '' : null);
   const [error, setError] = useState<string | null>(null);
   const tokenRef = useRef(0);
 
   const refresh = useCallback(async () => {
     const token = ++tokenRef.current;
-    if (key === '') { setStatuses(new Map()); setReady(true); setError(null); return; }
+    if (key === '') { setStatuses(new Map()); setLoadedKey(''); setError(null); return; }
     const result = await fetchLogStatuses(key.split(','));
     if (token !== tokenRef.current) return;
     if (result.error) setError(result.error);
     else { setStatuses(result.statuses); setError(null); }
-    setReady(true);
+    setLoadedKey(key);
   }, [key]);
 
   useEffect(() => {
-    setReady(key === '');
     void refresh();
     return () => { tokenRef.current += 1; };
   }, [key, refresh]);
 
-  return { statuses, ready, error, refresh };
+  return { statuses, ready: loadedKey === key, error, refresh };
 }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { useAutopilotRunLeads } from '../../hooks/useAutopilotRunLeads';
 import { useDraftStatuses } from '../../hooks/useDraftStatuses';
+import { NEEDS_INPUT_CHANGED_EVENT } from '../../hooks/useNeedsInputCount';
 import { applyDraftResolution } from '../../lib/runLeadGroups';
 import type { AutopilotRun } from '../../types';
 import { RunHeader } from './RunHeader';
@@ -23,8 +24,7 @@ export function SelectedRunSection({ run, refresh, stopRun }: SelectedRunSection
   const draftIds = leads.rows.filter((r) => r.status === 'needs_input' && r.email_log_id).map((r) => r.email_log_id as string);
   const drafts = useDraftStatuses(draftIds);
   const [followUpError, setFollowUpError] = useState<string | null>(null);
-  const rows = applyDraftResolution(leads.rows, drafts.statuses);
-  const waiting = !leads.loading && !drafts.ready;
+  const rows = applyDraftResolution(leads.rows, drafts.statuses, drafts.error !== null || !drafts.ready);
 
   return (
     <div className="flex flex-col gap-4">
@@ -36,10 +36,10 @@ export function SelectedRunSection({ run, refresh, stopRun }: SelectedRunSection
       {followUpError && <p role="alert" className="text-sm text-danger">{followUpError}</p>}
       <RunLeadGroups
         rows={rows}
-        loading={leads.loading || waiting}
+        loading={leads.loading}
         error={leads.error}
         renderNeedsInputAction={(row) => (
-          <NeedsInputRow row={row} onChanged={(err) => { setFollowUpError(err); void drafts.refresh(); }} />
+          <NeedsInputRow row={row} onChanged={(err) => { setFollowUpError(err); void drafts.refresh(); window.dispatchEvent(new Event(NEEDS_INPUT_CHANGED_EVENT)); }} />
         )}
       />
     </div>

@@ -6,6 +6,9 @@ import { useOrg } from './useOrg';
 
 const WINDOW_DAYS = 30;
 
+/** Window event fired after a parked draft is sent, so every mounted count refreshes. */
+export const NEEDS_INPUT_CHANGED_EVENT = 'needs-input-changed';
+
 /**
  * How many autopilot leads in the active org (any run, last 30 days) are waiting on the user:
  * needs-input rows whose parked draft is still unsent. Switching org clears the count at once
@@ -48,6 +51,12 @@ export function useNeedsInputCount() {
     void refresh();
     return () => { tokenRef.current += 1; };
   }, [orgId, refresh]);
+
+  useEffect(() => {
+    const handler = () => void refresh();
+    window.addEventListener(NEEDS_INPUT_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(NEEDS_INPUT_CHANGED_EVENT, handler);
+  }, [refresh]);
 
   return { count, loading, error, refresh };
 }

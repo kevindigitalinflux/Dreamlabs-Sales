@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { shouldEnrolAfterSend } from '../../lib/runLeadGroups';
 import { fetchLogStatuses } from '../../hooks/useDraftStatuses';
@@ -19,22 +19,31 @@ interface NeedsInputReviewProps {
 /**
  * Opens a parked autopilot draft in the standard email composer. When the composer closes and the
  * draft turns out to be sent, enrols the lead in the row's sequence at step 2 (unless it is already
- * enrolled) and leaves a lead note. A follow-up error is reported but never undoes the send.
+ * enrolled, checked fresh) and leaves a lead note, once. A follow-up error is reported but never undoes the send.
  */
 export function NeedsInputReview({ lead, log, sequenceId, onDone }: NeedsInputReviewProps) {
   const { session } = useAuth();
-  const { enrollment, enroll } = useEnrollments(lead.id);
+  const { enroll } = useEnrollments(lead.id);
   const [open, setOpen] = useState(true);
+  const handled = useRef(false);
 
   async function handleClose() {
+    if (handled.current) return;
+    handled.current = true;
     setOpen(false);
-    const { statuses } = await fetchLogStatuses([log.id]);
+    const { statuses, error: lookupErr } = await fetchLogStatuses([log.id]);
+    if (lookupErr) { onDone(`Could not confirm the email was sent: ${lookupErr}`); return; }
     const logStatus = statuses.get(log.id);
     if (logStatus !== 'sent') { onDone(null); return; }
     const problems: string[] = [];
-    if (shouldEnrolAfterSend({ logStatus, sequenceId, hasActiveEnrollment: enrollment !== null }) && sequenceId) {
-      const err = await enroll(sequenceId, 2);
-      if (err) problems.push(`Email sent, but the follow-up sequence could not be started: ${err}`);
+    if (sequenceId && shouldEnrolAfterSend({ logStatus, sequenceId, hasActiveEnrollment: false })) {
+      const { data: existing, error: checkErr } = await supabase
+        .from('sequence_enrollments').select('id').eq('lead_id', lead.id).in('status', ['active', 'paused']).limit(1);
+      if (checkErr) problems.push(`Email sent, but: Could not check existing sequences: ${checkErr.message}`);
+      else if (shouldEnrolAfterSend({ logStatus, sequenceId, hasActiveEnrollment: (existing ?? []).length > 0 })) {
+        const err = await enroll(sequenceId, 2);
+        if (err) problems.push(`Email sent, but the follow-up sequence could not be started: ${err}`);
+      }
     }
     const { error: noteErr } = await supabase.from('lead_notes').insert({
       lead_id: lead.id, created_by: session?.user.id, note_type: 'general', content: `Autopilot email sent after review: ${log.subject}`,

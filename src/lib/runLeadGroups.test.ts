@@ -87,6 +87,15 @@ describe('needs-input resolution', () => {
     expect(countRunLeads(out)).toEqual({ sent: 1, needs_input: 3, skipped: 1, not_reached: 0, failed: 0, queued: 0 });
   });
 
+  it('keeps drafts open when the status lookup failed', () => {
+    const out = applyDraftResolution([ni('a', 'l-sent'), ni('b', 'l-gone'), ni('d', null)], new Map(), true);
+    expect(out.map((r) => [r.id, r.status, r.reason, r.resolution])).toEqual([
+      ['a', 'needs_input', 'Unfilled placeholder', 'open'],
+      ['b', 'needs_input', 'Unfilled placeholder', 'open'],
+      ['d', 'needs_input', 'Unfilled placeholder', 'no_draft'],
+    ]);
+  });
+
   it('counts only needs-input rows whose draft is still open', () => {
     const rows = [ni('a', 'l-sent'), ni('b', 'l-gone'), ni('c', 'l-draft'), ni('d', null), ni('e', 'l-failed'), ni('f', 'l-draft', 'sent')];
     expect(countOpenNeedsInput(rows, logs)).toBe(2);

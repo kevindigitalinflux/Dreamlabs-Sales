@@ -18,8 +18,7 @@ export function NeedsInputRow({ row, onChanged }: NeedsInputRowProps) {
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<{ lead: Lead; log: EmailLog } | null>(null);
 
-  if (row.resolution === 'discarded') return null;
-  if (row.resolution === 'no_draft' || !row.email_log_id) {
+  if (row.resolution === 'discarded' || row.resolution === 'no_draft' || !row.email_log_id) {
     return <Link to={`/pipeline/leads/${row.lead_id}`} className="text-sm font-semibold text-cyan hover:underline">Open lead to handle it</Link>;
   }
   const logId = row.email_log_id;

@@ -140,14 +140,17 @@ export function needsInputResolution(
  * Derives the displayed state of run rows without writing anything: a needs-input row whose draft
  * was sent by the user shows as sent ("Sent by you after review"), and one whose draft was removed
  * says so. Every row gets a `resolution` ('open' for rows that are not needs-input).
+ * If the status lookup failed (`lookupFailed`), nothing can be concluded, so needs-input rows with a draft
+ * stay 'open' (never 'discarded' or 'sent') and the action remains available.
  */
 export function applyDraftResolution<T extends { status: string; reason: string | null; email_log_id: string | null }>(
   rows: T[],
   logStatuses: ReadonlyMap<string, string>,
+  lookupFailed = false,
 ): (T & { resolution: NeedsInputResolution })[] {
   return rows.map((row) => {
     if (row.status !== 'needs_input') return { ...row, resolution: 'open' as const };
-    const resolution = needsInputResolution(row, logStatuses);
+    const resolution = lookupFailed && row.email_log_id ? 'open' : needsInputResolution(row, logStatuses);
     if (resolution === 'sent') return { ...row, status: 'sent', reason: 'Sent by you after review', resolution };
     if (resolution === 'discarded') return { ...row, reason: 'Draft was discarded', resolution };
     return { ...row, resolution };
