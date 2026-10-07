@@ -1,6 +1,6 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
-export type ApiProvider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates';
+export type ApiProvider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates' | 'cro';
 
 const GLOBAL_ENV_VARS: Record<ApiProvider, string> = {
   gemini: 'GEMINI_API_KEY',
@@ -26,6 +26,9 @@ const GLOBAL_ENV_VARS: Record<ApiProvider, string> = {
   // — Kevin's own 2 orgs can use a shared key here if one is ever
   // configured (unlike apollo/hunter, which never fall back for anyone).
   opencorporates: 'OPENCORPORATES_API_KEY',
+  // CRO (Ireland) is a single "email:apiKey" string. CRO_API_KEY is never set
+  // globally, so there is no fallback: an org must configure its own.
+  cro: 'CRO_API_KEY',
 };
 
 /**

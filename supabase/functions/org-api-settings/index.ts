@@ -1,7 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
+import { searchCroCompanies, splitCroSecret } from '../_shared/cro.ts';
 
-type Provider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates';
+type Provider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates' | 'cro';
 
 async function validateKey(provider: Provider, key: string): Promise<string | null> {
   try {
@@ -64,6 +65,19 @@ async function validateKey(provider: Provider, key: string): Promise<string | nu
       const res = await fetch(`https://api.opencorporates.com/v0.4/companies/search?q=test&api_token=${key}`);
       return res.ok ? null : `OpenCorporates rejected the key (HTTP ${res.status})`;
     }
+    if (provider === 'cro') {
+      // Stored as one "email:apiKey" string; split on the FIRST colon (the key may itself contain colons).
+      const creds = splitCroSecret(key);
+      if (!creds) return 'Enter your CRO email and key as email:key';
+      try {
+        await searchCroCompanies('test', 1, creds);
+        return null;
+      } catch (e) {
+        const m = e instanceof Error ? /^CRO HTTP (d+)$/.exec(e.message) : null;
+        if (m) return `CRO rejected the key (HTTP ${m[1]})`;
+        throw e;
+      }
+    }
     // hunter — /v2/account is Hunter's free account-info call, used purely to verify the key.
     const res = await fetch(`https://api.hunter.io/v2/account?api_key=${key}`);
     return res.ok ? null : `Hunter rejected the key (HTTP ${res.status})`;
@@ -111,7 +125,7 @@ Deno.serve(async (req) => {
     if (!canManage) return json({ error: 'Org admin only' }, 403, headers);
     const provider = String(body.provider ?? '') as Provider;
     const apiKey = String(body.api_key ?? '').trim();
-    if (!['gemini', 'google_places', 'google_places_pro', 'companies_house', 'apollo', 'hunter', 'anthropic', 'opencorporates'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
+    if (!['gemini', 'google_places', 'google_places_pro', 'companies_house', 'apollo', 'hunter', 'anthropic', 'opencorporates', 'cro'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
     if (!apiKey) return json({ error: 'api_key is required' }, 400, headers);
 
     const validationError = await validateKey(provider, apiKey);

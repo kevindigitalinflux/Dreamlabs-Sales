@@ -8,7 +8,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 
 interface AutopilotRun {
   id: string; org_id: string; created_by: string; icp_raw_input: string; icp_params: Record<string, unknown>;
-  source: 'google_places' | 'companies_house'; daily_lead_target: number; ends_at: string;
+  source: 'google_places' | 'companies_house' | 'cro'; daily_lead_target: number; ends_at: string;
   leads_scraped_total: number; outreach_sent_total: number; icp_id?: string | null;
 }
 
@@ -143,10 +143,10 @@ Deno.serve(async (req) => {
     // the autopilot setup UI's source picker should stop offering this
     // option entirely; this is the backend backstop in case a row is ever
     // created with that source some other way.)
-    if (r.source === 'companies_house') {
+    if (r.source === 'companies_house' || r.source === 'cro') {
       await service.from('autopilot_runs').update({
         status: 'cancelled',
-        cancel_reason: 'Companies House is not yet supported for autopilot — it returns no contact details, so no lead can ever pass the email-required guardrail. Use Google Places instead.',
+        cancel_reason: `${r.source === 'cro' ? 'CRO' : 'Companies House'} is not yet supported for autopilot — it returns no contact details, so no lead can ever pass the email-required guardrail. Use Google Places instead.`,
       }).eq('id', r.id);
       processed++;
       continue;

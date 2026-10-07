@@ -40,6 +40,7 @@ export function Scraper() {
 
   const placesConfigured = settings.find((s) => s.provider === 'google_places')?.is_configured ?? false;
   const chConfigured = settings.find((s) => s.provider === 'companies_house')?.is_configured ?? false;
+  const croConfigured = settings.find((s) => s.provider === 'cro')?.is_configured ?? false;
 
   async function parseIcp() {
     if (!currentOrg || !rawInput.trim()) return;
@@ -67,7 +68,7 @@ export function Scraper() {
       if (createErr || !pipeline) { setBusy(false); setError(createErr ?? 'Could not create pipeline'); return; }
       targetPipelineId = pipeline.id;
     }
-    const functionName = source === 'google_places' ? 'scrape-google-places' : 'scrape-companies-house';
+    const functionName = source === 'google_places' ? 'scrape-google-places' : source === 'cro' ? 'scrape-cro' : 'scrape-companies-house';
     const { data, error: err } = await supabase.functions.invoke(functionName, {
       body: { org_id: currentOrg.id, icp_raw_input: rawInput, icp_params: icp, pipeline_id: targetPipelineId || null, icp_id: icpId },
     });
@@ -79,7 +80,7 @@ export function Scraper() {
   }
 
   const sourceUnavailable =
-    source === 'google_places' ? !placesConfigured : icp?.country !== 'GB' || !chConfigured;
+    source === 'google_places' ? !placesConfigured : source === 'cro' ? !croConfigured : icp?.country !== 'GB' || !chConfigured;
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
@@ -149,6 +150,10 @@ export function Scraper() {
               Companies House {icp.country !== 'GB' && <span className="text-xs text-muted">(UK only)</span>}
               {icp.country === 'GB' && !chConfigured && <span className="text-xs text-muted">(no key configured — see Settings)</span>}
             </label>
+            <label className="flex min-h-11 items-center gap-2">
+              <input type="radio" name="scrape-source" checked={source === 'cro'} onChange={() => setSource('cro')} disabled={!croConfigured} className="h-4 w-4 accent-violet-500" />
+              CRO (Ireland) {!croConfigured && <span className="text-xs text-muted">(no key configured, see Settings)</span>}
+            </label>
             <div className="flex justify-between">
               <Button variant="secondary" onClick={() => setStep(2)}>Back</Button>
               <Button onClick={() => setStep(4)} disabled={sourceUnavailable}>Continue</Button>
@@ -160,7 +165,7 @@ export function Scraper() {
       {step === 4 && (
         <Card>
           <div className="flex flex-col gap-3">
-            <p className="font-semibold">Ready to search {source === 'google_places' ? 'Google Places' : 'Companies House'}</p>
+            <p className="font-semibold">Ready to search {source === 'google_places' ? 'Google Places' : source === 'cro' ? 'CRO (Ireland)' : 'Companies House'}</p>
             <p className="text-sm text-muted">This runs in the background — you'll be taken to a live results page.</p>
             <label className="flex min-h-11 items-center gap-2">
               <input type="radio" name="pipeline-choice" checked={pipelineChoice === 'existing'} onChange={() => setPipelineChoice('existing')} className="h-4 w-4 accent-violet-500" />
