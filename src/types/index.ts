@@ -87,7 +87,7 @@ export interface EnrichmentResult {
 export interface DecisionMakerCandidate {
   id: string;
   lead_id: string;
-  source: 'hunter' | 'apollo';
+  source: 'hunter' | 'apollo' | 'companies_house' | 'cro';
   apollo_person_id: string | null;
   first_name: string | null;
   last_name: string | null;
@@ -319,7 +319,7 @@ export type DreamAgentAction =
   | { type: 'update_company_context'; proposed_context: string; excerpt: string; rationale: string };
 
 export type ScrapeJobStatus = 'pending' | 'running' | 'completed' | 'failed';
-export type ScrapeSource = 'google_places' | 'companies_house' | 'csv_upload';
+export type ScrapeSource = 'google_places' | 'companies_house' | 'cro' | 'csv_upload';
 
 export interface ScrapeJob {
   id: string;
@@ -355,7 +355,7 @@ export interface RawLead {
   google_rating: number | null;
   review_count: number | null;
   vertical: string | null;
-  source: 'google_places' | 'companies_house' | 'csv_upload';
+  source: 'google_places' | 'companies_house' | 'cro' | 'csv_upload';
   source_id: string | null;
   raw_data: Record<string, unknown> | null;
   status: RawLeadStatus;
