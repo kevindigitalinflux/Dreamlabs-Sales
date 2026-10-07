@@ -1,3 +1,4 @@
+import { replySenderMatches } from '../_shared/replyMatch.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { ImapFlow } from 'npm:imapflow@1';
 import { json } from '../_shared/cors.ts';
@@ -113,7 +114,7 @@ Deno.serve(async (req) => {
           // reference some OTHER org's real Message-ID could pause that org's
           // enrollment and spend that org's Anthropic key from this mailbox.
           const { data: sentLog } = await service.from('email_logs')
-            .select('id, lead_id, sequence_enrollment_id, org_id')
+            .select('id, lead_id, sequence_enrollment_id, org_id, to_email')
             .eq('message_id', inReplyTo).eq('status', 'sent').eq('sent_by', u.user_id).maybeSingle();
           if (!sentLog || !sentLog.sequence_enrollment_id || !sentLog.lead_id) continue;
 
@@ -123,7 +124,7 @@ Deno.serve(async (req) => {
           // In-Reply-To against this mailbox's own genuine Message-IDs (e.g. a
           // reused/leaked one) still can't hijack a real lead's thread this way.
           const { data: lead } = await service.from('leads').select('*').eq('id', sentLog.lead_id).single();
-          if (!lead?.email || lead.email.toLowerCase() !== fromAddr.toLowerCase()) continue;
+          if (!lead || !replySenderMatches(fromAddr, sentLog.to_email, lead.email)) continue;
 
           const bodyText = msg.source ? new TextDecoder().decode(msg.source).slice(0, 5000) : '';
 
@@ -157,11 +158,11 @@ Deno.serve(async (req) => {
               apiKey, model: complexity === 'complex' ? 'claude-sonnet-5' : 'claude-haiku-4-5',
             });
             await service.from('email_logs').insert({
-              // to_email is the verified lead.email, never fromAddr — fromAddr comes
+              // to_email is the address we originally emailed (our own sent log), never fromAddr — fromAddr comes
               // straight off an unauthenticated header and must never be used as a
               // send target, even after the match/sender validation above.
               lead_id: sentLog.lead_id, sequence_enrollment_id: sentLog.sequence_enrollment_id,
-              sent_by: null, to_email: lead.email, subject: draft.subject, body: draft.body,
+              sent_by: null, to_email: sentLog.to_email ?? lead.email, subject: draft.subject, body: draft.body,
               status: 'draft', org_id: sentLog.org_id,
             });
           } catch (e) {

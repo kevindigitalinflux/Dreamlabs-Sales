@@ -27,17 +27,19 @@ export async function loadOrgContext(service: SupabaseClient, run: PipelineRun):
 
 /** Non-dismissed decision-maker candidates for a lead, oldest first. */
 export async function loadCandidates(service: SupabaseClient, leadId: string): Promise<CandidateRow[]> {
-  const { data } = await service.from('decision_maker_candidates').select('*').eq('lead_id', leadId).is('dismissed_at', null).order('created_at');
+  const { data, error } = await service.from('decision_maker_candidates').select('*').eq('lead_id', leadId).is('dismissed_at', null).order('created_at');
+  if (error) throw new Error('Could not load the decision makers for this lead');
   return (data ?? []) as CandidateRow[];
 }
 
 /** The org's sequences plus the shared (org-less) defaults, and the templates visible to the org. Same visibility rule for both. */
 export async function loadSequencesAndTemplates(service: SupabaseClient, orgId: string): Promise<{ sequences: SequenceRow[]; templates: TemplateRow[] }> {
   const scope = `org_id.eq.${orgId},org_id.is.null`;
-  const [{ data: seqs }, { data: tpls }] = await Promise.all([
+  const [{ data: seqs, error: sErr }, { data: tpls, error: tErr }] = await Promise.all([
     service.from('email_sequences').select('*').or(scope),
     service.from('email_templates').select('*').or(scope),
   ]);
+  if (sErr || tErr) throw new Error('Could not load the sequences and templates');
   const sequences = ((seqs ?? []) as SequenceRow[]).map((s) => ({ ...s, steps: Array.isArray(s.steps) ? s.steps : [] }));
   return { sequences, templates: (tpls ?? []) as TemplateRow[] };
 }

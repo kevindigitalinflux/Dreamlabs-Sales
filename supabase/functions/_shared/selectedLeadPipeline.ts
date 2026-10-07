@@ -4,7 +4,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { RESEARCH_COST_CENTS, researchLead } from './leadResearch.ts';
 import { isEmptyResearch } from './researchPages.ts';
 import type { EligibilityEnrollment } from './autopilotEligibility.ts';
-import { canSendNow, placeholderReason, plainReason, unfilledPlaceholderNames } from './selectedLeadPipelineRules.ts';
+import { canSendNow, hasStrayPlaceholder, placeholderReason, plainReason, unfilledPlaceholderNames } from './selectedLeadPipelineRules.ts';
 import { buildDraft, type Draft } from './selectedLeadSteps/draft.ts';
 import { creatorCanSend, loadNotes, loadOrgContext, loadSequencesAndTemplates } from './selectedLeadSteps/load.ts';
 import { ensureRecipient } from './selectedLeadSteps/recipient.ts';
@@ -57,6 +57,9 @@ async function park(ctx: PipelineContext, lead: Lead, recipient: Recipient, draf
 function draftProblem(draft: Draft): string | null {
   const names = unfilledPlaceholderNames(draft.subject, draft.body, draft.missing);
   if (names.length > 0) return placeholderReason(names);
+  if (hasStrayPlaceholder(`${draft.subject} ${draft.body}`)) return 'The draft contains a placeholder that was not filled in';
+  if (draft.unexpected.length > 0) return 'Draft contains a link or address that was not in the template';
+  if (!draft.unsubscribeOk) return 'The unsubscribe link is not set up for this app, so the draft was saved for review';
   if (draft.aiFailed) return 'The AI draft failed, so a plain draft was saved for you to review';
   if (!draft.subject.trim() || !draft.body.trim()) return 'The draft was empty, so it was saved for you to review';
   return null;

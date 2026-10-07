@@ -17,7 +17,7 @@ Contract in `selectedLeadPipeline.ts` (PipelineContext, PipelineOutcome, process
 | 9 After send | `send.ts: recordSendEffects` (note, enrol/advance via `nextEnrollmentState`, next_action_date/note); each part best effort |
 | 10 Whole wrapper | `selectedLeadPipeline.ts: processLeadPipeline` |
 
-Pure rules: `_shared/selectedLeadPipelineRules.ts`, tests `src/lib/selectedLeadPipelineRules.test.ts` (33 tests, written first and seen failing).
+Pure rules: `_shared/selectedLeadPipelineRules.ts`, tests `src/lib/selectedLeadPipelineRules.test.ts` (32 tests at the first commit, written first and seen failing; the earlier "33" claim was wrong).
 
 ## Every place a lead can be skipped, parked or failed
 
@@ -48,7 +48,7 @@ Pure rules: `_shared/selectedLeadPipelineRules.ts`, tests `src/lib/selectedLeadP
 
 ## Verification
 
-- Focused vitest 33/33; full `npx vitest run` 462/462 (30 files); `npx tsc --noEmit` clean.
+- Focused vitest 32/32; full `npx vitest run` 462/462 (30 files); `npx tsc --noEmit` clean.
 - Syntax check (`--ignoreConfig`, grep `error TS1`) clean for: selectedLeadPipeline, selectedLeadPipelineRules, enrichLead, findDecisionMakers, ai, leadResearch, researchPages, all selectedLeadSteps files, enrich-leads-bulk/index.ts, find-decision-makers/index.ts.
 - Orchestration is not unit tested (no Deno runner); nothing deployed, no DB commands run.
 
@@ -59,3 +59,35 @@ Pure rules: `_shared/selectedLeadPipelineRules.ts`, tests `src/lib/selectedLeadP
 - `creatorCanSend` duplicates SQL logic; if `can_view_lead` changes it must be updated.
 - `raceDeadline` cannot cancel the underlying work: enrichment or decision-maker search may finish after the lead returned (they only write fill-blank details/candidates).
 - Hunter/Apollo paid lookups run unattended whenever the org has keys and a lead has no email.
+
+---
+
+# Fix round 1 (commit "fix: autopilot pipeline send safety and reply detection")
+
+Test count correction: the first commit had 32 rules tests, not 33. After this round: 57 rules tests; full suite 487/487; `npx tsc --noEmit` clean; `--ignoreConfig` syntax check clean on every touched Deno file. `npm run build` not run (no client `src/` files changed, only a test file).
+
+| # | Done |
+|---|---|
+| 1 Reply detection | `send.ts: recordSendEffects` now writes the enrolment id onto the sent `email_logs.sequence_enrollment_id` (new enrolment via `.insert().select('id').single()`, existing via its id). email_logs has no sequence_id column, so nothing else is set. `check-replies` verified: it only acts when the sent log has `message_id`, `status='sent'`, `sent_by = mailbox owner`, `sequence_enrollment_id` and `lead_id`; `sendLeadEmail` sets message_id and sent_by = run creator, so replies now match and the enrolment is paused. check-replies edit (small): selects `to_email`; sender check now `replySenderMatches(from, sentLog.to_email, lead.email)` (new import-free `_shared/replyMatch.ts`, tested); the auto-draft reply `to_email` is now `sentLog.to_email ?? lead.email` (our own record of who we emailed, never the From header) so a reply from a decision maker is answered to that person. Scoping by Message-ID, mailbox owner and status is unchanged. |
+| 2 Fail closed | `lastMinuteCheck` and `precheckLead` now check `error` on the lead, blocklist and enrolment reads and return `Could not check ...` / `failed` (never proceed). Also fail closed: decision maker dismissed read, recent emails read, opted-out read, `loadCandidates`, `loadSequencesAndTemplates` (now throw), member and pipeline reads (already threw). Audit notes: share-count error resolves to "not shared" (denies); org/profile lookup errors degrade to org name fallback / missing sender name (which parks); neither can cause a send. |
+| 3 Greeting vs recipient | `recipientVarOverrides(candidate)` now always sets `first_name` and `owner_name` from the candidate (`''` when no first name, so a `{{first_name}}` template parks; first name only when the surname is obfuscated). `buildDraft` gives the template vars and the AI a lead copy whose `owner_name` comes from the candidate. `draftEmailClaude` gained optional `recipient` input adding `RECIPIENT: name, title. Address the email to this person only; never to anyone else named in the data.` (name/title `unknown` when not known; for the lead's own address the owner name is used). Pure `recipientLabel`. Other callers unchanged (prompt text identical when the options are absent). |
+| 4 AI body | (a) optional `untrustedData` flag on `draftEmailClaude` adds the DATA not instructions sentence (autopilot only). (b) `unexpectedLinksOrAddresses` parks with `Draft contains a link or address that was not in the template` (allowed: filled template text, the template links, the unsubscribe URL; URLs compared exactly after trailing punctuation trim, case insensitive). (c) `withUnsubscribeLine` appends `If you would rather not hear from me again, you can opt out here: <url>` after the links block whenever the body lacks the URL. Extra safety I added: the draft also parks if the unsubscribe URL is not an https `/unsubscribe/` link (otherwise an unattended email would carry a broken or localhost opt out). (d) `hasStrayPlaceholder` (`[First Name]`, `{name}`) parks; `missing` is checked BEFORE the AI call, so no AI cost is spent on a lead that will park (a parked-for-missing draft is the plain template). |
+| 5 Found email | `ensureRecipient` tracks the email applied by the fill-blank patch this run. If the recipient is that address (not a candidate), `canSendToFoundEmail` must pass: `emailMatchesWebsiteDomain` (www, subdomains, small co.uk style suffix list, free mail never matches, no website false) AND the website was already on the lead, or was found by a source other than `google_places`. Otherwise `needs_input` `Found a contact email; please confirm it before sending` (patch stays). Candidates with an email are used as before. |
+| 6 Unsubscribe base | New import-free `_shared/appUrl.ts: publicAppUrl(appPublicUrl, appOrigins)`; Deno `templateVars.ts` now uses `APP_PUBLIC_URL`, else the first https entry of `APP_ORIGINS`, else the first entry. The frontend copy (`src/lib/templateVars.ts`) uses `VITE_APP_URL` (the Cloudflare build variable, a real public URL) so it does NOT have this bug; unchanged. Controller must set the `APP_PUBLIC_URL` secret (e.g. https://sales.didreamlabs.com). Until set, the first https entry of APP_ORIGINS is used, which is the production domain, and autopilot additionally refuses to send if the link is not https. |
+| 7 Minors | `lastMinuteCheck` skips if the fresh enrolment differs from `ctx.enrollment` (id and step, or both absent: `sameEnrolment`); the advance is conditional (`.eq('id').eq('current_step', step).eq('status','active').select('id')`; zero rows is logged as `enrolment changed during send, left as is`, no failure and no follow up note); the repair update is wrapped in try/catch; `next_action_date` uses `localDateString(nextSendAt, run.timezone)`; per recipient guard: skip `This address was emailed in the last 14 days` when a `sent` email_logs row in the org to the same address (case insensitive, LIKE wildcards escaped) exists within 14 days, EXCEPT rows for this same lead when it is mid sequence (otherwise every follow up would be blocked; deliberate deviation); skip `This address belongs to a lead that opted out` when another opted-out lead in the org has the address. |
+| 8 Order of safeguards | Extracted as pure `firstSendBlock(facts, reasonFor)` (order: lead missing, other org, classifyLead ineligible, recipient blocklisted, enrolment changed, opted-out address, recently emailed, candidate removed) with tests, and `lastMinuteCheck` now gathers facts then calls it. The order of reserve / insert draft / markSendStarted / send was left inline (extracting it would be a risky refactor of the send state machine). |
+
+## Functions whose bundle changes (redeploy)
+
+- `check-replies` (direct edit + ai.ts)
+- `check-sequences`, `generate-email` (templateVars.ts unsubscribe base, ai.ts)
+- `run-selected-autopilot` (the pipeline, selectedAutopilot.ts, ai.ts, templateVars.ts)
+- Import ai.ts only (prompt text identical when new options are absent, so behaviour unchanged, redeploy optional but safest): `draft-linkedin-message`, `org-api-settings`, `parse-csv-leads`, `parse-icp`, `parse-notes`, `parse-session-notes`
+- From the first commit still pending: `enrich-leads-bulk`, `find-decision-makers`
+- `send-email` unchanged.
+
+## Concerns
+
+- The 14 day per address guard also blocks a legitimate second lead at the same business address; it parks as skipped with a plain reason.
+- Greeting for the lead's own address uses the lead's owner name, which may be a different person than the mailbox owner (e.g. info@); that is unchanged behaviour from check-sequences.
+- `APP_PUBLIC_URL` secret must be set; deployed functions read secrets on next cold start.

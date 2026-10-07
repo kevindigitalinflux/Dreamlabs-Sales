@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   canCreatorViewLead, canSendNow, chooseTemplate, fillBlankPatch, followUpNote, isRecipientBlocked, nextEnrollmentState,
-  placeholderReason, plainReason, recipientVarOverrides, senderFirstName, unfilledPlaceholderNames,
+  placeholderReason, plainReason, recipientVarOverrides, senderFirstName, unfilledPlaceholderNames, recipientLabel, unexpectedLinksOrAddresses,
+  withUnsubscribeLine, isUsableUnsubscribeUrl, hasStrayPlaceholder, emailMatchesWebsiteDomain, canSendToFoundEmail, firstSendBlock, sameEnrolment,
 } from '../../supabase/functions/_shared/selectedLeadPipelineRules';
+import { publicAppUrl } from '../../supabase/functions/_shared/appUrl';
+import { replySenderMatches } from '../../supabase/functions/_shared/replyMatch';
 import { RESEARCH_FALLBACK_NOTE, formatResearchNote, isEmptyResearch } from '../../supabase/functions/_shared/researchPages';
 
 const now = new Date('2026-10-07T10:00:00.000Z');
@@ -41,14 +44,136 @@ describe('recipientVarOverrides', () => {
   it('uses the chosen candidate first name and full name', () => {
     expect(recipientVarOverrides({ first_name: ' Sam ', last_name: 'Lee', name_obfuscated: false })).toEqual({ first_name: 'Sam', owner_name: 'Sam Lee' });
   });
-  it('keeps the lead owner name when the candidate last name is obfuscated', () => {
-    expect(recipientVarOverrides({ first_name: 'Sam', last_name: 'L***', name_obfuscated: true })).toEqual({ first_name: 'Sam' });
+  it('uses only the first name when the candidate last name is obfuscated', () => {
+    expect(recipientVarOverrides({ first_name: 'Sam', last_name: 'L***', name_obfuscated: true })).toEqual({ first_name: 'Sam', owner_name: 'Sam' });
   });
   it('overrides nothing when there is no candidate', () => {
     expect(recipientVarOverrides(null)).toEqual({});
   });
-  it('overrides nothing when the candidate has no first name', () => {
-    expect(recipientVarOverrides({ first_name: ' ', last_name: null, name_obfuscated: false })).toEqual({});
+  it('blanks first and owner name when the candidate has no first name, so the draft parks', () => {
+    expect(recipientVarOverrides({ first_name: ' ', last_name: null, name_obfuscated: false })).toEqual({ first_name: '', owner_name: '' });
+  });
+});
+
+describe('recipientLabel', () => {
+  it('uses the candidate name and title', () => {
+    expect(recipientLabel({ first_name: 'Sam', last_name: 'Lee', name_obfuscated: false, title: 'Director' }, 'Pat Jones')).toEqual({ name: 'Sam Lee', title: 'Director' });
+  });
+  it('falls back to the lead owner without a candidate, title unknown', () => {
+    expect(recipientLabel(null, ' Pat Jones ')).toEqual({ name: 'Pat Jones', title: null });
+    expect(recipientLabel(null, null)).toEqual({ name: null, title: null });
+  });
+  it('never falls back to the lead owner when a candidate has no name', () => {
+    expect(recipientLabel({ first_name: null, last_name: null, name_obfuscated: false, title: null }, 'Pat Jones')).toEqual({ name: null, title: null });
+  });
+});
+
+describe('unexpectedLinksOrAddresses', () => {
+  const tpl = 'Hi Sam, see https://acme.co/price. Reply to sales@acme.co';
+  it('accepts links and addresses from the template, allowed list and trailing punctuation', () => {
+    expect(unexpectedLinksOrAddresses(tpl, 'Hello, see https://acme.co/price, or sales@acme.co. Opt out: https://app.example.com/unsubscribe/abc.', ['https://app.example.com/unsubscribe/abc'])).toEqual([]);
+  });
+  it('flags a new link and a new address', () => {
+    expect(unexpectedLinksOrAddresses(tpl, 'Visit https://evil.test/x or mail bob@evil.test', [])).toEqual(['https://evil.test/x', 'bob@evil.test']);
+  });
+  it('treats a different path as unexpected', () => {
+    expect(unexpectedLinksOrAddresses(tpl, 'see https://acme.co/other', [])).toEqual(['https://acme.co/other']);
+  });
+  it('does not count the email inside an allowed URL separately', () => {
+    expect(unexpectedLinksOrAddresses('x', 'go https://a.co/u?e=a@b.co', ['https://a.co/u?e=a@b.co'])).toEqual([]);
+  });
+});
+
+describe('withUnsubscribeLine and isUsableUnsubscribeUrl', () => {
+  const url = 'https://sales.example.com/unsubscribe/abc';
+  it('appends the opt out line when missing', () => {
+    expect(withUnsubscribeLine('Body\n', url)).toBe(`Body\n\nIf you would rather not hear from me again, you can opt out here: ${url}`);
+  });
+  it('leaves a body that already has the link', () => {
+    expect(withUnsubscribeLine(`Body ${url}`, url)).toBe(`Body ${url}`);
+  });
+  it('only accepts https unsubscribe links', () => {
+    expect(isUsableUnsubscribeUrl(url)).toBe(true);
+    expect(isUsableUnsubscribeUrl('http://localhost:5173/unsubscribe/abc')).toBe(false);
+    expect(isUsableUnsubscribeUrl('https://x.com/other')).toBe(false);
+  });
+});
+
+describe('hasStrayPlaceholder', () => {
+  it('flags bracket and single brace placeholders', () => {
+    expect(hasStrayPlaceholder('Hi [First Name]')).toBe(true);
+    expect(hasStrayPlaceholder('Hi {name}')).toBe(true);
+    expect(hasStrayPlaceholder('Hi {{name}}')).toBe(false);
+    expect(hasStrayPlaceholder('Hi Sam, see [1] and (note)')).toBe(false);
+  });
+});
+
+describe('emailMatchesWebsiteDomain', () => {
+  it('matches www, subdomains and bare domains', () => {
+    expect(emailMatchesWebsiteDomain('a@acme.com', 'https://www.acme.com/about')).toBe(true);
+    expect(emailMatchesWebsiteDomain('a@mail.acme.com', 'acme.com')).toBe(true);
+  });
+  it('handles co.uk style suffixes', () => {
+    expect(emailMatchesWebsiteDomain('a@acme.co.uk', 'www.acme.co.uk')).toBe(true);
+    expect(emailMatchesWebsiteDomain('a@other.co.uk', 'acme.co.uk')).toBe(false);
+  });
+  it('rejects free mail, other companies and a missing website', () => {
+    expect(emailMatchesWebsiteDomain('acme@gmail.com', 'acme.com')).toBe(false);
+    expect(emailMatchesWebsiteDomain('a@acme.com', null)).toBe(false);
+    expect(emailMatchesWebsiteDomain('a@acme.com', '  ')).toBe(false);
+  });
+});
+
+describe('canSendToFoundEmail', () => {
+  const base = { email: 'a@acme.com', website: 'acme.com', websiteWasOnLead: true, websiteSource: undefined };
+  it('allows a matching domain on a website the lead already had', () => { expect(canSendToFoundEmail(base)).toBe(true); });
+  it('rejects a website found only by Google Places', () => {
+    expect(canSendToFoundEmail({ ...base, websiteWasOnLead: false, websiteSource: 'google_places' })).toBe(false);
+  });
+  it('allows a newly found website from another source', () => {
+    expect(canSendToFoundEmail({ ...base, websiteWasOnLead: false, websiteSource: 'hunter' })).toBe(true);
+  });
+  it('rejects a domain mismatch', () => { expect(canSendToFoundEmail({ ...base, email: 'a@other.com' })).toBe(false); });
+});
+
+describe('firstSendBlock and sameEnrolment', () => {
+  const ok = { leadFound: true, sameOrg: true, ineligibleReason: null, recipientBlocked: false, enrolmentChanged: false, recentlyEmailed: false, optedOutLeadHasAddress: false, candidateRemoved: false };
+  const reasonFor = (c: string) => `code:${c}`;
+  it('passes when everything is fine', () => { expect(firstSendBlock(ok, reasonFor)).toBeNull(); });
+  it('reports the highest priority failure first', () => {
+    expect(firstSendBlock({ ...ok, ineligibleReason: 'opted_out', recentlyEmailed: true }, reasonFor)).toBe('code:opted_out');
+    expect(firstSendBlock({ ...ok, recipientBlocked: true, recentlyEmailed: true }, reasonFor)).toBe('code:blocked');
+    expect(firstSendBlock({ ...ok, recentlyEmailed: true, candidateRemoved: true }, reasonFor)).toBe('This address was emailed in the last 14 days');
+    expect(firstSendBlock({ ...ok, leadFound: false, sameOrg: false }, reasonFor)).toBe('Lead no longer exists');
+  });
+  it('compares enrolments by id and step', () => {
+    expect(sameEnrolment(null, null)).toBe(true);
+    expect(sameEnrolment({ id: 'e', current_step: 2 }, { id: 'e', current_step: 2 })).toBe(true);
+    expect(sameEnrolment({ id: 'e', current_step: 2 }, { id: 'e', current_step: 3 })).toBe(false);
+    expect(sameEnrolment(null, { id: 'e', current_step: 1 })).toBe(false);
+  });
+});
+
+describe('publicAppUrl', () => {
+  it('prefers APP_PUBLIC_URL and trims slashes', () => {
+    expect(publicAppUrl('https://sales.example.com/', 'http://localhost:5173,https://x.com')).toBe('https://sales.example.com');
+  });
+  it('else the first https origin, else the first origin', () => {
+    expect(publicAppUrl(undefined, 'http://localhost:5173, https://sales.example.com ,https://b.com')).toBe('https://sales.example.com');
+    expect(publicAppUrl('', 'http://localhost:5173')).toBe('http://localhost:5173');
+    expect(publicAppUrl(null, null)).toBe('http://localhost:5173');
+  });
+});
+
+describe('replySenderMatches', () => {
+  it('matches the emailed address or the lead email, ignoring case', () => {
+    expect(replySenderMatches('Sam@Acme.com', 'sam@acme.com', 'info@acme.com')).toBe(true);
+    expect(replySenderMatches('info@acme.com', 'sam@acme.com', 'INFO@acme.com')).toBe(true);
+  });
+  it('rejects others and empty values', () => {
+    expect(replySenderMatches('x@evil.com', 'sam@acme.com', 'info@acme.com')).toBe(false);
+    expect(replySenderMatches('', '', '')).toBe(false);
+    expect(replySenderMatches('a@b.co', null, undefined)).toBe(false);
   });
 });
 

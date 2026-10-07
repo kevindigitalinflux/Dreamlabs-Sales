@@ -71,15 +71,18 @@ async function cancelRun(service: SupabaseClient, runId: string, reason: string)
 
 /** Cheap per-lead checks, then the (12b) pipeline. Never trusts the row's own org_id. */
 export async function precheckLead(service: SupabaseClient, run: SelectedRun, row: RunLeadRow, hooks: Pick<PipelineContext, 'markSendStarted' | 'reserveSend' | 'releaseSend'>): Promise<PipelineOutcome> {
-  const { data } = await service.from('leads').select('*').eq('id', row.lead_id).maybeSingle();
+  const { data, error: leadErr } = await service.from('leads').select('*').eq('id', row.lead_id).maybeSingle();
+  if (leadErr) return { outcome: 'failed', reason: 'Could not load this lead' };
   const lead = data as (Record<string, unknown> & { id: string; org_id: string }) | null;
   if (!lead) return { outcome: 'skipped', reason: 'Lead no longer exists' };
   if (lead.org_id !== run.org_id) return { outcome: 'skipped', reason: 'Lead is not in this organization' };
 
-  const { data: enr } = await service.from('sequence_enrollments').select('*')
+  const { data: enr, error: enrErr } = await service.from('sequence_enrollments').select('*')
     .eq('lead_id', lead.id).in('status', ['active', 'paused']).order('created_at', { ascending: false }).limit(1);
+  if (enrErr) return { outcome: 'failed', reason: "Could not check this lead's sequence status" };
   const enrollment = ((enr ?? [])[0] ?? null) as (EligibilityEnrollment & { id?: string; sequence_id?: string; current_step?: number }) | null;
-  const { data: bl } = await service.from('outreach_blocklist').select('value').eq('org_id', run.org_id);
+  const { data: bl, error: blErr } = await service.from('outreach_blocklist').select('value').eq('org_id', run.org_id);
+  if (blErr) return { outcome: 'failed', reason: 'Could not check the blocklist' };
   const blocked = new Set((bl ?? []).map((b) => String((b as { value: string }).value)));
 
   const now = new Date();

@@ -1,4 +1,5 @@
 // Deno copy of src/lib/templateVars.ts — keep the two in sync.
+import { publicAppUrl } from './appUrl.ts';
 
 /** Whole-pound GBP: 1200 → "£1,200". */
 function formatCurrency(n: number): string {
@@ -76,6 +77,6 @@ export function buildTemplateVars(
     contractor_name: contractorName,
     pain_point: painPoint ?? icpPainPoint,
     cal_link: null,
-    unsubscribe_url: `${(Deno.env.get('APP_ORIGINS') ?? 'http://localhost:5173').split(',')[0]}/unsubscribe/${lead.id as string}`,
+    unsubscribe_url: `${publicAppUrl(Deno.env.get('APP_PUBLIC_URL'), Deno.env.get('APP_ORIGINS'))}/unsubscribe/${lead.id as string}`,
   };
 }

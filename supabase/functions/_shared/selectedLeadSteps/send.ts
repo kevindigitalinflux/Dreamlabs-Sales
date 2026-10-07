@@ -1,9 +1,9 @@
 // Steps 7 to 9: save the draft, final safety re-check, reserve a slot, mark the send, send, and update the platform.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { classifyLead, endOfLocalDay, type EligibilityEnrollment, type EligibilityLead } from '../autopilotEligibility.ts';
+import { classifyLead, endOfLocalDay, localDateString, type EligibilityEnrollment, type EligibilityLead } from '../autopilotEligibility.ts';
 import { sendLeadEmail } from '../sendLeadEmail.ts';
 import { skipReasonFor } from '../selectedAutopilotRules.ts';
-import { followUpNote, isRecipientBlocked, nextEnrollmentState, plainReason } from '../selectedLeadPipelineRules.ts';
+import { firstSendBlock, followUpNote, isRecipientBlocked, nextEnrollmentState, plainReason, sameEnrolment } from '../selectedLeadPipelineRules.ts';
 import type { PipelineContext, PipelineOutcome } from '../selectedLeadPipeline.ts';
 import type { Draft } from './draft.ts';
 import type { Lead, Progress, SequenceRow } from './types.ts';
@@ -20,34 +20,62 @@ export async function insertDraftLog(ctx: PipelineContext, lead: Lead, recipient
   return (data as { id: string }).id;
 }
 
+const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+const RECENT_EMAIL_DAYS = 14;
+
 /**
- * One more cheap check right before sending: the lead reloaded (still in this org, not opted out, not blocked, still
- * eligible), the recipient address and domain not on the blocklist, and a chosen decision-maker not dismissed since.
- * Returns a skip reason, or the freshly read lead stage when it is still fine to send.
+ * One more check right before sending, failing CLOSED: any read error stops the send. Facts are gathered here and
+ * decided in order by the pure firstSendBlock. Covers: lead still exists and is in this org, opted out / closed /
+ * blocked / paused / not due (classifyLead), recipient address and domain blocklisted, the sequence enrolment is the
+ * same one we started with, the same address was not emailed in the last 14 days (follow ups inside this lead's own
+ * sequence are expected and ignored), no opted-out lead in the org owns this address, and a chosen decision maker
+ * was not dismissed. Returns a skip reason, or the freshly read lead stage when it is fine to send.
  */
 export async function lastMinuteCheck(ctx: PipelineContext, recipient: Recipient): Promise<{ skip: string } | { stage: string | null }> {
-  const { data } = await ctx.service.from('leads').select('*').eq('id', ctx.lead.id).maybeSingle();
+  const { service } = ctx;
+  const failed = (what: string) => ({ skip: `Could not check ${what}` });
+  const { data, error: leadErr } = await service.from('leads').select('*').eq('id', ctx.lead.id).maybeSingle();
+  if (leadErr) return failed('this lead');
   const lead = data as (Record<string, unknown> & { org_id: string }) | null;
-  if (!lead) return { skip: 'Lead no longer exists' };
-  if (lead.org_id !== ctx.run.org_id) return { skip: 'Lead is not in this organization' };
-  const { data: bl } = await ctx.service.from('outreach_blocklist').select('value').eq('org_id', ctx.run.org_id);
+  const { data: bl, error: blErr } = await service.from('outreach_blocklist').select('value').eq('org_id', ctx.run.org_id);
+  if (blErr) return failed('the blocklist');
   const blocked = new Set<string>((bl ?? []).map((b) => String((b as { value: string }).value)));
-  const { data: enr } = await ctx.service.from('sequence_enrollments').select('*')
+  const { data: enr, error: enrErr } = await service.from('sequence_enrollments').select('*')
     .eq('lead_id', ctx.lead.id).in('status', ['active', 'paused']).order('created_at', { ascending: false }).limit(1);
-  const enrollment = ((enr ?? [])[0] ?? null) as EligibilityEnrollment | null;
-  const now = new Date();
-  const verdict = classifyLead(lead as unknown as EligibilityLead, enrollment, blocked, endOfLocalDay(now, ctx.run.timezone), now);
-  if (!verdict.eligible) return { skip: skipReasonFor(verdict.reason) };
-  if (isRecipientBlocked(recipient.email, blocked)) return { skip: skipReasonFor('blocked') };
+  if (enrErr) return failed("this lead's sequence status");
+  const enrollment = ((enr ?? [])[0] ?? null) as (EligibilityEnrollment & { id?: string; current_step?: number }) | null;
+
+  const since = new Date(Date.now() - RECENT_EMAIL_DAYS * 86_400_000).toISOString();
+  const { data: sent, error: sentErr } = await service.from('email_logs').select('lead_id')
+    .eq('org_id', ctx.run.org_id).eq('status', 'sent').gte('sent_at', since).ilike('to_email', escapeLike(recipient.email)).limit(20);
+  if (sentErr) return failed('recent emails to this address');
+  const { count: optedOut, error: ooErr } = await service.from('leads').select('id', { count: 'exact', head: true })
+    .eq('org_id', ctx.run.org_id).eq('opted_out', true).neq('id', ctx.lead.id).ilike('email', escapeLike(recipient.email));
+  if (ooErr) return failed('opt outs for this address');
+  let candidateRemoved = false;
   if (recipient.candidateId) {
-    const { data: cand } = await ctx.service.from('decision_maker_candidates').select('dismissed_at').eq('id', recipient.candidateId).maybeSingle();
-    if (!cand || (cand as { dismissed_at: string | null }).dismissed_at) return { skip: 'The chosen decision maker was removed' };
+    const { data: cand, error: cErr } = await service.from('decision_maker_candidates').select('dismissed_at').eq('id', recipient.candidateId).maybeSingle();
+    if (cErr) return failed('the chosen decision maker');
+    candidateRemoved = !cand || !!(cand as { dismissed_at: string | null }).dismissed_at;
   }
-  return { stage: (lead.stage as string | null) ?? null };
+
+  const now = new Date();
+  const verdict = lead ? classifyLead(lead as unknown as EligibilityLead, enrollment, blocked, endOfLocalDay(now, ctx.run.timezone), now) : null;
+  const block = firstSendBlock({
+    leadFound: !!lead, sameOrg: lead?.org_id === ctx.run.org_id,
+    ineligibleReason: verdict && !verdict.eligible ? verdict.reason : null,
+    recipientBlocked: isRecipientBlocked(recipient.email, blocked),
+    enrolmentChanged: !sameEnrolment(ctx.enrollment, enrollment),
+    // Earlier steps of this lead's own sequence are expected; anything else sent to this address is not.
+    recentlyEmailed: ((sent ?? []) as { lead_id: string | null }[]).some((r) => !(ctx.enrollment && r.lead_id === ctx.lead.id)),
+    optedOutLeadHasAddress: (optedOut ?? 0) > 0, candidateRemoved,
+  }, skipReasonFor);
+  if (block) return { skip: block };
+  return { stage: (lead!.stage as string | null) ?? null };
 }
 
 /** Records the outcome of the platform updates after a send. Each part is best effort: the email already went out. */
-export async function recordSendEffects(service: SupabaseClient, ctx: PipelineContext, sequence: SequenceRow, step: number, subject: string): Promise<void> {
+export async function recordSendEffects(service: SupabaseClient, ctx: PipelineContext, sequence: SequenceRow, step: number, subject: string, emailLogId: string): Promise<void> {
   const leadId = ctx.lead.id;
   try {
     const { error } = await service.from('lead_notes').insert({ lead_id: leadId, created_by: ctx.run.created_by, note_type: 'general', content: `Autopilot sent email: ${subject}` });
@@ -55,19 +83,40 @@ export async function recordSendEffects(service: SupabaseClient, ctx: PipelineCo
   } catch { console.error('autopilot: could not add sent note'); }
 
   let next: ReturnType<typeof nextEnrollmentState> | null = null;
+  let enrolmentId: string | null = ctx.enrollment?.id ?? null;
   try {
     next = nextEnrollmentState(step, sequence.steps, new Date());
-    const existingId = ctx.enrollment?.id;
-    const { error } = ctx.enrollment
-      ? (existingId ? await service.from('sequence_enrollments').update(next).eq('id', existingId) : { error: new Error('no enrolment id') })
-      : await service.from('sequence_enrollments').insert({ lead_id: leadId, sequence_id: sequence.id, ...next, enrolled_by: ctx.run.created_by });
-    if (error) console.error('autopilot: could not update the sequence enrolment');
+    if (ctx.enrollment) {
+      if (!enrolmentId) console.error('autopilot: no enrolment id to update');
+      else {
+        // Conditional so a change made during the send (someone paused or moved the enrolment) is left as is.
+        const { data, error } = await service.from('sequence_enrollments').update(next)
+          .eq('id', enrolmentId).eq('current_step', step).eq('status', 'active').select('id');
+        if (error) console.error('autopilot: could not update the sequence enrolment');
+        else if (!data || data.length === 0) { console.error('autopilot: enrolment changed during send, left as is'); next = null; }
+      }
+    } else {
+      const { data, error } = await service.from('sequence_enrollments')
+        .insert({ lead_id: leadId, sequence_id: sequence.id, ...next, enrolled_by: ctx.run.created_by }).select('id').single();
+      if (error) console.error('autopilot: could not create the sequence enrolment');
+      else enrolmentId = (data as { id: string }).id;
+    }
   } catch { console.error('autopilot: could not update the sequence enrolment'); }
+
+  // Link the sent email to the enrolment so a reply to it is detected and pauses the sequence (check-replies).
+  try {
+    if (enrolmentId) {
+      const { error } = await service.from('email_logs').update({ sequence_enrollment_id: enrolmentId }).eq('id', emailLogId);
+      if (error) console.error('autopilot: could not link the email to its enrolment');
+    }
+  } catch { console.error('autopilot: could not link the email to its enrolment'); }
 
   try {
     if (next && next.status === 'active' && next.next_send_at) {
-      const { error } = await service.from('leads')
-        .update({ next_action_date: next.next_send_at.slice(0, 10), next_action_note: followUpNote(next.current_step, sequence.steps.length) }).eq('id', leadId);
+      const { error } = await service.from('leads').update({
+        next_action_date: localDateString(new Date(next.next_send_at), ctx.run.timezone),
+        next_action_note: followUpNote(next.current_step, sequence.steps.length),
+      }).eq('id', leadId);
       if (error) console.error('autopilot: could not set the follow up');
     }
   } catch { console.error('autopilot: could not set the follow up'); }
@@ -101,9 +150,11 @@ export async function sendDraft(
   }
   if (result.warning) {
     // Sent but the log row may still say draft; fix it so a person cannot release it a second time.
-    const { error } = await ctx.service.from('email_logs').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', emailLogId);
-    if (error) console.error('autopilot: could not mark the sent email as sent');
+    try {
+      const { error } = await ctx.service.from('email_logs').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', emailLogId);
+      if (error) console.error('autopilot: could not mark the sent email as sent');
+    } catch { console.error('autopilot: could not mark the sent email as sent'); }
   }
-  try { await recordSendEffects(ctx.service, ctx, sequence, step, draft.subject); } catch { console.error('autopilot: platform updates failed after send'); }
+  try { await recordSendEffects(ctx.service, ctx, sequence, step, draft.subject, emailLogId); } catch { console.error('autopilot: platform updates failed after send'); }
   return { outcome: 'sent', emailLogId, sequenceId: sequence.id, costCents: progress.costCents };
 }
