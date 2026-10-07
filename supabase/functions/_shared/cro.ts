@@ -70,3 +70,9 @@ export function splitCroSecret(secret: string): { email: string; apiKey: string 
   if (i <= 0 || i === secret.length - 1) return null;
   return { email: secret.slice(0, i).trim(), apiKey: secret.slice(i + 1).trim() };
 }
+
+/** Maps a "CRO HTTP n" error from searchCroCompanies to "CRO rejected the key (HTTP n)". Returns null for any other error. */
+export function croRejectionMessage(err: unknown): string | null {
+  const m = err instanceof Error ? /^CRO HTTP (\d+)$/.exec(err.message) : null;
+  return m ? `CRO rejected the key (HTTP ${m[1]})` : null;
+}

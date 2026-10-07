@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
-import { searchCroCompanies, splitCroSecret } from '../_shared/cro.ts';
+import { croRejectionMessage, searchCroCompanies, splitCroSecret } from '../_shared/cro.ts';
 
 type Provider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates' | 'cro';
 
@@ -73,8 +73,8 @@ async function validateKey(provider: Provider, key: string): Promise<string | nu
         await searchCroCompanies('test', 1, creds);
         return null;
       } catch (e) {
-        const m = e instanceof Error ? /^CRO HTTP (d+)$/.exec(e.message) : null;
-        if (m) return `CRO rejected the key (HTTP ${m[1]})`;
+        const rejection = croRejectionMessage(e);
+        if (rejection) return rejection;
         throw e;
       }
     }

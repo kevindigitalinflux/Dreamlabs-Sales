@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCroCompanies } from '../../supabase/functions/_shared/cro';
+import { croRejectionMessage, parseCroCompanies } from '../../supabase/functions/_shared/cro';
 
 describe('parseCroCompanies', () => {
   it('maps CRO search rows', () => {
@@ -9,5 +9,15 @@ describe('parseCroCompanies', () => {
   it('is tolerant of junk', () => {
     expect(parseCroCompanies(null)).toEqual([]);
     expect(parseCroCompanies([{}])).toEqual([]);
+  });
+});
+
+describe('croRejectionMessage', () => {
+  it('maps CRO HTTP errors', () => {
+    expect(croRejectionMessage(new Error('CRO HTTP 401'))).toBe('CRO rejected the key (HTTP 401)');
+  });
+  it('ignores other errors', () => {
+    expect(croRejectionMessage(new Error('network down'))).toBeNull();
+    expect(croRejectionMessage('CRO HTTP 401')).toBeNull();
   });
 });

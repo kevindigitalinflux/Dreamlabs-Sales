@@ -65,11 +65,12 @@ const PROVIDERS: {
     label: 'CRO (Irish company scraper)',
     url: 'https://services.cro.ie/',
     ctaLabel: 'Open the CRO Open Services site →',
-    freeText: 'Free. Covers companies registered in Ireland. One-time setup for the whole organization, done once by whoever administers it.',
+    freeText: "CRO's basic company data is free; check their site for your key's terms. Covers companies registered in Ireland. One-time setup for the whole organization, done once by whoever administers it.",
     steps: [
       'Click the button above and register (or sign in) for a CRO Open Services account.',
       'Request an API key for the CRO web services (CWS). CRO may take a little while to issue it.',
       'Paste it into the box below in the form youremail:key, that is the email you registered with, then a colon, then the key (for example name@company.com:abc123).',
+      "CRO's exact login and key format may differ from what we expect. If saving fails, tell us what CRO gave you and we will adjust it.",
     ],
   },
   {
