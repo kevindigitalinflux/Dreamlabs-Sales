@@ -7,17 +7,20 @@ import { Card } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
+import { SelectedRunSection } from '../components/autopilot/SelectedRunSection';
+import { useSelectedRun } from '../hooks/useSelectedRun';
 
 /** Live autopilot progress + blocklist management. */
 export function AutopilotStatus() {
   const notice = (useLocation().state as { notice?: string } | null)?.notice;
   const { run, blocklist, loading, stopRun, addBlocklistEntry, removeBlocklistEntry } = useAutopilot();
+  const selected = useSelectedRun();
   const [blockValue, setBlockValue] = useState('');
   const [blockReason, setBlockReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (loading) return <Skeleton className="h-96 w-full" />;
+  if (loading || selected.loading) return <Skeleton className="h-96 w-full" />;
 
   const dayNumber = run ? Math.max(1, Math.floor((Date.now() - new Date(run.started_at).getTime()) / 86_400_000) + 1) : 0;
 
@@ -30,7 +33,7 @@ export function AutopilotStatus() {
       {notice && <p role="status" className="text-sm text-warning">{notice}</p>}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
-      {!run && (
+      {!run && !selected.run && (
         <EmptyState
           icon={Rocket}
           title="No autopilot run active"
@@ -38,6 +41,9 @@ export function AutopilotStatus() {
           action={<Link to="/outreach/autopilot/new"><Button>Start autopilot</Button></Link>}
         />
       )}
+
+      {selected.error && <p role="alert" className="text-sm text-danger">Could not load the selected leads run: {selected.error}</p>}
+      {selected.run && <SelectedRunSection run={selected.run} refresh={selected.refresh} stopRun={selected.stopRun} />}
 
       {run && (
         <Card>
