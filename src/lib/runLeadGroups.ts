@@ -114,3 +114,55 @@ export function formatWindowDate(value: string): string {
   if (mo < 1 || mo > 12 || d < 1 || d > daysInMonth(y, mo)) return value;
   return `${WEEKDAYS[weekdayIndex(y, mo, d)]} ${d} ${MONTHS[mo - 1]} ${y}`;
 }
+
+/** Email log statuses that still leave a parked draft open for the user to review (a failed send can be retried). */
+const OPEN_LOG_STATUSES = ['draft', 'failed'];
+
+/** How a "needs input" row stands, judged from its draft email's current status. */
+export type NeedsInputResolution = 'open' | 'no_draft' | 'sent' | 'discarded';
+
+/**
+ * Where a needs-input row stands. `logStatuses` maps email log id to its current status;
+ * a log id missing from the map means the draft no longer exists (discarded).
+ */
+export function needsInputResolution(
+  row: { email_log_id: string | null },
+  logStatuses: ReadonlyMap<string, string>,
+): NeedsInputResolution {
+  if (!row.email_log_id) return 'no_draft';
+  const status = logStatuses.get(row.email_log_id);
+  if (status === undefined) return 'discarded';
+  if (status === 'sent') return 'sent';
+  return OPEN_LOG_STATUSES.includes(status) ? 'open' : 'discarded';
+}
+
+/**
+ * Derives the displayed state of run rows without writing anything: a needs-input row whose draft
+ * was sent by the user shows as sent ("Sent by you after review"), and one whose draft was removed
+ * says so. Every row gets a `resolution` ('open' for rows that are not needs-input).
+ */
+export function applyDraftResolution<T extends { status: string; reason: string | null; email_log_id: string | null }>(
+  rows: T[],
+  logStatuses: ReadonlyMap<string, string>,
+): (T & { resolution: NeedsInputResolution })[] {
+  return rows.map((row) => {
+    if (row.status !== 'needs_input') return { ...row, resolution: 'open' as const };
+    const resolution = needsInputResolution(row, logStatuses);
+    if (resolution === 'sent') return { ...row, status: 'sent', reason: 'Sent by you after review', resolution };
+    if (resolution === 'discarded') return { ...row, reason: 'Draft was discarded', resolution };
+    return { ...row, resolution };
+  });
+}
+
+/** How many needs-input rows still have an open draft waiting for the user. */
+export function countOpenNeedsInput(
+  rows: { status: string; email_log_id: string | null }[],
+  logStatuses: ReadonlyMap<string, string>,
+): number {
+  return rows.filter((r) => r.status === 'needs_input' && needsInputResolution(r, logStatuses) === 'open' && r.email_log_id !== null).length;
+}
+
+/** Whether to enrol a lead in the row's sequence after the user sent its parked draft. */
+export function shouldEnrolAfterSend(opts: { logStatus: string | undefined; sequenceId: string | null; hasActiveEnrollment: boolean }): boolean {
+  return opts.logStatus === 'sent' && opts.sequenceId !== null && !opts.hasActiveEnrollment;
+}

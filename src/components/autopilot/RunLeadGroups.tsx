@@ -1,15 +1,19 @@
 import type { ReactNode } from 'react';
 import { Skeleton } from '../ui/Skeleton';
 import { groupRunLeads } from '../../lib/runLeadGroups';
+import type { NeedsInputResolution } from '../../lib/runLeadGroups';
 import type { RunLeadRow as RunLeadRowData } from '../../hooks/useAutopilotRunLeads';
 import { RunLeadRow } from './RunLeadRow';
 
+/** A run row plus how its parked draft (if any) stands. */
+export type ResolvedRunLeadRow = RunLeadRowData & { resolution: NeedsInputResolution };
+
 interface RunLeadGroupsProps {
-  rows: RunLeadRowData[];
+  rows: ResolvedRunLeadRow[];
   loading: boolean;
   error: string | null;
   /** Slot for the action shown on each "Needs your input" row. */
-  renderNeedsInputAction?: (row: RunLeadRowData) => ReactNode;
+  renderNeedsInputAction?: (row: ResolvedRunLeadRow) => ReactNode;
 }
 
 /** A selected run's leads in Sent / Needs your input / Skipped / Not reached / Failed / Still queued groups. */

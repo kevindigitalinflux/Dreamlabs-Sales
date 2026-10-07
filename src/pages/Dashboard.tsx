@@ -10,6 +10,7 @@ import { Card } from '../components/ui/Card';
 import { Skeleton } from '../components/ui/Skeleton';
 import { StatsBar } from '../components/dashboard/StatsBar';
 import { TodaysFocus } from '../components/dashboard/TodaysFocus';
+import { NeedsInputNotice } from '../components/dashboard/NeedsInputNotice';
 import { EmailReviewQueue } from '../components/dashboard/EmailReviewQueue';
 import { RecentlyActive } from '../components/dashboard/RecentlyActive';
 import { PipelineSnapshot } from '../components/dashboard/PipelineSnapshot';
@@ -59,6 +60,8 @@ export function Dashboard() {
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         {!loading && !error && <TodaysFocus leads={leads} onOpen={setSelected} />}
       </Card>
+
+      <NeedsInputNotice />
 
       <Card>
         <h2 className="mb-3 text-[18px] font-bold">Emails ready to review</h2>

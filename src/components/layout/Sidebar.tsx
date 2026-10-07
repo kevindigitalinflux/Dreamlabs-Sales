@@ -2,6 +2,7 @@ import { NavLink } from 'react-router';
 import { BarChart3, Contact, KanbanSquare, LayoutDashboard, Mail, Phone, Radar, Rocket, Settings, Shield, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useOrg } from '../../hooks/useOrg';
+import { useNeedsInputCount } from '../../hooks/useNeedsInputCount';
 import logoIcon from '../../assets/logo/logo-icon.png';
 
 interface NavItem {
@@ -33,6 +34,7 @@ function navClass({ isActive }: { isActive: boolean }): string {
 /** Desktop sidebar navigation. Hidden below md; MobileNav takes over there. */
 export function Sidebar() {
   const { currentOrg } = useOrg();
+  const { count: needsInput } = useNeedsInputCount();
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r border-nav-line bg-nav-bg p-4 md:flex">
       <img src={logoIcon} alt="" className="mb-2 h-9 w-auto self-start px-2" />
@@ -44,6 +46,9 @@ export function Sidebar() {
           <NavLink key={to} to={to} end={end} className={navClass}>
             <Icon className="h-5 w-5" aria-hidden />
             {label}
+            {to === '/emails' && needsInput ? (
+              <span className="ml-auto rounded-full bg-cyan/20 px-2 py-0.5 text-[11px] font-bold text-cyan" aria-label={`${needsInput} autopilot leads need your input`}>{needsInput}</span>
+            ) : null}
           </NavLink>
         ))}
         {currentOrg?.role === 'admin' && (

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countRunLeads, formatWindowDate, RUN_LEAD_GROUP_ORDER, groupKeyFor, groupRunLeads, runFinishNote, runStatusLabel } from './runLeadGroups';
+import { applyDraftResolution, countOpenNeedsInput, needsInputResolution, shouldEnrolAfterSend, countRunLeads, formatWindowDate, RUN_LEAD_GROUP_ORDER, groupKeyFor, groupRunLeads, runFinishNote, runStatusLabel } from './runLeadGroups';
 
 const row = (id: string, status: string, updated_at = '2026-10-08T10:00:00Z', reason: string | null = null) => ({ id, status, updated_at, reason });
 
@@ -59,5 +59,45 @@ describe('runLeadGroups', () => {
     expect(runFinishNote({ status: 'completed', cancel_reason: null }, [{ status: 'sent', reason: null }])).toBeNull();
     expect(runFinishNote({ status: 'active', cancel_reason: null }, [])).toBeNull();
     expect(runFinishNote({ status: 'cancelled', cancel_reason: 'stopped by user' }, [])).toBeNull();
+  });
+});
+
+describe('needs-input resolution', () => {
+  const ni = (id: string, email_log_id: string | null, status = 'needs_input') => ({ id, status, reason: 'Unfilled placeholder', email_log_id, updated_at: '2026-10-08T10:00:00Z' });
+  const logs = new Map([['l-draft', 'draft'], ['l-sent', 'sent'], ['l-failed', 'failed'], ['l-other', 'queued']]);
+
+  it('classifies by the draft log status', () => {
+    expect(needsInputResolution({ email_log_id: null }, logs)).toBe('no_draft');
+    expect(needsInputResolution({ email_log_id: 'l-draft' }, logs)).toBe('open');
+    expect(needsInputResolution({ email_log_id: 'l-failed' }, logs)).toBe('open');
+    expect(needsInputResolution({ email_log_id: 'l-sent' }, logs)).toBe('sent');
+    expect(needsInputResolution({ email_log_id: 'l-gone' }, logs)).toBe('discarded');
+    expect(needsInputResolution({ email_log_id: 'l-other' }, logs)).toBe('discarded');
+  });
+
+  it('derives sent and discarded display state and leaves other rows alone', () => {
+    const out = applyDraftResolution([ni('a', 'l-sent'), ni('b', 'l-gone'), ni('c', 'l-draft'), ni('d', null), ni('e', null, 'skipped')], logs);
+    expect(out.map((r) => [r.id, r.status, r.reason, r.resolution])).toEqual([
+      ['a', 'sent', 'Sent by you after review', 'sent'],
+      ['b', 'needs_input', 'Draft was discarded', 'discarded'],
+      ['c', 'needs_input', 'Unfilled placeholder', 'open'],
+      ['d', 'needs_input', 'Unfilled placeholder', 'no_draft'],
+      ['e', 'skipped', 'Unfilled placeholder', 'open'],
+    ]);
+    expect(countRunLeads(out)).toEqual({ sent: 1, needs_input: 3, skipped: 1, not_reached: 0, failed: 0, queued: 0 });
+  });
+
+  it('counts only needs-input rows whose draft is still open', () => {
+    const rows = [ni('a', 'l-sent'), ni('b', 'l-gone'), ni('c', 'l-draft'), ni('d', null), ni('e', 'l-failed'), ni('f', 'l-draft', 'sent')];
+    expect(countOpenNeedsInput(rows, logs)).toBe(2);
+    expect(countOpenNeedsInput([], logs)).toBe(0);
+  });
+
+  it('enrols only after a sent draft, with a sequence and no active enrolment', () => {
+    expect(shouldEnrolAfterSend({ logStatus: 'sent', sequenceId: 's1', hasActiveEnrollment: false })).toBe(true);
+    expect(shouldEnrolAfterSend({ logStatus: 'sent', sequenceId: null, hasActiveEnrollment: false })).toBe(false);
+    expect(shouldEnrolAfterSend({ logStatus: 'sent', sequenceId: 's1', hasActiveEnrollment: true })).toBe(false);
+    expect(shouldEnrolAfterSend({ logStatus: 'draft', sequenceId: 's1', hasActiveEnrollment: false })).toBe(false);
+    expect(shouldEnrolAfterSend({ logStatus: undefined, sequenceId: 's1', hasActiveEnrollment: false })).toBe(false);
   });
 });

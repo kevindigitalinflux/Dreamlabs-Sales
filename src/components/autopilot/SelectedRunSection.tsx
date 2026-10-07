@@ -1,29 +1,47 @@
-import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { useAutopilotRunLeads } from '../../hooks/useAutopilotRunLeads';
-import type { RunLeadRow } from '../../hooks/useAutopilotRunLeads';
+import { useDraftStatuses } from '../../hooks/useDraftStatuses';
+import { applyDraftResolution } from '../../lib/runLeadGroups';
 import type { AutopilotRun } from '../../types';
 import { RunHeader } from './RunHeader';
 import { RunLeadGroups } from './RunLeadGroups';
+import { NeedsInputRow } from './NeedsInputRow';
 
 interface SelectedRunSectionProps {
   run: AutopilotRun;
   refresh: () => Promise<void>;
   stopRun: () => Promise<string | null>;
-  /** Slot for the action on each "Needs your input" row. */
-  renderNeedsInputAction?: (row: RunLeadRow) => ReactNode;
 }
 
-/** Status of a selected-leads run: header card plus its leads in groups, live via realtime. */
-export function SelectedRunSection({ run, refresh, stopRun, renderNeedsInputAction }: SelectedRunSectionProps) {
+/**
+ * Status of a selected-leads run: header card plus its leads in groups, live via realtime.
+ * Needs-input rows are resolved from their draft's current status (nothing is written back to the run).
+ */
+export function SelectedRunSection({ run, refresh, stopRun }: SelectedRunSectionProps) {
   const leads = useAutopilotRunLeads(run.id, () => void refresh());
+  const draftIds = leads.rows.filter((r) => r.status === 'needs_input' && r.email_log_id).map((r) => r.email_log_id as string);
+  const drafts = useDraftStatuses(draftIds);
+  const [followUpError, setFollowUpError] = useState<string | null>(null);
+  const rows = applyDraftResolution(leads.rows, drafts.statuses);
+  const waiting = !leads.loading && !drafts.ready;
+
   return (
     <div className="flex flex-col gap-4">
-      <RunHeader run={run} rows={leads.rows} onStop={stopRun} />
+      <RunHeader run={run} rows={rows} onStop={stopRun} />
       {run.status !== 'active' && (
         <Link to="/outreach/autopilot/new" className="text-sm font-semibold text-cyan hover:underline">Start a new run</Link>
       )}
-      <RunLeadGroups rows={leads.rows} loading={leads.loading} error={leads.error} renderNeedsInputAction={renderNeedsInputAction} />
+      {drafts.error && <p role="alert" className="text-sm text-danger">Could not check which parked drafts were sent: {drafts.error}</p>}
+      {followUpError && <p role="alert" className="text-sm text-danger">{followUpError}</p>}
+      <RunLeadGroups
+        rows={rows}
+        loading={leads.loading || waiting}
+        error={leads.error}
+        renderNeedsInputAction={(row) => (
+          <NeedsInputRow row={row} onChanged={(err) => { setFollowUpError(err); void drafts.refresh(); }} />
+        )}
+      />
     </div>
   );
 }
