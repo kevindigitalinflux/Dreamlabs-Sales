@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import type { DecisionMakerCandidate, Lead } from '../../types';
 import { readableInvokeError } from '../../lib/invokeError';
 import { additionsFor, additionsPatchFor, alreadyOnLead, candidateName } from '../../lib/decisionMakerAdditions';
-import { candidateSourceLabel, hasNoContactDetails } from '../../lib/candidateSource';
+import { candidateSourceLabel, hasNoContactDetails, isRegistrySource } from '../../lib/candidateSource';
 import { dismissDecisionMaker } from '../../lib/dismissDecisionMaker';
 import { ConfirmDeleteButton } from '../ui/ConfirmDeleteButton';
 import type { LeadPatch } from '../../lib/leadUpdates';
@@ -141,7 +141,7 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
                     {candidate.source === 'hunter' && (
                       <p className="mt-1 text-success">{candidate.email}</p>
                     )}
-                    {hasNoContactDetails(candidate) && candidate.source !== 'apollo' && (
+                    {isRegistrySource(candidate.source) && hasNoContactDetails(candidate) && (
                       <p className="mt-1 text-xs text-muted">No contact details found yet.</p>
                     )}
                     {candidate.source === 'apollo' && (

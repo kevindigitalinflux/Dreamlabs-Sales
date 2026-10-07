@@ -16,3 +16,8 @@ export function candidateSourceLabel(source: string): string {
 export function hasNoContactDetails(c: Pick<DecisionMakerCandidate, 'email' | 'phone'>): boolean {
   return !c.email && !c.phone;
 }
+
+/** True for sources that come from a company registry (Companies House, CRO). */
+export function isRegistrySource(source: string): boolean {
+  return source === 'companies_house' || source === 'cro';
+}
