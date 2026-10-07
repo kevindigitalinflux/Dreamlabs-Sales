@@ -12,6 +12,7 @@ import { Card } from '../components/ui/Card';
 import { IcpSelect } from '../components/emails/IcpSelect';
 import { useIcps } from '../hooks/useIcps';
 import { searchTextFromIcp } from '../lib/icp';
+import { SelectedSetup } from '../components/autopilot/SelectedSetup';
 import type { IcpParams, ScrapeSource } from '../types';
 
 const DURATIONS = [1, 7, 14, 21, 30] as const;
@@ -22,6 +23,7 @@ export function AutopilotSetup() {
   const { currentOrg } = useOrg();
   const { settings } = useOrgApiSettings();
   const { createRun } = useAutopilot();
+  const [mode, setMode] = useState<'discover' | 'selected'>('discover');
   const [step, setStep] = useState(1);
   const [rawInput, setRawInput] = useState('');
   const [icp, setIcp] = useState<IcpParams | null>(null);
@@ -77,10 +79,15 @@ export function AutopilotSetup() {
         <Rocket className="h-6 w-6 text-cyan" aria-hidden />
         <h1 className="text-[28px] font-extrabold">Start autopilot</h1>
       </header>
-      <StepProgress step={step} total={3} />
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      <div role="group" aria-label="Autopilot mode" className="flex gap-2">
+        <Button variant={mode === 'discover' ? 'primary' : 'secondary'} aria-pressed={mode === 'discover'} onClick={() => setMode('discover')}>Find new leads</Button>
+        <Button variant={mode === 'selected' ? 'primary' : 'secondary'} aria-pressed={mode === 'selected'} onClick={() => setMode('selected')}>Selected leads</Button>
+      </div>
+      {mode === 'selected' && <SelectedSetup />}
+      {mode === 'discover' && <StepProgress step={step} total={3} />}
+      {mode === 'discover' && error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
-      {step === 1 && (
+      {mode === 'discover' && step === 1 && (
         <Card>
           <div className="flex flex-col gap-3">
             <p className="font-semibold">Describe your ideal customer</p>
@@ -97,7 +104,7 @@ export function AutopilotSetup() {
         </Card>
       )}
 
-      {step === 2 && icp && (
+      {mode === 'discover' && step === 2 && icp && (
         <Card>
           <div className="flex flex-col gap-3">
             <p className="font-semibold">Choose one data source</p>
@@ -117,7 +124,7 @@ export function AutopilotSetup() {
         </Card>
       )}
 
-      {step === 3 && (
+      {mode === 'discover' && step === 3 && (
         <Card>
           <div className="flex flex-col gap-4">
             <SelectField label="Duration" value={String(duration)} onChange={(e) => setDuration(Number(e.target.value) as typeof DURATIONS[number])}>

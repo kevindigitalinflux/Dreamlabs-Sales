@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useOrg } from './useOrg';
 import { useAuth } from './useAuth';
+import { localDateString } from '../../supabase/functions/_shared/autopilotEligibility';
 import type { AutopilotRun, IcpParams, OutreachBlocklistEntry, ScrapeSource } from '../types';
 
 const HAIKU_CENTS_PER_DRAFT = 0.225;
@@ -17,6 +18,17 @@ export interface CreateRunInput {
   icp_raw_input: string; icp_params: IcpParams; source: ScrapeSource;
   daily_lead_target: number; daily_outreach_target: number; duration_days: 1 | 7 | 14 | 21 | 30;
   ramp_up_enabled: boolean; max_total_spend_cents: number | null; icp_id?: string | null;
+}
+
+export interface CreateSelectedRunInput {
+  leadIds: string[]; windowStart: string; windowEnd: string; timeZone: string;
+  dailySendCap: number; maxTotalSpendCents: number | null;
+}
+
+export interface CreateSelectedRunResult {
+  error: string | null; runId: string | null;
+  /** Set when the run was saved but the engine could not be started right now. */
+  notice: string | null;
 }
 
 /** The current org's active autopilot run (if any), plus its blocklist. */
@@ -57,6 +69,29 @@ export function useAutopilot() {
     return null;
   }, [currentOrg, session, refresh]);
 
+  /** Creates a selected-leads run plus its queue, then asks the engine to start (best effort). */
+  const createSelectedRun = useCallback(async (input: CreateSelectedRunInput): Promise<CreateSelectedRunResult> => {
+    if (!currentOrg || !session) return { error: 'No organization selected', runId: null, notice: null };
+    const { data: runRow, error: runErr } = await supabase.from('autopilot_runs').insert({
+      org_id: currentOrg.id, created_by: session.user.id, mode: 'selected', status: 'active',
+      window_start: input.windowStart, window_end: input.windowEnd, timezone: input.timeZone,
+      window_date: localDateString(new Date(), input.timeZone), daily_send_cap: input.dailySendCap,
+      max_total_spend_cents: input.maxTotalSpendCents, started_at: new Date().toISOString(),
+    }).select().single();
+    if (runErr || !runRow) return { error: runErr?.message ?? 'Could not create the run', runId: null, notice: null };
+    const runId = (runRow as AutopilotRun).id;
+    const { error: leadsErr } = await supabase.from('autopilot_run_leads').insert(
+      input.leadIds.map((lead_id) => ({ run_id: runId, lead_id, org_id: currentOrg.id, status: 'queued' })),
+    );
+    if (leadsErr) {
+      await supabase.from('autopilot_runs').delete().eq('id', runId);
+      return { error: leadsErr.message, runId: null, notice: null };
+    }
+    const { error: invokeErr } = await supabase.functions.invoke('run-selected-autopilot', { body: { action: 'start', run_id: runId } });
+    const notice = invokeErr ? 'Your run is saved but could not be started right now. It will begin automatically on the next scheduled check.' : null;
+    return { error: null, runId, notice };
+  }, [currentOrg, session]);
+
   const stopRun = useCallback(async (): Promise<string | null> => {
     if (!run) return 'No active run';
     const { error } = await supabase.from('autopilot_runs').update({ status: 'cancelled', cancel_reason: 'stopped by user' }).eq('id', run.id);
@@ -80,5 +115,5 @@ export function useAutopilot() {
     return null;
   }, [refresh]);
 
-  return { run, blocklist, loading, createRun, stopRun, addBlocklistEntry, removeBlocklistEntry };
+  return { run, blocklist, loading, createRun, createSelectedRun, stopRun, addBlocklistEntry, removeBlocklistEntry };
 }

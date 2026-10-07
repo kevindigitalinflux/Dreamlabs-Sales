@@ -42,6 +42,8 @@ export interface Lead {
   owner_name: string | null;
   phone: string | null;
   email: string | null;
+  /** True once the lead has unsubscribed (migration 010). */
+  opted_out?: boolean;
   website: string | null;
   /** The ideal customer profile this lead is most like; overrides its template's/sequence's profile when drafting. */
   icp_id: string | null;

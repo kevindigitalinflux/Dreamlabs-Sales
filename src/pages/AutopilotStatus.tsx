@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { Rocket, XCircle } from 'lucide-react';
 import { useAutopilot } from '../hooks/useAutopilot';
 import { Button } from '../components/ui/Button';
@@ -10,6 +10,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 
 /** Live autopilot progress + blocklist management. */
 export function AutopilotStatus() {
+  const notice = (useLocation().state as { notice?: string } | null)?.notice;
   const { run, blocklist, loading, stopRun, addBlocklistEntry, removeBlocklistEntry } = useAutopilot();
   const [blockValue, setBlockValue] = useState('');
   const [blockReason, setBlockReason] = useState('');
@@ -26,6 +27,7 @@ export function AutopilotStatus() {
         <Rocket className="h-6 w-6 text-cyan" aria-hidden />
         <h1 className="text-[28px] font-extrabold">Autopilot</h1>
       </header>
+      {notice && <p role="status" className="text-sm text-warning">{notice}</p>}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
       {!run && (
