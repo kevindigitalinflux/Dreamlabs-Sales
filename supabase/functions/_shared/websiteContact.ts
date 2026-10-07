@@ -31,8 +31,10 @@ function extractPhone(html: string): string | null {
 }
 
 // SSRF host guard lives in hostGuard.ts (pure, import-free); re-exported so existing imports keep working.
-import { isPrivateOrLoopbackHost, parseSafeWebsiteUrl } from './hostGuard.ts';
-export { isPrivateOrLoopbackHost, parseSafeWebsiteUrl };
+import { isPrivateOrLoopbackHost, parseSafeWebsiteUrl, resolveSafeRedirect } from './hostGuard.ts';
+export { isPrivateOrLoopbackHost, parseSafeWebsiteUrl, resolveSafeRedirect };
+
+const MAX_REDIRECTS = 3;
 
 /**
  * Best-effort: fetch a business website and pull a plausible contact email
@@ -44,15 +46,27 @@ export async function scrapeWebsiteContact(
   website: string | null | undefined,
 ): Promise<{ email: string | null; phone: string | null }> {
   if (!website) return { email: null, phone: null };
-  const url = parseSafeWebsiteUrl(website);
+  let url = parseSafeWebsiteUrl(website);
   if (!url) return { email: null, phone: null };
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
   try {
-    const res = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
-    if (!res.ok) return { email: null, phone: null };
-    const html = await res.text();
-    return { email: extractEmail(html), phone: extractPhone(html) };
+    // Redirects are followed by hand so every hop is re-checked by the SSRF guard.
+    for (let hop = 0; url && hop <= MAX_REDIRECTS; hop++) {
+      const res = await fetch(url.toString(), {
+        signal: controller.signal, redirect: 'manual', headers: { 'User-Agent': 'Mozilla/5.0' },
+      });
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get('location');
+        try { await res.body?.cancel(); } catch { /* ignore */ }
+        url = resolveSafeRedirect(url.toString(), loc);
+        continue;
+      }
+      if (!res.ok) return { email: null, phone: null };
+      const html = await res.text();
+      return { email: extractEmail(html), phone: extractPhone(html) };
+    }
+    return { email: null, phone: null };
   } catch {
     return { email: null, phone: null };
   } finally {

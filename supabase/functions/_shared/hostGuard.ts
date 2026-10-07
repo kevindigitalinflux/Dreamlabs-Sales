@@ -31,12 +31,17 @@ function isPrivateIpv6(addr: string): boolean {
     const hi = parseInt(hex[1], 16);
     return isPrivateIpv4(hi >> 8, hi & 0xff);
   }
-  const first = addr.split(':')[0];
-  if (first === '') return false;
-  const h = parseInt(first, 16);
+  // Any other "::"-leading address: IPv4-compatible ::/96 (e.g. ::7f00:1) and SIIT ::ffff:0:0:0/96.
+  // No public website is served from these, so block outright.
+  if (addr.startsWith('::')) return true;
+  const groups = addr.split(':');
+  const h = parseInt(groups[0], 16);
   if (Number.isNaN(h)) return false;
   if (h >= 0xfc00 && h <= 0xfdff) return true; // fc00::/7 unique local
   if (h >= 0xfe80 && h <= 0xfebf) return true; // fe80::/10 link-local
+  if (h === 0x2002) return true; // 2002::/16 6to4 (embeds an IPv4 address)
+  // 64:ff9b::/96 and 64:ff9b:1::/48 NAT64 (embed an IPv4 address).
+  if (h === 0x64 && groups.length > 1 && parseInt(groups[1], 16) === 0xff9b) return true;
   return false;
 }
 
@@ -44,12 +49,16 @@ function isPrivateIpv6(addr: string): boolean {
  * True when a URL hostname (as returned by `URL.hostname`, so IPv6 literals are
  * bracketed) points at, or looks like, an internal/loopback/private target.
  * IPv6 prefix rules apply only to bracketed literals, never to ordinary names.
+ * Input MUST be the canonical `URL.hostname` (lowercased, IPv6 compressed with
+ * hex groups, IPv4 normalised to dotted decimal); non-canonical spellings are
+ * not guaranteed to be recognised.
  */
 export function isPrivateOrLoopbackHost(hostname: string): boolean {
   let host = hostname.trim().toLowerCase();
   if (host.startsWith('[') && host.endsWith(']')) return isPrivateIpv6(host.slice(1, -1));
-  if (host.endsWith('.')) host = host.slice(0, -1);
+  host = host.replace(/\.+$/, '');
   if (host === '' || !host.includes('.')) return true; // single-label (localhost, intranet, router...)
+  if (host.split('.').some((label) => label === '')) return true; // empty label (a..b, .x)
   if (INTERNAL_SUFFIXES.some((s) => host.endsWith(s))) return true;
   const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
   if (ipv4) return isPrivateIpv4(Number(ipv4[1]), Number(ipv4[2]));
@@ -68,4 +77,20 @@ export function parseSafeWebsiteUrl(website: string): URL | null {
   if (url.username || url.password) return null;
   if (isPrivateOrLoopbackHost(url.hostname)) return null;
   return url;
+}
+
+/**
+ * Resolves a redirect `Location` header against the URL that returned it and
+ * re-applies the full guard to the result. Returns null for a missing/invalid
+ * Location, a non-http(s) scheme, credentials or a blocked host.
+ */
+export function resolveSafeRedirect(currentUrl: string, location: string | null): URL | null {
+  if (!location) return null;
+  let next: string;
+  try {
+    next = new URL(location, currentUrl).toString();
+  } catch {
+    return null;
+  }
+  return parseSafeWebsiteUrl(next);
 }

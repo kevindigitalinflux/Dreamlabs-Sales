@@ -3,7 +3,7 @@ import { DASH_GUARDRAIL_LINE, geminiGroundedSearch, geminiJson } from './ai.ts';
 import { runBounded } from './concurrency.ts';
 import { formatResearchNote, pickResearchLinks, stripToText } from './researchPages.ts';
 import { stripAiPunctuation } from './textGuardrails.ts';
-import { parseSafeWebsiteUrl } from './websiteContact.ts';
+import { parseSafeWebsiteUrl, resolveSafeRedirect } from './hostGuard.ts';
 
 /** Flat per-lead research cost estimate (cents) the engine adds to its spend counter. */
 export const RESEARCH_COST_CENTS = 3;
@@ -66,10 +66,7 @@ async function fetchPageHtml(rawUrl: string, deadline: AbortSignal): Promise<{ h
       if (res.status >= 300 && res.status < 400) {
         const loc = res.headers.get('location');
         await cancelBody(res);
-        if (!loc) return null;
-        let next: string;
-        try { next = new URL(loc, url).toString(); } catch { return null; }
-        url = parseSafeWebsiteUrl(next);
+        url = resolveSafeRedirect(url.toString(), loc);
         continue;
       }
       const type = res.headers.get('content-type') ?? '';
