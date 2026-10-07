@@ -30,7 +30,7 @@ export function useAutopilot() {
   const refresh = useCallback(async () => {
     if (!currentOrg) return;
     const [runRes, blocklistRes] = await Promise.all([
-      supabase.from('autopilot_runs').select('*').eq('org_id', currentOrg.id).eq('status', 'active').maybeSingle(),
+      supabase.from('autopilot_runs').select('*').eq('org_id', currentOrg.id).eq('status', 'active').eq('mode', 'discover').maybeSingle(),
       supabase.from('outreach_blocklist').select('*').eq('org_id', currentOrg.id).order('created_at', { ascending: false }),
     ]);
     setRun((runRes.data as AutopilotRun | null) ?? null);

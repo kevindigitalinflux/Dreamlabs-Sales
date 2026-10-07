@@ -421,22 +421,29 @@ export interface LinkedinDraft {
 
 export type AutopilotRunStatus = 'active' | 'completed' | 'cancelled';
 
+/** 'discover' scrapes new leads daily; 'selected' works through a hand-picked lead list (migration 048). */
+export type AutopilotMode = 'discover' | 'selected';
+
 export interface AutopilotRun {
   id: string;
   org_id: string;
+  /** Discover runs scrape for leads; selected runs only work through autopilot_run_leads. */
+  mode: AutopilotMode;
   /** The customer profile this campaign targets; every lead it approves is tagged with it. */
   icp_id: string | null;
   created_by: string;
   icp_raw_input: string;
   icp_params: IcpParams;
-  source: ScrapeSource;
-  daily_lead_target: number;
-  daily_outreach_target: number;
-  duration_days: number;
+  /** Null for selected runs (nothing is scraped). */
+  source: ScrapeSource | null;
+  daily_lead_target: number | null;
+  daily_outreach_target: number | null;
+  duration_days: number | null;
   ramp_up_enabled: boolean;
   max_total_spend_cents: number | null;
   started_at: string;
-  ends_at: string;
+  /** Null for selected runs (they finish when the queue is empty). */
+  ends_at: string | null;
   status: AutopilotRunStatus;
   cancel_reason: string | null;
   estimated_cost_low_cents: number;
@@ -445,7 +452,31 @@ export interface AutopilotRun {
   outreach_sent_total: number;
   actual_ai_cost_cents: number;
   bounce_count: number;
+  /** Selected runs only: daily send window as 'HH:MM' in the run's timezone. */
+  window_start: string | null;
+  window_end: string | null;
+  /** IANA timezone name, e.g. 'Europe/London'. */
+  timezone: string | null;
+  /** The local date the window applies to (YYYY-MM-DD). */
+  window_date: string | null;
+  daily_send_cap: number | null;
   created_at: string;
+}
+
+export type AutopilotRunLeadStatus = 'queued' | 'working' | 'sent' | 'skipped' | 'needs_input' | 'failed' | 'not_reached';
+
+/** One lead's place in a selected-mode autopilot run (migration 048). */
+export interface AutopilotRunLead {
+  id: string;
+  run_id: string;
+  lead_id: string;
+  org_id: string;
+  status: AutopilotRunLeadStatus;
+  reason: string | null;
+  email_log_id: string | null;
+  sequence_id: string | null;
+  claimed_at: string | null;
+  updated_at: string;
 }
 
 export interface OutreachBlocklistEntry {

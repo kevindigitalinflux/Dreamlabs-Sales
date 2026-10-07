@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
 
   const service = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
-  const { data: runs } = await service.from('autopilot_runs').select('*').eq('status', 'active');
+  const { data: runs } = await service.from('autopilot_runs').select('*').eq('status', 'active').eq('mode', 'discover');
   let processed = 0;
 
   for (const r of (runs ?? []) as AutopilotRun[]) {

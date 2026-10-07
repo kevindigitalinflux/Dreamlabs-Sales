@@ -94,7 +94,7 @@ Deno.serve(async (req) => {
           if (BOUNCE_PATTERN.test(fromAddr) || BOUNCE_SUBJECT_PATTERN.test(subject)) {
             if (userOrgId) {
               const { data: activeRun } = await service.from('autopilot_runs')
-                .select('id, bounce_count').eq('status', 'active').eq('org_id', userOrgId).maybeSingle();
+                .select('id, bounce_count').eq('status', 'active').eq('mode', 'discover').eq('org_id', userOrgId).maybeSingle();
               if (activeRun) {
                 await service.from('autopilot_runs').update({ bounce_count: activeRun.bounce_count + 1 }).eq('id', activeRun.id);
                 bounces++;

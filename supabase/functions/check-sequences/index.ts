@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
       if (!autopilotByOrg.has(orgId)) {
         const { data: run } = await service.from('autopilot_runs')
           .select('id, daily_outreach_target, ramp_up_enabled, started_at, max_total_spend_cents, actual_ai_cost_cents, outreach_sent_total')
-          .eq('org_id', orgId).eq('status', 'active').maybeSingle();
+          .eq('org_id', orgId).eq('status', 'active').eq('mode', 'discover').maybeSingle();
         if (run) {
           const dayNumber = Math.max(1, Math.floor((Date.now() - new Date(run.started_at).getTime()) / 86_400_000) + 1);
           autopilotByOrg.set(orgId, {
