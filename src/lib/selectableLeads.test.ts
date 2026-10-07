@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupSelectableLeads, selectionState, setIds, validateWindow } from './selectableLeads';
+import { groupSelectableLeads, mapRunInsertError, pruneSelection, selectionState, setIds, spendCapToCents, validateCaps, validateWindow } from './selectableLeads';
 import type { Lead, Pipeline } from '../types';
 
 const now = new Date('2026-10-07T10:00:00.000Z');
@@ -43,5 +43,42 @@ describe('validateWindow', () => {
   it('rejects empty times and bad zones', () => {
     expect(validateWindow('', '09:00', 'Europe/London', now)).not.toBeNull();
     expect(validateWindow('09:00', '17:00', 'Nope/Zone', now)).toBe('Choose a valid timezone');
+  });
+});
+
+describe('pruneSelection', () => {
+  const groups = groupSelectableLeads([pl('1')], [ld('a', '1'), ld('b', '1', { opted_out: true })], new Map(), new Set(), end, now);
+  it('drops stale, hidden and other-org ids', () => {
+    expect(pruneSelection(new Set(['a', 'b', 'gone', 'other-org']), groups)).toEqual(['a']);
+  });
+  it('is empty when nothing selected is visible', () => {
+    expect(pruneSelection(new Set(['zzz']), groups)).toEqual([]);
+  });
+});
+
+describe('mapRunInsertError', () => {
+  it('maps unique violations', () => {
+    expect(mapRunInsertError({ code: '23505', message: 'x' })).toMatch(/already have a selected-leads run/);
+    expect(mapRunInsertError({ message: 'duplicate key autopilot_runs_one_active_per_org_mode' })).toMatch(/already have/);
+  });
+  it('passes other errors through', () => expect(mapRunInsertError({ code: '42501', message: 'denied' })).toBe('denied'));
+});
+
+describe('caps', () => {
+  it('validates daily sends', () => {
+    expect(validateCaps(0, '')).not.toBeNull();
+    expect(validateCaps(2.5, '')).not.toBeNull();
+    expect(validateCaps(5, '')).toBeNull();
+  });
+  it('validates spend cap', () => {
+    expect(validateCaps(5, '-3')).not.toBeNull();
+    expect(validateCaps(5, 'abc')).not.toBeNull();
+    expect(validateCaps(5, '0')).toBeNull();
+    expect(validateCaps(5, '12.5')).toBeNull();
+  });
+  it('empty or zero is no cap', () => {
+    expect(spendCapToCents('')).toBeNull();
+    expect(spendCapToCents('0')).toBeNull();
+    expect(spendCapToCents('12.5')).toBe(1250);
   });
 });

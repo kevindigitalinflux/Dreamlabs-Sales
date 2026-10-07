@@ -12,6 +12,8 @@ import { Card } from '../components/ui/Card';
 import { IcpSelect } from '../components/emails/IcpSelect';
 import { useIcps } from '../hooks/useIcps';
 import { searchTextFromIcp } from '../lib/icp';
+import { ModeSwitch, type AutopilotModeChoice } from '../components/autopilot/ModeSwitch';
+import { SourceStep } from '../components/autopilot/SourceStep';
 import { SelectedSetup } from '../components/autopilot/SelectedSetup';
 import type { IcpParams, ScrapeSource } from '../types';
 
@@ -23,7 +25,7 @@ export function AutopilotSetup() {
   const { currentOrg } = useOrg();
   const { settings } = useOrgApiSettings();
   const { createRun } = useAutopilot();
-  const [mode, setMode] = useState<'discover' | 'selected'>('discover');
+  const [mode, setMode] = useState<AutopilotModeChoice>('discover');
   const [step, setStep] = useState(1);
   const [rawInput, setRawInput] = useState('');
   const [icp, setIcp] = useState<IcpParams | null>(null);
@@ -79,10 +81,7 @@ export function AutopilotSetup() {
         <Rocket className="h-6 w-6 text-cyan" aria-hidden />
         <h1 className="text-[28px] font-extrabold">Start autopilot</h1>
       </header>
-      <div role="group" aria-label="Autopilot mode" className="flex gap-2">
-        <Button variant={mode === 'discover' ? 'primary' : 'secondary'} aria-pressed={mode === 'discover'} onClick={() => setMode('discover')}>Find new leads</Button>
-        <Button variant={mode === 'selected' ? 'primary' : 'secondary'} aria-pressed={mode === 'selected'} onClick={() => setMode('selected')}>Selected leads</Button>
-      </div>
+      <ModeSwitch mode={mode} onChange={setMode} />
       {mode === 'selected' && <SelectedSetup />}
       {mode === 'discover' && <StepProgress step={step} total={3} />}
       {mode === 'discover' && error && <p role="alert" className="text-sm text-danger">{error}</p>}
@@ -105,23 +104,7 @@ export function AutopilotSetup() {
       )}
 
       {mode === 'discover' && step === 2 && icp && (
-        <Card>
-          <div className="flex flex-col gap-3">
-            <p className="font-semibold">Choose one data source</p>
-            <label className="flex min-h-11 items-center gap-2">
-              <input type="radio" name="autopilot-source" checked={source === 'google_places'} onChange={() => setSource('google_places')} disabled={!placesConfigured} className="h-4 w-4 accent-violet-500" />
-              Google Places {!placesConfigured && <span className="text-xs text-muted">(no key configured)</span>}
-            </label>
-            <label className="flex min-h-11 items-center gap-2">
-              <input type="radio" name="autopilot-source" checked={source === 'companies_house'} onChange={() => setSource('companies_house')} disabled className="h-4 w-4 accent-violet-500" />
-              Companies House <span className="text-xs text-muted">(not yet supported for autopilot — no contact details available from this source)</span>
-            </label>
-            <div className="flex justify-between">
-              <Button variant="secondary" onClick={() => setStep(1)}>Back</Button>
-              <Button onClick={() => setStep(3)} disabled={sourceUnavailable}>Continue</Button>
-            </div>
-          </div>
-        </Card>
+        <SourceStep source={source} onSource={setSource} placesConfigured={placesConfigured} sourceUnavailable={sourceUnavailable} onBack={() => setStep(1)} onNext={() => setStep(3)} />
       )}
 
       {mode === 'discover' && step === 3 && (

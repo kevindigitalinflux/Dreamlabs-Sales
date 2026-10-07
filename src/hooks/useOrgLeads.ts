@@ -27,6 +27,9 @@ export function useOrgLeads() {
   }, [currentOrg]);
 
   useEffect(() => {
+    // A different org must never show the previous org's leads while it loads.
+    setLeads([]);
+    setLoading(true);
     void refresh();
     const channel = supabase
       .channel('org-leads-changes')

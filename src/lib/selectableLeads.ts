@@ -69,3 +69,32 @@ export function validateWindow(start: string, end: string, timeZone: string, now
     return 'Choose a valid timezone';
   }
 }
+
+/** Ids that are both selected and currently eligible (visible) in the picker. Stale or other-org ids are dropped. */
+export function pruneSelection(selected: Set<string>, groups: PipelineGroup[]): string[] {
+  const out: string[] = [];
+  for (const g of groups) for (const l of g.eligible) if (selected.has(l.id)) out.push(l.id);
+  return out;
+}
+
+/** Readable message for a failed autopilot_runs insert (unique index: one active run per mode per org). */
+export function mapRunInsertError(err: { code?: string; message: string }): string {
+  if (err.code === '23505' || err.message.includes('autopilot_runs_one_active_per_org_mode')) {
+    return 'You already have a selected-leads run in progress. Let it finish or stop it before starting another.';
+  }
+  return err.message;
+}
+
+/** Validates the daily send cap (positive whole number) and spend cap (empty, 0, or a positive number). */
+export function validateCaps(dailySendCap: number, spendCap: string): string | null {
+  if (!Number.isInteger(dailySendCap) || dailySendCap < 1) return 'Daily sends must be a whole number of at least 1';
+  const t = spendCap.trim();
+  if (t !== '' && !(Number.isFinite(Number(t)) && Number(t) >= 0)) return 'Spend cap must be a positive number, or empty for no cap';
+  return null;
+}
+
+/** Spend cap in cents, or null for no cap (empty or 0 never means a zero-cent cap). */
+export function spendCapToCents(spendCap: string): number | null {
+  const n = Number(spendCap.trim());
+  return spendCap.trim() === '' || !Number.isFinite(n) || n <= 0 ? null : Math.round(n * 100);
+}

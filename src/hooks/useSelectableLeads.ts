@@ -16,12 +16,13 @@ export function useSelectableLeads(timeZone: string = Intl.DateTimeFormat().reso
   const { currentOrg } = useOrg();
   const { pipelines, loading: pipelinesLoading } = usePipeline();
   const { leads, loading: leadsLoading, error: leadsError } = useOrgLeads();
-  const [enrollments, setEnrollments] = useState<Map<string, EligibilityEnrollment> | null>(null);
-  const [blocked, setBlocked] = useState<Set<string> | null>(null);
+  const [loaded, setLoaded] = useState<{ orgId: string; enrollments: Map<string, EligibilityEnrollment>; blocked: Set<string> } | null>(null);
   const [extraError, setExtraError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!currentOrg) return;
+    setLoaded(null);
+    setExtraError(null);
     let cancelled = false;
     void (async () => {
       const [enrRes, blRes] = await Promise.all([
@@ -38,21 +39,20 @@ export function useSelectableLeads(timeZone: string = Intl.DateTimeFormat().reso
         if (map.get(r.lead_id)?.status === 'active') continue;
         map.set(r.lead_id, { status: r.status, next_send_at: r.next_send_at });
       }
-      setEnrollments(map);
-      setBlocked(new Set(((blRes.data ?? []) as { value: string }[]).map((b) => b.value)));
-      setExtraError(null);
+      setLoaded({ orgId: currentOrg.id, enrollments: map, blocked: new Set(((blRes.data ?? []) as { value: string }[]).map((b) => b.value)) });
     })();
     return () => { cancelled = true; };
   }, [currentOrg]);
 
   const byPipeline: PipelineGroup[] = useMemo(() => {
-    if (!currentOrg || !enrollments || !blocked) return [];
+    if (!currentOrg || !loaded || loaded.orgId !== currentOrg.id) return [];
     const now = new Date();
     const orgPipelines = pipelines.filter((p) => p.org_id === currentOrg.id);
-    return groupSelectableLeads(orgPipelines, leads, enrollments, blocked, endOfLocalDay(now, timeZone), now);
-  }, [currentOrg, pipelines, leads, enrollments, blocked, timeZone]);
+    return groupSelectableLeads(orgPipelines, leads, loaded.enrollments, loaded.blocked, endOfLocalDay(now, timeZone), now);
+  }, [currentOrg, pipelines, leads, loaded, timeZone]);
 
   const error = leadsError ?? extraError;
-  const loading = !error && (pipelinesLoading || leadsLoading || !enrollments || !blocked);
-  return { loading, error, byPipeline };
+  // With no org there is nothing to load: report not loading so the picker shows its no-org state.
+  const loading = !!currentOrg && !error && (pipelinesLoading || leadsLoading || loaded?.orgId !== currentOrg.id);
+  return { loading, error, byPipeline, hasOrg: !!currentOrg };
 }

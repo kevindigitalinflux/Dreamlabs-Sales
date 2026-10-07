@@ -54,7 +54,7 @@ export function PipelineSection({ group, value, onChange }: Props) {
           ))}
         </div>
         {group.hiddenCount > 0 && (
-          <p className="text-xs text-muted">{group.hiddenCount} hidden (contacted recently, not due, paused or opted out)</p>
+          <p className="text-xs text-muted">{group.hiddenCount} not eligible today: contacted recently, not due, paused, opted out, blocked or closed</p>
         )}
       </div>
     </Card>

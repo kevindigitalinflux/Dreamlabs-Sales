@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useOrg } from './useOrg';
 import { useAuth } from './useAuth';
 import { localDateString } from '../../supabase/functions/_shared/autopilotEligibility';
+import { mapRunInsertError } from '../lib/selectableLeads';
 import type { AutopilotRun, IcpParams, OutreachBlocklistEntry, ScrapeSource } from '../types';
 
 const HAIKU_CENTS_PER_DRAFT = 0.225;
@@ -21,7 +22,10 @@ export interface CreateRunInput {
 }
 
 export interface CreateSelectedRunInput {
-  leadIds: string[]; windowStart: string; windowEnd: string; timeZone: string;
+  leadIds: string[];
+  /** Ids currently eligible in the current org; any selected id outside this set is refused. */
+  eligibleLeadIds: string[];
+  windowStart: string; windowEnd: string; timeZone: string;
   dailySendCap: number; maxTotalSpendCents: number | null;
 }
 
@@ -72,20 +76,27 @@ export function useAutopilot() {
   /** Creates a selected-leads run plus its queue, then asks the engine to start (best effort). */
   const createSelectedRun = useCallback(async (input: CreateSelectedRunInput): Promise<CreateSelectedRunResult> => {
     if (!currentOrg || !session) return { error: 'No organization selected', runId: null, notice: null };
+    const eligible = new Set(input.eligibleLeadIds);
+    if (input.leadIds.length === 0 || input.leadIds.some((id) => !eligible.has(id))) {
+      return { error: 'Some selected leads are no longer available. Review your selection and try again.', runId: null, notice: null };
+    }
     const { data: runRow, error: runErr } = await supabase.from('autopilot_runs').insert({
       org_id: currentOrg.id, created_by: session.user.id, mode: 'selected', status: 'active',
       window_start: input.windowStart, window_end: input.windowEnd, timezone: input.timeZone,
       window_date: localDateString(new Date(), input.timeZone), daily_send_cap: input.dailySendCap,
       max_total_spend_cents: input.maxTotalSpendCents, started_at: new Date().toISOString(),
     }).select().single();
-    if (runErr || !runRow) return { error: runErr?.message ?? 'Could not create the run', runId: null, notice: null };
+    if (runErr || !runRow) return { error: runErr ? mapRunInsertError(runErr) : 'Could not create the run', runId: null, notice: null };
     const runId = (runRow as AutopilotRun).id;
     const { error: leadsErr } = await supabase.from('autopilot_run_leads').insert(
       input.leadIds.map((lead_id) => ({ run_id: runId, lead_id, org_id: currentOrg.id, status: 'queued' })),
     );
     if (leadsErr) {
-      await supabase.from('autopilot_runs').delete().eq('id', runId);
-      return { error: leadsErr.message, runId: null, notice: null };
+      const { error: delErr } = await supabase.from('autopilot_runs').delete().eq('id', runId);
+      const error = delErr
+        ? `The run was partially created and could not be removed (${delErr.message}). Reason it failed: ${leadsErr.message}`
+        : leadsErr.message;
+      return { error, runId: null, notice: null };
     }
     const { error: invokeErr } = await supabase.functions.invoke('run-selected-autopilot', { body: { action: 'start', run_id: runId } });
     const notice = invokeErr ? 'Your run is saved but could not be started right now. It will begin automatically on the next scheduled check.' : null;
