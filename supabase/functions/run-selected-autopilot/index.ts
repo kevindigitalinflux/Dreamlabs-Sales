@@ -5,6 +5,12 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { processRun, runTick, type SelectedRun } from '../_shared/selectedAutopilot.ts';
 
+/** Runs work after the response is sent (EdgeRuntime.waitUntil); awaits it when that is unavailable. */
+async function background(task: Promise<unknown>): Promise<void> {
+  const rt = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime;
+  if (rt) rt.waitUntil(task); else await task;
+}
+
 Deno.serve(async (req) => {
   const startedAt = Date.now();
   const headers = corsHeaders(req.headers.get('origin'));
@@ -13,14 +19,15 @@ Deno.serve(async (req) => {
 
   let body: Record<string, unknown>;
   try { body = (await req.json()) as Record<string, unknown>; } catch { return json({ error: 'Invalid request' }, 400, headers); }
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return json({ error: 'Invalid request' }, 400, headers);
 
   const service = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
   if (body.action === 'tick') {
     const cronSecret = Deno.env.get('CRON_SECRET');
     if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) return json({ error: 'Forbidden' }, 403, headers);
-    const processed = await runTick(service, startedAt);
-    return json({ ok: true, processed }, 200, headers);
+    await background(runTick(service, startedAt).catch(() => console.error('tick failed')));
+    return json({ ok: true }, 202, headers);
   }
 
   if (body.action === 'start') {
@@ -43,8 +50,8 @@ Deno.serve(async (req) => {
     if (run.mode !== 'selected') return json({ error: 'Not a selected-leads run' }, 400, headers);
     if (run.status !== 'active') return json({ error: 'Run is not active' }, 400, headers);
 
-    try { await processRun(service, run, startedAt); } catch { return json({ error: 'Could not process the run' }, 500, headers); }
-    return json({ ok: true }, 200, headers);
+    await background(processRun(service, run, startedAt).catch(() => console.error('start failed')));
+    return json({ ok: true }, 202, headers);
   }
 
   return json({ error: 'Unknown action' }, 400, headers);

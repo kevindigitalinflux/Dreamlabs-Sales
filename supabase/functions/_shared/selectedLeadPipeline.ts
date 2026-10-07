@@ -16,6 +16,21 @@ export interface PipelineContext {
   /** Latest active/paused enrolment for the lead, if any. */
   enrollment: (EligibilityEnrollment & { id?: string; sequence_id?: string; current_step?: number }) | null;
   now: Date;
+  /**
+   * Absolute soft deadline (epoch ms, ~75s after this lead started). Abort research / AI steps once it passes
+   * (return needs_input/failed with a reason). NEVER abort once SMTP has started: finish the send and record it.
+   */
+  deadlineMs: number;
+  /**
+   * MUST be called immediately before SMTP. Sets send_started_at (and email_log_id when known) on the run-lead row.
+   * Rejects if the marker could not be saved: do NOT send in that case. A row stuck `working` after this call is
+   * marked failed ("Interrupted during send"), never requeued.
+   */
+  markSendStarted(emailLogId?: string): Promise<void>;
+  /** Reserve one send slot against daily_send_cap BEFORE sending. Resolves false when the run is not active or the cap is reached: do not send. */
+  reserveSend(): Promise<boolean>;
+  /** Give the reserved slot back if the send fails. The engine never increments outreach_sent_total itself. */
+  releaseSend(): Promise<void>;
 }
 
 export type PipelineOutcome =
