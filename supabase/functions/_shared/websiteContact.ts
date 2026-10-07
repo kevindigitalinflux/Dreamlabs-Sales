@@ -34,6 +34,8 @@ function extractPhone(html: string): string | null {
 import { isPrivateOrLoopbackHost, parseSafeWebsiteUrl, resolveSafeRedirect } from './hostGuard.ts';
 export { isPrivateOrLoopbackHost, parseSafeWebsiteUrl, resolveSafeRedirect };
 
+import { cancelBody, readCapped } from './cappedBody.ts';
+
 const MAX_REDIRECTS = 3;
 
 /**
@@ -58,12 +60,12 @@ export async function scrapeWebsiteContact(
       });
       if (res.status >= 300 && res.status < 400) {
         const loc = res.headers.get('location');
-        try { await res.body?.cancel(); } catch { /* ignore */ }
+        await cancelBody(res);
         url = resolveSafeRedirect(url.toString(), loc);
         continue;
       }
-      if (!res.ok) return { email: null, phone: null };
-      const html = await res.text();
+      if (!res.ok) { await cancelBody(res); return { email: null, phone: null }; }
+      const html = await readCapped(res, controller.signal);
       return { email: extractEmail(html), phone: extractPhone(html) };
     }
     return { email: null, phone: null };

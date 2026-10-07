@@ -37,6 +37,7 @@ function isPrivateIpv6(addr: string): boolean {
   const groups = addr.split(':');
   const h = parseInt(groups[0], 16);
   if (Number.isNaN(h)) return false;
+  if (h === 0) return true; // ::/8 (first group zero, e.g. 0:1:2:3:4:5:6:7)
   if (h >= 0xfc00 && h <= 0xfdff) return true; // fc00::/7 unique local
   if (h >= 0xfe80 && h <= 0xfebf) return true; // fe80::/10 link-local
   if (h === 0x2002) return true; // 2002::/16 6to4 (embeds an IPv4 address)

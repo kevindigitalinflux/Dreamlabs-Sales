@@ -14,6 +14,7 @@ const blockedUrls = [
   'file:///etc/passwd', 'javascript:alert(1)', 'ftp://example.com/',
   'http://user:pass@example.com/', 'http://user@example.com/',
   'http://localhost../', 'http://localhost.../', 'http://a..b/', 'http://[::ffff:a00:1]/',
+  'http://127.0.0.1../', 'http://10.0.0.1./', 'http://[0:1:2:3:4:5:6:7]/',
   'http://[::7f00:1]/', 'http://[::a00:1]/', 'http://[::ffff:0:7f00:1]/', 'http://[::ffff:0:a00:1]/',
   'http://[64:ff9b::7f00:1]/', 'http://[64:ff9b::808:808]/', 'http://[64:ff9b:1::1]/', 'http://[2002:7f00:1::1]/', 'http://[2002::1]/',
 ];
@@ -53,6 +54,10 @@ describe('resolveSafeRedirect', () => {
     'http://169.254.169.254/latest/meta-data', 'http://localhost/', 'http://10.0.0.5/', '//127.0.0.1/', 'http://[::1]/',
     'ftp://example.com/', 'javascript:alert(1)', 'file:///etc/passwd', 'http://user:pass@example.com/', 'http://[::ffff:7f00:1]/',
   ])('blocks %s', (loc) => expect(resolveSafeRedirect(base, loc)).toBeNull());
+  it('follows an http->https redirect', () =>
+    expect(resolveSafeRedirect('http://example.com/a', 'https://example.com/b')?.protocol).toBe('https:'));
+  it('trims whitespace around Location', () =>
+    expect(resolveSafeRedirect(base, '  /c  ')?.toString()).toBe('https://example.com/c'));
   it('returns null for a missing or empty Location', () => {
     expect(resolveSafeRedirect(base, null)).toBeNull();
     expect(resolveSafeRedirect(base, '')).toBeNull();

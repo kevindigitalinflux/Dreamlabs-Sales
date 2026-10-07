@@ -1,5 +1,6 @@
 // supabase/functions/_shared/leadResearch.ts
 import { DASH_GUARDRAIL_LINE, geminiGroundedSearch, geminiJson } from './ai.ts';
+import { cancelBody, readCapped } from './cappedBody.ts';
 import { runBounded } from './concurrency.ts';
 import { formatResearchNote, pickResearchLinks, stripToText } from './researchPages.ts';
 import { stripAiPunctuation } from './textGuardrails.ts';
@@ -10,7 +11,6 @@ export const RESEARCH_COST_CENTS = 3;
 
 const MAX_EXTRA_PAGES = 4;
 const PAGE_TIMEOUT_MS = 5000;
-const MAX_BODY_BYTES = 300_000;
 const MAX_REDIRECTS = 3;
 const PAGE_TEXT_CHARS = 2500;
 const HOME_TEXT_CHARS = 3000;
@@ -21,33 +21,6 @@ const MIN_AI_BUDGET_MS = 2_000;
 const FALLBACK_NOTE = 'Research gathered; no summary could be written.';
 
 export interface ResearchResult { summary: string; sources: string[]; costCents: number }
-
-async function cancelBody(res: Response): Promise<void> {
-  try { await res.body?.cancel(); } catch { /* ignore */ }
-}
-
-/**
- * Reads at most MAX_BODY_BYTES of a response body as text. The caller's signal stays armed for
- * the whole read, so a slow-drip body is aborted; whatever was read before that is returned.
- */
-async function readCapped(res: Response, signal: AbortSignal): Promise<string> {
-  if (!res.body) return '';
-  const reader = res.body.getReader();
-  const all = new Uint8Array(MAX_BODY_BYTES);
-  let offset = 0;
-  try {
-    while (offset < MAX_BODY_BYTES && !signal.aborted) {
-      const { done, value } = await reader.read();
-      if (done || !value) break;
-      const room = MAX_BODY_BYTES - offset;
-      const slice = value.length > room ? value.subarray(0, room) : value;
-      all.set(slice, offset);
-      offset += slice.length;
-    }
-  } catch { /* aborted or network error: keep what we have */ }
-  try { await reader.cancel(); } catch { /* ignore */ }
-  return new TextDecoder().decode(all.subarray(0, offset));
-}
 
 /**
  * Fetches an HTML page with the SSRF guard applied before every request, including every
