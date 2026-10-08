@@ -89,7 +89,15 @@ export interface EnrichmentResult {
 export interface DecisionMakerCandidate {
   id: string;
   lead_id: string;
-  source: 'hunter' | 'apollo' | 'companies_house' | 'cro';
+  source: 'hunter' | 'apollo' | 'companies_house' | 'cro' | 'manual' | 'dream_agent';
+  /** 'person' (a named individual) or 'general' (a shared inbox such as reception). */
+  kind: 'person' | 'general';
+  /** Free-text name for a general contact, e.g. 'General reception'. */
+  label: string | null;
+  /** The contact emailed by default; at most one live primary per lead. */
+  is_primary: boolean;
+  /** Whether sequence follow-ups are drafted for this contact. */
+  include_in_sequences: boolean;
   apollo_person_id: string | null;
   first_name: string | null;
   last_name: string | null;

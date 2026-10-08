@@ -5,6 +5,8 @@ const LABELS: Record<DecisionMakerCandidate['source'], string> = {
   apollo: 'Apollo',
   companies_house: 'Companies House',
   cro: 'CRO',
+  manual: 'Added by you',
+  dream_agent: 'Dream Agent',
 };
 
 /** Readable source name for a decision-maker candidate (falls back to the raw value for unknown sources). */
