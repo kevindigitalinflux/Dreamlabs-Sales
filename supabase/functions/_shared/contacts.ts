@@ -169,18 +169,17 @@ export function mainContact(
  * Otherwise the usable contacts with `include_in_sequences`, de-duplicated by
  * lowercased email (a primary, then the higher-ranked contact, wins a duplicate;
  * the first wins a tie), the main contact first, the rest in input order.
- * Rule for the lead's own email: it is added (once) only when the lead has no
- * curated contact, meaning no usable contact other than migrated legacy rows
- * (so follow-ups go to the people the user chose), and it is not already
- * covered. `contactId` is null for the lead's own email and `name` is null there.
+ * Fallback: when no curated contact is included (all excluded, provider rows switched off, only
+ * migrated legacy rows, or no contacts) the lead's own valid email is the single recipient
+ * (`contactId: null`, `name: null`), added once, unless an excluded or dismissed row the caller
+ * passed carries that same address (exclusion wins for that address only). So [] means the lead has
+ * no valid email, its email is vetoed, or it opted out.
  * Exclusion wins: an address excluded (include_in_sequences false) or dismissed on
  * any contact the caller passes never receives mail through another contact or the lead's own
  * email. Dismissed rows only count when the caller passes them (check-sequences passes live rows
  * only, on purpose). A provider-found row that is simply switched off (the default) is not a
- * deliberate choice: it is not "curated" and does not veto its address.
- * When every curated usable contact is excluded this returns [] on purpose (the
- * user deliberately replaced the lead's email). Callers (check-sequences, task A6)
- * MUST surface 'no recipients' visibly instead of stalling silently.
+ * deliberate choice: it does not veto its address. Callers (check-sequences, task A6) MUST
+ * surface 'no recipients' visibly when this is [] instead of stalling silently.
  */
 export function sequenceRecipients(
   contacts: Contact[],
@@ -214,8 +213,10 @@ export function sequenceRecipients(
   }));
 
   const own = validEmail(leadEmail);
-  const hasCurated = usable.some((c) => !isLegacyGeneral(c) && !isUnadoptedProviderRow(c));
-  if (own && !hasCurated && !excluded.has(own) && !out.some((r) => r.email === own)) {
+  // The lead's own email is the fallback whenever no curated contact is included (all excluded, provider rows
+  // switched off, only migrated legacy rows, or no contacts), unless an excluded or dismissed row carries it.
+  const hasIncludedCurated = included.some((c) => !isLegacyGeneral(c));
+  if (own && !hasIncludedCurated && !excluded.has(own) && !out.some((r) => r.email === own)) {
     out.push({ email: own, contactId: null, name: null });
   }
   return out;

@@ -6,6 +6,7 @@ import {
   isSequenceSystemNote,
   noRecipientsNoteText,
   planStepDrafts,
+  recipientsWithoutDraft,
   recipientNaming,
   shouldAdvance,
 } from '../../supabase/functions/_shared/sequenceRecipients';
@@ -67,8 +68,10 @@ describe('planStepDrafts: legacy single recipient', () => {
     const r = plan([person({ id: 'h', email: 'h@x.com', source: 'hunter', include_in_sequences: true })]);
     expect(r.recipients.map((x) => x.contactId)).toEqual(['h']);
   });
-  it('a manual contact excluded by the user is still a deliberate choice (no recipients)', () => {
-    expect(plan([person({ email: 'a@x.com', source: 'manual', include_in_sequences: false })]).reason).toBe('no_recipients');
+  it('a manual contact excluded by the user falls back to the lead email (legacy single)', () => {
+    const r = plan([person({ email: 'a@x.com', source: 'manual', include_in_sequences: false })]);
+    expect(r.kind).toBe('legacy_single');
+    expect(r.recipients).toEqual([{ email: 'Owner@Biz.com', contactId: null, name: null }]);
   });
   it('is not capped: a single legacy draft is never cut by the cap', () => {
     expect(plan([], 'a@b.com', 1).kind).toBe('legacy_single');
@@ -143,9 +146,14 @@ describe('planStepDrafts: multi', () => {
 });
 
 describe('planStepDrafts: none', () => {
-  it('every curated contact excluded => no recipients, to be paused visibly', () => {
-    const r = plan([person({ email: 'a@x.com', include_in_sequences: false })]);
+  it('every contact excluded and the lead email vetoed by an excluded row => no recipients, to be paused visibly', () => {
+    const r = plan([person({ email: 'a@x.com', include_in_sequences: false }), person({ email: 'OWNER@biz.com', include_in_sequences: false })]);
     expect(r).toEqual({ kind: 'none', recipients: [], limitedByCap: false, totalRecipients: 0, reason: 'no_recipients' });
+  });
+  it('every curated contact excluded falls back to the lead own email', () => {
+    const r = plan([person({ email: 'a@x.com', include_in_sequences: false })]);
+    expect(r.kind).toBe('legacy_single');
+    expect(r.recipients).toEqual([{ email: 'Owner@Biz.com', contactId: null, name: null }]);
   });
   it('no lead email and no contact email => the old "lead has no email" skip', () => {
     expect(plan([], null).reason).toBe('no_email');
@@ -170,6 +178,17 @@ describe('shouldAdvance', () => {
     expect(shouldAdvance({ planned: 3, covered: 2 })).toBe(false);
     expect(shouldAdvance({ planned: 2, covered: 0 })).toBe(false);
     expect(shouldAdvance({ planned: 0, covered: 0 })).toBe(false);
+  });
+});
+
+describe('recipientsWithoutDraft', () => {
+  const r = (email: string) => ({ email, contactId: null, name: null });
+  it('drops recipients that already have a draft or sent copy, ignoring case and spaces', () => {
+    expect(recipientsWithoutDraft([r('a@x.com'), r('b@x.com')], [' A@X.com '])).toEqual([r('b@x.com')]);
+  });
+  it('keeps everyone when nothing exists, and returns nothing when all are covered', () => {
+    expect(recipientsWithoutDraft([r('a@x.com')], [])).toEqual([r('a@x.com')]);
+    expect(recipientsWithoutDraft([r('a@x.com')], ['a@x.com'])).toEqual([]);
   });
 });
 

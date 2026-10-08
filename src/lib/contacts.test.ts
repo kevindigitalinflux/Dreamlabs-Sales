@@ -205,8 +205,10 @@ describe('sequenceRecipients', () => {
     expect(r).toEqual([{ email: 'a@x.com', contactId: 'a', name: 'Ann A' }]);
   });
 
-  it('sends to nobody when every usable curated contact is excluded', () => {
-    expect(sequenceRecipients([person({ email: 'b@x.com', include_in_sequences: false })], 'lead@x.com', false)).toEqual([]);
+  it('falls back to the lead own email when every usable curated contact is excluded', () => {
+    expect(sequenceRecipients([person({ email: 'b@x.com', include_in_sequences: false })], 'lead@x.com', false)).toEqual([
+      { email: 'lead@x.com', contactId: null, name: null },
+    ]);
   });
 
   it('still includes the lead email when only migrated legacy rows exist and they are excluded', () => {
@@ -262,12 +264,24 @@ describe('sequenceRecipients', () => {
     expect(r.map((x) => x.contactId)).toEqual(['c', 'a', 'b']);
   });
 
-  it('sends to nobody and not the lead email when every curated contact is excluded (deliberate)', () => {
+  it('falls back to the lead own email when every curated contact (person and general) is excluded', () => {
     const rows = [
       person({ id: 'a', email: 'a@x.com', include_in_sequences: false }),
       general({ id: 'g', label: 'Accounts', email: 'g@x.com', include_in_sequences: false }),
     ];
-    expect(sequenceRecipients(rows, 'lead@x.com', false)).toEqual([]);
+    expect(sequenceRecipients(rows, 'lead@x.com', false)).toEqual([{ email: 'lead@x.com', contactId: null, name: null }]);
+  });
+
+  it('sends to nobody when the only fallback (the lead own email) is vetoed by an excluded row or the lead has none', () => {
+    const vetoed = [person({ email: 'lead@x.com', include_in_sequences: false })];
+    expect(sequenceRecipients(vetoed, 'LEAD@x.com', false)).toEqual([]);
+    expect(sequenceRecipients([person({ email: 'b@x.com', include_in_sequences: false })], null, false)).toEqual([]);
+    expect(sequenceRecipients([person({ email: 'b@x.com', include_in_sequences: false })], 'bad', false)).toEqual([]);
+  });
+
+  it('adds the lead own email once when a switched-off provider row is the only contact', () => {
+    const hunter = person({ id: 'h', email: 'h@x.com', source: 'hunter', include_in_sequences: false });
+    expect(sequenceRecipients([hunter], 'lead@x.com', false)).toEqual([{ email: 'lead@x.com', contactId: null, name: null }]);
   });
 
   it('lets exclusion win: an excluded or dismissed address is not mailed through another contact', () => {

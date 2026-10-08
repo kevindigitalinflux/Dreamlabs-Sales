@@ -8,7 +8,7 @@ import { appendLinks, onlyOrgAttachments, parseAttachments, parseLinks } from '.
 import { formatIcpContext, loadIcp, resolveIcpId, topPainPoint } from '../_shared/icp.ts';
 import { applyCustomVariables, loadCustomVariables } from '../_shared/customVariables.ts';
 import type { Contact } from '../_shared/contacts.ts';
-import { capDecision, capLimitedNoteText, isSequenceSystemNote, noRecipientsNoteText, planStepDrafts, recipientNaming, shouldAdvance } from '../_shared/sequenceRecipients.ts';
+import { capDecision, capLimitedNoteText, isSequenceSystemNote, noRecipientsNoteText, planStepDrafts, recipientNaming, recipientsWithoutDraft, shouldAdvance } from '../_shared/sequenceRecipients.ts';
 
 interface Step { delay_days: number; template_type: string; template_id?: string | null; subject_override: string | null }
 
@@ -21,6 +21,8 @@ function advance(currentStep: number, steps: Step[], now: Date) {
 
 /** Stop starting new enrolments after this long (the edge function wall-clock limit is higher). */
 const TIME_BUDGET_MS = 110_000;
+/** No NEW draft is started after this long (lower, so a draft in progress can finish); a Gemini draft also needs its 7s pause. */
+const DRAFT_START_BUDGET_MS = 100_000;
 const HEADERS = { 'Content-Type': 'application/json' };
 const OUTREACH_PREFIXES = ['cold_outreach_', 'jv_pitch_'];
 function isOutreachTemplate(templateType: string): boolean {
@@ -258,16 +260,17 @@ Deno.serve(async (req) => {
     const multi = plan.kind === 'multi';
 
     // Idempotency: a draft already created for this step and address (an earlier run that stopped part-way) is
-    // reused, never duplicated. Drafts of earlier steps are older than this step's due time. Fail closed on a read error.
+    // reused, never duplicated. A released or sent copy of THIS step's draft counts too; earlier steps' emails were
+    // created before this step's due time. Needs email_logs.created_at (migration 054); without it the read fails
+    // and the enrolment is skipped (fail closed).
     const { data: existingDrafts, error: existingDraftsErr } = await service.from('email_logs').select('to_email')
-      .eq('sequence_enrollment_id', enrollment.id).eq('status', 'draft').gte('sent_at', enrollment.next_send_at);
+      .eq('sequence_enrollment_id', enrollment.id).in('status', ['draft', 'sent']).gte('created_at', enrollment.next_send_at);
     if (existingDraftsErr) {
       console.error(`existing-draft check failed for enrollment ${enrollment.id}:`, existingDraftsErr.message);
       skipped.push({ id: enrollment.id, reason: 'draft check failed' });
       continue;
     }
-    const haveDraft = new Set((existingDrafts ?? []).map((d) => String((d as { to_email: string }).to_email).trim().toLowerCase()));
-    const missing = plan.recipients.filter((r) => !haveDraft.has(r.email.trim().toLowerCase()));
+    const missing = recipientsWithoutDraft(plan.recipients, (existingDrafts ?? []).map((d) => String((d as { to_email: string }).to_email)));
     const alreadyCovered = plan.recipients.length - missing.length;
     // A multi-contact step never silently loses contacts to the daily cap: defer it a day if a full day could cover it.
     const decision = capDecision({ needed: missing.length, capRemaining, dailyCap });
@@ -347,9 +350,12 @@ Deno.serve(async (req) => {
     let draftsCreated = 0;
     const failures: string[] = [];
     let stoppedBySpendCap = false;
+    let stoppedByTime = false;
 
     for (let idx = 0; idx < toDraft.length; idx++) {
       const target = toDraft[idx]!;
+      // Never start a draft late in the run; the step stays partial (not advanced) and the rest is done next run.
+      if (Date.now() - startedAt > DRAFT_START_BUDGET_MS - (outreach ? 0 : 7000)) { stoppedByTime = true; break; }
       // Spend cap is re-checked before every further draft of a multi-contact step.
       if (idx > 0) {
         const apNow = outreach ? autopilotByOrg.get(orgId) : null;
@@ -447,7 +453,7 @@ Deno.serve(async (req) => {
       }
     } else {
       // Don't advance — the next daily run re-picks this enrollment and creates only the missing drafts (intended retry).
-      const why = [...failures, ...(stoppedBySpendCap ? ['autopilot spend cap reached'] : [])].join('; ');
+      const why = [...failures, ...(stoppedBySpendCap ? ['autopilot spend cap reached'] : []), ...(stoppedByTime ? ['time budget'] : [])].join('; ');
       skipped.push({ id: enrollment.id, reason: !multi ? why : (covered === alreadyCovered && alreadyCovered === 0 && failures.length > 0 ? `all ${planned} drafts failed: ${why}` : `incomplete: ${covered} of ${planned} drafts exist, step not advanced; ${why}`) });
     }
     drafted += draftsCreated;

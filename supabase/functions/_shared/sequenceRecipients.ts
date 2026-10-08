@@ -21,8 +21,8 @@ export interface StepPlan {
   totalRecipients: number;
   /**
    * Only for 'none'. 'no_email': the lead has no email and no contact has one (the long-standing
-   * "lead has no email" skip). 'no_recipients': addresses exist but every one is excluded from
-   * sequences or unusable; the caller must pause the enrolment and leave a visible note.
+   * "lead has no email" skip). 'no_recipients': the lead's own email is missing or vetoed by an excluded row and no contact is included, or
+   * all addresses are unusable; the caller must pause the enrolment and leave a visible note.
    */
   reason?: 'no_email' | 'no_recipients' | 'opted_out';
 }
@@ -58,6 +58,17 @@ export function planStepDrafts(input: {
   }
   const limit = capRemaining === null || !Number.isFinite(capRemaining) ? recipients.length : Math.max(0, Math.floor(capRemaining));
   return { kind: 'multi', recipients: recipients.slice(0, limit), limitedByCap: limit < recipients.length, totalRecipients: recipients.length };
+}
+
+/**
+ * Recipients that still need a draft for this step. `existingEmails` are the addresses of email_logs rows
+ * of this enrolment created at or after the step's due time whose status is draft or sent (so a released
+ * or sent copy of THIS step's draft counts; an earlier step's, created before the due time, does not).
+ * Addresses compare case-insensitively and ignoring surrounding spaces.
+ */
+export function recipientsWithoutDraft(recipients: StepRecipient[], existingEmails: string[]): StepRecipient[] {
+  const have = new Set(existingEmails.map((e) => e.trim().toLowerCase()));
+  return recipients.filter((r) => !have.has(r.email.trim().toLowerCase()));
 }
 
 /**

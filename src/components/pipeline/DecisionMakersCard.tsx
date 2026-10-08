@@ -69,7 +69,9 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
   if (hook.loadError) return <p role="alert" className="text-sm text-danger">{hook.loadError}</p>;
 
   const main = mainContact(contacts, lead.email ?? null);
-  const noFollowUps = contacts.length > 0 && !lead.opted_out && sequenceRecipients(contacts, lead.email ?? null, false).length === 0;
+  const recipients = sequenceRecipients(contacts, lead.email ?? null, false);
+  const noFollowUps = contacts.length > 0 && !lead.opted_out && recipients.length === 0;
+  const followUpsToLeadEmail = contacts.length > 0 && !lead.opted_out && recipients.length > 0 && recipients.every((r) => r.contactId === null);
 
   return (
     <div className="flex flex-col gap-2">
@@ -77,6 +79,7 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
         <p className="text-sm text-muted">No contacts yet. Add one below, or use "Find decision maker" from the Pipeline list to search.</p>
       )}
       {noFollowUps && <p role="status" className="text-sm text-danger">No contact is set to receive follow-ups. Turn on "Include in sequences" for one with an email.</p>}
+      {followUpsToLeadEmail && <p className="text-xs text-muted">Follow-ups go to the lead's main email</p>}
       {notice && <p role="status" className="text-sm text-success">{notice}</p>}
       <ul className="flex flex-col gap-2">
         {contacts.map((c) => (

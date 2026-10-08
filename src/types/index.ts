@@ -219,6 +219,8 @@ export interface EmailLog {
   error_message: string | null;
   message_id: string | null;
   sent_at: string;
+  /** When the row was first created (a draft keeps this when it is released). */
+  created_at: string;
   decision_maker_candidate_id: string | null;
   /** Files this draft carries / this sent email carried. */
   attachments: EmailAttachment[];
