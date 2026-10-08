@@ -15,6 +15,10 @@ const PHONE_CHARS = /^[0-9 +().-]+$/;
 // https only, then a dotted host (no spaces, credentials or path chars), then anything without spaces.
 const HTTPS_URL = /^https:\/\/[^\s/?#@]+\.[^\s/?#@]+([/?#]\S*)?$/i;
 
+// Control characters (C0, DEL) and the Unicode line/paragraph separators.
+const CONTROL_CHARS = /[\u0000-\u001F\u007F\u2028\u2029]/;
+const MIN_PHONE_DIGITS = 5;
+
 const MAX_NAME = 80;
 const MAX_TITLE = 120;
 const MAX_LABEL = 80;
@@ -37,6 +41,18 @@ export interface Contact {
   dismissed_at: string | null;
   source?: string;
 }
+
+/**
+ * Read-only fingerprints of the regexes shared with `_shared/autopilotChoices.ts`. A test
+ * asserts both modules export identical values, so the copies cannot drift.
+ */
+export const CHOICE_REGEX_SOURCES = {
+  tier1: `${TIER_1.source}/${TIER_1.flags}`,
+  tier2: `${TIER_2.source}/${TIER_2.flags}`,
+  tier3: `${TIER_3.source}/${TIER_3.flags}`,
+  demoted: `${DEMOTED.source}/${DEMOTED.flags}`,
+  plausibleEmail: `${PLAUSIBLE_EMAIL.source}/${PLAUSIBLE_EMAIL.flags}`,
+} as const;
 
 /** Empty or whitespace-only strings count as missing. */
 function clean(value: string | null | undefined): string | null {
@@ -61,6 +77,10 @@ function tierOf(title: string | null): number {
 }
 
 /**
+ * NOTE: legacy detection is label/source based, so toggling include_in_sequences on
+ * a manual general inbox changes its ranking. A dedicated marker column should
+ * replace this later. Keep in sync with `autopilotChoices.ts`.
+ *
  * A general row copied from the old "additional emails" list (label 'Additional
  * email') or a manual general row excluded from sequences. Such rows rank below
  * the lead's own email. Keep in sync with `autopilotChoices.ts`.
@@ -101,8 +121,9 @@ function rankOf(c: Contact): number {
  * The main contact for a lead. Order of preference:
  * 1. the usable contact marked primary;
  * 2. the best-ranked usable person (seniority tiers, input order within a tier);
- * 3. a usable general inbox the user added themselves;
- * 4. the lead's own valid email (`contactId: null`);
+ * 3. the lead's own valid email (`contactId: null`);
+ * 4. a usable general inbox the user added and did not mark primary (an unmarked
+ *    general inbox never beats the lead's own email);
  * 5. a migrated legacy general row ('Additional email' or manual and excluded
  *    from sequences);
  * 6. null.
@@ -113,19 +134,22 @@ export function mainContact(
   leadEmail: string | null,
 ): { email: string; contactId: string | null } | null {
   let best: { contact: Contact; rank: number } | null = null;
+  let curated: Contact | null = null;
+  let legacy: Contact | null = null;
   for (const c of contacts) {
     if (!isUsable(c)) continue;
     const rank = rankOf(c);
-    if (rank >= 7) continue; // legacy rows are handled after the lead's own email
-    if (!best || rank < best.rank) best = { contact: c, rank };
+    if (rank === 6) curated = curated ?? c;
+    else if (rank === 7) legacy = legacy ?? c;
+    else if (!best || rank < best.rank) best = { contact: c, rank };
   }
   if (best) return { email: validEmail(best.contact.email) as string, contactId: best.contact.id };
 
   const own = validEmail(leadEmail);
   if (own) return { email: own, contactId: null };
 
-  const legacy = contacts.find((c) => isUsable(c));
-  return legacy ? { email: validEmail(legacy.email) as string, contactId: legacy.id } : null;
+  const general = curated ?? legacy;
+  return general ? { email: validEmail(general.email) as string, contactId: general.id } : null;
 }
 
 /**
@@ -137,6 +161,11 @@ export function mainContact(
  * curated contact, meaning no usable contact other than migrated legacy rows
  * (so follow-ups go to the people the user chose), and it is not already
  * covered. `contactId` is null for the lead's own email and `name` is null there.
+ * Exclusion wins: an address excluded (include_in_sequences false) or dismissed on
+ * ANY contact never receives mail through another contact or the lead's own email.
+ * When every curated usable contact is excluded this returns [] on purpose (the
+ * user deliberately replaced the lead's email). Callers (check-sequences, task A6)
+ * MUST surface 'no recipients' visibly instead of stalling silently.
  */
 export function sequenceRecipients(
   contacts: Contact[],
@@ -145,11 +174,17 @@ export function sequenceRecipients(
 ): { email: string; contactId: string | null; name: string | null }[] {
   if (optedOut) return [];
   const usable = contacts.filter(isUsable);
+  const excluded = new Set<string>();
+  for (const c of contacts) {
+    const e = validEmail(c.email);
+    if (e && (c.dismissed_at != null || !c.include_in_sequences)) excluded.add(e);
+  }
 
   const winners = new Map<string, Contact>();
   for (const c of usable) {
     if (!c.include_in_sequences) continue;
     const email = validEmail(c.email) as string;
+    if (excluded.has(email)) continue;
     const held = winners.get(email);
     if (!held || rankOf(c) < rankOf(held)) winners.set(email, c);
   }
@@ -165,7 +200,7 @@ export function sequenceRecipients(
 
   const own = validEmail(leadEmail);
   const hasCurated = usable.some((c) => !isLegacyGeneral(c));
-  if (own && !hasCurated && !out.some((r) => r.email === own)) {
+  if (own && !hasCurated && !excluded.has(own) && !out.some((r) => r.email === own)) {
     out.push({ email: own, contactId: null, name: null });
   }
   return out;
@@ -217,6 +252,14 @@ export function validateContactEdit(
   const phone = clean(input.phone);
   const url = clean(input.linkedin_url);
 
+  const texts: [string, string | null][] = [
+    ['First name', first], ['Last name', last], ['Position', title], ['Label', label],
+    ['Email', email], ['Phone', phone], ['The LinkedIn link', url],
+  ];
+  for (const [name, text] of texts) {
+    if (text && CONTROL_CHARS.test(text)) return fail(`${name} cannot contain line breaks or other control characters.`);
+  }
+
   if (kind === 'person' && !first && !last) return fail('Add a first or last name for this person.');
   if (kind === 'general' && !label) return fail('Add a label for this inbox, for example Accounts.');
 
@@ -230,6 +273,9 @@ export function validateContactEdit(
 
   if (email && !PLAUSIBLE_EMAIL.test(email)) return fail('That email address does not look right.');
   if (phone && !PHONE_CHARS.test(phone)) return fail('Phone numbers can only contain digits, spaces and + ( ) - .');
+  if (phone && phone.replace(/\D/g, '').length < MIN_PHONE_DIGITS) {
+    return fail(`Phone numbers need at least ${MIN_PHONE_DIGITS} digits.`);
+  }
   if (url && !HTTPS_URL.test(url)) {
     return fail('The LinkedIn link must start with https:// and include a website address.');
   }

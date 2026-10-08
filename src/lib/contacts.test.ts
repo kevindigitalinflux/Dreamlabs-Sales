@@ -135,9 +135,28 @@ describe('mainContact', () => {
     expect(r?.contactId).toBe('g');
   });
 
-  it('ranks a curated general contact above the lead own email', () => {
+  it('never lets an unmarked general inbox beat the lead own email', () => {
     const r = mainContact([general({ id: 'g', label: 'Accounts', email: 'acc@x.com' })], 'lead@x.com');
-    expect(r?.contactId).toBe('g');
+    expect(r).toEqual({ email: 'lead@x.com', contactId: null });
+  });
+
+  it('lets a general inbox marked primary beat the lead own email', () => {
+    const r = mainContact([general({ id: 'g', label: 'Accounts', email: 'acc@x.com', is_primary: true })], 'lead@x.com');
+    expect(r).toEqual({ email: 'acc@x.com', contactId: 'g' });
+  });
+
+  it('still ranks a named person above the lead own email', () => {
+    const r = mainContact([person({ id: 'p', title: 'Clerk', email: 'p@x.com' })], 'lead@x.com');
+    expect(r?.contactId).toBe('p');
+  });
+
+  it('falls back to the first usable general inbox, curated before legacy, when the lead has no email', () => {
+    const rows = [
+      general({ id: 'legacy', label: 'Additional email', email: 'old@x.com' }),
+      general({ id: 'g1', label: 'Accounts', email: 'acc@x.com' }),
+      general({ id: 'g2', label: 'Sales', email: 'sales@x.com' }),
+    ];
+    expect(mainContact(rows, null)).toEqual({ email: 'acc@x.com', contactId: 'g1' });
   });
 
   it('falls back to a legacy general row only when the lead has no valid email', () => {
@@ -243,6 +262,39 @@ describe('sequenceRecipients', () => {
     expect(r.map((x) => x.contactId)).toEqual(['c', 'a', 'b']);
   });
 
+  it('sends to nobody and not the lead email when every curated contact is excluded (deliberate)', () => {
+    const rows = [
+      person({ id: 'a', email: 'a@x.com', include_in_sequences: false }),
+      general({ id: 'g', label: 'Accounts', email: 'g@x.com', include_in_sequences: false }),
+    ];
+    expect(sequenceRecipients(rows, 'lead@x.com', false)).toEqual([]);
+  });
+
+  it('lets exclusion win: an excluded or dismissed address is not mailed through another contact', () => {
+    const rows = [
+      person({ id: 'a', email: 'dup@x.com', include_in_sequences: false }),
+      person({ id: 'b', email: 'DUP@x.com' }),
+      person({ id: 'c', email: 'ok@x.com' }),
+      person({ id: 'd', email: 'gone@x.com', dismissed_at: '2026-10-01T00:00:00Z' }),
+      person({ id: 'e', email: 'Gone@x.com' }),
+    ];
+    expect(sequenceRecipients(rows, null, false).map((r) => r.contactId)).toEqual(['c']);
+  });
+
+  it('does not add the lead own email when a contact with that address is excluded', () => {
+    const rows = [general({ id: 'g', label: 'Additional email', email: 'lead@x.com', include_in_sequences: false })];
+    expect(sequenceRecipients(rows, 'LEAD@x.com', false)).toEqual([]);
+  });
+
+  it('ignores an unusable primary and uses the usable person', () => {
+    const rows = [
+      person({ id: 'prim', email: 'not-an-email', is_primary: true }),
+      person({ id: 'dprim', email: 'd@x.com', is_primary: true, dismissed_at: 'x' }),
+      person({ id: 'p', title: 'Clerk', email: 'p@x.com' }),
+    ];
+    expect(sequenceRecipients(rows, 'lead@x.com', false).map((r) => r.contactId)).toEqual(['p']);
+  });
+
   it('names a general contact by its label', () => {
     const r = sequenceRecipients([general({ id: 'g', label: 'Accounts', email: 'acc@x.com' })], null, false);
     expect(r).toEqual([{ email: 'acc@x.com', contactId: 'g', name: 'Accounts' }]);
@@ -297,7 +349,10 @@ describe('validateContactEdit', () => {
 
   it('requires a first or last name for a person', () => {
     expect(err({ kind: 'person', first_name: ' ', last_name: '', label: 'Front desk' })).toBe('Add a first or last name for this person.');
-    expect(validateContactEdit({ kind: 'person', last_name: 'Doe' }).ok).toBe(true);
+    expect(validateContactEdit({ kind: 'person', last_name: 'Doe' })).toEqual({
+      ok: true,
+      value: { kind: 'person', first_name: null, last_name: 'Doe', title: null, label: null, email: null, phone: null, linkedin_url: null },
+    });
   });
 
   it('requires a label for a general contact', () => {
@@ -314,7 +369,8 @@ describe('validateContactEdit', () => {
   it('restricts phone characters', () => {
     expect(err({ ...ok, phone: '020 7946 0958 ext 5' })).toBe('Phone numbers can only contain digits, spaces and + ( ) - .');
     expect(err({ ...ok, phone: '07<script>' })).toBe('Phone numbers can only contain digits, spaces and + ( ) - .');
-    expect(validateContactEdit({ ...ok, phone: '+1 (555) 010-9999.' }).ok).toBe(true);
+    const r = validateContactEdit({ ...ok, phone: '+1 (555) 010-9999.' });
+    expect(r.ok && r.value.phone).toBe('+1 (555) 010-9999.');
   });
 
   it('requires https for a LinkedIn url and a host', () => {
@@ -325,7 +381,8 @@ describe('validateContactEdit', () => {
     expect(err({ ...ok, linkedin_url: 'https://' })).toBe(msg);
     expect(err({ ...ok, linkedin_url: 'https:///in/jane' })).toBe(msg);
     expect(err({ ...ok, linkedin_url: 'https://www.linkedin.com/in/ja ne' })).toBe(msg);
-    expect(validateContactEdit({ ...ok, linkedin_url: 'HTTPS://www.linkedin.com/in/jane' }).ok).toBe(true);
+    const r = validateContactEdit({ ...ok, linkedin_url: 'HTTPS://www.linkedin.com/in/jane' });
+    expect(r.ok && r.value.linkedin_url).toBe('HTTPS://www.linkedin.com/in/jane');
   });
 
   it('caps lengths', () => {
@@ -336,6 +393,55 @@ describe('validateContactEdit', () => {
     expect(err({ kind: 'general', label: long(81) })).toBe('Label must be 80 characters or fewer.');
     expect(err({ ...ok, email: `${long(250)}@x.com` })).toBe('Email must be 254 characters or fewer.');
     expect(err({ ...ok, phone: '1'.repeat(41) })).toBe('Phone must be 40 characters or fewer.');
-    expect(validateContactEdit({ ...ok, first_name: long(80), title: long(120) }).ok).toBe(true);
+    const r = validateContactEdit({ ...ok, first_name: long(80), title: long(120) });
+    expect(r.ok && [r.value.first_name, r.value.title]).toEqual([long(80), long(120)]);
+  });
+
+  it('rejects control characters and line separators in every text field', () => {
+    const bad = ['\n', '\r', '\t', '\u0000', '\u001F', '\u007F', '\u2028', '\u2029'];
+    const fields = ['first_name', 'last_name', 'title', 'label', 'email', 'phone', 'linkedin_url'] as const;
+    for (const ch of bad) {
+      for (const f of fields) {
+        const input = { ...ok, kind: 'person', label: 'L', phone: '12345', linkedin_url: 'https://a.com/x', [f]: `ab${ch}cd` };
+        const r = validateContactEdit(input);
+        expect(r.ok).toBe(false);
+        if (!r.ok) expect(r.error).toMatch(/control characters/);
+      }
+    }
+  });
+
+  it('trims leading and trailing newlines and tabs but not inner ones', () => {
+    const r = validateContactEdit({ ...ok, first_name: '\n Jane \t' });
+    expect(r.ok && r.value.first_name).toBe('Jane');
+  });
+
+  it('needs at least 5 digits in a phone number', () => {
+    expect(err({ ...ok, phone: '+ ( ) 123 4' })).toBe('Phone numbers need at least 5 digits.');
+    expect(err({ ...ok, phone: '...' })).toBe('Phone numbers need at least 5 digits.');
+    const r = validateContactEdit({ ...ok, phone: '+1 2345' });
+    expect(r.ok && r.value.phone).toBe('+1 2345');
+  });
+
+  it('accepts plus addressing, uppercase email and rejects a trailing dot', () => {
+    const r = validateContactEdit({ ...ok, email: 'Jane+Sales@Mail.X.CO.UK' });
+    expect(r.ok && r.value.email).toBe('jane+sales@mail.x.co.uk');
+    expect(err({ ...ok, email: 'jane@x.com.' })).toBe('That email address does not look right.');
+  });
+
+  it('handles unicode names and counts 80 vs 81 characters', () => {
+    const accented = validateContactEdit({ kind: 'person', first_name: 'José', last_name: 'Zoë' });
+    expect(accented.ok && [accented.value.first_name, accented.value.last_name]).toEqual(['José', 'Zoë']);
+    const ok80 = validateContactEdit({ kind: 'person', first_name: 'é'.repeat(80) });
+    expect(ok80.ok && ok80.value.first_name).toBe('é'.repeat(80));
+    expect(err({ kind: 'person', first_name: 'é'.repeat(81) })).toBe('First name must be 80 characters or fewer.');
+  });
+
+  it('treats whitespace-only names as missing', () => {
+    expect(err({ kind: 'person', first_name: '   ', last_name: '\u00a0 ' })).toBe('Add a first or last name for this person.');
+  });
+
+  it('keeps the label of a person who has a name', () => {
+    const r = validateContactEdit({ kind: 'person', first_name: 'Jane', label: ' Front desk ' });
+    expect(r.ok && [r.value.first_name, r.value.label]).toEqual(['Jane', 'Front desk']);
   });
 });

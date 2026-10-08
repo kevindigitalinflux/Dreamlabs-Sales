@@ -10,6 +10,18 @@ const DEMOTED = /\b(assistant|deputy|associate|account|non-executive|non executi
 // No whitespace or <>,;: anywhere, a dotted domain, and a TLD of 2+ letters.
 const PLAUSIBLE_EMAIL = /^[^\s@<>,;:]+@([^\s@<>,;:.]+\.)+[a-z]{2,}$/i;
 
+/**
+ * Read-only fingerprints of the regexes shared with `_shared/contacts.ts`. A test
+ * asserts both modules export identical values, so the copies cannot drift.
+ */
+export const CHOICE_REGEX_SOURCES = {
+  tier1: `${TIER_1.source}/${TIER_1.flags}`,
+  tier2: `${TIER_2.source}/${TIER_2.flags}`,
+  tier3: `${TIER_3.source}/${TIER_3.flags}`,
+  demoted: `${DEMOTED.source}/${DEMOTED.flags}`,
+  plausibleEmail: `${PLAUSIBLE_EMAIL.source}/${PLAUSIBLE_EMAIL.flags}`,
+} as const;
+
 /** Empty or whitespace-only strings count as missing. */
 function clean(value: string | null | undefined): string | null {
   const v = value?.trim();
@@ -59,6 +71,10 @@ export function pickSequence(input: {
 }
 
 /**
+ * NOTE: legacy detection is label/source based, so toggling include_in_sequences on
+ * a manual general inbox changes its ranking. A dedicated marker column should
+ * replace this later. Keep in sync with `_shared/contacts.ts`.
+ *
  * True for a general contact copied over from the old "additional emails" list
  * (label 'Additional email') or a manual general row excluded from sequences.
  * These rank below the lead's own email. Keep in sync with `_shared/contacts.ts`.
@@ -82,8 +98,9 @@ function isLegacyGeneral(c: {
  *    everyone else (assistant, deputy, associate, account and non-executive
  *    titles are demoted to the last tier). Ties keep input order. A candidate
  *    without `kind` counts as a person.
- * 3. A general inbox the user added themselves (first in input order).
- * 4. The lead's own email, if valid.
+ * 3. The lead's own email, if valid.
+ * 4. A general inbox the user added and did not mark primary (first in input
+ *    order). An unmarked general inbox never beats the lead's own email.
  * 5. A migrated legacy general row ('Additional email' or manual and excluded
  *    from sequences), then null.
  * Dismissed candidates and candidates without a plausible email are skipped.
@@ -127,9 +144,9 @@ export function pickRecipient(
   }
   if (primary) return { email: primary.email, candidateId: primary.id };
   if (person) return { email: person.email, candidateId: person.id };
-  if (curated) return { email: curated.email, candidateId: curated.id };
 
   const own = validEmail(leadEmail);
   if (own) return { email: own, candidateId: null };
+  if (curated) return { email: curated.email, candidateId: curated.id };
   return legacy ? { email: legacy.email, candidateId: legacy.id } : null;
 }

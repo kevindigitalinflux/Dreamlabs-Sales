@@ -238,9 +238,23 @@ describe('pickRecipient with primary and general contacts', () => {
     expect(r).toEqual({ email: 'info@x.com', candidateId: 'g' });
   });
 
-  it('uses a curated general contact before the lead own email', () => {
+  it('never lets an unmarked general inbox beat the lead own email', () => {
     const r = pickRecipient('lead@x.com', [{ id: 'g', kind: 'general', title: null, email: 'acc@x.com', label: 'Accounts' }]);
-    expect(r?.candidateId).toBe('g');
+    expect(r).toEqual({ email: 'lead@x.com', candidateId: null });
+  });
+
+  it('falls back to the first unmarked general inbox, curated before legacy, when the lead has no email', () => {
+    const r = pickRecipient(null, [
+      { id: 'legacy', kind: 'general', title: null, email: 'old@x.com', label: 'Additional email' },
+      { id: 'g1', kind: 'general', title: null, email: 'acc@x.com', label: 'Accounts' },
+      { id: 'g2', kind: 'general', title: null, email: 'sales@x.com', label: 'Sales' },
+    ]);
+    expect(r).toEqual({ email: 'acc@x.com', candidateId: 'g1' });
+  });
+
+  it('still ranks a named person above the lead own email', () => {
+    const r = pickRecipient('lead@x.com', [{ id: 'p', kind: 'person', title: 'Clerk', email: 'p@x.com' }]);
+    expect(r?.candidateId).toBe('p');
   });
 
   it('ranks the lead own email above migrated Additional email rows', () => {
