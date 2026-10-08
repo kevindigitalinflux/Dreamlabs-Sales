@@ -7,7 +7,7 @@ describe('candidateSource', () => {
     expect(candidateSourceLabel('cro')).toBe('CRO');
     expect(candidateSourceLabel('hunter')).toBe('Hunter');
     expect(candidateSourceLabel('apollo')).toBe('Apollo');
-    expect(candidateSourceLabel('manual')).toBe('Added by you');
+    expect(candidateSourceLabel('manual')).toBe('Added manually');
     expect(candidateSourceLabel('dream_agent')).toBe('Dream Agent');
     expect(candidateSourceLabel('other')).toBe('other');
   });

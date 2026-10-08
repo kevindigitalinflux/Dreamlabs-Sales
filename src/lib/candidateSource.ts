@@ -5,7 +5,7 @@ const LABELS: Record<DecisionMakerCandidate['source'], string> = {
   apollo: 'Apollo',
   companies_house: 'Companies House',
   cro: 'CRO',
-  manual: 'Added by you',
+  manual: 'Added manually',
   dream_agent: 'Dream Agent',
 };
 
