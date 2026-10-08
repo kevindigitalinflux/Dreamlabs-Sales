@@ -32,6 +32,8 @@ REVOKE UPDATE ON decision_maker_candidates FROM authenticated;
 GRANT UPDATE (first_name, last_name, title, email, phone, linkedin_url, kind, label,
               is_primary, include_in_sequences, dismissed_at, updated_at)
   ON decision_maker_candidates TO authenticated;
+-- Explicit so this migration is self-contained; RLS policies below still govern.
+GRANT INSERT, DELETE ON decision_maker_candidates TO authenticated;
 -- Defence in depth: anon never writes (RLS already denies it).
 REVOKE INSERT, UPDATE, DELETE ON decision_maker_candidates FROM anon;
 
@@ -77,7 +79,10 @@ BEGIN
        OR NEW.apollo_person_id IS DISTINCT FROM OLD.apollo_person_id
        OR NEW.email_revealed   IS DISTINCT FROM OLD.email_revealed
        OR NEW.phone_status     IS DISTINCT FROM OLD.phone_status
-       OR NEW.created_by       IS DISTINCT FROM OLD.created_by THEN
+       OR NEW.created_by       IS DISTINCT FROM OLD.created_by
+       OR NEW.name_obfuscated  IS DISTINCT FROM OLD.name_obfuscated
+       OR NEW.id               IS DISTINCT FROM OLD.id
+       OR NEW.created_at       IS DISTINCT FROM OLD.created_at THEN
       RAISE EXCEPTION 'decision_maker_candidates: provider-owned columns cannot be changed'
         USING ERRCODE = '42501';
     END IF;
@@ -89,28 +94,3 @@ END $$;
 DROP TRIGGER IF EXISTS decision_maker_candidates_guard ON decision_maker_candidates;
 CREATE TRIGGER decision_maker_candidates_guard BEFORE UPDATE ON decision_maker_candidates
   FOR EACH ROW EXECUTE FUNCTION decision_maker_candidates_guard();
-
--- 6. One-off copy of leads.additional_emails into general contacts ----------------------
--- dedupe_key (039) = source || ':' || coalesce(apollo_person_id, lower(email), id::text):
--- a general contact with only an email keys on 'manual:<lowercased email>', and a manual
--- person with no email falls back to the row id, so neither can collide spuriously. A
--- general contact and a manual person sharing an email on one lead collide on
--- (lead_id, dedupe_key), so the unique index rejects the duplicate. Here that conflict is
--- handled by NOT EXISTS (any existing contact for the lead with that address, any source,
--- dismissed or not) plus ON CONFLICT DO NOTHING, so a re-run never duplicates.
--- Runs as the migration role, so RLS does not apply. created_by is nullable; the lead's
--- creator is used.
-INSERT INTO decision_maker_candidates (lead_id, source, kind, label, email, created_by)
-SELECT DISTINCT ON (l.id, lower(btrim(e.addr)))
-       l.id, 'manual', 'general', 'Additional email', lower(btrim(e.addr)), l.created_by
-FROM leads l
-CROSS JOIN LATERAL unnest(l.additional_emails) AS e(addr)
-WHERE btrim(coalesce(e.addr, '')) <> ''
-  AND position('@' in e.addr) > 1
-  AND lower(btrim(e.addr)) IS DISTINCT FROM lower(btrim(coalesce(l.email, '')))
-  AND NOT EXISTS (
-    SELECT 1 FROM decision_maker_candidates c
-    WHERE c.lead_id = l.id AND lower(btrim(c.email)) = lower(btrim(e.addr))
-  )
-ORDER BY l.id, lower(btrim(e.addr))
-ON CONFLICT (lead_id, dedupe_key) DO NOTHING;
