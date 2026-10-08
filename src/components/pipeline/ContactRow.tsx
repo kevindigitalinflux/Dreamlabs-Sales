@@ -5,7 +5,7 @@ import { ContactForm } from './ContactForm';
 import { ContactRevealButtons } from './ContactRevealButtons';
 import { contactDisplayName } from '../../../supabase/functions/_shared/contacts';
 import { candidateSourceLabel, hasNoContactDetails, isRegistrySource } from '../../lib/candidateSource';
-import { contactToForm, isOwnSource } from '../../lib/leadContacts';
+import { contactToForm, isOwnSource, safeLinkedinHref } from '../../lib/leadContacts';
 import type { ContactFormValues } from '../../lib/leadContacts';
 import type { ContactResult } from '../../hooks/useLeadContacts';
 import type { DecisionMakerCandidate, Lead } from '../../types';
@@ -34,7 +34,7 @@ export function ContactRow({ contact, lead, isMain, busy, error, onMakeMain, onT
   const [editing, setEditing] = useState(false);
   const name = contactDisplayName(contact);
   if (editing) {
-    return <li><ContactForm initial={contactToForm(contact)} submitLabel="Save changes" onSubmit={onSave} onCancel={() => setEditing(false)} /></li>;
+    return <li><ContactForm initial={contactToForm(contact)} storedLinkedin={contact.linkedin_url} submitLabel="Save changes" onSubmit={onSave} onCancel={() => setEditing(false)} /></li>;
   }
   const own = isOwnSource(contact.source);
   return (
@@ -44,7 +44,7 @@ export function ContactRow({ contact, lead, isMain, busy, error, onMakeMain, onT
         {contact.kind === 'general' && <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] uppercase text-muted">General inbox</span>}
         {isMain && <span className="rounded-full bg-violet/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-violet">Main</span>}
         <span className="font-semibold">{name}</span>
-        {contact.title && <span className="text-muted">— {contact.title}</span>}
+        {contact.title && <span className="text-muted">({contact.title})</span>}
         <button type="button" aria-label={`Edit ${name}`} onClick={() => setEditing(true)} className="ml-auto flex h-8 w-8 cursor-pointer items-center justify-center rounded text-muted hover:text-offwhite">
           <Pencil className="h-3.5 w-3.5" aria-hidden />
         </button>
@@ -52,11 +52,11 @@ export function ContactRow({ contact, lead, isMain, busy, error, onMakeMain, onT
       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
         {contact.email && <a href={`mailto:${contact.email}`} className="text-success">{contact.email}</a>}
         {contact.phone && <a href={`tel:${contact.phone}`} className="text-muted">{contact.phone}</a>}
-        {contact.linkedin_url && (
-          <a href={contact.linkedin_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-cyan">
+        {contact.linkedin_url && (safeLinkedinHref(contact.linkedin_url) ? (
+          <a href={safeLinkedinHref(contact.linkedin_url)!} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-cyan">
             <ExternalLink className="h-3.5 w-3.5" aria-hidden /> LinkedIn
           </a>
-        )}
+        ) : <span className="text-muted">{contact.linkedin_url}</span>)}
       </div>
       {isRegistrySource(contact.source) && hasNoContactDetails(contact) && (
         <p className="mt-1 text-xs text-muted">No contact details found yet. Use "Find decision maker" to look them up.</p>

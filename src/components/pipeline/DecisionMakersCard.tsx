@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { readableInvokeError } from '../../lib/invokeError';
@@ -29,6 +29,8 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => { setAdding(null); setBusyId(null); setErrors({}); setNotice(null); }, [leadId]);
 
   function report(id: string, error: string | null) {
     setErrors((prev) => {

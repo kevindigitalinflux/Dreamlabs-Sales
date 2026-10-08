@@ -41,12 +41,27 @@ export function contactToForm(c: DecisionMakerCandidate): ContactFormValues {
   };
 }
 
-/** Validates form text and returns the clean value, or a plain-English error. */
+/**
+ * Validates form text and returns the clean value, or a plain-English error. When the
+ * LinkedIn text is unchanged from the stored link (a provider may have saved an http
+ * link) the https rule is skipped for it and the stored value is kept as it is.
+ */
 export function validateContactForm(
   form: ContactFormValues,
+  storedLinkedin?: string | null,
 ): { ok: true; value: ContactEditValue } | { ok: false; error: string } {
-  const input: ContactEditInput = { ...form };
-  return validateContactEdit(input);
+  const stored = storedLinkedin?.trim() ?? '';
+  const unchanged = stored !== '' && form.linkedin_url.trim() === stored;
+  const input: ContactEditInput = { ...form, linkedin_url: unchanged ? '' : form.linkedin_url };
+  const result = validateContactEdit(input);
+  if (result.ok && unchanged) return { ok: true, value: { ...result.value, linkedin_url: stored } };
+  return result;
+}
+
+/** The link to use for a contact's LinkedIn, or null unless it is a plain https URL with a host. */
+export function safeLinkedinHref(url: string | null | undefined): string | null {
+  const v = (url ?? '').trim();
+  return /^https:\/\/[^\s/?#@]+\.[^\s/?#@]+([/?#]\S*)?$/i.test(v) ? v : null;
 }
 
 /** Lowercased trimmed email for comparisons ('' when none). */
@@ -100,8 +115,9 @@ export interface DbErrorLike {
  */
 export function contactErrorMessage(err: DbErrorLike): string {
   const text = `${err.message ?? ''} ${err.details ?? ''}`;
+  if (err.code === '42501') return 'You do not have permission to change this contact';
   if (err.code === '23505') {
-    if (text.includes('decision_maker_candidates_one_primary')) return 'This lead already has a main contact; pick one first';
+    if (text.includes('decision_maker_candidates_one_primary')) return 'Another contact is already marked as main. Unmark it first.';
     if (text.includes('decision_maker_candidates_lead_dedupe_key')) return 'That email is already on this lead';
     return 'That contact already exists on this lead';
   }

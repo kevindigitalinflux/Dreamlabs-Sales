@@ -6,6 +6,7 @@ import {
   emptyContactForm,
   newContactRow,
   primarySwitchPlan,
+  safeLinkedinHref,
   validateContactForm,
 } from './leadContacts';
 
@@ -48,7 +49,7 @@ describe('contactErrorMessage', () => {
   });
   it('maps the one primary index', () => {
     const e = { code: '23505', message: 'x', details: 'violates "decision_maker_candidates_one_primary"' };
-    expect(contactErrorMessage(e)).toBe('This lead already has a main contact; pick one first');
+    expect(contactErrorMessage(e)).toBe('Another contact is already marked as main. Unmark it first.');
   });
   it('handles other unique violations, RLS no-ops and unknown errors', () => {
     expect(contactErrorMessage({ code: '23505', message: 'other' })).toBe('That contact already exists on this lead');
@@ -91,5 +92,31 @@ describe('form helpers', () => {
     const v = { kind: 'person', first_name: 'A', last_name: null, title: null, label: null, email: 'a@x.com', phone: null, linkedin_url: null } as const;
     expect(newContactRow('L', 'U', v, false)).toEqual({ ...v, lead_id: 'L', source: 'manual', created_by: 'U', include_in_sequences: false, is_primary: false });
     expect(newContactRow('L', 'U', v).include_in_sequences).toBe(true);
+  });
+});
+
+describe('linkedin handling and 42501', () => {
+  const form = { ...emptyContactForm('person'), first_name: 'Ann' };
+  it('skips the https rule when the stored link is unchanged, keeping it as stored', () => {
+    const r = validateContactForm({ ...form, linkedin_url: ' http://www.linkedin.com/in/ann ' }, 'http://www.linkedin.com/in/ann');
+    expect(r).toEqual({ ok: true, value: expect.objectContaining({ linkedin_url: 'http://www.linkedin.com/in/ann' }) });
+  });
+  it('still enforces https when the link was changed', () => {
+    const r = validateContactForm({ ...form, linkedin_url: 'http://www.linkedin.com/in/bob' }, 'http://www.linkedin.com/in/ann');
+    expect(r).toEqual({ ok: false, error: 'The LinkedIn link must start with https:// and include a website address.' });
+    expect(validateContactForm({ ...form, linkedin_url: 'http://x.com/a' })).toEqual(expect.objectContaining({ ok: false }));
+  });
+  it('safeLinkedinHref only allows https urls with a host', () => {
+    expect(safeLinkedinHref('https://www.linkedin.com/in/ann')).toBe('https://www.linkedin.com/in/ann');
+    expect(safeLinkedinHref('  HTTPS://www.linkedin.com/in/ann ')).toBe('HTTPS://www.linkedin.com/in/ann');
+    expect(safeLinkedinHref('http://www.linkedin.com/in/ann')).toBeNull();
+    expect(safeLinkedinHref('javascript:alert(1)')).toBeNull();
+    expect(safeLinkedinHref('data:text/html,hi')).toBeNull();
+    expect(safeLinkedinHref('https://localhost')).toBeNull();
+    expect(safeLinkedinHref('https://')).toBeNull();
+    expect(safeLinkedinHref(null)).toBeNull();
+  });
+  it('maps 42501 to a permission message', () => {
+    expect(contactErrorMessage({ code: '42501', message: 'new row violates row-level security policy' })).toBe('You do not have permission to change this contact');
   });
 });

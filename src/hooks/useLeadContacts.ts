@@ -96,20 +96,24 @@ export function useLeadContacts(leadId: string) {
     }
     const r = await patchRow(plan.set, { is_primary: true });
     if (!r.error) return { error: null };
-    for (const oldId of plan.restore) await patchRow(oldId, { is_primary: true });
-    return { error: `${r.error}. Your previous main contact was kept.` };
+    let restoreFailed = false;
+    for (const oldId of plan.restore) if ((await patchRow(oldId, { is_primary: true })).error) restoreFailed = true;
+    return { error: restoreFailed
+      ? `${r.error}. Your previous main contact could not be restored, so no contact is marked as main. Choose one again.`
+      : `${r.error}. Your previous main contact was kept.` };
   }, [patchRow]);
 
   /** Saves an edit. Provider rows whose email (or obfuscated name) changes are dismissed and re-saved as a manual contact. */
   const updateContact = useCallback(async (contact: DecisionMakerCandidate, form: ContactFormValues): Promise<ContactResult> => {
-    const v = validateContactForm(form);
+    const v = validateContactForm(form, contact.linkedin_url);
     if (!v.ok) return { error: v.error };
     if (editStrategy(contact, v.value) === 'inline') return { error: (await patchRow(contact.id, { ...v.value })).error };
     const made = await insertRow(v.value, contact.include_in_sequences);
     if (made.error || !made.row) return { error: made.error };
     const dismissErr = await dismissDecisionMaker(contact.id);
     if (dismissErr) {
-      await supabase.from(TABLE).delete().eq('id', made.row.id);
+      const { error: delErr } = await supabase.from(TABLE).delete().eq('id', made.row.id);
+      if (delErr) return { error: 'A duplicate contact may exist; refresh and delete the extra one' };
       setContacts((prev) => prev.filter((c) => c.id !== made.row?.id));
       return { error: dismissErr };
     }
