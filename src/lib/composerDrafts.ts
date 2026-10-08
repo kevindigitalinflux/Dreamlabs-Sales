@@ -1,5 +1,4 @@
 import type { EmailAttachment } from './emailAttachments';
-import { NEUTRAL_GREETING } from './composerRecipients';
 import type { RecipientKind } from './composerRecipients';
 
 /** One recipient's own email while it is being written: each person ticked gets their own. */
@@ -65,15 +64,17 @@ export function unionMissing(targets: DraftTarget[], drafts: Record<string, Reci
 
 /**
  * The recipient details sent to generate-email so the email is written for them. A named
- * contact gets their own name and job title; a general inbox gets the neutral greeting
- * word and no title; the lead's own and legacy addresses keep the lead's default contact.
+ * contact gets their own name and job title; a general inbox is flagged with
+ * `recipient_kind: 'general'` (the server greets it "Hi there" without touching the owner
+ * name); the lead's own and legacy addresses keep the lead's default contact.
  */
 export function generationIdentity(
   t: { candidateId: string | null; kind?: RecipientKind; name: string | null; title: string | null } | null,
-): { recipient_name: string | undefined; recipient_title: string | undefined } {
-  if (t?.kind === 'general') return { recipient_name: NEUTRAL_GREETING, recipient_title: undefined };
+): { recipient_name: string | undefined; recipient_title: string | undefined; recipient_kind: 'general' | undefined } {
+  if (t?.kind === 'general') return { recipient_name: undefined, recipient_title: undefined, recipient_kind: 'general' };
   return {
     recipient_name: t?.candidateId ? (t.name ?? undefined) : undefined,
     recipient_title: t?.candidateId ? (t.title ?? undefined) : undefined,
+    recipient_kind: undefined,
   };
 }

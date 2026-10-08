@@ -280,7 +280,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
           <Button variant="ghost" onClick={() => void send(true)} disabled={busy !== null} loading={busy === 'save'}>
             {busy === 'save' ? 'Saving…' : multi ? `Save ${n} drafts` : 'Save as draft'}
           </Button>
-          <Button onClick={() => void send(false)} disabled={busy !== null || selectedRecipients.size === 0} loading={busy === 'send'}>
+          <Button onClick={() => void send(false)} disabled={busy !== null || selectedTargets.length === 0 || (contactsLoading && !draft)} loading={busy === 'send'}>
             <Send className="h-4 w-4" aria-hidden />
             {busy === 'send'
               ? 'Sending…'

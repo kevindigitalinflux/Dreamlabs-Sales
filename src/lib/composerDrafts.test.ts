@@ -55,6 +55,10 @@ describe('general inbox greeting', () => {
     expect(unionMissing([{ key: 'l', email: 'l@x.com', name: null }], drafts)).toEqual(['first_name']);
   });
 
+  it('still flags owner_name for a general inbox', () => {
+    expect(unionMissing([inbox], { g: done({ missing: ['first_name', 'owner_name'] }) })).toEqual(['owner_name']);
+  });
+
   it('keeps first_name when a person and an inbox are both ticked and the person lacks it', () => {
     const drafts = { p: done({ missing: ['first_name'] }), g: done({ missing: ['first_name'] }) };
     expect(unionMissing([person, inbox], drafts)).toEqual(['first_name']);
@@ -63,18 +67,18 @@ describe('general inbox greeting', () => {
 });
 
 describe('generationIdentity', () => {
-  it('greets a general inbox with "there" and sends no title', () => {
+  it('flags a general inbox with recipient_kind and sends no name or title', () => {
     expect(generationIdentity({ candidateId: 'c1', kind: 'general', name: null, title: null }))
-      .toEqual({ recipient_name: 'there', recipient_title: undefined });
+      .toEqual({ recipient_name: undefined, recipient_title: undefined, recipient_kind: 'general' });
   });
 
-  it('sends a named contact their own name and title', () => {
+  it('sends a named contact their own name and title, with no kind', () => {
     expect(generationIdentity({ candidateId: 'c2', kind: 'person', name: 'Andrea Manning', title: 'Office Manager' }))
-      .toEqual({ recipient_name: 'Andrea Manning', recipient_title: 'Office Manager' });
+      .toEqual({ recipient_name: 'Andrea Manning', recipient_title: 'Office Manager', recipient_kind: undefined });
   });
 
   it('leaves the lead address and nothing-ticked unchanged', () => {
-    const none = { recipient_name: undefined, recipient_title: undefined };
+    const none = { recipient_name: undefined, recipient_title: undefined, recipient_kind: undefined };
     expect(generationIdentity({ candidateId: null, kind: 'lead', name: 'Sarah', title: null })).toEqual(none);
     expect(generationIdentity({ candidateId: null, kind: 'extra', name: null, title: null })).toEqual(none);
     expect(generationIdentity(null)).toEqual(none);

@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
-  const body = (await req.json()) as { lead_id?: string; template_id?: string; use_ai?: boolean; recipient_name?: string; recipient_title?: string };
+  const body = (await req.json()) as { lead_id?: string; template_id?: string; use_ai?: boolean; recipient_name?: string; recipient_title?: string; recipient_kind?: string };
   if (!body.lead_id || !body.template_id) return json({ error: 'lead_id and template_id required' }, 400, headers);
 
   // RLS applies: contractors can only draft for leads they can see.
@@ -39,6 +39,8 @@ Deno.serve(async (req) => {
   const leadForDraft: Record<string, unknown> = body.recipient_name
     ? { ...(lead as Record<string, unknown>), owner_name: body.recipient_name }
     : (lead as Record<string, unknown>);
+  // Only the exact value 'general' counts; anything else (or nothing, from older callers) is ignored.
+  const generalInbox = body.recipient_kind === 'general';
   const { data: template } = await client.from('email_templates').select('*').eq('id', body.template_id).single();
   if (!template) return json({ error: 'Template not found' }, 404, headers);
   const { data: notes } = await client
@@ -53,7 +55,7 @@ Deno.serve(async (req) => {
   const icp = await loadIcp(service, (lead as { org_id: string }).org_id, resolveIcpId((lead as { icp_id?: string | null }).icp_id, template.icp_id as string | null));
   // Built-ins first, then this sender's own placeholders (their meeting link etc.) and the company-wide ones.
   const vars = applyCustomVariables(
-    buildTemplateVars(leadForDraft, contractorName, noteTexts, topPainPoint(icp)),
+    buildTemplateVars(leadForDraft, contractorName, noteTexts, topPainPoint(icp), { generalInbox }),
     await loadCustomVariables(service, (lead as { org_id: string }).org_id, userData.user.id),
   );
   const subject = substituteVariables(template.subject as string, vars);
@@ -78,7 +80,7 @@ Deno.serve(async (req) => {
   const { data: org } = await service.from('organizations').select('name, company_context').eq('id', orgId).maybeSingle();
   const orgName = org?.name ?? 'our team';
   try {
-    const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: leadForDraft, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, icpContext: formatIcpContext(icp), recipientTitle: body.recipient_title?.slice(0, 120) ?? null, apiKey });
+    const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: leadForDraft, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, icpContext: formatIcpContext(icp), recipientTitle: body.recipient_title?.slice(0, 120) ?? null, generalInbox, apiKey });
     return respond(ai.subject, ai.body, true);
   } catch (e) {
     console.error('draftEmail failed, falling back to plain template:', e);

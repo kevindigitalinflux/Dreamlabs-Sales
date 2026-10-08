@@ -113,11 +113,19 @@ describe('draftRecipientKey', () => {
   const a = person({ id: 'a', email: 'a@hok.com' });
   const r = buildRecipients(lead({ additional_emails: ['x@hok.com'] }), [a]);
 
-  it('prefers the contact the draft was written for', () => {
-    expect(draftRecipientKey({ to_email: 'other@hok.com', decision_maker_candidate_id: 'a' }, r)).toBe('a');
+  it('uses the contact when the id and the address both match', () => {
+    expect(draftRecipientKey({ to_email: 'A@hok.com', decision_maker_candidate_id: 'a' }, r)).toBe('a');
   });
 
-  it('matches the lead, a legacy extra or a contact by address ignoring case', () => {
+  it('ignores the contact id when the contact now has a different address, falling to the address match', () => {
+    expect(draftRecipientKey({ to_email: 'info@hok.com', decision_maker_candidate_id: 'a' }, r)).toBe('lead');
+  });
+
+  it('is null when the id matches but its address changed and nobody else has the draft address', () => {
+    expect(draftRecipientKey({ to_email: 'old@hok.com', decision_maker_candidate_id: 'a' }, r)).toBeNull();
+  });
+
+  it('matches the lead, a legacy extra or a contact by address alone, ignoring case', () => {
     expect(draftRecipientKey({ to_email: 'INFO@hok.com', decision_maker_candidate_id: null }, r)).toBe('lead');
     expect(draftRecipientKey({ to_email: 'x@hok.com', decision_maker_candidate_id: null }, r)).toBe('extra:x@hok.com');
     expect(draftRecipientKey({ to_email: 'A@hok.com', decision_maker_candidate_id: null }, r)).toBe('a');

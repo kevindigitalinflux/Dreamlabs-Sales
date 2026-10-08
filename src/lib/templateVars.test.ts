@@ -47,6 +47,18 @@ describe('buildTemplateVars', () => {
   it('derives first_name from owner_name', () => {
     expect(buildTemplateVars(lead, 'Kevin').first_name).toBe('Ana');
   });
+  it('greets a general inbox with "there" and leaves owner_name alone', () => {
+    const v = buildTemplateVars(lead, 'Kevin', [], null, { generalInbox: true });
+    expect(v.first_name).toBe('there');
+    expect(v.owner_name).toBe('Ana Diaz');
+    const noOwner = buildTemplateVars(makeLead({ owner_name: null }), 'Kevin', [], null, { generalInbox: true });
+    expect(noOwner.first_name).toBe('there');
+    expect(noOwner.owner_name).toBeNull();
+  });
+  it('is unchanged without the general inbox option', () => {
+    expect(buildTemplateVars(lead, 'Kevin', [], null, {})).toEqual(buildTemplateVars(lead, 'Kevin'));
+    expect(buildTemplateVars(lead, 'Kevin', [], null, { generalInbox: false }).first_name).toBe('Ana');
+  });
   it('formats package and deal value', () => {
     const v = buildTemplateVars(lead, 'Kevin');
     expect(v.package_name).toBe('AI Foundation');

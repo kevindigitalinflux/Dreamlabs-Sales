@@ -23,9 +23,6 @@ export interface RecipientLead {
   additional_emails?: string[] | null;
 }
 
-/** Greeting word used for a general inbox, so the template reads "Hi there". */
-export const NEUTRAL_GREETING = 'there';
-
 const lower = (email: string): string => email.trim().toLowerCase();
 
 /**
@@ -85,17 +82,19 @@ export function defaultSelection(recipients: Recipient[], contacts: Contact[], l
 }
 
 /**
- * Which recipient an existing draft was written for: its contact if that contact is
- * still listed, otherwise whoever has the draft's address. Null when neither matches,
- * so nothing is pre-selected rather than guessing the wrong person.
+ * Which recipient an existing draft was written for. The draft's contact counts only while
+ * that contact still has the address the draft was sent to; otherwise whoever listed has the
+ * draft's address. Null when neither matches, so nothing is pre-selected rather than
+ * guessing the wrong person.
  */
 export function draftRecipientKey(
   draft: { to_email: string; decision_maker_candidate_id: string | null },
   recipients: Recipient[],
 ): string | null {
+  const to = lower(draft.to_email);
   if (draft.decision_maker_candidate_id) {
     const byId = recipients.find((r) => r.candidateId === draft.decision_maker_candidate_id);
-    if (byId) return byId.key;
+    if (byId && lower(byId.email) === to) return byId.key;
   }
-  return recipients.find((r) => lower(r.email) === lower(draft.to_email))?.key ?? null;
+  return recipients.find((r) => lower(r.email) === to)?.key ?? null;
 }

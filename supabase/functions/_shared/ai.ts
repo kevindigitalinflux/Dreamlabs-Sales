@@ -142,7 +142,7 @@ async function claudeJson(prompt: string, model: ClaudeModel, apiKey: string, ma
 
 /** Personalises an already-variable-substituted draft using lead context + notes. Throws on failure. */
 export async function draftEmail(input: {
-  subject: string; body: string; lead: Record<string, unknown>; notes: string[]; contractorName: string; orgName: string; companyContext?: string | null; icpContext?: string | null; recipientTitle?: string | null; apiKey: string;
+  subject: string; body: string; lead: Record<string, unknown>; notes: string[]; contractorName: string; orgName: string; companyContext?: string | null; icpContext?: string | null; recipientTitle?: string | null; generalInbox?: boolean; apiKey: string;
 }): Promise<{ subject: string; body: string }> {
   const result = await geminiJson(
 `${orgDescriptionLine(input.orgName, input.companyContext)}
@@ -152,7 +152,7 @@ ${input.icpContext ? `
 IDEAL CUSTOMER PROFILE for this lead (who they are most like). Use it to choose which pain points, goals and objections to speak to, and the wording and tone that will resonate with them. Use it as background, not as text to quote, and never state a fact about this lead that is not in the lead data:
 ${input.icpContext}
 ` : ''}
-${input.recipientTitle ? `\nThis email is addressed to a specific person: ${String(input.lead.owner_name ?? 'the recipient')}, ${input.recipientTitle}. Tailor the opening and the angle to someone in that role, and do not assume they are the business owner.\n` : ''}
+${input.recipientTitle ? `\nThis email is addressed to a specific person: ${String(input.lead.owner_name ?? 'the recipient')}, ${input.recipientTitle}. Tailor the opening and the angle to someone in that role, and do not assume they are the business owner.\n` : ''}${input.generalInbox ? 'This email goes to a shared inbox. Greet with "Hi there". Never address or name a specific person.\n' : ''}
 LEAD: ${JSON.stringify(input.lead)}
 RECENT CALL NOTES (newest first): ${JSON.stringify(input.notes)}
 SENDER NAME: ${input.contractorName}

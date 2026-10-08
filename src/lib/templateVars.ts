@@ -42,12 +42,14 @@ export function buildTemplateVars(
   contractorName: string,
   notes: string[] = [],
   icpPainPoint: string | null = null,
+  options: { generalInbox?: boolean } = {},
 ): Record<string, string | null> {
   const painPoint = notes
     .map((n) => /Main pain point:\n([^\n]+)/.exec(n)?.[1]?.trim() ?? null)
     .find((p) => p) ?? null;
   return {
-    first_name: lead.owner_name?.split(' ')[0] ?? null,
+    // A shared inbox has no first name, so it is greeted neutrally. owner_name is left as it is.
+    first_name: options.generalInbox ? 'there' : (lead.owner_name?.split(' ')[0] ?? null),
     business_name: lead.business_name,
     owner_name: lead.owner_name,
     audit_date: null,
