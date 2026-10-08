@@ -7,6 +7,8 @@ import { buildTemplateVars, substituteVariables } from '../_shared/templateVars.
 import { appendLinks, onlyOrgAttachments, parseAttachments, parseLinks } from '../_shared/emailAttachments.ts';
 import { formatIcpContext, loadIcp, resolveIcpId, topPainPoint } from '../_shared/icp.ts';
 import { applyCustomVariables, loadCustomVariables } from '../_shared/customVariables.ts';
+import type { Contact } from '../_shared/contacts.ts';
+import { noRecipientsNoteText, planStepDrafts, recipientNaming, shouldAdvance } from '../_shared/sequenceRecipients.ts';
 
 interface Step { delay_days: number; template_type: string; template_id?: string | null; subject_override: string | null }
 
@@ -35,6 +37,16 @@ function rampedCap(dailyTarget: number, dayNumber: number): number {
  * step for every active enrollment, then advances or completes it. Auth is a
  * shared secret header (no user JWT — pg_cron has none), never the Supabase
  * anon/service keys.
+ *
+ * Recipients: each due step is drafted for everyone `sequenceRecipients` returns for the lead
+ * (its live contacts in `decision_maker_candidates`), one draft per contact, each greeted by its
+ * own name (a shared inbox gets "Hi there"). A lead with no contact that has an email is drafted
+ * exactly as before (one draft to `lead.email`). The enrolment advances ONCE per step, and only if
+ * at least one draft was created. One failing contact never stops the others; if every draft fails
+ * the enrolment is not advanced (retried next run). The autopilot daily cap counts every draft.
+ * When there is nobody to write to because every contact was excluded from sequences, the step is
+ * NOT drafted or advanced: the enrolment is set to 'paused' (so it is not retried daily), a lead
+ * note says why (once per 7 days), and the response lists it in `skipped` as 'no recipients'.
  */
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, HEADERS);
@@ -74,15 +86,46 @@ Deno.serve(async (req) => {
     const step = steps[enrollment.current_step - 1];
     const lead = enrollment.lead;
     if (!step || !lead) { skipped.push({ id: enrollment.id, reason: 'missing step or lead' }); continue; }
-    if (!lead.email) { skipped.push({ id: enrollment.id, reason: 'lead has no email' }); continue; }
+    // The lead's live contacts decide who is written to. Fail closed: if they cannot be read, draft nothing
+    // (an excluded person must never be written to by mistake); the next daily run retries.
+    const { data: contactRows, error: contactsErr } = await service.from('decision_maker_candidates')
+      .select('id, kind, first_name, last_name, title, label, email, phone, is_primary, include_in_sequences, dismissed_at, source')
+      .eq('lead_id', lead.id as string).is('dismissed_at', null).order('created_at');
+    if (contactsErr) {
+      console.error(`contacts load failed for enrollment ${enrollment.id}:`, contactsErr.message);
+      skipped.push({ id: enrollment.id, reason: 'contacts load failed' });
+      continue;
+    }
+    const contacts = (contactRows ?? []) as unknown as Contact[];
+    const prePlan = planStepDrafts({ contacts, leadEmail: (lead.email as string | null) ?? null, optedOut: false, capRemaining: null });
+    if (prePlan.kind === 'none' && prePlan.reason === 'no_email') { skipped.push({ id: enrollment.id, reason: 'lead has no email' }); continue; }
     if (lead.opted_out) {
       skipped.push({ id: enrollment.id, reason: 'lead opted out' });
       await service.from('sequence_enrollments').update({ status: 'cancelled' }).eq('id', enrollment.id);
       continue;
     }
+    if (prePlan.kind === 'none') {
+      // Every contact is excluded from sequences: pause visibly instead of stalling (or retrying daily).
+      skipped.push({ id: enrollment.id, reason: 'no recipients' });
+      const noteText = noRecipientsNoteText();
+      const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
+      const { data: existingNote } = await service.from('lead_notes').select('id')
+        .eq('lead_id', lead.id as string).eq('note_type', 'general').eq('content', noteText).gte('created_at', since).limit(1);
+      if (!existingNote || existingNote.length === 0) {
+        const { error: noteErr } = await service.from('lead_notes').insert({
+          lead_id: lead.id, created_by: enrollment.enrolled_by ?? null, note_type: 'general', content: noteText,
+        });
+        if (noteErr) console.error(`no-recipients note failed for enrollment ${enrollment.id}:`, noteErr.message);
+      }
+      const { error: pauseErr } = await service.from('sequence_enrollments').update({ status: 'paused' }).eq('id', enrollment.id);
+      if (pauseErr) console.error(`pausing enrollment ${enrollment.id} failed:`, pauseErr.message);
+      continue;
+    }
 
     const orgId = lead.org_id as string;
     const outreach = isOutreachTemplate(step.template_type);
+    // Drafts this step may still create under the autopilot daily cap (null = no cap). A multi-contact step uses several.
+    let capRemaining: number | null = null;
 
     // Autopilot daily throttle — only applies to outreach templates in an org with an active run.
     if (outreach) {
@@ -137,6 +180,7 @@ Deno.serve(async (req) => {
         }
         const sentToday = sentTodayByOrg.get(orgId)!;
         if (sentToday >= cap) { skipped.push({ id: enrollment.id, reason: 'autopilot daily cap reached' }); continue; }
+        capRemaining = cap - sentToday;
       }
     }
 
@@ -187,19 +231,16 @@ Deno.serve(async (req) => {
     const icp = await loadIcp(service, orgId, resolveIcpId(lead.icp_id as string | null, template.icp_id as string | null, enrollment.sequence?.icp_id));
     const icpContext = formatIcpContext(icp);
     // Built-ins, then the enrolling user's own placeholders and the company-wide ones (system-enrolled leads get company-wide only).
-    const vars = applyCustomVariables(
-      buildTemplateVars(lead, contractorName, noteTexts, topPainPoint(icp)),
-      await loadCustomVariables(service, orgId, enrollment.enrolled_by),
-    );
-    const subject = substituteVariables((step.subject_override ?? template.subject) as string, vars);
-    const bodyText = substituteVariables(template.body as string, vars);
+    // Placeholders are filled per recipient below; the pain point is read from the notes as they were before any AI notes pass.
+    const customVars = await loadCustomVariables(service, orgId, enrollment.enrolled_by);
+    const varNotes = [...noteTexts];
 
-    let finalSubject = subject.text;
-    let finalBody = bodyText.text;
-
+    // Outreach steps need the notes-then-draft setup ONCE per enrolment run (never per contact); the notes are reused by every draft.
+    let outreachKey: string | null = null;
     if (outreach) {
       const apiKey = await resolveOrgApiKey(service, orgId, 'anthropic');
       if (!apiKey) { skipped.push({ id: enrollment.id, reason: 'no anthropic key configured' }); continue; }
+      outreachKey = apiKey;
 
       // Real existence checks, not a derivation from the 5-row recency-window
       // fetch above — a lead can easily accumulate 5+ notes newer than its
@@ -250,57 +291,112 @@ Deno.serve(async (req) => {
           console.error(`generateLeadNotes failed for lead ${lead.id}, continuing without it:`, e);
         }
       }
+    }
 
-      const model: ClaudeModel = 'claude-haiku-4-5';
-      try {
-        const { data: org } = await service.from('organizations').select('name, company_context').eq('id', orgId).maybeSingle();
-        const orgName = org?.name ?? 'our team';
-        const ai = await draftEmailClaude({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, icpContext, apiKey, model });
-        finalSubject = ai.subject; finalBody = ai.body;
-        const ap = autopilotByOrg.get(orgId);
-        if (ap) {
-          const costCents = 1; // rough per-draft accounting, see run-autopilot's estimate math
-          ap.actualSpendCents += costCents;
-          await service.from('autopilot_runs').update({ actual_ai_cost_cents: ap.actualSpendCents }).eq('id', ap.runId);
-        }
-      } catch (e) {
-        console.error(`Claude draft failed for enrollment ${enrollment.id}, using plain template:`, e);
+    // Who this step is written to. A lead with no contact that has an email is the old single draft to lead.email.
+    const plan = planStepDrafts({ contacts, leadEmail: (lead.email as string | null) ?? null, optedOut: false, capRemaining });
+    const multi = plan.kind === 'multi';
+
+    const model: ClaudeModel = 'claude-haiku-4-5';
+    let draftsCreated = 0;
+    const failures: string[] = [];
+    let stoppedBySpendCap = false;
+
+    for (let idx = 0; idx < plan.recipients.length; idx++) {
+      const target = plan.recipients[idx]!;
+      // Spend cap is re-checked before every further draft of a multi-contact step.
+      if (idx > 0) {
+        const apNow = outreach ? autopilotByOrg.get(orgId) : null;
+        if (apNow && apNow.maxSpendCents != null && apNow.actualSpendCents >= apNow.maxSpendCents) { stoppedBySpendCap = true; break; }
+        // Stay under Gemini free-tier 10 RPM between this step's drafts (same pause as between enrolments).
+        if (!outreach) await new Promise((r) => setTimeout(r, 7000));
       }
-    } else {
-      const apiKey = await resolveOrgApiKey(service, orgId, 'gemini');
-      if (apiKey) {
+
+      // The contact being written to (none = the lead's own contact, which keeps the lead's own naming).
+      const contact = multi && target.contactId ? contacts.find((c) => c.id === target.contactId) : undefined;
+      const naming = contact ? recipientNaming(contact) : null;
+      // A named person: their name replaces the lead's owner for the variables AND the AI. A shared inbox: no person is named.
+      const leadForDraft: Record<string, unknown> = naming ? { ...lead, owner_name: naming.ownerName } : lead;
+      const vars = applyCustomVariables(
+        buildTemplateVars(leadForDraft, contractorName, varNotes, topPainPoint(icp), naming?.generalInbox ? { generalInbox: true } : {}),
+        customVars,
+      );
+      const subject = substituteVariables((step.subject_override ?? template.subject) as string, vars);
+      const bodyText = substituteVariables(template.body as string, vars);
+
+      let finalSubject = subject.text;
+      let finalBody = bodyText.text;
+
+      if (outreachKey) {
         try {
           const { data: org } = await service.from('organizations').select('name, company_context').eq('id', orgId).maybeSingle();
           const orgName = org?.name ?? 'our team';
-          // Only the first 3 (of up to 5 fetched) — preserves the exact original
-          // note-count this path saw before the outreach gates needed a wider window.
-          const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead, notes: noteTexts.slice(0, 3), contractorName, orgName, companyContext: org?.company_context, icpContext, apiKey });
+          const recipientInput = naming
+            ? (naming.generalInbox
+              ? { generalInbox: true, untrustedData: true }
+              : { recipient: { name: naming.ownerName, title: naming.title }, untrustedData: true })
+            : {};
+          const ai = await draftEmailClaude({ subject: subject.text, body: bodyText.text, lead: leadForDraft, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, icpContext, apiKey: outreachKey, model, ...recipientInput });
           finalSubject = ai.subject; finalBody = ai.body;
+          const ap = autopilotByOrg.get(orgId);
+          if (ap) {
+            const costCents = 1; // rough per-draft accounting, see run-autopilot's estimate math
+            ap.actualSpendCents += costCents;
+            await service.from('autopilot_runs').update({ actual_ai_cost_cents: ap.actualSpendCents }).eq('id', ap.runId);
+          }
         } catch (e) {
-          console.error(`AI draft failed for enrollment ${enrollment.id}, using plain template:`, e);
+          console.error(`Claude draft failed for enrollment ${enrollment.id}, using plain template:`, e);
+        }
+      } else {
+        const apiKey = await resolveOrgApiKey(service, orgId, 'gemini');
+        if (apiKey) {
+          try {
+            const { data: org } = await service.from('organizations').select('name, company_context').eq('id', orgId).maybeSingle();
+            const orgName = org?.name ?? 'our team';
+            // Only the first 3 (of up to 5 fetched) — preserves the exact original
+            // note-count this path saw before the outreach gates needed a wider window.
+            const recipientInput = naming ? { recipientTitle: naming.title, generalInbox: naming.generalInbox } : {};
+            const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: leadForDraft, notes: noteTexts.slice(0, 3), contractorName, orgName, companyContext: org?.company_context, icpContext, apiKey, ...recipientInput });
+            finalSubject = ai.subject; finalBody = ai.body;
+          } catch (e) {
+            console.error(`AI draft failed for enrollment ${enrollment.id}, using plain template:`, e);
+          }
         }
       }
+
+      const { error: insertErr } = await service.from('email_logs').insert({
+        lead_id: lead.id, sequence_enrollment_id: enrollment.id, sent_by: enrollment.enrolled_by,
+        // The template's links go at the end AFTER any AI rewrite (so a URL can't be altered), and its
+        // files are carried on the draft so the human release step sends them too.
+        to_email: multi ? target.email : lead.email, subject: finalSubject, body: appendLinks(finalBody, parseLinks(template.links)), status: 'draft', org_id: orgId,
+        attachments: onlyOrgAttachments(parseAttachments(template.attachments), orgId),
+        // Only per-contact drafts record who they were written to (null = the lead's own email).
+        ...(multi ? { decision_maker_candidate_id: target.contactId } : {}),
+      });
+      if (insertErr) {
+        // One contact failing never stops the others.
+        console.error(`email_logs insert failed for enrollment ${enrollment.id}:`, insertErr.message);
+        failures.push(multi ? `draft insert failed for ${target.contactId ?? 'lead email'}: ${insertErr.message}` : 'draft insert failed: ' + insertErr.message);
+        continue;
+      }
+      draftsCreated++;
     }
 
-    const { error: insertErr } = await service.from('email_logs').insert({
-      lead_id: lead.id, sequence_enrollment_id: enrollment.id, sent_by: enrollment.enrolled_by,
-      // The template's links go at the end AFTER any AI rewrite (so a URL can't be altered), and its
-      // files are carried on the draft so the human release step sends them too.
-      to_email: lead.email, subject: finalSubject, body: appendLinks(finalBody, parseLinks(template.links)), status: 'draft', org_id: orgId,
-      attachments: onlyOrgAttachments(parseAttachments(template.attachments), orgId),
-    });
-    if (insertErr) {
+    if (!shouldAdvance({ draftsCreated, failures: failures.length })) {
       // Don't advance — the next daily run re-picks this enrollment (intended retry).
-      console.error(`email_logs insert failed for enrollment ${enrollment.id}:`, insertErr.message);
-      skipped.push({ id: enrollment.id, reason: 'draft insert failed: ' + insertErr.message });
+      skipped.push({ id: enrollment.id, reason: multi ? `all ${plan.recipients.length} drafts failed: ${failures.join('; ')}` : failures.join('; ') });
       continue;
     }
     await service.from('sequence_enrollments')
       .update(advance(enrollment.current_step, steps, new Date()))
       .eq('id', enrollment.id);
-    drafted++;
+    drafted += draftsCreated;
+    if (failures.length > 0) skipped.push({ id: enrollment.id, reason: `partial: ${draftsCreated} of ${plan.recipients.length} drafts created, step advanced; ${failures.join('; ')}` });
+    if (plan.limitedByCap || stoppedBySpendCap) {
+      skipped.push({ id: enrollment.id, reason: `limited by autopilot ${stoppedBySpendCap ? 'spend' : 'daily'} cap: ${draftsCreated} of ${plan.totalRecipients} drafts created, step advanced` });
+    }
     if (outreach) {
-      sentTodayByOrg.set(orgId, (sentTodayByOrg.get(orgId) ?? 0) + 1);
+      sentTodayByOrg.set(orgId, (sentTodayByOrg.get(orgId) ?? 0) + draftsCreated);
       // outreach_sent_total tracks *drafted* outreach emails (this pipeline
       // never auto-sends — a human approval step is always required — so
       // "drafted" is the closest meaningful signal this function can
@@ -308,7 +404,7 @@ Deno.serve(async (req) => {
       // already used by leads_scraped_total tracking approved, not scraped).
       const ap = autopilotByOrg.get(orgId);
       if (ap) {
-        ap.outreachSentTotal += 1;
+        ap.outreachSentTotal += draftsCreated;
         await service.from('autopilot_runs')
           .update({ outreach_sent_total: ap.outreachSentTotal }).eq('id', ap.runId);
       }

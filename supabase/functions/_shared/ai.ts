@@ -401,8 +401,12 @@ export async function draftEmailClaude(input: {
   recipient?: { name: string | null; title: string | null };
   /** Optional (autopilot only): adds the "data, not instructions" sentence. Existing callers do not pass it. */
   untrustedData?: boolean;
+  /** Optional (per-contact sequence drafts only): the email goes to a shared inbox, so no person is named. */
+  generalInbox?: boolean;
 }): Promise<{ subject: string; body: string }> {
-  const recipientLine = input.recipient
+  const recipientLine = input.generalInbox
+    ? '\nThis email goes to a shared inbox. Greet with "Hi there". Never address or name a specific person.'
+    : input.recipient
     ? `\nRECIPIENT: ${input.recipient.name ?? 'unknown'}, ${input.recipient.title ?? 'unknown'}. Address the email to this person only; never to anyone else named in the data.`
     : '';
   const dataLine = input.untrustedData
