@@ -1,4 +1,6 @@
 import type { EmailAttachment } from './emailAttachments';
+import { NEUTRAL_GREETING } from './composerRecipients';
+import type { RecipientKind } from './composerRecipients';
 
 /** One recipient's own email while it is being written: each person ticked gets their own. */
 export interface RecipientDraft {
@@ -18,7 +20,10 @@ export const BLANK_DRAFT: RecipientDraft = { subject: '', body: '', attachments:
 export const SEED_KEY = '__draft';
 
 /** A target of the email: its draft key plus what's needed to name it in messages. */
-export interface DraftTarget { key: string; email: string; name: string | null }
+export interface DraftTarget { key: string; email: string; name: string | null; kind?: RecipientKind }
+
+/** The greeting placeholder; a general inbox has no first name, so it gets a neutral word instead. */
+const GREETING_VAR = 'first_name';
 
 /** Returns a copy of the drafts with `patch` applied to one recipient's draft (creating it if needed). */
 export function patchDraft(
@@ -47,7 +52,28 @@ export function firstIncompleteDraft(targets: DraftTarget[], drafts: Record<stri
   return null;
 }
 
-/** All the placeholders still unfilled across the given recipients' drafts, de-duplicated. */
+/**
+ * All the placeholders still unfilled across the given recipients' drafts, de-duplicated.
+ * A general inbox is greeted with a neutral word ("Hi there"), so a missing first name is
+ * not reported for it and never blocks anything. Person and lead recipients are unchanged.
+ */
 export function unionMissing(targets: DraftTarget[], drafts: Record<string, RecipientDraft>): string[] {
-  return [...new Set(targets.flatMap((t) => drafts[t.key]?.missing ?? []))];
+  return [...new Set(targets.flatMap((t) => (
+    (drafts[t.key]?.missing ?? []).filter((m) => !(t.kind === 'general' && m === GREETING_VAR))
+  )))];
+}
+
+/**
+ * The recipient details sent to generate-email so the email is written for them. A named
+ * contact gets their own name and job title; a general inbox gets the neutral greeting
+ * word and no title; the lead's own and legacy addresses keep the lead's default contact.
+ */
+export function generationIdentity(
+  t: { candidateId: string | null; kind?: RecipientKind; name: string | null; title: string | null } | null,
+): { recipient_name: string | undefined; recipient_title: string | undefined } {
+  if (t?.kind === 'general') return { recipient_name: NEUTRAL_GREETING, recipient_title: undefined };
+  return {
+    recipient_name: t?.candidateId ? (t.name ?? undefined) : undefined,
+    recipient_title: t?.candidateId ? (t.title ?? undefined) : undefined,
+  };
 }

@@ -4,15 +4,18 @@ import { readableInvokeError } from '../../lib/invokeError';
 import { supabase } from '../../lib/supabase';
 import { useOrg } from '../../hooks/useOrg';
 import { useTemplates } from '../../hooks/useTemplates';
-import type { DecisionMakerCandidate, Lead } from '../../types';
+import { useLeadContacts } from '../../hooks/useLeadContacts';
+import type { Lead } from '../../types';
 import { Button } from '../ui/Button';
 import { Input, SelectField, Textarea } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { AttachmentFiles } from './AttachmentFiles';
 import { InsertLink } from './InsertLink';
 import { RecipientDraftCard } from './RecipientDraftCard';
+import { RecipientPicker } from './RecipientPicker';
 import { categorisedOptions } from '../ui/CategorisedOptions';
-import { BLANK_DRAFT, SEED_KEY, firstIncompleteDraft, patchDraft, unionMissing } from '../../lib/composerDrafts';
+import { BLANK_DRAFT, SEED_KEY, firstIncompleteDraft, generationIdentity, patchDraft, unionMissing } from '../../lib/composerDrafts';
+import { buildRecipients, defaultSelection, draftRecipientKey } from '../../lib/composerRecipients';
 import type { RecipientDraft } from '../../lib/composerDrafts';
 import { appendLinkToBody } from '../../lib/emailAttachments';
 import type { EmailAttachment } from '../../lib/emailAttachments';
@@ -55,9 +58,6 @@ interface EmailComposerProps {
 
 type StatusMsg = { kind: 'ok' | 'warn' | 'err'; text: string };
 
-/** A selectable send target: the lead's own email, an additional address, or one of its decision-makers. */
-interface Recipient { key: string; email: string; label: string; candidateId: string | null; name: string | null; title: string | null }
-
 type GenerateResult = {
   subject: string; body: string; ai_used: boolean; missing: string[]; attachments?: EmailAttachment[]; error?: string;
 };
@@ -82,56 +82,21 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
   });
   const [busy, setBusy] = useState<'load' | 'ai' | 'send' | 'save' | null>(null);
   const [msg, setMsg] = useState<StatusMsg | null>(null);
-  const [decisionMakers, setDecisionMakers] = useState<DecisionMakerCandidate[]>([]);
-  const [selectedRecipients, setSelectedRecipients] = useState<Set<string>>(new Set(lead.email ? ['lead'] : []));
+  const { contacts, loading: contactsLoading } = useLeadContacts(lead.id);
+  const [selectedRecipients, setSelectedRecipients] = useState<Set<string>>(new Set(!draft && lead.email ? ['lead'] : []));
+  const recipients = useMemo(() => buildRecipients(lead, contacts), [lead, contacts]);
 
+  // Once the contacts have loaded, tick the main contact; or, when reviewing an existing draft, the
+  // person it was actually written for (never guess a default for a draft whose recipient is gone).
   useEffect(() => {
-    let cancelled = false;
-    // While reviewing an existing draft, don't guess a default selection
-    // until decisionMakers has loaded (below) — the draft's own
-    // to_email/decision_maker_candidate_id are the source of truth for who
-    // it was actually written for, and checking decision_maker_candidate_id
-    // against the loaded list is what tells us it's still a valid, current
-    // recipient (see C1 in the 2026-09-28 final review).
-    setSelectedRecipients(draft ? new Set() : new Set(lead.email ? ['lead'] : []));
-    void supabase.from('decision_maker_candidates').select('*').eq('lead_id', lead.id).not('email', 'is', null).is('dismissed_at', null).then(({ data }) => {
-      if (cancelled) return;
-      const dms = (data as DecisionMakerCandidate[]) ?? [];
-      setDecisionMakers(dms);
-      if (draft) {
-        let key: string | null = null;
-        if (draft.decision_maker_candidate_id && dms.some((d) => d.id === draft.decision_maker_candidate_id)) key = draft.decision_maker_candidate_id;
-        else if (draft.to_email === lead.email) key = 'lead';
-        else if ((lead.additional_emails ?? []).includes(draft.to_email)) key = `extra:${draft.to_email}`;
-        // else: the draft's recipient is neither the lead nor a still-known
-        // decision-maker (e.g. the candidate row was later removed) — leave
-        // nothing pre-selected rather than defaulting to the wrong person.
-        if (key) {
-          const resolved = key;
-          setSelectedRecipients(new Set([resolved]));
-          setDrafts((prev) => (prev[SEED_KEY] ? { ...prev, [resolved]: prev[SEED_KEY]! } : prev));
-        }
-      }
-    });
-    return () => { cancelled = true; };
+    if (contactsLoading) return;
+    if (!draft) { setSelectedRecipients(new Set(defaultSelection(recipients, contacts, lead.email))); return; }
+    const key = draftRecipientKey(draft, recipients);
+    setSelectedRecipients(new Set(key ? [key] : []));
+    if (key) setDrafts((prev) => (prev[SEED_KEY] ? { ...prev, [key]: prev[SEED_KEY]! } : prev));
+    // Re-seed only when the lead, the draft or the finished load changes, not on every realtime contact edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lead.id, draft?.log_id, draft?.to_email, draft?.decision_maker_candidate_id]);
-
-  const recipients: Recipient[] = useMemo(() => {
-    const list: Recipient[] = [];
-    if (lead.email) list.push({ key: 'lead', email: lead.email, label: `${lead.owner_name ?? lead.business_name} (${lead.email})`, candidateId: null, name: lead.owner_name ?? null, title: null });
-    // Extra addresses kept from Fill missing details (never the primary again).
-    for (const extra of lead.additional_emails ?? []) {
-      if (extra.toLowerCase() === lead.email?.toLowerCase()) continue;
-      list.push({ key: `extra:${extra}`, email: extra, label: `${extra} (additional)`, candidateId: null, name: null, title: null });
-    }
-    for (const dm of decisionMakers) {
-      if (!dm.email) continue;
-      const name = `${dm.first_name ?? ''} ${dm.last_name ?? ''}`.trim() || null;
-      list.push({ key: dm.id, email: dm.email, label: `${name ?? 'Unknown'}${dm.title ? ` — ${dm.title}` : ''} (${dm.email})`, candidateId: dm.id, name, title: dm.title });
-    }
-    return list;
-  }, [lead, decisionMakers]);
+  }, [lead.id, draft?.log_id, draft?.to_email, draft?.decision_maker_candidate_id, contactsLoading]);
 
   const selectedTargets = useMemo(() => recipients.filter((r) => selectedRecipients.has(r.key)), [recipients, selectedRecipients]);
   const multi = selectedTargets.length > 1;
@@ -170,8 +135,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
       const { data, error } = await supabase.functions.invoke('generate-email', {
         body: {
           lead_id: lead.id, template_id: templateId, use_ai: useAi,
-          recipient_name: t?.candidateId ? (t.name ?? undefined) : undefined,
-          recipient_title: t?.candidateId ? (t.title ?? undefined) : undefined,
+          ...generationIdentity(t),
         },
       });
       if (error) return { key, error: await readableInvokeError(error) };
@@ -252,21 +216,8 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
   return (
     <Modal open={open} onClose={onClose} title={`Email — ${lead.business_name}`}>
       <div className="flex flex-col gap-4">
-        {recipients.length === 0 && <p role="alert" className="text-sm text-danger">No email addresses available for this lead or its decision-makers.</p>}
-        {recipients.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <p className="text-xs font-semibold text-muted">Send to</p>
-            {recipients.map((r) => (
-              <label key={r.key} className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
-                <input type="checkbox" checked={selectedRecipients.has(r.key)} onChange={() => toggleRecipient(r.key)} className="h-4 w-4 accent-violet-500" />
-                {r.label}
-              </label>
-            ))}
-            {multi && (
-              <p className="text-xs text-muted">Each person you tick gets their own email, written for them. You can edit each one below.</p>
-            )}
-          </div>
-        )}
+        {recipients.length === 0 && <p role="alert" className="text-sm text-danger">No email addresses available for this lead or its contacts.</p>}
+        {recipients.length > 0 && <RecipientPicker recipients={recipients} selected={selectedRecipients} onToggle={toggleRecipient} multi={multi} />}
         <SelectField label="Template" value={templateId} onChange={(e) => setTemplateId(e.target.value)} showGroupInValue>
           <option value="">Choose…</option>
           {categorisedOptions(templates, (t) => ({ value: t.id }))}
@@ -289,6 +240,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
               <RecipientDraftCard
                 key={t.key}
                 name={t.name}
+                kind={t.kind}
                 title={t.title}
                 email={t.email}
                 draft={drafts[t.key] ?? BLANK_DRAFT}

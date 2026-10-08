@@ -2,13 +2,17 @@ import { UserRound } from 'lucide-react';
 import { appendLinkToBody } from '../../lib/emailAttachments';
 import type { RecipientDraft } from '../../lib/composerDrafts';
 import { Input, Textarea } from '../ui/Input';
+import type { RecipientKind } from '../../lib/composerRecipients';
 import { AttachmentFiles } from './AttachmentFiles';
 import { InsertLink } from './InsertLink';
+import { GeneralInboxTag } from './RecipientPicker';
 
 interface RecipientDraftCardProps {
   /** Who this email is for. */
   name: string | null;
   title: string | null;
+  /** A general inbox is tagged so it is not mistaken for a named person. */
+  kind?: RecipientKind;
   email: string;
   draft: RecipientDraft;
   onChange: (patch: Partial<RecipientDraft>) => void;
@@ -21,13 +25,14 @@ interface RecipientDraftCardProps {
  * (written for them, so editable on their own) plus their own attachments and links. The
  * single-recipient composer view is unchanged; this is only used for two or more.
  */
-export function RecipientDraftCard({ name, title, email, draft, onChange, orgId }: RecipientDraftCardProps) {
+export function RecipientDraftCard({ name, title, kind, email, draft, onChange, orgId }: RecipientDraftCardProps) {
   const written = draft.subject.trim() !== '' || draft.body.trim() !== '';
   return (
     <section className="flex flex-col gap-3 rounded-lg border border-line p-3">
       <header className="flex flex-wrap items-center gap-2">
         <UserRound className="h-4 w-4 shrink-0 text-muted" aria-hidden />
         <span className="text-sm font-bold">{name ?? email}</span>
+        {kind === 'general' && <GeneralInboxTag />}
         {title && <span className="text-xs text-muted">{title}</span>}
         {name && <span className="text-xs text-muted">{email}</span>}
         {!written && <span className="ml-auto text-xs text-warning">Not written yet</span>}
