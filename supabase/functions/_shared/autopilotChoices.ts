@@ -8,7 +8,7 @@ const TIER_3 = /\b(head|manager)\b/i;
 // Titles that look senior but are not the decision-maker: dropped to the last tier.
 const DEMOTED = /\b(assistant|deputy|associate|account|non-executive|non executive)\b/i;
 // No whitespace or <>,;: anywhere, a dotted domain, and a TLD of 2+ letters.
-const PLAUSIBLE_EMAIL = /^[^\s@<>,;:]+@([^\s@<>,;:.]+\.)+[a-z]{2,}$/i;
+const PLAUSIBLE_EMAIL = /^[^\s@<>,;:\u0080-￿]+@([^\s@<>,;:.\u0080-￿]+\.)+[a-z]{2,}$/i;
 
 /**
  * Read-only fingerprints of the regexes shared with `_shared/contacts.ts`. A test

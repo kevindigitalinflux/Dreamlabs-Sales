@@ -51,11 +51,22 @@ describe('promptContacts', () => {
       c({ id: 'g', kind: 'general', first_name: null, last_name: null, label: 'Accounts', email: 'Acc@X.com', is_primary: true }),
       c({ id: 'z', email: 'z@x.com' }),
     ];
-    expect(promptContacts(list)).toEqual([
+    expect(promptContacts(list.filter((x) => x.id !== 'noemail'))).toEqual([
       { id: 'g', name_or_label: 'Accounts', title: 'Owner', email: 'acc@x.com', kind: 'general', is_primary: true },
       { id: 'a', name_or_label: 'Ann Ray', title: 'Owner', email: 'a@x.com', kind: 'person', is_primary: false },
       { id: 'z', name_or_label: 'Ann Ray', title: 'Owner', email: 'z@x.com', kind: 'person', is_primary: false },
     ]);
     expect(promptContacts(list, 2).map((x) => x.id)).toEqual(['g', 'a']);
+  });
+
+  it('also lists name-only contacts (no usable email) after the ones with an email', () => {
+    const list = [
+      c({ id: 'officer', email: null, first_name: 'Olive', last_name: 'Officer', title: 'Director' }),
+      c({ id: 'bad', email: 'not-an-email' }),
+      c({ id: 'ok', email: 'ok@x.com' }),
+      c({ id: 'gone', email: null, dismissed_at: '2026-01-01' }),
+    ];
+    expect(promptContacts(list).map((x) => [x.id, x.email])).toEqual([['ok', 'ok@x.com'], ['officer', null], ['bad', null]]);
+    expect(promptContacts(list, 2).map((x) => x.id)).toEqual(['ok', 'officer']);
   });
 });

@@ -11,6 +11,7 @@ import { formatProfilesForPrompt, loadOrgIcps } from '../_shared/icp.ts';
 const MAX_CONTACTS_PER_LEAD = 8;
 const MAX_CONTACTS_TOTAL = 1500;
 const LEAD_CHUNK = 100;
+const PAGE_SIZE = 1000;
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -71,30 +72,39 @@ Deno.serve(async (req) => {
 });
 
 /**
- * Adds each lead's usable contacts to the lead index (only leads that have any). Read
- * with the caller's RLS client, like the leads themselves, in chunks so the query
- * stays small. A failed read leaves the index without contacts: the app also drops
- * a proposed contact whose email the lead already has, so this is not a safety gate.
+ * Adds each lead's live contacts (with or without an email) to the lead index, only for
+ * leads that have any. Read with the caller's RLS client, like the leads themselves, in
+ * lead chunks and 1000-row pages (PostgREST's cap) so nothing is silently cut off. If
+ * any read fails the index is left without contacts and the request carries on: the app
+ * also drops a proposed contact whose email the lead already has, so this is not a gate.
  */
 async function attachContacts(client: ReturnType<typeof createClient>, leadIndex: SessionLeadIndexEntry[]): Promise<void> {
-  const byLead = new Map<string, Contact[]>();
-  for (let i = 0; i < leadIndex.length; i += LEAD_CHUNK) {
-    const ids = leadIndex.slice(i, i + LEAD_CHUNK).map((l) => l.id);
-    const { data, error } = await client.from('decision_maker_candidates')
-      .select('id, lead_id, kind, first_name, last_name, title, label, email, phone, is_primary, include_in_sequences, dismissed_at, source')
-      .in('lead_id', ids).is('dismissed_at', null).order('created_at');
-    if (error) { console.error('parse-session-notes: contacts read failed:', error.message); return; }
-    for (const row of (data ?? []) as (Contact & { lead_id: string })[]) {
-      const list = byLead.get(row.lead_id) ?? [];
-      list.push(row);
-      byLead.set(row.lead_id, list);
+  try {
+    const byLead = new Map<string, Contact[]>();
+    for (let i = 0; i < leadIndex.length; i += LEAD_CHUNK) {
+      const ids = leadIndex.slice(i, i + LEAD_CHUNK).map((l) => l.id);
+      for (let from = 0; ; from += PAGE_SIZE) {
+        const { data, error } = await client.from('decision_maker_candidates')
+          .select('id, lead_id, kind, first_name, last_name, title, label, email, phone, is_primary, include_in_sequences, dismissed_at, source')
+          .in('lead_id', ids).is('dismissed_at', null).order('created_at').order('id').range(from, from + PAGE_SIZE - 1);
+        if (error) { console.error('parse-session-notes: contacts read failed:', error.message); return; }
+        const rows = (data ?? []) as (Contact & { lead_id: string })[];
+        for (const row of rows) {
+          const list = byLead.get(row.lead_id) ?? [];
+          list.push(row);
+          byLead.set(row.lead_id, list);
+        }
+        if (rows.length < PAGE_SIZE) break;
+      }
     }
-  }
-  let total = 0;
-  for (const lead of leadIndex) {
-    const contacts = promptContacts(byLead.get(lead.id) ?? [], MAX_CONTACTS_PER_LEAD);
-    if (contacts.length === 0 || total + contacts.length > MAX_CONTACTS_TOTAL) continue;
-    total += contacts.length;
-    lead.contacts = contacts;
+    let total = 0;
+    for (const lead of leadIndex) {
+      const contacts = promptContacts(byLead.get(lead.id) ?? [], MAX_CONTACTS_PER_LEAD);
+      if (contacts.length === 0 || total + contacts.length > MAX_CONTACTS_TOTAL) continue;
+      total += contacts.length;
+      lead.contacts = contacts;
+    }
+  } catch (e) {
+    console.error('parse-session-notes: attaching contacts failed:', e);
   }
 }

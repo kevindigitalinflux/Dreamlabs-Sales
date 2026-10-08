@@ -20,7 +20,7 @@ import type { Lead } from '../types';
 export function DreamAgent() {
   const { currentOrg } = useOrg();
   const { currentPipeline, pipelines } = usePipeline();
-  const { messages, actions, resolutions, loading, error, contactIndex, contactReport, sendMessage, resolveAction, confirmAll } = useDreamAgentSession();
+  const { messages, actions, resolutions, loading, error, contactIndex, contactReport, round, sendMessage, resolveAction, confirmAll } = useDreamAgentSession();
   const navigate = useNavigate();
   const location = useLocation();
   const [tab, setTab] = useState<'notes' | 'csv'>(() => ((location.state as { tab?: 'notes' | 'csv' } | null)?.tab === 'csv' ? 'csv' : 'notes'));
@@ -199,7 +199,7 @@ export function DreamAgent() {
         ))}
         {actions.map((action, i) => (
           <ActionRow
-            key={i}
+            key={`${round}-${i}-${action.type}`}
             action={action}
             resolution={resolutions[i] ?? { status: 'pending' }}
             leadsById={leadsById}
@@ -210,6 +210,7 @@ export function DreamAgent() {
             onResolve={(resolution) => resolveAction(i, resolution)}
             icpNames={icpNames}
             contactsByLead={contactIndex}
+            messages={messages}
             onPickLead={(leadId) => action.type === 'ambiguous' && void handleClarify(action.mentioned_text, leadId)}
           />
         ))}

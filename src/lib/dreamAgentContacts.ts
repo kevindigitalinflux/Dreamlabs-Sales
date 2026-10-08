@@ -217,12 +217,53 @@ export function draftToForm(kind: 'person' | 'general', d: ContactDraft, linkedi
   };
 }
 
-/** Plain-English problem with an edited row, or null when it can be applied. */
-export function draftProblem(kind: 'person' | 'general', d: ContactDraft): string | null {
+/** Shown when an email is already on another live contact of the lead. */
+export const DUPLICATE_EMAIL_MESSAGE = 'That email is already on this lead';
+
+/** True when another live contact (not `selfId`) of the lead already has this email, ignoring case. */
+export function emailTaken(others: Pick<DecisionMakerCandidate, 'id' | 'email' | 'dismissed_at'>[], email: string, selfId?: string): boolean {
+  const e = email.trim().toLowerCase();
+  return e !== '' && others.some((c) => c.id !== selfId && c.dismissed_at == null && (c.email ?? '').trim().toLowerCase() === e);
+}
+
+/**
+ * Plain-English problem with an edited row, or null when it can be applied. `others` is
+ * the lead's other live contacts (leave out the contact being edited): an email one of
+ * them already has is a problem.
+ */
+export function draftProblem(kind: 'person' | 'general', d: ContactDraft, others: Pick<DecisionMakerCandidate, 'id' | 'email' | 'dismissed_at'>[] = []): string | null {
   const markup = markupProblem(d);
   if (markup) return markup;
   const r = validateContactEdit({ kind, ...d, linkedin_url: '' });
-  return r.ok ? null : r.error;
+  if (!r.ok) return r.error;
+  return emailTaken(others, d.email) ? DUPLICATE_EMAIL_MESSAGE : null;
+}
+
+/** Display name for messages: the person's name, else the label, else the email. */
+export function contactDraftName(kind: 'person' | 'general', d: ContactDraft): string {
+  const person = [d.first_name, d.last_name].filter(Boolean).join(' ');
+  return (kind === 'person' ? person : d.label) || d.email || 'a contact';
+}
+
+/** Lead ids that raw (unsanitised) contact actions refer to, limited to known leads. */
+export function contactLeadIds(raw: unknown, validLeadIds: Set<string>): string[] {
+  if (!Array.isArray(raw)) return [];
+  const ids = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null) continue;
+    const r = item as Record<string, unknown>;
+    if ((r.type === 'add_contact' || r.type === 'update_contact') && typeof r.lead_id === 'string' && validLeadIds.has(r.lead_id)) ids.add(r.lead_id);
+  }
+  return [...ids];
+}
+
+/** The raw action list without any contact action (used when the contacts could not be read). */
+export function withoutContactActions(raw: unknown): unknown {
+  if (!Array.isArray(raw)) return raw;
+  return raw.filter((item) => {
+    const t = typeof item === 'object' && item !== null ? (item as Record<string, unknown>).type : undefined;
+    return t !== 'add_contact' && t !== 'update_contact';
+  });
 }
 
 /** True when saving the draft would change something on the contact (ignoring the main-contact flag). */
@@ -246,7 +287,8 @@ export interface ContactStep {
   primaryDeclined: boolean;
 }
 
-type StepInput = Omit<ContactStep, 'makePrimary' | 'primaryDeclined'>;
+/** A confirmed row ready to be ordered by planContactSteps. */
+export type ContactStepInput = Omit<ContactStep, 'makePrimary' | 'primaryDeclined'>;
 
 /**
  * Orders confirmed contact rows for applying: leads in the order they first appear,
@@ -254,7 +296,7 @@ type StepInput = Omit<ContactStep, 'makePrimary' | 'primaryDeclined'>;
  * otherwise. Only the first row that asks to be the main contact of a lead is made
  * main; later ones are saved but flagged `primaryDeclined`.
  */
-export function planContactSteps(items: StepInput[]): ContactStep[] {
+export function planContactSteps(items: ContactStepInput[]): ContactStep[] {
   const leadOrder: string[] = [];
   for (const it of items) if (!leadOrder.includes(it.leadId)) leadOrder.push(it.leadId);
   const sorted = [...items].sort((a, b) => (
@@ -269,4 +311,31 @@ export function planContactSteps(items: StepInput[]): ContactStep[] {
     if (makePrimary) claimed.add(it.leadId);
     return { ...it, makePrimary, primaryDeclined: wants && !makePrimary };
   });
+}
+
+/** A confirmed row that was not written, and why (shown to the user). */
+export interface SkippedContact { index: number; name: string; reason: string }
+
+/**
+ * Decides which confirmed contact rows can be applied, checking the CURRENT edited
+ * draft (not what the AI first proposed) against the freshly read contacts: a row the
+ * user fixed is applied, a row that is still invalid, whose contact has gone, or whose
+ * email another contact already has, is skipped with a plain-English reason.
+ */
+export function selectApplicable(
+  items: { index: number; action: ContactAction; draft: ContactDraft }[],
+  live: ContactIndex,
+): { steps: ContactStepInput[]; skipped: SkippedContact[] } {
+  const steps: ContactStepInput[] = [];
+  const skipped: SkippedContact[] = [];
+  for (const { index, action, draft } of items) {
+    const contacts = live[action.lead_id] ?? [];
+    const existing = action.type === 'update_contact' ? contacts.find((c) => c.id === action.contact_id) : undefined;
+    const kind = action.type === 'add_contact' ? action.kind : existing?.kind;
+    if (!kind) { skipped.push({ index, name: contactDraftName('person', draft), reason: 'That contact is no longer on this lead.' }); continue; }
+    const reason = draftProblem(kind, draft, contacts.filter((c) => c.id !== existing?.id));
+    if (reason) { skipped.push({ index, name: contactDraftName(kind, draft), reason }); continue; }
+    steps.push({ index, type: action.type === 'add_contact' ? 'add' : 'update', leadId: action.lead_id, contactId: existing?.id, kind, draft });
+  }
+  return { steps, skipped };
 }

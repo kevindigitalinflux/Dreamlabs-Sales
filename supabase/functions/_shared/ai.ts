@@ -222,7 +222,7 @@ ${input.note}`,
 /** One lead in the Dream Agent's lead index; `contacts` is present only when the lead has usable ones. */
 export interface SessionLeadIndexEntry {
   id: string; business_name: string; city: string | null; stage: string; icp_id?: string | null;
-  contacts?: { id: string; name_or_label: string; title: string | null; email: string; kind: 'person' | 'general'; is_primary: boolean }[];
+  contacts?: { id: string; name_or_label: string; title: string | null; email: string | null; kind: 'person' | 'general'; is_primary: boolean }[];
 }
 
 /** The full parse-session-notes prompt (exported so tests can check what the AI is told). */
@@ -286,7 +286,9 @@ For each company/person mentioned, decide one of these action types:
 
 CONTACT RULES (add_contact / update_contact):
 - Each lead in LEAD INDEX may carry "contacts": its current people and inboxes as
-  {"id","name_or_label","title","email","kind","is_primary"}. UPDATE an existing contact
+  {"id","name_or_label","title","email","kind","is_primary"} (email is null when we have
+  no address for them yet: adding the address they gave is an update_contact, not a new contact).
+  UPDATE an existing contact
   instead of adding a duplicate: if the note names someone already listed (or gives an email
   already listed), emit update_contact for it, never add_contact.
 - A person's own email goes on that person's contact (kind "person"), never on a general one.

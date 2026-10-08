@@ -8,15 +8,16 @@ const TIER_1 = /\b(owner|founder|co-founder|managing director|ceo|chief executiv
 const TIER_2 = /\bdirector\b/i;
 const TIER_3 = /\b(head|manager)\b/i;
 const DEMOTED = /\b(assistant|deputy|associate|account|non-executive|non executive)\b/i;
-// Same email rule as `autopilotChoices.ts` (keep both in sync): no whitespace or
-// <>,;: anywhere, a dotted domain, and a TLD of 2+ letters.
-const PLAUSIBLE_EMAIL = /^[^\s@<>,;:]+@([^\s@<>,;:.]+\.)+[a-z]{2,}$/i;
+// Same email rule as `autopilotChoices.ts` (keep both in sync): no whitespace, <>,;: or
+// non-ASCII characters anywhere, a dotted domain, and a TLD of 2+ letters.
+const PLAUSIBLE_EMAIL = /^[^\s@<>,;:\u0080-￿]+@([^\s@<>,;:.\u0080-￿]+\.)+[a-z]{2,}$/i;
 const PHONE_CHARS = /^[0-9 +().-]+$/;
 // https only, then a dotted host (no spaces, credentials or path chars), then anything without spaces.
 const HTTPS_URL = /^https:\/\/[^\s/?#@]+\.[^\s/?#@]+([/?#]\S*)?$/i;
 
-// Control characters (C0, DEL) and the Unicode line/paragraph separators.
-const CONTROL_CHARS = /[\u0000-\u001F\u007F\u2028\u2029]/;
+// Control characters (C0, DEL), the Unicode line/paragraph separators, bidi controls
+// (which can disguise text) and zero-width characters (which hide differences).
+const CONTROL_CHARS = /[\u0000-\u001F\u007F\u2028\u2029\u202a-\u202e\u2066-\u2069\u200b-\u200f\u2060\ufeff]/;
 const MIN_PHONE_DIGITS = 5;
 
 const MAX_NAME = 80;
@@ -295,28 +296,31 @@ export function validateContactEdit(
   };
 }
 
-/** One of a lead's current contacts as shown to the Dream Agent prompt. */
+/** One of a lead's current contacts as shown to the Dream Agent prompt. `email` is null for a contact with no usable address. */
 export interface PromptContact {
   id: string;
   name_or_label: string;
   title: string | null;
-  email: string;
+  email: string | null;
   kind: 'person' | 'general';
   is_primary: boolean;
 }
 
 /**
- * A lead's usable contacts (not dismissed, plausible email) in the compact shape the
- * Dream Agent prompt gets: the main contact first, then input order, at most `cap`.
+ * A lead's live (not dismissed) contacts in the compact shape the Dream Agent prompt
+ * gets, so it can update a person instead of adding a duplicate. Contacts with a
+ * usable email come first (the main contact first among them), then name-only
+ * contacts such as registry officers; at most `cap`.
  */
 export function promptContacts(contacts: Contact[], cap = 8): PromptContact[] {
-  const usable = contacts.filter(isUsable);
-  usable.sort((a, b) => Number(b.is_primary) - Number(a.is_primary));
-  return usable.slice(0, Math.max(0, cap)).map((c) => ({
+  const live = contacts.filter((c) => c.dismissed_at == null);
+  const rank = (c: Contact) => (isUsable(c) ? (c.is_primary ? 0 : 1) : 2);
+  live.sort((a, b) => rank(a) - rank(b));
+  return live.slice(0, Math.max(0, cap)).map((c) => ({
     id: c.id,
     name_or_label: contactDisplayName(c),
     title: clean(c.title),
-    email: validEmail(c.email) as string,
+    email: validEmail(c.email),
     kind: c.kind,
     is_primary: c.is_primary,
   }));

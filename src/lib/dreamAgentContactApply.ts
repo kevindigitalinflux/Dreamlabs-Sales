@@ -1,6 +1,6 @@
 import { addContactRow, setPrimaryContact, updateContactRow } from './contactWrites';
 import type { ContactWriteCtx } from './contactWrites';
-import { draftChangesContact, draftToForm } from './dreamAgentContacts';
+import { DUPLICATE_EMAIL_MESSAGE, draftChangesContact, draftToForm, emailTaken } from './dreamAgentContacts';
 import type { ContactStep } from './dreamAgentContacts';
 import type { DecisionMakerCandidate } from '../types';
 
@@ -46,6 +46,7 @@ export async function applyContactSteps(
     let message: string | undefined;
 
     if (step.type === 'add') {
+      if (emailTaken(current, step.draft.email)) { results.push({ index: step.index, ok: false, message: DUPLICATE_EMAIL_MESSAGE }); continue; }
       const r = await addContactRow(ctx, step.leadId, draftToForm(step.kind, step.draft), step.draft.include_in_sequences);
       if (r.error || !r.row) { results.push({ index: step.index, ok: false, message: r.error ?? 'The contact could not be added.' }); continue; }
       savedId = r.row.id;
@@ -53,6 +54,10 @@ export async function applyContactSteps(
       const contact = current.find((c) => c.id === step.contactId);
       if (!contact) { results.push({ index: step.index, ok: false, message: 'That contact is no longer on this lead.' }); continue; }
       savedId = contact.id;
+      if (emailTaken(current, step.draft.email, contact.id) && step.draft.email.trim().toLowerCase() !== (contact.email ?? '').trim().toLowerCase()) {
+        results.push({ index: step.index, ok: false, message: DUPLICATE_EMAIL_MESSAGE });
+        continue;
+      }
       if (draftChangesContact(contact, step.draft)) {
         const r = await updateContactRow(ctx, contact, draftToForm(contact.kind, step.draft, contact.linkedin_url ?? ''));
         if (r.error) { results.push({ index: step.index, ok: false, message: r.error }); continue; }

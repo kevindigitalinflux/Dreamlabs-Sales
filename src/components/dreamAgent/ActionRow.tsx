@@ -31,6 +31,8 @@ interface ActionRowProps {
   icpNames?: Record<string, string>;
   /** Live contacts per lead, for contact rows (an update shows the contact as it is now). */
   contactsByLead?: Record<string, DecisionMakerCandidate[]>;
+  /** The conversation so far (the user's own messages). */
+  messages?: string[];
 }
 
 const CONTACT_LABELS = { owner_name: 'Owner', phone: 'Phone', email: 'Email', website: 'Website', address: 'Address', city: 'City', postcode: 'Postcode', vertical: 'Business type' };
@@ -62,7 +64,7 @@ function patchRows(patch: DreamAgentUpdatePatch, lead: Lead | undefined, include
  * a candidate picker plus "this is someone new", which itself becomes a create-like
  * picker step rather than guessing a pipeline; `update_company_context` shows an
  * editable textarea pre-filled with the AI's proposed merge. */
-export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipelineId, needsPipelinePicker, isOrgAdmin, onResolve, onPickLead, icpNames = {}, contactsByLead = {} }: ActionRowProps) {
+export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipelineId, needsPipelinePicker, isOrgAdmin, onResolve, onPickLead, icpNames = {}, contactsByLead = {}, messages = [] }: ActionRowProps) {
   const [promotedToNew, setPromotedToNew] = useState(false);
   const [editedContext, setEditedContext] = useState(
     action.type === 'update_company_context' ? action.proposed_context : '',
@@ -73,6 +75,7 @@ export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipe
     return (
       <ContactActionRow
         key={existing?.id ?? 'new'} action={action} resolution={resolution} existing={existing}
+        leadContacts={contactsByLead[action.lead_id] ?? []} contactsLoaded={contactsByLead[action.lead_id] !== undefined} messages={messages}
         leadName={leadsById[action.lead_id]?.business_name ?? 'this lead'} onResolve={onResolve}
       />
     );
