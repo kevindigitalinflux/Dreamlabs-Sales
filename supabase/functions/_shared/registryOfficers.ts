@@ -2,8 +2,9 @@ export interface RegistryOfficer { first_name: string | null; last_name: string 
 
 const CORPORATE = /\b(ltd|limited|llp|plc|secretaries|nominees|nominee|services|holdings|trustees)\b/i;
 
+/** Capitalises the first letter and the letter after a hyphen or apostrophe: MARY-JANE to Mary-Jane, O'BRIEN to O'Brien. (McDonald becomes Mcdonald, accepted.) */
 function titleCase(word: string): string {
-  return word ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : word;
+  return word ? word.toLowerCase().replace(/(^|[-'’])(\p{L})/gu, (_m, sep: string, ch: string) => sep + ch.toUpperCase()) : word;
 }
 
 /** Splits "SURNAME, Forename Middle" (registry style) or "Forename Surname" into first and last name. */

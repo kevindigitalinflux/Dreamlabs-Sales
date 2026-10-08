@@ -118,3 +118,38 @@ Only `_shared/selectedLeadPipelineRules.ts` and its test changed. Checks: rules 
 4. `FREE_MAIL_DOMAINS` gained ymail.com, msn.com, gmx.com, gmx.co.uk, ntlworld.com, outlook.co.uk, googlemail.co.uk, mail.com, zoho.com, fastmail.com, hey.com (tested).
 
 Redeploy: `run-selected-autopilot` only (no other function imports this file's changed behaviour).
+
+---
+
+# Final review fix wave (commit "fix: final review wave (config, enrolment-linked drafts, stuck-send, mailbox gate, minors)")
+
+Checks: focused vitest files 171/171, full suite 567/567, `tsc --noEmit` clean, `--ignoreConfig` syntax check clean on every touched Deno file, `npm run build` ok (existing chunk warning only).
+
+| Item | Done |
+|---|---|
+| C1 | `supabase/config.toml` gains `[functions.run-selected-autopilot] verify_jwt = false`; the function header says it must be deployed with verify_jwt false. |
+| I1a | `insertDraftLog` (and therefore the parked draft) sets `sequence_enrollment_id = ctx.enrollment?.id ?? null`. |
+| I1b | The 14 day same-lead exemption now needs the earlier email to be linked to the lead's CURRENT enrolment (`isOwnSequenceEmail`, pure, tested). |
+| I1c | `NeedsInputReview`, after a confirmed send, reads the active/paused enrolment fresh and applies `enrolmentActionAfterSend` (pure, tested): `advance` when an ACTIVE enrolment exists and the sent log was linked to it (`advanceEnrollment`, the same logic as the engine, conditional update on id, current_step and status active); `enrol` at step 2 when there is no enrolment and the row has a sequence, then the new enrolment id is written onto the sent log; otherwise nothing. The email_logs policies are FOR ALL for org members (migration 003/009), so the link update works for the sender. Once-guard and error reporting kept. `shouldEnrolAfterSend` is still exported and tested but no longer used by the component. |
+| I2 | New `_shared/interruptedSend.ts: markLogInterrupted` (draft to failed with the Sent folder message, conditional on draft, error checked and logged). Used by `applyStuck` for the `fail` action (row selects now include `email_log_id`) and by the pipeline wrapper when an error occurs after `markSendStarted`. |
+| I3 | `processRun` calls `loadSenderMailbox` once per tick before any lead; on failure it cancels the run with the (plain English, dash free) error as `cancel_reason` and marks queued rows `not_reached` with the same reason. A transient database error in that read also cancels (loadSenderMailbox cannot tell the difference); this fails safe. `SelectedSetup` reads `user_email_settings` (own row, client readable by RLS) and disables Start with "Set up and verify your email in Settings, Email sending first" (`emailGateMessage`, pure, tested); a read error does not block (the engine checks again). |
+| I4 | Membership read error: return and retry next tick; cancel only when the read succeeds with no row. |
+| M1 | `recoverEndedRunRows` also marks `queued` rows of non-active runs `not_reached` ("Run ended before this lead was processed"), including user-stopped runs. |
+| M2 | `NeedsInputRow` shows "Review and send" only to the run creator (`canReview`, from run.created_by vs the session user, no new queries); others see "Waiting for the person who started this run" (no creator name query). |
+| M3 | The Sidebar badge moved from the Emails item to the Autopilot item (`/outreach/autopilot`), the same destination as the Dashboard notice. |
+| M4 | `scrapeWebsiteContact(website, maxBytes = 1_500_000)`; research fetches keep the 300 KB cap. Tests: default finds an address after 400 KB, default stops at 1.5 MB, explicit maxBytes honoured. |
+| M5 | `googlePlacesLookup` no longer logs the error text (fixed string). Audit of `key=` URLs: Gemini (`ai.ts`, now wrapped by `geminiFetch`, which rethrows a fixed message so a network error echoing the URL can never reach a log), Places (fixed), Hunter (`api_key=` in the query, errors are swallowed silently, nothing logged). |
+| M6 | `titleCase` capitalises after hyphens and apostrophes (MARY-JANE to Mary-Jane, O'BRIEN to O'Brien); McDonald stays Mcdonald. Tests added. |
+| M7 | Bidi controls U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069 stripped in `normalise`; test per code point. |
+| M8 | `MAX_DAILY_SEND_CAP = 200` in `validateCaps` with the plain message "Daily sends cannot be more than 200" (input clamp raised so the message can show); tests. |
+| M9 | Applied: `send-email` returns 400 "This email was already sent" when the supplied log is already `sent`. Confirmed from app code that no screen re-sends a sent log: the only `log_id` senders are EmailComposer (opened from the review and release queues, `useDrafts` lists draft and failed only), ReleaseQueue (same list) and NeedsInputReview (draft or failed only, checked); no resend feature exists. |
+
+## Functions whose bundle changed (redeploy)
+
+- `run-selected-autopilot` (config + header, selectedAutopilot, pipeline, rules, send step, interruptedSend, ai, googlePlacesLookup, websiteContact, registryOfficers via enrichLead)
+- `send-email` (M9)
+- `check-replies`, `check-sequences`, `generate-email`, `draft-linkedin-message`, `org-api-settings`, `parse-csv-leads`, `parse-icp`, `parse-notes`, `parse-session-notes` (ai.ts `geminiFetch`)
+- `enrich-leads-bulk`, `scrape-google-places` (googlePlacesLookup, websiteContact)
+- `scrape-companies-house`, `scrape-cro` (googlePlacesLookup, websiteContact, registryOfficers via registryContacts)
+- Also needs `supabase/config.toml` verify_jwt for run-selected-autopilot to be honoured when deploying (deploy with the config or `--no-verify-jwt`).
+- Client: Sidebar, NeedsInput components, SelectedSetup and WindowFields change the web bundle.

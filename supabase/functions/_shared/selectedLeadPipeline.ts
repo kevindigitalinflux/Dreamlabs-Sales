@@ -1,5 +1,6 @@
 // The real per-lead pipeline for the selected-leads autopilot (Task 12b).
 // Safety first: whenever there is doubt the lead is parked (needs_input) or skipped with a plain reason. Never send on uncertainty.
+import { markLogInterrupted } from './interruptedSend.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { RESEARCH_COST_CENTS, researchLead } from './leadResearch.ts';
 import { isEmptyResearch } from './researchPages.ts';
@@ -137,7 +138,10 @@ export async function processLeadPipeline(ctx: PipelineContext): Promise<Pipelin
     return await run(ctx, progress);
   } catch (e) {
     const common = { emailLogId: progress.emailLogId, sequenceId: progress.sequenceId, costCents: progress.costCents };
-    if (progress.sendStarted) return { outcome: 'failed', reason: 'Error after send started; check Email logs', ...common };
+    if (progress.sendStarted) {
+      await markLogInterrupted(ctx.service, progress.emailLogId);
+      return { outcome: 'failed', reason: 'Error after send started; check Email logs', ...common };
+    }
     if (progress.reserved) { try { await ctx.releaseSend(); } catch { console.error('autopilot: could not release the send slot'); } }
     return { outcome: 'failed', reason: plainReason(e instanceof Error ? e.message : ''), ...common };
   }

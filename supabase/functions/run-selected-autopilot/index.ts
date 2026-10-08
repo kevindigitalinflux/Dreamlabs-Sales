@@ -1,4 +1,6 @@
 // supabase/functions/run-selected-autopilot/index.ts
+// DEPLOY WITH verify_jwt = false (see supabase/config.toml): the pg_cron tick sends only x-cron-secret, no Authorization header,
+// so the gateway would answer 401. The function authenticates both actions itself (cron secret for tick, user JWT + membership for start).
 // Engine for selected-leads autopilot runs. `tick` (cron, x-cron-secret) processes every active selected run;
 // `start` (signed-in user) processes one run immediately, through the same code path.
 import { createClient } from 'npm:@supabase/supabase-js@2';

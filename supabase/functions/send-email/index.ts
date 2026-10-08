@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
   // owner-only.
   let draft: { org_id: string | null; attachments: unknown } | undefined;
   if (body.log_id) {
-    const { data: log } = await service.from('email_logs').select('sent_by, org_id, attachments').eq('id', body.log_id).single();
+    const { data: log } = await service.from('email_logs').select('sent_by, org_id, attachments, status').eq('id', body.log_id).single();
     if (!log) return json({ error: 'Draft not found' }, 404, headers);
     draft = { org_id: log.org_id as string | null, attachments: log.attachments };
     if (log.sent_by !== null && log.sent_by !== user.id) {
@@ -64,6 +64,8 @@ Deno.serve(async (req) => {
       const { data: membership } = await service.from('org_members').select('role').eq('org_id', log.org_id).eq('user_id', user.id).maybeSingle();
       if (!membership) return json({ error: 'Draft not found' }, 404, headers);
     }
+    // Defence in depth: an already sent email is never sent again (no screen re-sends a sent log; queues only list draft and failed).
+    if (log.status === 'sent') return json({ error: 'This email was already sent' }, 400, headers);
   }
 
   const result = await sendLeadEmail(service, {

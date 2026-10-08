@@ -85,9 +85,18 @@ export function mapRunInsertError(err: { code?: string; message: string }): stri
   return err.message;
 }
 
-/** Validates the daily send cap (positive whole number) and spend cap (empty, 0, or a positive number). */
+/** Validates the daily send cap (whole number from 1 to MAX_DAILY_SEND_CAP) and spend cap (empty, 0, or a positive number). */
+export const MAX_DAILY_SEND_CAP = 200;
+
+/** Plain message when the sender mailbox is not ready, else null. Unknown (a read error) never blocks: the engine checks again. */
+export function emailGateMessage(state: 'unknown' | { verified: boolean } | null): string | null {
+  if (state === 'unknown') return null;
+  return state && state.verified ? null : 'Set up and verify your email in Settings, Email sending first';
+}
+
 export function validateCaps(dailySendCap: number, spendCap: string): string | null {
   if (!Number.isInteger(dailySendCap) || dailySendCap < 1) return 'Daily sends must be a whole number of at least 1';
+  if (dailySendCap > MAX_DAILY_SEND_CAP) return `Daily sends cannot be more than ${MAX_DAILY_SEND_CAP}`;
   const t = spendCap.trim();
   if (t !== '' && !(Number.isFinite(Number(t)) && Number(t) >= 0)) return 'Spend cap must be a positive number, or empty for no cap';
   return null;

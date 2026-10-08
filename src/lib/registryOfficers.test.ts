@@ -37,3 +37,14 @@ describe('mapCompaniesHouseOfficers', () => {
     expect(mapCompaniesHouseOfficers([])).toEqual([]);
   });
 });
+
+describe('name casing', () => {
+  it('capitalises after hyphens and apostrophes', () => {
+    expect(splitOfficerName('MARY-JANE WATSON')).toEqual({ first_name: 'Mary-Jane', last_name: 'Watson' });
+    expect(splitOfficerName("O'BRIEN, Patrick")).toEqual({ first_name: 'Patrick', last_name: "O'Brien" });
+    expect(splitOfficerName('Mary-Jane Smith-Jones')).toEqual({ first_name: 'Mary-Jane', last_name: 'Smith-Jones' });
+  });
+  it('accepts the McDonald limitation', () => {
+    expect(splitOfficerName('MCDONALD, Ann').last_name).toBe('Mcdonald');
+  });
+});

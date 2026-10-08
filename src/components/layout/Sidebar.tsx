@@ -46,7 +46,7 @@ export function Sidebar() {
           <NavLink key={to} to={to} end={end} className={navClass}>
             <Icon className="h-5 w-5" aria-hidden />
             {label}
-            {to === '/emails' && needsInput ? (
+            {to === '/outreach/autopilot' && needsInput ? (
               <span className="ml-auto rounded-full bg-cyan/20 px-2 py-0.5 text-[11px] font-bold text-cyan" aria-label={`${needsInput} autopilot leads need your input`}>{needsInput}</span>
             ) : null}
           </NavLink>

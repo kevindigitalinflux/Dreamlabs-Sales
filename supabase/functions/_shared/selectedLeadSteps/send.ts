@@ -3,7 +3,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { classifyLead, endOfLocalDay, localDateString, type EligibilityEnrollment, type EligibilityLead } from '../autopilotEligibility.ts';
 import { sendLeadEmail } from '../sendLeadEmail.ts';
 import { skipReasonFor } from '../selectedAutopilotRules.ts';
-import { firstSendBlock, followUpNote, isRecipientBlocked, nextEnrollmentState, plainReason, sameEnrolment, stepAlreadySent } from '../selectedLeadPipelineRules.ts';
+import { firstSendBlock, isOwnSequenceEmail, followUpNote, isRecipientBlocked, nextEnrollmentState, plainReason, sameEnrolment, stepAlreadySent } from '../selectedLeadPipelineRules.ts';
 import type { PipelineContext, PipelineOutcome } from '../selectedLeadPipeline.ts';
 import type { Draft } from './draft.ts';
 import type { Lead, Progress, SequenceRow } from './types.ts';
@@ -15,6 +15,8 @@ export async function insertDraftLog(ctx: PipelineContext, lead: Lead, recipient
   const { data, error } = await ctx.service.from('email_logs').insert({
     lead_id: lead.id, sent_by: ctx.run.created_by, to_email: recipient.email, subject: draft.subject, body: draft.body,
     status: 'draft', org_id: ctx.run.org_id, decision_maker_candidate_id: recipient.candidateId, attachments: draft.attachments,
+    // Linked to the enrolment so that once a person sends a parked draft, the step-sent guard counts it and replies are detected.
+    sequence_enrollment_id: ctx.enrollment?.id ?? null,
   }).select('id').single();
   if (error) { console.error('autopilot: could not save draft'); return null; }
   return (data as { id: string }).id;
@@ -46,7 +48,7 @@ export async function lastMinuteCheck(ctx: PipelineContext, recipient: Recipient
   const enrollment = ((enr ?? [])[0] ?? null) as (EligibilityEnrollment & { id?: string; current_step?: number }) | null;
 
   const since = new Date(Date.now() - RECENT_EMAIL_DAYS * 86_400_000).toISOString();
-  const { data: sent, error: sentErr } = await service.from('email_logs').select('lead_id')
+  const { data: sent, error: sentErr } = await service.from('email_logs').select('lead_id, sequence_enrollment_id')
     .eq('org_id', ctx.run.org_id).eq('status', 'sent').gte('sent_at', since).ilike('to_email', escapeLike(recipient.email)).limit(20);
   if (sentErr) return failed('recent emails to this address');
   const { count: optedOut, error: ooErr } = await service.from('leads').select('id', { count: 'exact', head: true })
@@ -75,7 +77,7 @@ export async function lastMinuteCheck(ctx: PipelineContext, recipient: Recipient
     recipientBlocked: isRecipientBlocked(recipient.email, blocked),
     enrolmentChanged: !sameEnrolment(ctx.enrollment, enrollment), stepAlreadySent: stepSent,
     // Earlier steps of this lead's own sequence are expected (stepAlreadySent above catches a replay); anything else sent to this address is not.
-    recentlyEmailed: ((sent ?? []) as { lead_id: string | null }[]).some((r) => !(ctx.enrollment && r.lead_id === ctx.lead.id)),
+    recentlyEmailed: ((sent ?? []) as { lead_id: string | null; sequence_enrollment_id: string | null }[]).some((r) => !isOwnSequenceEmail(r, ctx.lead.id, ctx.enrollment?.id)),
     optedOutLeadHasAddress: (optedOut ?? 0) > 0, candidateRemoved,
   }, skipReasonFor);
   if (block) return { skip: block };

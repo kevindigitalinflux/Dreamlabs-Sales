@@ -37,6 +37,8 @@ export { isPrivateOrLoopbackHost, parseSafeWebsiteUrl, resolveSafeRedirect };
 import { cancelBody, readCapped } from './cappedBody.ts';
 
 const MAX_REDIRECTS = 3;
+/** Default cap for the contact scrape (research page fetches keep the smaller MAX_BODY_BYTES). */
+export const CONTACT_MAX_BYTES = 1_500_000;
 
 /**
  * Best-effort: fetch a business website and pull a plausible contact email
@@ -46,6 +48,8 @@ const MAX_REDIRECTS = 3;
  */
 export async function scrapeWebsiteContact(
   website: string | null | undefined,
+  /** Most bytes of the page to read. Contact details often sit in a footer, so this is larger than the research fetch cap. */
+  maxBytes: number = CONTACT_MAX_BYTES,
 ): Promise<{ email: string | null; phone: string | null }> {
   if (!website) return { email: null, phone: null };
   let url = parseSafeWebsiteUrl(website);
@@ -65,7 +69,7 @@ export async function scrapeWebsiteContact(
         continue;
       }
       if (!res.ok) { await cancelBody(res); return { email: null, phone: null }; }
-      const html = await readCapped(res, controller.signal);
+      const html = await readCapped(res, controller.signal, maxBytes);
       return { email: extractEmail(html), phone: extractPhone(html) };
     }
     return { email: null, phone: null };

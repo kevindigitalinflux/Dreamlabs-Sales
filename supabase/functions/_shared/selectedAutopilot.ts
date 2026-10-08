@@ -2,6 +2,9 @@
 // The heavy per-lead work lives in selectedLeadPipeline.ts (Task 12b).
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { classifyLead, endOfLocalDay, windowBounds, type EligibilityEnrollment, type EligibilityLead } from './autopilotEligibility.ts';
+import { markLogInterrupted } from './interruptedSend.ts';
+import { loadSenderMailbox } from './sendLeadEmail.ts';
+import { plainReason } from './selectedLeadPipelineRules.ts';
 import { processLeadPipeline, type PipelineContext, type PipelineOutcome } from './selectedLeadPipeline.ts';
 import {
   STUCK_SEND_REASON, canStartLead, decideRunState, shouldWaitBetweenLeads, skipReasonFor, stuckRowAction, truncateError, type RunDecision,
@@ -147,7 +150,7 @@ async function claimOne(service: SupabaseClient, runId: string): Promise<RunLead
   return null;
 }
 
-type StuckRow = { id: string; claimed_at: string | null; send_started_at: string | null };
+type StuckRow = { id: string; claimed_at: string | null; send_started_at: string | null; email_log_id?: string | null };
 
 /** Applies the stuck-row decision. On a live run a never-sent row is requeued; on an ended run it becomes not_reached. A row whose send began is always failed. */
 async function applyStuck(service: SupabaseClient, rows: StuckRow[], runEnded: boolean): Promise<void> {
@@ -160,20 +163,31 @@ async function applyStuck(service: SupabaseClient, rows: StuckRow[], runEnded: b
       : runEnded ? { status: 'not_reached', reason: 'Run ended before this lead was processed' } : { status: 'queued', claimed_at: null };
     const { error } = await service.from('autopilot_run_leads').update({ ...patch, updated_at: nowIso() }).eq('id', r.id).eq('status', 'working');
     if (error) console.error('recover stuck row failed');
+    // The send may or may not have been delivered: the leftover draft must not be releasable.
+    else if (action === 'fail') await markLogInterrupted(service, r.email_log_id);
   }
 }
 
 /** Rows stuck in working >10min on this active run. */
 async function recoverStuckRows(service: SupabaseClient, runId: string): Promise<void> {
-  const { data } = await service.from('autopilot_run_leads').select('id, claimed_at, send_started_at').eq('run_id', runId).eq('status', 'working');
+  const { data } = await service.from('autopilot_run_leads').select('id, claimed_at, send_started_at, email_log_id').eq('run_id', runId).eq('status', 'working');
   await applyStuck(service, (data ?? []) as StuckRow[], false);
 }
 
 /** Rows stuck in working on runs that are no longer active (window closed, then the worker died). */
 async function recoverEndedRunRows(service: SupabaseClient): Promise<void> {
-  const { data } = await service.from('autopilot_run_leads').select('id, claimed_at, send_started_at, autopilot_runs!inner(status)')
+  const { data } = await service.from('autopilot_run_leads').select('id, claimed_at, send_started_at, email_log_id, autopilot_runs!inner(status)')
     .eq('status', 'working').neq('autopilot_runs.status', 'active');
   await applyStuck(service, (data ?? []) as StuckRow[], true);
+  // Queued rows have no work in flight: once their run has ended (finished, stopped or cancelled) they will never run.
+  const { data: queued } = await service.from('autopilot_run_leads').select('id, autopilot_runs!inner(status)')
+    .eq('status', 'queued').neq('autopilot_runs.status', 'active');
+  const ids = ((queued ?? []) as { id: string }[]).map((q) => q.id);
+  if (ids.length > 0) {
+    const { error } = await service.from('autopilot_run_leads')
+      .update({ status: 'not_reached', reason: 'Run ended before this lead was processed', updated_at: nowIso() }).in('id', ids).eq('status', 'queued');
+    if (error) console.error('mark queued rows of ended runs failed');
+  }
 }
 
 /** Fresh read of the run and row counts, then the pure decision. `run` is null when the run is gone or no longer an active selected run. */
@@ -195,8 +209,13 @@ export async function processRun(service: SupabaseClient, run: SelectedRun, star
   const bounds = computeBounds(run);
   if (!bounds) { await cancelRun(service, run.id, 'Invalid send window'); return; }
 
-  const { data: member } = await service.from('org_members').select('user_id').eq('org_id', run.org_id).eq('user_id', run.created_by).maybeSingle();
+  const { data: member, error: memberErr } = await service.from('org_members').select('user_id').eq('org_id', run.org_id).eq('user_id', run.created_by).maybeSingle();
+  if (memberErr) { console.error('run-selected-autopilot: could not check the run creator, will retry next tick'); return; }
   if (!member) { await cancelRun(service, run.id, 'Run creator is no longer a member of this organization'); return; }
+
+  // The sender mailbox must be verified before any lead is touched; otherwise every send would fail and burn research cost.
+  const mailbox = await loadSenderMailbox(service, run.created_by);
+  if (!mailbox.ok) { await cancelRun(service, run.id, plainReason(mailbox.error)); return; }
 
   await recoverStuckRows(service, run.id);
   const budget = { budgetMs: WALL_BUDGET_MS, reserveMs: LEAD_RESERVE_MS };

@@ -1,4 +1,5 @@
 import { Input, SelectField } from '../ui/Input';
+import { MAX_DAILY_SEND_CAP } from '../../lib/selectableLeads';
 
 export interface WindowValues {
   start: string;
@@ -31,7 +32,7 @@ export function WindowFields({ value, onChange, windowError }: Props) {
       <SelectField label="Timezone" value={value.timeZone} onChange={(e) => set({ timeZone: e.target.value })}>
         {zones.map((z) => <option key={z} value={z}>{z}</option>)}
       </SelectField>
-      <Input label="Cold outreach sends per day" type="number" value={String(value.dailySendCap)} onChange={(e) => set({ dailySendCap: Math.max(1, Math.min(100, Number(e.target.value) || 1)) })} />
+      <Input label="Cold outreach sends per day" type="number" value={String(value.dailySendCap)} onChange={(e) => set({ dailySendCap: Math.max(1, Math.min(MAX_DAILY_SEND_CAP + 1, Number(e.target.value) || 1)) })} />
       <Input label="Optional total spend cap ($)" type="number" value={value.spendCap} onChange={(e) => set({ spendCap: e.target.value })} placeholder="No cap" />
     </div>
   );

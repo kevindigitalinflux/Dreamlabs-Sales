@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyDraftResolution, countOpenNeedsInput, needsInputResolution, shouldEnrolAfterSend, countRunLeads, formatWindowDate, RUN_LEAD_GROUP_ORDER, groupKeyFor, groupRunLeads, runFinishNote, runStatusLabel } from './runLeadGroups';
+import { applyDraftResolution, countOpenNeedsInput, needsInputResolution, shouldEnrolAfterSend, enrolmentActionAfterSend, countRunLeads, formatWindowDate, RUN_LEAD_GROUP_ORDER, groupKeyFor, groupRunLeads, runFinishNote, runStatusLabel } from './runLeadGroups';
 
 const row = (id: string, status: string, updated_at = '2026-10-08T10:00:00Z', reason: string | null = null) => ({ id, status, updated_at, reason });
 
@@ -112,5 +112,25 @@ describe('needs-input resolution', () => {
     expect(shouldEnrolAfterSend({ logStatus: 'sent', sequenceId: 's1', hasActiveEnrollment: true })).toBe(false);
     expect(shouldEnrolAfterSend({ logStatus: 'draft', sequenceId: 's1', hasActiveEnrollment: false })).toBe(false);
     expect(shouldEnrolAfterSend({ logStatus: undefined, sequenceId: 's1', hasActiveEnrollment: false })).toBe(false);
+  });
+});
+
+describe('enrolmentActionAfterSend', () => {
+  const base = { logStatus: 'sent' as string | undefined, sequenceId: 's1' as string | null, logEnrollmentId: null as string | null, existing: null as { id: string; status: string } | null };
+  it('advances an active enrolment the draft was linked to', () => {
+    expect(enrolmentActionAfterSend({ ...base, logEnrollmentId: 'e1', existing: { id: 'e1', status: 'active' } })).toBe('advance');
+  });
+  it('leaves a paused, unrelated or unlinked enrolment alone', () => {
+    expect(enrolmentActionAfterSend({ ...base, logEnrollmentId: 'e1', existing: { id: 'e1', status: 'paused' } })).toBe('none');
+    expect(enrolmentActionAfterSend({ ...base, logEnrollmentId: 'e2', existing: { id: 'e1', status: 'active' } })).toBe('none');
+    expect(enrolmentActionAfterSend({ ...base, existing: { id: 'e1', status: 'active' } })).toBe('none');
+  });
+  it('enrols only when there is no enrolment and a sequence', () => {
+    expect(enrolmentActionAfterSend(base)).toBe('enrol');
+    expect(enrolmentActionAfterSend({ ...base, sequenceId: null })).toBe('none');
+  });
+  it('does nothing unless the draft was sent', () => {
+    expect(enrolmentActionAfterSend({ ...base, logStatus: 'draft' })).toBe('none');
+    expect(enrolmentActionAfterSend({ ...base, logStatus: undefined })).toBe('none');
   });
 });

@@ -158,9 +158,9 @@ const TRAILING = new Set(['.', ',', ';', ':', '!', '?', ')', ']', '}', '>']);
 const trimEnd = (s: string): string => { let i = s.length; while (i > 0 && TRAILING.has(s[i - 1]!)) i--; return s.slice(0, i); };
 const trimSlashes = (s: string): string => { let i = s.length; while (i > 0 && s[i - 1] === '/') i--; return s.slice(0, i); };
 const domainKey = (token: string) => trimSlashes(trimEnd(token).toLowerCase().replace(/^www\./, ''));
-/** NFKC (fullwidth forms to ASCII), ideographic full stops to dots, then zero width characters and soft hyphens removed. */
+/** NFKC (fullwidth forms to ASCII), ideographic full stops to dots, then zero width characters, soft hyphens and bidi control characters removed. */
 const normalise = (text: string): string =>
-  text.normalize('NFKC').replace(/[。｡．]/g, '.').replace(/[​‌‍⁠﻿­]/g, '');
+  text.normalize('NFKC').replace(/[。｡．]/g, '.').replace(/[​‌‍⁠﻿­‎‏‪-‮⁦-⁩]/g, '');
 
 /** Splits text into URLs, then email addresses, then bare domains (each pass removes what it found, so nothing is counted twice). */
 function extractTokens(raw: string): { urls: string[]; emails: string[]; domains: string[] } {
@@ -307,4 +307,9 @@ export function placesDerivedWebsiteBlock(p: { websiteWasOnLead: boolean; websit
     return 'Found a website and contact; please confirm they belong to this business before sending';
   }
   return null;
+}
+
+/** An earlier email is a normal part of this lead's own sequence only if it is linked to the lead's CURRENT enrolment. */
+export function isOwnSequenceEmail(log: { lead_id: string | null; sequence_enrollment_id: string | null }, leadId: string, enrolmentId: string | null | undefined): boolean {
+  return !!enrolmentId && log.lead_id === leadId && log.sequence_enrollment_id === enrolmentId;
 }

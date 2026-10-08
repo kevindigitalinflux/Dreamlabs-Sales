@@ -85,9 +85,18 @@ describe('scrapeWebsiteContact redirects', () => {
     expect(await scrapeWebsiteContact('https://example.com')).toEqual(EMPTY);
   });
 
-  it('reads at most ~300 KB of the body', async () => {
-    const big = 'a'.repeat(400_000) + ' late@acme.co.uk';
-    stubFetch([() => page(big)]);
+  it('reads up to 1.5 MB by default, so a footer address after 400 KB is found', async () => {
+    stubFetch([() => page('a'.repeat(400_000) + ' late@acme.co.uk')]);
+    expect((await scrapeWebsiteContact('https://example.com')).email).toBe('late@acme.co.uk');
+  });
+
+  it('stops at the default cap', async () => {
+    stubFetch([() => page('a'.repeat(1_600_000) + ' late@acme.co.uk')]);
     expect((await scrapeWebsiteContact('https://example.com')).email).toBeNull();
+  });
+
+  it('honours an explicit maxBytes', async () => {
+    stubFetch([() => page('a'.repeat(400_000) + ' late@acme.co.uk')]);
+    expect((await scrapeWebsiteContact('https://example.com', 300_000)).email).toBeNull();
   });
 });

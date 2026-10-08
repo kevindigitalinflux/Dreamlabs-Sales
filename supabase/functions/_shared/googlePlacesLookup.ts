@@ -76,8 +76,9 @@ export async function lookupPlaceContact(businessName: string, city: string | nu
     const phone = details.result?.formatted_phone_number ?? null;
     console.log(`places details "${match.name}": status=${details.status ?? '?'} website=${website ? 'yes' : 'no'} phone=${phone ? 'yes' : 'no'}`);
     return website || phone ? { website, phone } : null;
-  } catch (e) {
-    console.warn(`places lookup failed for "${businessName}":`, e instanceof Error ? e.message : e);
+  } catch {
+    // Never log the error text: Deno network errors can include the request URL, which carries the API key.
+    console.warn('places lookup failed (network error or timeout)');
     return null;
   }
 }

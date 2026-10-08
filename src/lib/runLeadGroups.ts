@@ -174,3 +174,20 @@ export function countOpenNeedsInput(
 export function shouldEnrolAfterSend(opts: { logStatus: string | undefined; sequenceId: string | null; hasActiveEnrollment: boolean }): boolean {
   return opts.logStatus === 'sent' && opts.sequenceId !== null && !opts.hasActiveEnrollment;
 }
+
+/**
+ * What to do with the lead's sequence after a person sent a parked autopilot draft:
+ * - 'advance': an ACTIVE enrolment exists and the draft was linked to it (it was that enrolment's current step), so move it on;
+ * - 'enrol': there is no active or paused enrolment and the row has a sequence, so enrol at step 2;
+ * - 'none': anything else (not sent, a paused or unrelated enrolment, no sequence).
+ */
+export function enrolmentActionAfterSend(opts: {
+  logStatus: string | undefined;
+  sequenceId: string | null;
+  logEnrollmentId: string | null;
+  existing: { id: string; status: string } | null;
+}): 'advance' | 'enrol' | 'none' {
+  if (opts.logStatus !== 'sent') return 'none';
+  if (opts.existing) return opts.existing.status === 'active' && opts.logEnrollmentId === opts.existing.id ? 'advance' : 'none';
+  return opts.sequenceId ? 'enrol' : 'none';
+}

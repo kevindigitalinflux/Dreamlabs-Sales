@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canCreatorViewLead, canSendNow, chooseTemplate, fillBlankPatch, followUpNote, isRecipientBlocked, nextEnrollmentState,
   placeholderReason, plainReason, recipientVarOverrides, senderFirstName, unfilledPlaceholderNames, recipientLabel, unexpectedLinksOrAddresses,
-  withUnsubscribeLine, isUsableUnsubscribeUrl, hasStrayPlaceholder, emailMatchesWebsiteDomain, canSendToFoundEmail, firstSendBlock, sameEnrolment,
+  withUnsubscribeLine, isUsableUnsubscribeUrl, isOwnSequenceEmail, hasStrayPlaceholder, emailMatchesWebsiteDomain, canSendToFoundEmail, firstSendBlock, sameEnrolment,
 } from '../../supabase/functions/_shared/selectedLeadPipelineRules';
 import { stepAlreadySent, placesDerivedWebsiteBlock, FREE_MAIL_DOMAINS } from '../../supabase/functions/_shared/selectedLeadPipelineRules';
 import { publicAppUrl } from '../../supabase/functions/_shared/appUrl';
@@ -394,5 +394,24 @@ describe('more free mail domains', () => {
       expect(FREE_MAIL_DOMAINS.has(d)).toBe(true);
       expect(emailMatchesWebsiteDomain(`a@${d}`, d)).toBe(false);
     }
+  });
+});
+
+describe('bidi control characters', () => {
+  const codes = [0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069];
+  it.each(codes)('are stripped before link detection (U+%i)', (code) => {
+    const c = String.fromCharCode(code);
+    expect(unexpectedLinksOrAddresses('x', 'Visit ev' + c + 'il.com', [])).toEqual(['evil.com']);
+  });
+});
+
+describe('isOwnSequenceEmail', () => {
+  const log = (lead_id: string | null, sequence_enrollment_id: string | null) => ({ lead_id, sequence_enrollment_id });
+  it('only counts emails linked to the lead own current enrolment', () => {
+    expect(isOwnSequenceEmail(log('l1', 'e1'), 'l1', 'e1')).toBe(true);
+    expect(isOwnSequenceEmail(log('l1', null), 'l1', 'e1')).toBe(false);
+    expect(isOwnSequenceEmail(log('l1', 'e0'), 'l1', 'e1')).toBe(false);
+    expect(isOwnSequenceEmail(log('l2', 'e1'), 'l1', 'e1')).toBe(false);
+    expect(isOwnSequenceEmail(log('l1', 'e1'), 'l1', undefined)).toBe(false);
   });
 });

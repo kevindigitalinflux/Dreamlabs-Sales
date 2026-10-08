@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupSelectableLeads, mapRunInsertError, pruneSelection, selectionState, setIds, spendCapToCents, validateCaps, validateWindow } from './selectableLeads';
+import { emailGateMessage, groupSelectableLeads, mapRunInsertError, pruneSelection, selectionState, setIds, spendCapToCents, validateCaps, validateWindow } from './selectableLeads';
 import type { Lead, Pipeline } from '../types';
 
 const now = new Date('2026-10-07T10:00:00.000Z');
@@ -80,5 +80,18 @@ describe('caps', () => {
     expect(spendCapToCents('')).toBeNull();
     expect(spendCapToCents('0')).toBeNull();
     expect(spendCapToCents('12.5')).toBe(1250);
+  });
+});
+
+describe('daily cap upper bound and email gate', () => {
+  it('rejects more than the maximum with a plain message', () => {
+    expect(validateCaps(200, '')).toBeNull();
+    expect(validateCaps(201, '')).toBe('Daily sends cannot be more than 200');
+  });
+  it('blocks only when the mailbox is missing or unverified', () => {
+    expect(emailGateMessage('unknown')).toBeNull();
+    expect(emailGateMessage({ verified: true })).toBeNull();
+    expect(emailGateMessage({ verified: false })).toContain('verify your email');
+    expect(emailGateMessage(null)).toContain('Set up and verify');
   });
 });

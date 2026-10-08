@@ -14,3 +14,7 @@ verify_jwt = false
 
 [functions.apollo-phone-webhook]
 verify_jwt = false
+
+# The cron request carries only x-cron-secret (no Authorization header); the function authenticates both actions itself.
+[functions.run-selected-autopilot]
+verify_jwt = false

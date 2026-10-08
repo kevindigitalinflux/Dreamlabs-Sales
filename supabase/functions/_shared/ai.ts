@@ -27,9 +27,17 @@ function orgDescriptionLine(orgName: string, companyContext: string | null | und
     : `You are a sales assistant for ${orgName}.`;
 }
 
+/**
+ * fetch for Gemini URLs, which carry the API key in the query string. Deno network errors can echo the request URL,
+ * so a failure is rethrown with a fixed message: the key must never reach a log or an error text.
+ */
+async function geminiFetch(url: string, init: RequestInit): Promise<Response> {
+  try { return await fetch(url, init); } catch { throw new Error('Gemini request failed (network error or timeout)'); }
+}
+
 /** `timeoutMs` is optional; when set, the whole call (including reading the reply) is aborted after it. */
 export async function geminiJson(prompt: string, apiKey: string, timeoutMs?: number): Promise<unknown> {
-  const res = await fetch(`${GEMINI_URL}/${AI_MODEL}:generateContent?key=${apiKey}`, {
+  const res = await geminiFetch(`${GEMINI_URL}/${AI_MODEL}:generateContent?key=${apiKey}`, {
     method: 'POST',
     signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
     headers: { 'Content-Type': 'application/json' },
@@ -53,7 +61,7 @@ export async function geminiJson(prompt: string, apiKey: string, timeoutMs?: num
  */
 export async function geminiGroundedSearch(prompt: string, apiKey: string, timeoutMs = 25000): Promise<{ text: string; sources: string[] }> {
   if (!apiKey) return { text: '', sources: [] };
-  const res = await fetch(`${GEMINI_URL}/${AI_MODEL}:generateContent?key=${apiKey}`, {
+  const res = await geminiFetch(`${GEMINI_URL}/${AI_MODEL}:generateContent?key=${apiKey}`, {
     method: 'POST',
     signal: AbortSignal.timeout(timeoutMs),
     headers: { 'Content-Type': 'application/json' },

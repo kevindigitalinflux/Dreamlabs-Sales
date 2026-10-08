@@ -12,10 +12,12 @@ interface NeedsInputRowProps {
   onChanged: (followUpError: string | null, sentConfirmed: boolean) => void;
   /** Re-runs the draft status lookup. */
   onRetry: () => void;
+  /** True only for the person who started the run: the draft is sent from their mailbox. */
+  canReview: boolean;
 }
 
 /** The action on a "Needs your input" row: review and send the parked draft, or open the lead when there is none. */
-export function NeedsInputRow({ row, onChanged, onRetry }: NeedsInputRowProps) {
+export function NeedsInputRow({ row, onChanged, onRetry, canReview }: NeedsInputRowProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<{ lead: Lead; log: EmailLog } | null>(null);
@@ -27,6 +29,7 @@ export function NeedsInputRow({ row, onChanged, onRetry }: NeedsInputRowProps) {
   if (row.resolution === 'lookup_failed') {
     return <Button variant="secondary" onClick={onRetry}>Could not check this draft, try again</Button>;
   }
+  if (!canReview) return <span className="text-sm text-muted">Waiting for the person who started this run</span>;
   const logId = row.email_log_id;
 
   async function start() {
