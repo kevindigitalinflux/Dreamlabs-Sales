@@ -204,6 +204,71 @@ describe('pickRecipient', () => {
   });
 });
 
+describe('pickRecipient with primary and general contacts', () => {
+  it('lets a usable primary beat a more senior person', () => {
+    const r = pickRecipient('lead@x.com', [
+      { id: 'boss', title: 'Managing Director', email: 'boss@x.com' },
+      { id: 'prim', title: 'Clerk', email: 'Prim@x.com', is_primary: true },
+    ]);
+    expect(r).toEqual({ email: 'prim@x.com', candidateId: 'prim' });
+  });
+
+  it('skips a primary that is dismissed or has no valid email', () => {
+    const r = pickRecipient(null, [
+      { id: 'd', title: 'Clerk', email: 'd@x.com', is_primary: true, dismissed_at: '2026-10-01T00:00:00Z' },
+      { id: 'n', title: 'Clerk', email: 'nope', is_primary: true },
+      { id: 'b', title: 'Owner', email: 'b@x.com' },
+    ]);
+    expect(r).toEqual({ email: 'b@x.com', candidateId: 'b' });
+  });
+
+  it('ranks named people above a general contact, even with a more senior looking title', () => {
+    const r = pickRecipient('lead@x.com', [
+      { id: 'g', kind: 'general', title: 'Director', email: 'info@x.com' },
+      { id: 'p', kind: 'person', title: 'Clerk', email: 'p@x.com' },
+    ]);
+    expect(r?.candidateId).toBe('p');
+  });
+
+  it('lets a general contact marked primary win over people', () => {
+    const r = pickRecipient('lead@x.com', [
+      { id: 'p', kind: 'person', title: 'Owner', email: 'p@x.com' },
+      { id: 'g', kind: 'general', title: null, email: 'info@x.com', is_primary: true },
+    ]);
+    expect(r).toEqual({ email: 'info@x.com', candidateId: 'g' });
+  });
+
+  it('uses a curated general contact before the lead own email', () => {
+    const r = pickRecipient('lead@x.com', [{ id: 'g', kind: 'general', title: null, email: 'acc@x.com', label: 'Accounts' }]);
+    expect(r?.candidateId).toBe('g');
+  });
+
+  it('ranks the lead own email above migrated Additional email rows', () => {
+    const r = pickRecipient('lead@x.com', [
+      { id: 'g', kind: 'general', title: null, email: 'extra@x.com', label: 'Additional email' },
+    ]);
+    expect(r).toEqual({ email: 'lead@x.com', candidateId: null });
+    const manual = pickRecipient('lead@x.com', [
+      { id: 'g', kind: 'general', title: null, email: 'extra@x.com', label: 'X', source: 'manual', include_in_sequences: false },
+    ]);
+    expect(manual).toEqual({ email: 'lead@x.com', candidateId: null });
+  });
+
+  it('keeps a primary legacy row above the lead own email', () => {
+    const r = pickRecipient('lead@x.com', [
+      { id: 'g', kind: 'general', title: null, email: 'extra@x.com', label: 'Additional email', is_primary: true },
+    ]);
+    expect(r?.candidateId).toBe('g');
+  });
+
+  it('falls back to a legacy row when the lead has no valid email', () => {
+    const r = pickRecipient(null, [
+      { id: 'g', kind: 'general', title: null, email: 'extra@x.com', label: 'Additional email' },
+    ]);
+    expect(r).toEqual({ email: 'extra@x.com', candidateId: 'g' });
+  });
+});
+
 describe('whitespace-only ids', () => {
   it('are treated as missing', () => {
     expect(pickSequence({ ...base, enrolledSequenceId: '  ', aiPickedId: 's2' })).toBe('s2');

@@ -59,13 +59,36 @@ export function pickSequence(input: {
 }
 
 /**
- * Chooses who an email goes to. Candidates with a plausible email (and not
- * dismissed) are ranked by tiered seniority of title: owner/founder/MD/CEO,
- * then director, then head/manager, then everyone else (assistant, deputy,
- * associate, account and non-executive titles are demoted to the last tier).
- * Ties keep input order. Otherwise falls back to the lead's own email if
- * valid, else null. Emails are returned trimmed and lowercased; `candidateId`
- * is null when the lead's own email is used.
+ * True for a general contact copied over from the old "additional emails" list
+ * (label 'Additional email') or a manual general row excluded from sequences.
+ * These rank below the lead's own email. Keep in sync with `_shared/contacts.ts`.
+ */
+function isLegacyGeneral(c: {
+  kind?: string;
+  label?: string | null;
+  source?: string;
+  include_in_sequences?: boolean;
+}): boolean {
+  if (c.kind !== 'general') return false;
+  if ((c.label ?? '').trim().toLowerCase() === 'additional email') return true;
+  return c.source === 'manual' && c.include_in_sequences === false;
+}
+
+/**
+ * Chooses who an email goes to. Order of preference:
+ * 1. A usable contact marked `is_primary` (person or general inbox).
+ * 2. The most senior named person with a plausible email, by tiered seniority
+ *    of title: owner/founder/MD/CEO, then director, then head/manager, then
+ *    everyone else (assistant, deputy, associate, account and non-executive
+ *    titles are demoted to the last tier). Ties keep input order. A candidate
+ *    without `kind` counts as a person.
+ * 3. A general inbox the user added themselves (first in input order).
+ * 4. The lead's own email, if valid.
+ * 5. A migrated legacy general row ('Additional email' or manual and excluded
+ *    from sequences), then null.
+ * Dismissed candidates and candidates without a plausible email are skipped.
+ * Emails are returned trimmed and lowercased; `candidateId` is null when the
+ * lead's own email is used.
  */
 export function pickRecipient(
   leadEmail: string | null,
@@ -74,19 +97,39 @@ export function pickRecipient(
     title: string | null;
     email: string | null;
     dismissed_at?: string | null;
+    is_primary?: boolean;
+    kind?: string;
+    label?: string | null;
+    source?: string;
+    include_in_sequences?: boolean;
   }[],
 ): { email: string; candidateId: string | null } | null {
-  let best: { id: string; email: string; tier: number } | null = null;
+  let primary: { id: string; email: string } | null = null;
+  let person: { id: string; email: string; tier: number } | null = null;
+  let curated: { id: string; email: string } | null = null;
+  let legacy: { id: string; email: string } | null = null;
   for (const c of candidates) {
     if (c.dismissed_at != null) continue;
     const email = validEmail(c.email);
     if (!email) continue;
+    if (c.is_primary === true) {
+      if (!primary) primary = { id: c.id, email };
+      continue;
+    }
+    if (c.kind === 'general') {
+      if (isLegacyGeneral(c)) legacy = legacy ?? { id: c.id, email };
+      else curated = curated ?? { id: c.id, email };
+      continue;
+    }
     const tier = tierOf(c.title);
     // Strictly better only, so the first of equal tiers (input order) wins.
-    if (!best || tier < best.tier) best = { id: c.id, email, tier };
+    if (!person || tier < person.tier) person = { id: c.id, email, tier };
   }
-  if (best) return { email: best.email, candidateId: best.id };
+  if (primary) return { email: primary.email, candidateId: primary.id };
+  if (person) return { email: person.email, candidateId: person.id };
+  if (curated) return { email: curated.email, candidateId: curated.id };
 
   const own = validEmail(leadEmail);
-  return own ? { email: own, candidateId: null } : null;
+  if (own) return { email: own, candidateId: null };
+  return legacy ? { email: legacy.email, candidateId: legacy.id } : null;
 }
