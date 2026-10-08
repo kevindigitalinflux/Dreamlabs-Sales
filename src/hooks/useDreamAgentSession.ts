@@ -1,19 +1,45 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { applyLeadUpdate } from '../lib/leadUpdates';
 import type { LeadPatch } from '../lib/leadUpdates';
 import { sanitizeDreamAgentActions, splitContactPatch } from '../lib/dreamAgentActions';
 import { mergeAdditions } from '../lib/enrichmentGrouping';
+import { dismissDecisionMaker } from '../lib/dismissDecisionMaker';
+import { applyContactSteps } from '../lib/dreamAgentContactApply';
+import { isContactAction, planContactSteps } from '../lib/dreamAgentContacts';
+import type { ContactDraft, ContactIndex } from '../lib/dreamAgentContacts';
 import { useAuth } from './useAuth';
 import { useOrg } from './useOrg';
 import { useOrgPackages } from './useOrgPackages';
 import { useIcps } from './useIcps';
 import { usePersistedState } from './usePersistedState';
-import type { DreamAgentAction, DreamAgentUpdatePatch, Lead } from '../types';
+import type { DecisionMakerCandidate, DreamAgentAction, DreamAgentUpdatePatch, Lead } from '../types';
 
 const NO_MESSAGES: string[] = [];
 const NO_ACTIONS: DreamAgentAction[] = [];
 const NO_RESOLUTIONS: Record<number, ActionResolution> = {};
+const LEAD_CHUNK = 100;
+
+/** Outcome of the contact rows of the last apply, in plain English. */
+export interface ContactReport { failed: string[]; notes: string[] }
+const NO_REPORT: ContactReport = { failed: [], notes: [] };
+
+/** Reads the live (not dismissed) contacts of the given leads with the caller's own session, so row-level security applies. */
+async function fetchContacts(leadIds: string[]): Promise<ContactIndex | null> {
+  const index: ContactIndex = {};
+  for (let i = 0; i < leadIds.length; i += LEAD_CHUNK) {
+    const { data, error } = await supabase.from('decision_maker_candidates').select('*')
+      .in('lead_id', leadIds.slice(i, i + LEAD_CHUNK)).is('dismissed_at', null).order('created_at');
+    if (error) return null;
+    for (const row of (data as DecisionMakerCandidate[] | null) ?? []) (index[row.lead_id] ??= []).push(row);
+  }
+  return index;
+}
+
+function draftName(kind: 'person' | 'general', d: ContactDraft): string {
+  const person = [d.first_name, d.last_name].filter(Boolean).join(' ');
+  return (kind === 'person' ? person : d.label) || d.email || 'a contact';
+}
 
 export type ActionResolution =
   | { status: 'pending' }
@@ -22,7 +48,9 @@ export type ActionResolution =
   | { status: 'confirmed_create'; pipeline_id: string }
   | { status: 'confirmed_ambiguous_as_lead'; lead_id: string }
   | { status: 'confirmed_ambiguous_as_new'; business_name: string; pipeline_id: string }
-  | { status: 'confirmed_update_company_context'; edited_context: string };
+  | { status: 'confirmed_update_company_context'; edited_context: string }
+  /** An add_contact / update_contact row, with the values as the user left them in the row. */
+  | { status: 'confirmed_contact'; draft: ContactDraft };
 
 /**
  * Owns one Dream Agent conversation: the growing list of user messages (the
@@ -45,11 +73,25 @@ export function useDreamAgentSession() {
   const [resolutions, setResolutions] = usePersistedState<Record<number, ActionResolution>>(`dream-agent:resolutions:${storageScope}`, NO_RESOLUTIONS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Live contacts of the leads in play. Not persisted: it is re-read when the page returns to saved actions and again right before applying.
+  const [contactIndex, setContactIndex] = useState<ContactIndex>({});
+  const [contactReport, setContactReport] = useState<ContactReport>(NO_REPORT);
+  const restoredFor = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (restoredFor.current === storageScope) return;
+    restoredFor.current = storageScope;
+    const ids = [...new Set(actions.filter(isContactAction).map((a) => a.lead_id))];
+    if (ids.length === 0) return;
+    void fetchContacts(ids).then((idx) => { if (idx) setContactIndex(idx); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageScope]);
 
   const sendMessage = useCallback(async (text: string, matchPipelineId: string | null) => {
     if (!currentOrg || !text.trim()) return;
     setLoading(true);
     setError(null);
+    setContactReport(NO_REPORT);
     const nextMessages = [...messages, text.trim()];
     const { data, error: invokeErr } = await supabase.functions.invoke('parse-session-notes', {
       body: { org_id: currentOrg.id, pipeline_id: matchPipelineId, messages: nextMessages },
@@ -65,7 +107,12 @@ export function useDreamAgentSession() {
     if (matchPipelineId) query = query.eq('pipeline_id', matchPipelineId);
     const { data: leadRows } = await query;
     const validIds = new Set((leadRows ?? []).map((l) => l.id as string));
-    const sanitized = sanitizeDreamAgentActions(result.actions, validIds, packages.allowed, new Set(icps.map((p) => p.id)));
+    // Contacts: the function reads its own copy for the prompt; this client copy (same RLS) is what
+    // the sanitizer checks contact ids against. If it cannot be read, no update_contact survives
+    // (it needs the contact to exist); an add is still caught by the database's duplicate check.
+    const idx = (await fetchContacts([...validIds])) ?? {};
+    setContactIndex(idx);
+    const sanitized = sanitizeDreamAgentActions(result.actions, validIds, packages.allowed, new Set(icps.map((p) => p.id)), idx);
     setMessages(nextMessages);
     setActions(sanitized);
     setResolutions(Object.fromEntries(sanitized.map((_, i) => [i, { status: 'pending' } as ActionResolution])));
@@ -88,10 +135,44 @@ export function useDreamAgentSession() {
     return result;
   }
 
+  /**
+   * Applies the confirmed add_contact / update_contact rows, after the lead changes above. The affected
+   * leads' contacts are read fresh first, adds run before updates per lead, and each row succeeds or
+   * fails on its own. Rows that are invalid, or not confirmed, are never written.
+   */
+  const applyContacts = useCallback(async () => {
+    if (!session) return;
+    const items = actions.flatMap((action, index) => {
+      const resolution = resolutions[index];
+      if (!isContactAction(action) || action.invalid || resolution?.status !== 'confirmed_contact') return [];
+      return [{ action, index, draft: resolution.draft }];
+    });
+    if (items.length === 0) return;
+    const leadIds = [...new Set(items.map((i) => i.action.lead_id))];
+    const live = await fetchContacts(leadIds);
+    if (!live) { setContactReport({ failed: ['Contacts could not be saved because the current contacts could not be read. Please try again.'], notes: [] }); return; }
+    const steps = planContactSteps(items.map(({ action, index, draft }) => {
+      const kind = action.type === 'add_contact' ? action.kind : (live[action.lead_id] ?? []).find((c) => c.id === action.contact_id)?.kind ?? 'person';
+      return { index, type: action.type === 'add_contact' ? 'add' as const : 'update' as const, leadId: action.lead_id, contactId: action.type === 'update_contact' ? action.contact_id : undefined, kind, draft };
+    }));
+    const results = await applyContactSteps({ client: supabase, userId: session.user.id, dismiss: dismissDecisionMaker }, steps, live);
+    const report: ContactReport = { failed: [], notes: [] };
+    for (const r of results) {
+      const step = steps.find((x) => x.index === r.index);
+      const name = step ? draftName(step.kind, step.draft) : 'a contact';
+      if (!r.ok) report.failed.push(`Could not save ${name}: ${r.message ?? 'something went wrong'}`);
+      else if (r.message) report.notes.push(`${name}: ${r.message}`);
+    }
+    setContactReport(report);
+    const fresh = await fetchContacts(leadIds);
+    if (fresh) setContactIndex((prev) => ({ ...prev, ...Object.fromEntries(leadIds.map((id) => [id, fresh[id] ?? []])) }));
+  }, [actions, resolutions, session]);
+
   const confirmAll = useCallback(async () => {
     if (!currentOrg || !session) return;
     setLoading(true);
     setError(null);
+    setContactReport(NO_REPORT);
     for (let i = 0; i < actions.length; i += 1) {
       const action = actions[i];
       const resolution = resolutions[i];
@@ -162,11 +243,12 @@ export function useDreamAgentSession() {
         if (updateErr) { setError(updateErr.message); continue; }
       }
     }
+    await applyContacts();
     setLoading(false);
     setActions([]);
     setResolutions({});
     setMessages([]);
-  }, [actions, resolutions, currentOrg, session]);
+  }, [actions, resolutions, currentOrg, session, applyContacts]);
 
-  return { messages, actions, resolutions, loading, error, sendMessage, resolveAction, confirmAll };
+  return { messages, actions, resolutions, loading, error, contactIndex, contactReport, sendMessage, resolveAction, confirmAll };
 }

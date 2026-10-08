@@ -3,16 +3,15 @@ import { supabase } from '../lib/supabase';
 import { dismissDecisionMaker } from '../lib/dismissDecisionMaker';
 import { useAuth } from './useAuth';
 import { useOrg } from './useOrg';
-import {
-  SAVED_AS_OWN_MESSAGE, contactErrorMessage, editStrategy, isOwnSource, newContactRow, primarySwitchPlan, validateContactForm,
-} from '../lib/leadContacts';
+import { contactErrorMessage, isOwnSource } from '../lib/leadContacts';
 import type { ContactFormValues } from '../lib/leadContacts';
+import { addContactRow, setPrimaryContact, updateContactRow } from '../lib/contactWrites';
+import type { ContactResult, ContactWriteCtx } from '../lib/contactWrites';
 import type { DecisionMakerCandidate } from '../types';
 
 const TABLE = 'decision_maker_candidates';
 
-/** Result of a contact write: an error to show, or null (with an optional plain-English notice). */
-export interface ContactResult { error: string | null; notice?: string }
+export type { ContactResult };
 
 /**
  * A lead's live (non-dismissed) contacts, people and general inboxes together, kept
@@ -61,6 +60,16 @@ export function useLeadContacts(leadId: string) {
     setContacts((prev) => (prev.some((c) => c.id === row.id) ? prev.map((c) => (c.id === row.id ? row : c)) : [...prev, row]));
   }, []);
 
+  /** Write context for one action: local state is only touched while this lead/org is still the current one. */
+  const ctxFor = useCallback((): ContactWriteCtx => {
+    const mine = epoch.current;
+    return {
+      client: supabase, userId, dismiss: dismissDecisionMaker,
+      onRow: (row) => { if (mine === epoch.current) upsertLocal(row); },
+      onRemoved: (id) => setContacts((prev) => prev.filter((c) => c.id !== id)),
+    };
+  }, [userId, upsertLocal]);
+
   /** Updates columns on one row; returns the stored row or an error message. */
   const patchRow = useCallback(async (id: string, patch: Record<string, unknown>) => {
     const mine = epoch.current;
@@ -70,60 +79,22 @@ export function useLeadContacts(leadId: string) {
     return { row: data as DecisionMakerCandidate, error: null };
   }, [upsertLocal]);
 
-  const insertRow = useCallback(async (value: Parameters<typeof newContactRow>[2], include = true) => {
-    if (!userId) return { row: null, error: 'You need to be signed in to add a contact.' };
-    const mine = epoch.current;
-    const { data, error } = await supabase.from(TABLE).insert(newContactRow(leadId, userId, value, include)).select().single();
-    if (error) return { row: null, error: contactErrorMessage(error) };
-    if (mine === epoch.current) upsertLocal(data as DecisionMakerCandidate);
-    return { row: data as DecisionMakerCandidate, error: null };
-  }, [leadId, userId, upsertLocal]);
-
   /** Adds a person or general inbox typed by the user (source 'manual'). */
   const addContact = useCallback(async (form: ContactFormValues): Promise<ContactResult> => {
-    const v = validateContactForm(form);
-    if (!v.ok) return { error: v.error };
-    return { error: (await insertRow(v.value)).error };
-  }, [insertRow]);
+    const r = await addContactRow(ctxFor(), leadId, form);
+    return { error: r.error };
+  }, [ctxFor, leadId]);
 
   /** Sets the main contact: clears the old one first, restores it if setting the new one fails. */
-  const setPrimary = useCallback(async (id: string): Promise<ContactResult> => {
-    const plan = primarySwitchPlan(listRef.current, id);
-    if (!plan.set) return { error: null };
-    for (const oldId of plan.clear) {
-      const r = await patchRow(oldId, { is_primary: false });
-      if (r.error) return { error: r.error };
-    }
-    const r = await patchRow(plan.set, { is_primary: true });
-    if (!r.error) return { error: null };
-    let restoreFailed = false;
-    for (const oldId of plan.restore) if ((await patchRow(oldId, { is_primary: true })).error) restoreFailed = true;
-    return { error: restoreFailed
-      ? `${r.error}. Your previous main contact could not be restored, so no contact is marked as main. Choose one again.`
-      : `${r.error}. Your previous main contact was kept.` };
-  }, [patchRow]);
+  const setPrimary = useCallback(async (id: string): Promise<ContactResult> => (
+    setPrimaryContact(ctxFor(), listRef.current, id)
+  ), [ctxFor]);
 
   /** Saves an edit. Provider rows whose email (or obfuscated name) changes are dismissed and re-saved as a manual contact. */
   const updateContact = useCallback(async (contact: DecisionMakerCandidate, form: ContactFormValues): Promise<ContactResult> => {
-    const v = validateContactForm(form, contact.linkedin_url);
-    if (!v.ok) return { error: v.error };
-    if (editStrategy(contact, v.value) === 'inline') return { error: (await patchRow(contact.id, { ...v.value })).error };
-    const made = await insertRow(v.value, contact.include_in_sequences);
-    if (made.error || !made.row) return { error: made.error };
-    const dismissErr = await dismissDecisionMaker(contact.id);
-    if (dismissErr) {
-      const { error: delErr } = await supabase.from(TABLE).delete().eq('id', made.row.id);
-      if (delErr) return { error: 'A duplicate contact may exist; refresh and delete the extra one' };
-      setContacts((prev) => prev.filter((c) => c.id !== made.row?.id));
-      return { error: dismissErr };
-    }
-    setContacts((prev) => prev.filter((c) => c.id !== contact.id));
-    if (contact.is_primary) {
-      const p = await patchRow(made.row.id, { is_primary: true });
-      if (p.error) return { error: null, notice: `${SAVED_AS_OWN_MESSAGE}. It could not be made the main contact: ${p.error}` };
-    }
-    return { error: null, notice: SAVED_AS_OWN_MESSAGE };
-  }, [patchRow, insertRow]);
+    const r = await updateContactRow(ctxFor(), contact, form);
+    return r.notice ? { error: r.error, notice: r.notice } : { error: r.error };
+  }, [ctxFor]);
 
   /** Turns follow-up sequences on or off for one contact. */
   const setIncludeInSequences = useCallback(async (id: string, on: boolean): Promise<ContactResult> => (

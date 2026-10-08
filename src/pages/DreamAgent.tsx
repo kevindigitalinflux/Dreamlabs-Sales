@@ -20,7 +20,7 @@ import type { Lead } from '../types';
 export function DreamAgent() {
   const { currentOrg } = useOrg();
   const { currentPipeline, pipelines } = usePipeline();
-  const { messages, actions, resolutions, loading, error, sendMessage, resolveAction, confirmAll } = useDreamAgentSession();
+  const { messages, actions, resolutions, loading, error, contactIndex, contactReport, sendMessage, resolveAction, confirmAll } = useDreamAgentSession();
   const navigate = useNavigate();
   const location = useLocation();
   const [tab, setTab] = useState<'notes' | 'csv'>(() => ((location.state as { tab?: 'notes' | 'csv' } | null)?.tab === 'csv' ? 'csv' : 'notes'));
@@ -209,6 +209,7 @@ export function DreamAgent() {
             isOrgAdmin={currentOrg?.role === 'admin'}
             onResolve={(resolution) => resolveAction(i, resolution)}
             icpNames={icpNames}
+            contactsByLead={contactIndex}
             onPickLead={(leadId) => action.type === 'ambiguous' && void handleClarify(action.mentioned_text, leadId)}
           />
         ))}
@@ -222,6 +223,8 @@ export function DreamAgent() {
       </div>
 
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      {contactReport.failed.map((m) => <p key={m} role="alert" className="text-sm text-danger">{m}</p>)}
+      {contactReport.notes.map((m) => <p key={m} role="status" className="text-sm text-muted">{m}</p>)}
 
       <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4">
         <SelectField label="Match against" value={matchScope} onChange={(e) => setMatchScope(e.target.value)}>

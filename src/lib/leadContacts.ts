@@ -144,13 +144,15 @@ export function primarySwitchPlan(
  * Row to insert for a new manual contact (or a replacement for a provider row):
  * the validated values, with the sequence setting chosen by the caller. The primary
  * flag is always false here; it is applied afterwards so the one-primary index is
- * never violated. Provider columns are left at their defaults.
+ * never violated. Provider columns are left at their defaults. `source` is 'manual'
+ * unless Dream Agent is saving a row the user confirmed.
  */
 export function newContactRow(
   leadId: string,
   userId: string,
   value: ContactEditValue,
   includeInSequences = true,
+  source: 'manual' | 'dream_agent' = 'manual',
 ): Record<string, unknown> {
-  return { ...value, lead_id: leadId, source: 'manual', created_by: userId, include_in_sequences: includeInSequences, is_primary: false };
+  return { ...value, lead_id: leadId, source, created_by: userId, include_in_sequences: includeInSequences, is_primary: false };
 }

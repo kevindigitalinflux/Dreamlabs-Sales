@@ -1,4 +1,6 @@
 import { PACKAGE_TIERS } from './utils';
+import { createContactSanitizer } from './dreamAgentContacts';
+import type { ContactIndex } from './dreamAgentContacts';
 import type { AdditionalDetail } from './enrichmentGrouping';
 import type { DreamAgentAction, DreamAgentUpdatePatch, Lead, PackageTier, Stage } from '../types';
 
@@ -82,14 +84,24 @@ export function splitContactPatch(
  * single-lead parse-notes flow. `validLeadIds` is the exact set of lead ids sent
  * to the AI in the lead index; any lead_id/candidate id outside that set is
  * dropped, never trusted — the AI is never a source of truth for which leads exist.
+ * `contactIndex` is the live contacts the client holds per lead; add_contact/update_contact
+ * actions are whitelisted and validated against it (see createContactSanitizer), and
+ * without it no update_contact can survive.
  */
-export function sanitizeDreamAgentActions(raw: unknown, validLeadIds: Set<string>, allowedPackages: Set<PackageTier> = DEFAULT_PACKAGE_VALUES, allowedIcpIds: Set<string> = new Set()): DreamAgentAction[] {
+export function sanitizeDreamAgentActions(raw: unknown, validLeadIds: Set<string>, allowedPackages: Set<PackageTier> = DEFAULT_PACKAGE_VALUES, allowedIcpIds: Set<string> = new Set(), contactIndex: ContactIndex = {}): DreamAgentAction[] {
   if (!Array.isArray(raw)) return [];
   const actions: DreamAgentAction[] = [];
+  const sanitizeContact = createContactSanitizer(validLeadIds, contactIndex);
 
   for (const item of raw) {
     if (typeof item !== 'object' || item === null) continue;
     const r = item as Record<string, unknown>;
+
+    if (r.type === 'add_contact' || r.type === 'update_contact') {
+      const contactAction = sanitizeContact(r);
+      if (contactAction) actions.push(contactAction);
+      continue;
+    }
 
     if (r.type === 'update') {
       if (typeof r.lead_id !== 'string' || !validLeadIds.has(r.lead_id)) continue;

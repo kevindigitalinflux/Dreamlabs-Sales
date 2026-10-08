@@ -318,6 +318,16 @@ export interface DreamAgentUpdatePatch {
   vertical?: string;
 }
 
+/** The text fields of a contact Dream Agent proposes to add or change. */
+export interface DreamAgentContactFields {
+  first_name?: string;
+  last_name?: string;
+  title?: string;
+  label?: string;
+  email?: string;
+  phone?: string;
+}
+
 /** One proposed change from parse-session-notes. `lead_id`/`candidate_lead_ids`
  * always reference ids from the lead index the caller sent — never trust these
  * without validating against that same set client-side (see sanitizeDreamAgentActions
@@ -326,7 +336,11 @@ export type DreamAgentAction =
   | { type: 'update'; lead_id: string; business_name: string; patch: DreamAgentUpdatePatch; excerpt: string; rationale: string }
   | { type: 'create'; extracted: { business_name: string; owner_name: string | null; phone: string | null; email: string | null; website: string | null; city: string | null; vertical: string | null; address?: string | null; postcode?: string | null }; patch: DreamAgentUpdatePatch; excerpt: string; rationale: string }
   | { type: 'ambiguous'; mentioned_text: string; candidate_lead_ids: string[]; excerpt: string }
-  | { type: 'update_company_context'; proposed_context: string; excerpt: string; rationale: string };
+  | { type: 'update_company_context'; proposed_context: string; excerpt: string; rationale: string }
+  // Contact actions never carry source, created_by or an id for a new row: the app
+  // sets those. `invalid` is a plain-English reason the row cannot be applied as proposed.
+  | ({ type: 'add_contact'; lead_id: string; kind: 'person' | 'general'; make_primary?: boolean; include_in_sequences?: boolean; excerpt: string; rationale: string; invalid?: string } & DreamAgentContactFields)
+  | { type: 'update_contact'; lead_id: string; contact_id: string; patch: DreamAgentContactFields & { make_primary?: boolean }; excerpt: string; rationale: string; invalid?: string };
 
 export type ScrapeJobStatus = 'pending' | 'running' | 'completed' | 'failed';
 export type ScrapeSource = 'google_places' | 'companies_house' | 'cro' | 'csv_upload';

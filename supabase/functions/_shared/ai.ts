@@ -219,26 +219,23 @@ ${input.note}`,
   ) as Record<string, unknown>;
 }
 
-/**
- * Multi-lead note parsing: compares a whole conversation (original note + any
- * free-text refinements) against a lead index and proposes update/create/ambiguous/
- * update_company_context actions across however many leads (or the org itself) it
- * touches. Unlike parseNotes (one lead, one patch), this is genuinely one-to-many —
- * stateless like every AI call in this app, the caller resends the full conversation
- * each round rather than this function tracking any server-side state. Throws on
- * failure.
- */
-export async function parseSessionNotes(input: {
-  messages: string[]; leadIndex: { id: string; business_name: string; city: string | null; stage: string; icp_id?: string | null }[];
-  currentCompanyContext: string | null; customPackages?: string[] | null; profilesBlock?: string | null; apiKey: string;
-}): Promise<unknown> {
-  return await geminiJson(
-`You extract CRM actions from a sales rep's session notes. The rep may mention
+/** One lead in the Dream Agent's lead index; `contacts` is present only when the lead has usable ones. */
+export interface SessionLeadIndexEntry {
+  id: string; business_name: string; city: string | null; stage: string; icp_id?: string | null;
+  contacts?: { id: string; name_or_label: string; title: string | null; email: string; kind: 'person' | 'general'; is_primary: boolean }[];
+}
+
+/** The full parse-session-notes prompt (exported so tests can check what the AI is told). */
+export function buildSessionNotesPrompt(input: {
+  messages: string[]; leadIndex: SessionLeadIndexEntry[];
+  currentCompanyContext: string | null; customPackages?: string[] | null; profilesBlock?: string | null;
+}): string {
+  return `You extract CRM actions from a sales rep's session notes. The rep may mention
 multiple companies in one note, and may send follow-up messages correcting or
 clarifying an earlier one — always re-read the WHOLE conversation and produce a
 fresh, complete list of actions, not just what changed.
 
-For each company/person mentioned, decide one of four action types:
+For each company/person mentioned, decide one of these action types:
 1. "update" — confidently matches one of the leads in LEAD INDEX below. Output:
    {"type":"update","lead_id":<id from LEAD INDEX>,"business_name":<their name>,
    "patch":{<only fields that should change, keys from: stage (one of new_lead,
@@ -272,6 +269,39 @@ For each company/person mentioned, decide one of four action types:
    text that's still accurate>,"excerpt":<the relevant sentence(s) from the
    note>,"rationale":<one sentence explaining what changed>}
 
+5. "add_contact" — the note names a person, or a shared inbox, to contact at a lead
+   in LEAD INDEX who is NOT already in that lead's "contacts". Output:
+   {"type":"add_contact","lead_id":<id from LEAD INDEX>,"kind":"person" or "general",
+   "first_name":<string>,"last_name":<string>,"title":<their position, string>,
+   "label":<for a general inbox, e.g. "General reception" or "Accounts">,"email":<string>,
+   "phone":<string>,"make_primary":<true only if the note says to use her/him as the
+   person to email, or they are clearly the target>,"excerpt":<relevant text>,
+   "rationale":<one sentence>} (omit keys the note does not give)
+6. "update_contact" — the note adds or corrects details of a contact the lead
+   ALREADY has in its "contacts" (match by name or email). Output:
+   {"type":"update_contact","lead_id":<id from LEAD INDEX>,"contact_id":<id from that
+   lead's "contacts">,"patch":{<only changed keys from: first_name, last_name, title,
+   label, email, phone, make_primary (true only)>},"excerpt":<relevant text>,
+   "rationale":<one sentence>}
+
+CONTACT RULES (add_contact / update_contact):
+- Each lead in LEAD INDEX may carry "contacts": its current people and inboxes as
+  {"id","name_or_label","title","email","kind","is_primary"}. UPDATE an existing contact
+  instead of adding a duplicate: if the note names someone already listed (or gives an email
+  already listed), emit update_contact for it, never add_contact.
+- A person's own email goes on that person's contact (kind "person"), never on a general one.
+- A shared or general address (info@, london@, reception, accounts@) is a "general" contact
+  with a "label" such as "General reception"; it has no first_name or last_name.
+- "Follow up with her and reception" means both exist as contacts. Add whichever of them is
+  missing; it does NOT by itself change anything else on the lead.
+- Never invent an email, phone or name. Only use what the note states (or, for a person's
+  title, what the note or the lead's existing data states).
+- Example: the note "I found Andrea Manning's email andrea.manning@hok.com but I also want
+  to email london@hok.com for reception" gives TWO actions for that lead: add_contact
+  {"kind":"person","first_name":"Andrea","last_name":"Manning","email":"andrea.manning@hok.com",
+  "make_primary":true} (include "title" if the note or lead data gives it) and add_contact
+  {"kind":"general","email":"london@hok.com","label":"General reception"}.
+
 Only emit an action for something a genuine business update/mention was made about —
 do not invent actions for names that only appear in passing. Today is
 ${todayWithWeekday()}. Return a JSON array of actions (empty
@@ -289,9 +319,23 @@ ${input.profilesBlock}
 CURRENT COMPANY CONTEXT (empty if nothing set yet): ${input.currentCompanyContext ?? '(none set)'}
 
 CONVERSATION (each entry is one message from the rep, in order):
-${JSON.stringify(input.messages)}`,
-    input.apiKey,
-  );
+${JSON.stringify(input.messages)}`;
+}
+
+/**
+ * Multi-lead note parsing: compares a whole conversation (original note + any
+ * free-text refinements) against a lead index and proposes update/create/ambiguous/
+ * update_company_context/add_contact/update_contact actions across however many leads (or the org itself) it
+ * touches. Unlike parseNotes (one lead, one patch), this is genuinely one-to-many —
+ * stateless like every AI call in this app, the caller resends the full conversation
+ * each round rather than this function tracking any server-side state. Throws on
+ * failure.
+ */
+export async function parseSessionNotes(input: {
+  messages: string[]; leadIndex: SessionLeadIndexEntry[];
+  currentCompanyContext: string | null; customPackages?: string[] | null; profilesBlock?: string | null; apiKey: string;
+}): Promise<unknown> {
+  return await geminiJson(buildSessionNotesPrompt(input), input.apiKey);
 }
 
 /**

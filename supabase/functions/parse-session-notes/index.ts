@@ -1,8 +1,16 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { parseSessionNotes } from '../_shared/ai.ts';
+import type { SessionLeadIndexEntry } from '../_shared/ai.ts';
+import { promptContacts } from '../_shared/contacts.ts';
+import type { Contact } from '../_shared/contacts.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { formatProfilesForPrompt, loadOrgIcps } from '../_shared/icp.ts';
+
+// Contacts sent to the AI: at most this many per lead, and this many overall (payload size).
+const MAX_CONTACTS_PER_LEAD = 8;
+const MAX_CONTACTS_TOTAL = 1500;
+const LEAD_CHUNK = 100;
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -31,7 +39,7 @@ Deno.serve(async (req) => {
   if (body.pipeline_id) query = query.eq('pipeline_id', body.pipeline_id);
   const { data: leads, error: leadsErr } = await query;
   if (leadsErr) return json({ actions: [], error: leadsErr.message }, 400, headers);
-  const leadIndex = (leads ?? []).map((l) => ({ id: l.id as string, business_name: l.business_name as string, city: l.city as string | null, stage: l.stage as string, icp_id: (l.icp_id as string | null) ?? null }));
+  const leadIndex: SessionLeadIndexEntry[] = (leads ?? []).map((l) => ({ id: l.id as string, business_name: l.business_name as string, city: l.city as string | null, stage: l.stage as string, icp_id: (l.icp_id as string | null) ?? null }));
 
   // Same RLS-scoped client as the lead index above — any org member can read
   // this via organizations_member_read, needed so the AI can propose a coherent
@@ -52,6 +60,7 @@ Deno.serve(async (req) => {
   if (!apiKey) return json({ actions: [], error: 'AI unavailable' }, 200, headers);
 
   try {
+    await attachContacts(client, leadIndex);
     const profilesBlock = formatProfilesForPrompt(await loadOrgIcps(service, orgId));
     const actions = await parseSessionNotes({ messages, leadIndex, currentCompanyContext, customPackages, profilesBlock, apiKey });
     return json({ actions }, 200, headers);
@@ -60,3 +69,32 @@ Deno.serve(async (req) => {
     return json({ actions: [], error: 'AI unavailable' }, 200, headers);
   }
 });
+
+/**
+ * Adds each lead's usable contacts to the lead index (only leads that have any). Read
+ * with the caller's RLS client, like the leads themselves, in chunks so the query
+ * stays small. A failed read leaves the index without contacts: the app also drops
+ * a proposed contact whose email the lead already has, so this is not a safety gate.
+ */
+async function attachContacts(client: ReturnType<typeof createClient>, leadIndex: SessionLeadIndexEntry[]): Promise<void> {
+  const byLead = new Map<string, Contact[]>();
+  for (let i = 0; i < leadIndex.length; i += LEAD_CHUNK) {
+    const ids = leadIndex.slice(i, i + LEAD_CHUNK).map((l) => l.id);
+    const { data, error } = await client.from('decision_maker_candidates')
+      .select('id, lead_id, kind, first_name, last_name, title, label, email, phone, is_primary, include_in_sequences, dismissed_at, source')
+      .in('lead_id', ids).is('dismissed_at', null).order('created_at');
+    if (error) { console.error('parse-session-notes: contacts read failed:', error.message); return; }
+    for (const row of (data ?? []) as (Contact & { lead_id: string })[]) {
+      const list = byLead.get(row.lead_id) ?? [];
+      list.push(row);
+      byLead.set(row.lead_id, list);
+    }
+  }
+  let total = 0;
+  for (const lead of leadIndex) {
+    const contacts = promptContacts(byLead.get(lead.id) ?? [], MAX_CONTACTS_PER_LEAD);
+    if (contacts.length === 0 || total + contacts.length > MAX_CONTACTS_TOTAL) continue;
+    total += contacts.length;
+    lead.contacts = contacts;
+  }
+}

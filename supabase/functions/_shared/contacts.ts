@@ -294,3 +294,30 @@ export function validateContactEdit(
     },
   };
 }
+
+/** One of a lead's current contacts as shown to the Dream Agent prompt. */
+export interface PromptContact {
+  id: string;
+  name_or_label: string;
+  title: string | null;
+  email: string;
+  kind: 'person' | 'general';
+  is_primary: boolean;
+}
+
+/**
+ * A lead's usable contacts (not dismissed, plausible email) in the compact shape the
+ * Dream Agent prompt gets: the main contact first, then input order, at most `cap`.
+ */
+export function promptContacts(contacts: Contact[], cap = 8): PromptContact[] {
+  const usable = contacts.filter(isUsable);
+  usable.sort((a, b) => Number(b.is_primary) - Number(a.is_primary));
+  return usable.slice(0, Math.max(0, cap)).map((c) => ({
+    id: c.id,
+    name_or_label: contactDisplayName(c),
+    title: clean(c.title),
+    email: validEmail(c.email) as string,
+    kind: c.kind,
+    is_primary: c.is_primary,
+  }));
+}

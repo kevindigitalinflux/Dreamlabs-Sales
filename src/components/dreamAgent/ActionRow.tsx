@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { ArrowRight, Building2, Sparkles } from 'lucide-react';
 import { formatCurrency, packageLabel, stageInfo } from '../../lib/utils';
 import { splitContactPatch } from '../../lib/dreamAgentActions';
+import { ContactActionRow } from './ContactActionRow';
 import { Button } from '../ui/Button';
 import { SelectField, Textarea } from '../ui/Input';
 import type { ActionResolution } from '../../hooks/useDreamAgentSession';
-import type { DreamAgentAction, DreamAgentUpdatePatch, Lead, Pipeline } from '../../types';
+import type { DecisionMakerCandidate, DreamAgentAction, DreamAgentUpdatePatch, Lead, Pipeline } from '../../types';
 
 interface ActionRowProps {
   action: DreamAgentAction;
@@ -28,6 +29,8 @@ interface ActionRowProps {
   onPickLead: (leadId: string) => void;
   /** Customer profile id to name, so a proposed profile reads as a name. */
   icpNames?: Record<string, string>;
+  /** Live contacts per lead, for contact rows (an update shows the contact as it is now). */
+  contactsByLead?: Record<string, DecisionMakerCandidate[]>;
 }
 
 const CONTACT_LABELS = { owner_name: 'Owner', phone: 'Phone', email: 'Email', website: 'Website', address: 'Address', city: 'City', postcode: 'Postcode', vertical: 'Business type' };
@@ -59,11 +62,21 @@ function patchRows(patch: DreamAgentUpdatePatch, lead: Lead | undefined, include
  * a candidate picker plus "this is someone new", which itself becomes a create-like
  * picker step rather than guessing a pipeline; `update_company_context` shows an
  * editable textarea pre-filled with the AI's proposed merge. */
-export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipelineId, needsPipelinePicker, isOrgAdmin, onResolve, onPickLead, icpNames = {} }: ActionRowProps) {
+export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipelineId, needsPipelinePicker, isOrgAdmin, onResolve, onPickLead, icpNames = {}, contactsByLead = {} }: ActionRowProps) {
   const [promotedToNew, setPromotedToNew] = useState(false);
   const [editedContext, setEditedContext] = useState(
     action.type === 'update_company_context' ? action.proposed_context : '',
   );
+
+  if (action.type === 'add_contact' || action.type === 'update_contact') {
+    const existing = action.type === 'update_contact' ? (contactsByLead[action.lead_id] ?? []).find((c) => c.id === action.contact_id) : undefined;
+    return (
+      <ContactActionRow
+        key={existing?.id ?? 'new'} action={action} resolution={resolution} existing={existing}
+        leadName={leadsById[action.lead_id]?.business_name ?? 'this lead'} onResolve={onResolve}
+      />
+    );
+  }
 
   if (action.type === 'update_company_context') {
     const confirmed = resolution.status === 'confirmed_update_company_context';
