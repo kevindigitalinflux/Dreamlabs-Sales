@@ -79,7 +79,7 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
         </Section>
 
         <Section title="Contact"><ContactInfo lead={lead} onSave={(patch) => onUpdate(lead.id, patch)} /></Section>
-        <Section title="Decision makers"><DecisionMakersCard leadId={lead.id} lead={lead} onSave={(patch) => onUpdate(lead.id, patch)} /></Section>
+        <Section title="Contacts"><DecisionMakersCard leadId={lead.id} lead={lead} onSave={(patch) => onUpdate(lead.id, patch)} /></Section>
         <Section title="Pipeline"><PipelineInfo lead={lead} onSave={(patch) => onUpdate(lead.id, patch)} /></Section>
 
         <Section title="Next action">

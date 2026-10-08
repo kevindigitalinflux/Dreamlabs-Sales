@@ -46,6 +46,7 @@ export function AdditionalDetails({ lead, onSave }: { lead: Lead; onSave: (patch
           </ul>
         </div>
       ))}
+      <p className="text-xs text-muted">Extra emails can now be added as contacts, with a name or label, in the Contacts section.</p>
     </div>
   );
 }

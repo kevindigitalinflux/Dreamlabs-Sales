@@ -1,158 +1,112 @@
-import { useEffect, useState } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { useState } from 'react';
+import { Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { readableInvokeError } from '../../lib/invokeError';
 import type { LeadPatch } from '../../lib/leadUpdates';
-import { additionsFor, additionsPatchFor, alreadyOnLead, candidateName } from '../../lib/decisionMakerAdditions';
-import { dismissDecisionMaker } from '../../lib/dismissDecisionMaker';
-import { candidateSourceLabel, hasNoContactDetails, isRegistrySource } from '../../lib/candidateSource';
-import { ConfirmDeleteButton } from '../ui/ConfirmDeleteButton';
+import { additionsPatchFor } from '../../lib/decisionMakerAdditions';
+import { emptyContactForm } from '../../lib/leadContacts';
+import { mainContact, sequenceRecipients } from '../../../supabase/functions/_shared/contacts';
+import { useLeadContacts } from '../../hooks/useLeadContacts';
+import type { ContactResult } from '../../hooks/useLeadContacts';
 import type { DecisionMakerCandidate, Lead } from '../../types';
 import { Button } from '../ui/Button';
+import { ContactForm } from './ContactForm';
+import { ContactRow } from './ContactRow';
+
+type Adding = 'person' | 'general' | null;
 
 /**
- * Persistent list of every decision-maker candidate found for this lead
- * (via "Find decision maker") -- unlike the bulk-search review modal, this
- * is the lead's own permanent record, not a transient search result.
- * Subscribes to realtime updates scoped to this lead so an Apollo reveal or
- * phone webhook lands here live, with no polling and no manual refresh.
+ * The lead's Contacts: named people and general inboxes together, kept live by
+ * realtime. Pick the main contact, switch follow-ups on or off per contact, edit
+ * details in place, add your own people or inboxes, and keep the existing
+ * provider actions (Apollo reveal, "Add to lead", LinkedIn). The lead's own
+ * record is the permanent home; the bulk-search review modal is only transient.
  */
 export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; lead: Lead; onSave: (patch: LeadPatch) => Promise<string | null> }) {
-  const [candidates, setCandidates] = useState<DecisionMakerCandidate[]>([]);
-  const [loading, setLoading] = useState(true);
+  const hook = useLeadContacts(leadId);
+  const { contacts } = hook;
+  const [adding, setAdding] = useState<Adding>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [errorByCandidate, setErrorByCandidate] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [notice, setNotice] = useState<string | null>(null);
 
-  /** Saves this person's name/email/phone into the lead's additional fields (never replacing its primary ones). */
-  async function handleAddToLead(candidate: DecisionMakerCandidate) {
-    setBusyId(candidate.id);
-    const patch = additionsPatchFor(lead, [candidate]);
+  function report(id: string, error: string | null) {
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (error) next[id] = error; else delete next[id];
+      return next;
+    });
+  }
+
+  async function run(id: string, job: () => Promise<ContactResult>): Promise<ContactResult> {
+    setBusyId(id);
+    const result = await job();
+    setBusyId(null);
+    report(id, result.error);
+    setNotice(result.notice ?? null);
+    return result;
+  }
+
+  async function handleAddToLead(c: DecisionMakerCandidate) {
+    setBusyId(c.id);
+    const patch = additionsPatchFor(lead, [c]);
     const err = patch ? await onSave(patch) : null;
     setBusyId(null);
-    setErrorByCandidate((prev) => {
-      const next = { ...prev };
-      if (err) next[candidate.id] = err; else delete next[candidate.id];
-      return next;
-    });
+    report(c.id, err);
   }
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void supabase.from('decision_maker_candidates').select('*').eq('lead_id', leadId).is('dismissed_at', null).order('created_at').then(({ data }) => {
-      if (!cancelled) { setCandidates((data as DecisionMakerCandidate[]) ?? []); setLoading(false); }
-    });
-    const channel = supabase
-      .channel(`decision-makers-card-${leadId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'decision_maker_candidates', filter: `lead_id=eq.${leadId}` }, (payload) => {
-        if (payload.eventType === 'DELETE') {
-          setCandidates((prev) => prev.filter((c) => c.id !== (payload.old as { id: string }).id));
-          return;
-        }
-        const row = payload.new as DecisionMakerCandidate;
-        // A person dismissed (here or in another tab) drops out of the list.
-        if (row.dismissed_at) { setCandidates((prev) => prev.filter((c) => c.id !== row.id)); return; }
-        setCandidates((prev) => {
-          const exists = prev.some((c) => c.id === row.id);
-          return exists ? prev.map((c) => (c.id === row.id ? row : c)) : [...prev, row];
-        });
-      })
-      .subscribe();
-    return () => {
-      cancelled = true;
-      void supabase.removeChannel(channel);
-    };
-  }, [leadId]);
-
-  async function handleReveal(candidate: DecisionMakerCandidate, field: 'reveal_email' | 'reveal_phone') {
-    setBusyId(candidate.id);
-    const { data, error } = await supabase.functions.invoke('reveal-decision-maker', {
-      body: { candidate_id: candidate.id, [field]: true },
-    });
+  async function handleReveal(c: DecisionMakerCandidate, field: 'reveal_email' | 'reveal_phone') {
+    setBusyId(c.id);
+    const { data, error } = await supabase.functions.invoke('reveal-decision-maker', { body: { candidate_id: c.id, [field]: true } });
     setBusyId(null);
     const apiError = error ? await readableInvokeError(error) : (data as { error?: string } | null)?.error;
-    if (apiError) { setErrorByCandidate((prev) => ({ ...prev, [candidate.id]: apiError })); return; }
-    setErrorByCandidate((prev) => {
-      if (!(candidate.id in prev)) return prev;
-      const next = { ...prev };
-      delete next[candidate.id];
-      return next;
-    });
-    // The realtime subscription above applies the actual update -- no local merge needed here.
+    report(c.id, apiError ?? null); // the realtime subscription applies the actual update
   }
 
-  if (loading) return <p className="text-sm text-muted">Loading…</p>;
-  if (candidates.length === 0) {
-    return <p className="text-sm text-muted">No decision-makers found yet — use "Find decision maker" from the Pipeline list to search.</p>;
-  }
+  if (hook.loading) return <p className="text-sm text-muted">Loading…</p>;
+  if (hook.loadError) return <p role="alert" className="text-sm text-danger">{hook.loadError}</p>;
+
+  const main = mainContact(contacts, lead.email ?? null);
+  const noFollowUps = contacts.length > 0 && !lead.opted_out && sequenceRecipients(contacts, lead.email ?? null, false).length === 0;
 
   return (
-    <ul className="flex flex-col gap-2">
-      {candidates.map((candidate) => (
-        <li key={candidate.id} className="rounded-lg bg-surface/60 p-2 text-sm">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] uppercase text-muted">{candidateSourceLabel(candidate.source)}</span>
-            <span className="font-semibold">{candidateName(candidate)}</span>
-            {candidate.title && <span className="text-muted">— {candidate.title}</span>}
-            {candidate.linkedin_url && (
-              <a href={candidate.linkedin_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-cyan">
-                <ExternalLink className="h-3.5 w-3.5" aria-hidden /> LinkedIn
-              </a>
-            )}
-          </div>
-          {candidate.source === 'hunter' && <p className="mt-1 text-success">{candidate.email}</p>}
-          {isRegistrySource(candidate.source) && hasNoContactDetails(candidate) && (
-            <p className="mt-1 text-xs text-muted">No contact details found yet. Use "Find decision maker" to look them up.</p>
-          )}
-          {candidate.source === 'apollo' && (
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => void handleReveal(candidate, 'reveal_email')}
-                disabled={busyId === candidate.id || candidate.email_revealed}
-                loading={busyId === candidate.id}
-              >
-                {candidate.email_revealed ? candidate.email! : busyId === candidate.id ? 'Revealing…' : 'Reveal email'}
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => void handleReveal(candidate, 'reveal_phone')}
-                disabled={busyId === candidate.id || candidate.phone_status !== 'not_requested'}
-                loading={busyId === candidate.id}
-              >
-                {candidate.phone_status === 'revealed' ? candidate.phone!
-                  : candidate.phone_status === 'pending' ? 'Waiting for phone number…'
-                  : candidate.phone_status === 'not_found' ? 'No phone found'
-                  : busyId === candidate.id ? 'Revealing…' : 'Reveal phone'}
-              </Button>
-            </div>
-          )}
-          {(() => {
-            const additions = additionsFor(candidate);
-            if (additions.length === 0) return null;
-            const added = alreadyOnLead(lead, additions);
-            return (
-              <div className="mt-1">
-                <Button variant="secondary" onClick={() => void handleAddToLead(candidate)} disabled={added || busyId === candidate.id} loading={busyId === candidate.id}>
-                  {added ? 'Added to lead ✓' : 'Add to lead'}
-                </Button>
-              </div>
-            );
-          })()}
-          <div className="mt-1">
-            <ConfirmDeleteButton
-              label="Remove"
-              question="Remove this person?"
-              onConfirm={async () => {
-                const err = await dismissDecisionMaker(candidate.id);
-                if (!err) setCandidates((prev) => prev.filter((c) => c.id !== candidate.id));
-                return err;
-              }}
-            />
-          </div>
-          {errorByCandidate[candidate.id] && <p role="alert" className="mt-1 text-xs text-danger">{errorByCandidate[candidate.id]}</p>}
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col gap-2">
+      {contacts.length === 0 && (
+        <p className="text-sm text-muted">No contacts yet. Add one below, or use "Find decision maker" from the Pipeline list to search.</p>
+      )}
+      {noFollowUps && <p role="status" className="text-sm text-danger">No contact is set to receive follow-ups. Turn on "Include in sequences" for one with an email.</p>}
+      {notice && <p role="status" className="text-sm text-success">{notice}</p>}
+      <ul className="flex flex-col gap-2">
+        {contacts.map((c) => (
+          <ContactRow
+            key={c.id}
+            contact={c}
+            lead={lead}
+            isMain={main?.contactId === c.id}
+            busy={busyId === c.id}
+            error={errors[c.id]}
+            onMakeMain={() => void run(c.id, () => hook.setPrimary(c.id))}
+            onToggleSequences={(on) => void run(c.id, () => hook.setIncludeInSequences(c.id, on))}
+            onSave={(form) => run(c.id, () => hook.updateContact(c, form))}
+            onRemove={async () => (await run(c.id, () => hook.removeContact(c))).error}
+            onReveal={(field) => void handleReveal(c, field)}
+            onAddToLead={() => void handleAddToLead(c)}
+          />
+        ))}
+      </ul>
+      {adding ? (
+        <ContactForm
+          initial={emptyContactForm(adding)}
+          submitLabel={adding === 'person' ? 'Add person' : 'Add general email'}
+          onSubmit={(form) => run('new', () => hook.addContact(form))}
+          onCancel={() => setAdding(null)}
+        />
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => setAdding('person')}><Plus className="h-4 w-4" aria-hidden /> Add person</Button>
+          <Button variant="secondary" onClick={() => setAdding('general')}><Plus className="h-4 w-4" aria-hidden /> Add general email</Button>
+        </div>
+      )}
+    </div>
   );
 }
