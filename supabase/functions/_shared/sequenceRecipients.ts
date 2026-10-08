@@ -1,7 +1,7 @@
 // Pure planning for check-sequences: who a due sequence step is drafted for, and when the
 // enrolment may advance. Only imports the equally pure `contacts.ts`, so it runs in both Deno
 // (edge functions) and Vitest.
-import { sequenceRecipients, type Contact } from './contacts.ts';
+import { isUsable, sequenceRecipients, validEmail, type Contact } from './contacts.ts';
 
 /** One email to draft for a due step. `contactId` is null for the lead's own email. */
 export interface StepRecipient { email: string; contactId: string | null; name: string | null }
@@ -29,9 +29,10 @@ export interface StepPlan {
 
 /**
  * Decides who a due step is drafted for.
- * - Legacy: a lead whose only recipient is its own email (no contact is curated), or whose contacts
- *   carry no email at all and whose own email is set (even a malformed one, as before), is drafted
- *   exactly as it always was.
+ * - Legacy: a lead with no contact rows at all and an email (even a malformed one, as before), or whose
+ *   only recipient is its own valid email (no contact is curated), is drafted exactly as it always was.
+ *   A lead WITH contact rows needs a valid own email to be used: an invalid own email plus no usable
+ *   contact address is 'no_email' (skipped as before), never a draft to a broken address.
  * - Multi: otherwise every address `sequenceRecipients` returns, main contact first, cut to
  *   `capRemaining` drafts (null = no cap) so a multi-contact step cannot overshoot the daily cap.
  * - None: `sequenceRecipients` returned nothing. With no email anywhere that is the old skip; with
@@ -43,14 +44,14 @@ export function planStepDrafts(input: {
   const { contacts, leadEmail, optedOut, capRemaining } = input;
   if (optedOut) return { kind: 'none', recipients: [], limitedByCap: false, totalRecipients: 0, reason: 'opted_out' };
   const own = leadEmail?.trim() ? leadEmail : null;
-  const contactHasEmail = contacts.some((c) => (c.email ?? '').trim() !== '');
+  const anyUsable = contacts.some(isUsable);
   const recipients = sequenceRecipients(contacts, leadEmail, optedOut);
 
-  if (own && !contactHasEmail) {
+  if (own && contacts.length === 0) {
     return { kind: 'legacy_single', recipients: [{ email: own, contactId: null, name: null }], limitedByCap: false, totalRecipients: 1 };
   }
   if (recipients.length === 0) {
-    return { kind: 'none', recipients: [], limitedByCap: false, totalRecipients: 0, reason: !own && !contactHasEmail ? 'no_email' : 'no_recipients' };
+    return { kind: 'none', recipients: [], limitedByCap: false, totalRecipients: 0, reason: anyUsable || validEmail(own) ? 'no_recipients' : 'no_email' };
   }
   if (recipients.length === 1 && recipients[0]!.contactId === null) {
     return { kind: 'legacy_single', recipients: [{ email: own ?? recipients[0]!.email, contactId: null, name: null }], limitedByCap: false, totalRecipients: 1 };
@@ -59,9 +60,36 @@ export function planStepDrafts(input: {
   return { kind: 'multi', recipients: recipients.slice(0, limit), limitedByCap: limit < recipients.length, totalRecipients: recipients.length };
 }
 
-/** The enrolment advances exactly once per step, and only when at least one draft was created. */
-export function shouldAdvance(input: { draftsCreated: number; failures: number }): boolean {
-  return input.draftsCreated > 0;
+/**
+ * The enrolment advances exactly once per step, and only when a draft exists (just created, or found
+ * from an earlier partial run) for EVERY planned recipient. A partial result never advances: the next
+ * run creates only the missing drafts.
+ */
+export function shouldAdvance(input: { planned: number; covered: number }): boolean {
+  return input.planned > 0 && input.covered >= input.planned;
+}
+
+/**
+ * What to do when the autopilot daily cap cannot cover every draft a step still needs.
+ * 'all': fits (or no cap). 'defer': a full day's cap could cover them, so wait for tomorrow rather than
+ * writing to only some contacts. 'truncate': even a full day's cap is too small, so write to `allow`
+ * contacts (the caller leaves a lead note saying how many were skipped).
+ */
+export function capDecision(input: { needed: number; capRemaining: number | null; dailyCap: number | null }): { action: 'all' | 'defer' | 'truncate'; allow: number } {
+  const { needed, capRemaining, dailyCap } = input;
+  if (capRemaining === null || !Number.isFinite(capRemaining) || needed <= capRemaining) return { action: 'all', allow: needed };
+  if (dailyCap !== null && dailyCap >= needed) return { action: 'defer', allow: 0 };
+  return { action: 'truncate', allow: Math.max(0, Math.floor(capRemaining)) };
+}
+
+/** Note left when the daily cap is too small for every contact of a step. */
+export function capLimitedNoteText(step: number, drafted: number, total: number): string {
+  return `Sequence follow-up limited: step ${step} was drafted for ${drafted} of ${total} contacts because the daily send cap is too small to cover them all`;
+}
+
+/** True for the notes this feature writes itself; they are not human notes and must not feed AI drafts. */
+export function isSequenceSystemNote(content: string): boolean {
+  return content === NO_RECIPIENTS_NOTE_TEXT || content.startsWith('Sequence follow-up limited:');
 }
 
 /** Visible record left on the lead when a due step has nobody to write to. */

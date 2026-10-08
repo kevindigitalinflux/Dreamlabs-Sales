@@ -62,7 +62,7 @@ function clean(value: string | null | undefined): string | null {
 }
 
 /** Trimmed, lowercased email, or null when it is not a plausible address. */
-function validEmail(value: string | null | undefined): string | null {
+export function validEmail(value: string | null | undefined): string | null {
   const v = clean(value)?.toLowerCase() ?? null;
   return v && PLAUSIBLE_EMAIL.test(v) ? v : null;
 }
@@ -100,6 +100,17 @@ export function contactDisplayName(c: Contact): string {
   if (c.kind === 'general') return clean(c.label) ?? 'General inbox';
   const full = [clean(c.first_name), clean(c.last_name)].filter(Boolean).join(' ');
   return full || clean(c.label) || 'Unknown name';
+}
+
+const PROVIDER_SOURCES = ['hunter', 'apollo', 'companies_house', 'cro'];
+
+/**
+ * A contact a provider search found that has not been switched on for sequences (migration 053 defaults
+ * these to off). Nobody curated it, so for sequence recipients it neither counts as a deliberate choice
+ * nor vetoes its address.
+ */
+function isUnadoptedProviderRow(c: Contact): boolean {
+  return !c.include_in_sequences && c.source !== undefined && PROVIDER_SOURCES.includes(c.source);
 }
 
 /** True when the contact is not dismissed and has a plausible email address. */
@@ -163,7 +174,10 @@ export function mainContact(
  * (so follow-ups go to the people the user chose), and it is not already
  * covered. `contactId` is null for the lead's own email and `name` is null there.
  * Exclusion wins: an address excluded (include_in_sequences false) or dismissed on
- * ANY contact never receives mail through another contact or the lead's own email.
+ * any contact the caller passes never receives mail through another contact or the lead's own
+ * email. Dismissed rows only count when the caller passes them (check-sequences passes live rows
+ * only, on purpose). A provider-found row that is simply switched off (the default) is not a
+ * deliberate choice: it is not "curated" and does not veto its address.
  * When every curated usable contact is excluded this returns [] on purpose (the
  * user deliberately replaced the lead's email). Callers (check-sequences, task A6)
  * MUST surface 'no recipients' visibly instead of stalling silently.
@@ -178,7 +192,7 @@ export function sequenceRecipients(
   const excluded = new Set<string>();
   for (const c of contacts) {
     const e = validEmail(c.email);
-    if (e && (c.dismissed_at != null || !c.include_in_sequences)) excluded.add(e);
+    if (e && (c.dismissed_at != null || (!c.include_in_sequences && !isUnadoptedProviderRow(c)))) excluded.add(e);
   }
 
   const winners = new Map<string, Contact>();
@@ -200,7 +214,7 @@ export function sequenceRecipients(
   }));
 
   const own = validEmail(leadEmail);
-  const hasCurated = usable.some((c) => !isLegacyGeneral(c));
+  const hasCurated = usable.some((c) => !isLegacyGeneral(c) && !isUnadoptedProviderRow(c));
   if (own && !hasCurated && !excluded.has(own) && !out.some((r) => r.email === own)) {
     out.push({ email: own, contactId: null, name: null });
   }

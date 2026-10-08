@@ -23,3 +23,8 @@ export function hasNoContactDetails(c: Pick<DecisionMakerCandidate, 'email' | 'p
 export function isRegistrySource(source: string): boolean {
   return source === 'companies_house' || source === 'cro';
 }
+
+/** True for contacts found automatically by a provider search or registry (never typed by the user). */
+export function isProviderSource(source: string): boolean {
+  return source === 'hunter' || source === 'apollo' || isRegistrySource(source);
+}

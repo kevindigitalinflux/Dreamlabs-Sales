@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Contact } from '../../supabase/functions/_shared/contacts';
 import {
+  capDecision,
+  capLimitedNoteText,
+  isSequenceSystemNote,
   noRecipientsNoteText,
   planStepDrafts,
   recipientNaming,
@@ -37,10 +40,35 @@ describe('planStepDrafts: legacy single recipient', () => {
       totalRecipients: 1,
     });
   });
-  it('contacts without any email (registry officers) keep the legacy path, even for a malformed lead email', () => {
+  it('name-only contacts (registry officers) keep the legacy path with a valid lead email', () => {
     const officers = [person({ email: null }), person({ email: '  ' })];
     expect(plan(officers).kind).toBe('legacy_single');
-    expect(plan(officers, 'not-an-email').recipients).toEqual([{ email: 'not-an-email', contactId: null, name: null }]);
+    expect(plan(officers).recipients).toEqual([{ email: 'Owner@Biz.com', contactId: null, name: null }]);
+  });
+  it('with no contact rows at all even a malformed lead email is drafted as before', () => {
+    expect(plan([], 'not-an-email').recipients).toEqual([{ email: 'not-an-email', contactId: null, name: null }]);
+  });
+  it('with contact rows, an invalid lead email and no usable contact address is the "no email" skip', () => {
+    expect(plan([person({ email: null })], 'not-an-email').reason).toBe('no_email');
+    expect(plan([person({ email: 'broken' })], 'not-an-email').reason).toBe('no_email');
+  });
+  it('with a usable but excluded contact and an invalid lead email it is no recipients (pause)', () => {
+    expect(plan([person({ email: 'a@x.com', include_in_sequences: false })], 'not-an-email').reason).toBe('no_recipients');
+  });
+  it('an unadopted provider-found person (switched off) neither blocks nor replaces the lead email', () => {
+    const hunter = person({ id: 'h', email: 'h@x.com', source: 'hunter', include_in_sequences: false });
+    expect(plan([hunter])).toEqual({
+      kind: 'legacy_single', recipients: [{ email: 'Owner@Biz.com', contactId: null, name: null }], limitedByCap: false, totalRecipients: 1,
+    });
+    // even when it shares the lead's own address
+    expect(plan([person({ email: 'owner@biz.com', source: 'hunter', include_in_sequences: false })]).kind).toBe('legacy_single');
+  });
+  it('a provider-found person the user switched on is curated: written to, and the lead email is not added', () => {
+    const r = plan([person({ id: 'h', email: 'h@x.com', source: 'hunter', include_in_sequences: true })]);
+    expect(r.recipients.map((x) => x.contactId)).toEqual(['h']);
+  });
+  it('a manual contact excluded by the user is still a deliberate choice (no recipients)', () => {
+    expect(plan([person({ email: 'a@x.com', source: 'manual', include_in_sequences: false })]).reason).toBe('no_recipients');
   });
   it('is not capped: a single legacy draft is never cut by the cap', () => {
     expect(plan([], 'a@b.com', 1).kind).toBe('legacy_single');
@@ -72,6 +100,15 @@ describe('planStepDrafts: multi', () => {
     const owner = person({ id: 'o', email: 'o@x.com', title: 'Owner' });
     const pri = person({ id: 'p', email: 'p@x.com', is_primary: true });
     expect(plan([owner, pri]).recipients.map((x) => x.contactId)).toEqual(['p', 'o']);
+  });
+  it('keeps the lead own email (contactId null) after an included legacy general row', () => {
+    const legacy = general({ id: 'g', email: 'extra@x.com', label: 'Additional email', source: 'manual' });
+    const r = plan([legacy]);
+    expect(r.kind).toBe('multi');
+    expect(r.recipients).toEqual([
+      { email: 'extra@x.com', contactId: 'g', name: 'Additional email' },
+      { email: 'owner@biz.com', contactId: null, name: null },
+    ]);
   });
   it('does not add the lead email when a curated contact exists', () => {
     const r = plan([person({ id: 'a', email: 'a@x.com' })], 'Owner@Biz.com');
@@ -125,13 +162,42 @@ describe('planStepDrafts: none', () => {
 });
 
 describe('shouldAdvance', () => {
-  it('advances once when at least one draft was created, whatever failed', () => {
-    expect(shouldAdvance({ draftsCreated: 1, failures: 0 })).toBe(true);
-    expect(shouldAdvance({ draftsCreated: 2, failures: 3 })).toBe(true);
+  it('advances only when every planned recipient has a draft (created now or found already)', () => {
+    expect(shouldAdvance({ planned: 1, covered: 1 })).toBe(true);
+    expect(shouldAdvance({ planned: 3, covered: 3 })).toBe(true);
   });
-  it('does not advance when nothing was drafted', () => {
-    expect(shouldAdvance({ draftsCreated: 0, failures: 2 })).toBe(false);
-    expect(shouldAdvance({ draftsCreated: 0, failures: 0 })).toBe(false);
+  it('never advances on a partial result or when nothing is planned', () => {
+    expect(shouldAdvance({ planned: 3, covered: 2 })).toBe(false);
+    expect(shouldAdvance({ planned: 2, covered: 0 })).toBe(false);
+    expect(shouldAdvance({ planned: 0, covered: 0 })).toBe(false);
+  });
+});
+
+describe('capDecision', () => {
+  it('everything fits, or there is no cap', () => {
+    expect(capDecision({ needed: 3, capRemaining: null, dailyCap: null })).toEqual({ action: 'all', allow: 3 });
+    expect(capDecision({ needed: 3, capRemaining: 3, dailyCap: 10 })).toEqual({ action: 'all', allow: 3 });
+    expect(capDecision({ needed: 3, capRemaining: Number.POSITIVE_INFINITY, dailyCap: 10 })).toEqual({ action: 'all', allow: 3 });
+  });
+  it('defers the whole step to tomorrow when a full day could cover it', () => {
+    expect(capDecision({ needed: 3, capRemaining: 2, dailyCap: 3 })).toEqual({ action: 'defer', allow: 0 });
+    expect(capDecision({ needed: 3, capRemaining: 0, dailyCap: 50 })).toEqual({ action: 'defer', allow: 0 });
+  });
+  it('truncates only when even a full day is too small', () => {
+    expect(capDecision({ needed: 5, capRemaining: 2, dailyCap: 2 })).toEqual({ action: 'truncate', allow: 2 });
+    expect(capDecision({ needed: 5, capRemaining: 1, dailyCap: 4 })).toEqual({ action: 'truncate', allow: 1 });
+  });
+});
+
+describe('system notes', () => {
+  it('recognises the notes this feature writes, and nothing else', () => {
+    expect(isSequenceSystemNote(noRecipientsNoteText())).toBe(true);
+    expect(isSequenceSystemNote(capLimitedNoteText(2, 1, 4))).toBe(true);
+    expect(isSequenceSystemNote('Sequence paused: because I said so')).toBe(false);
+    expect(isSequenceSystemNote('Called, wants a quote')).toBe(false);
+  });
+  it('names how many contacts were drafted', () => {
+    expect(capLimitedNoteText(2, 1, 4)).toBe('Sequence follow-up limited: step 2 was drafted for 1 of 4 contacts because the daily send cap is too small to cover them all');
   });
 });
 

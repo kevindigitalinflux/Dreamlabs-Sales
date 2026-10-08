@@ -8,7 +8,7 @@ import { appendLinks, onlyOrgAttachments, parseAttachments, parseLinks } from '.
 import { formatIcpContext, loadIcp, resolveIcpId, topPainPoint } from '../_shared/icp.ts';
 import { applyCustomVariables, loadCustomVariables } from '../_shared/customVariables.ts';
 import type { Contact } from '../_shared/contacts.ts';
-import { noRecipientsNoteText, planStepDrafts, recipientNaming, shouldAdvance } from '../_shared/sequenceRecipients.ts';
+import { capDecision, capLimitedNoteText, isSequenceSystemNote, noRecipientsNoteText, planStepDrafts, recipientNaming, shouldAdvance } from '../_shared/sequenceRecipients.ts';
 
 interface Step { delay_days: number; template_type: string; template_id?: string | null; subject_override: string | null }
 
@@ -19,6 +19,8 @@ function advance(currentStep: number, steps: Step[], now: Date) {
   return { current_step: next, next_send_at: new Date(now.getTime() + steps[next - 1]!.delay_days * 86_400_000).toISOString(), status: 'active' };
 }
 
+/** Stop starting new enrolments after this long (the edge function wall-clock limit is higher). */
+const TIME_BUDGET_MS = 110_000;
 const HEADERS = { 'Content-Type': 'application/json' };
 const OUTREACH_PREFIXES = ['cold_outreach_', 'jv_pitch_'];
 function isOutreachTemplate(templateType: string): boolean {
@@ -49,6 +51,7 @@ function rampedCap(dailyTarget: number, dayNumber: number): number {
  * note says why (once per 7 days), and the response lists it in `skipped` as 'no recipients'.
  */
 Deno.serve(async (req) => {
+  const startedAt = Date.now();
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, HEADERS);
   if (req.headers.get('x-cron-secret') !== Deno.env.get('CRON_SECRET')) {
     return json({ error: 'Forbidden' }, 403, HEADERS);
@@ -63,7 +66,9 @@ Deno.serve(async (req) => {
     .from('sequence_enrollments')
     .select('*, sequence:email_sequences(*), lead:leads(*)')
     .eq('status', 'active')
-    .lte('next_send_at', new Date().toISOString());
+    .lte('next_send_at', new Date().toISOString())
+    // Oldest first, so enrolments deferred by the time budget below are picked up first next time.
+    .order('next_send_at', { ascending: true });
 
   // Autopilot throttle state, computed once per org as it's needed.
   const autopilotByOrg = new Map<string, { dailyOutreachTarget: number; dayNumber: number; rampUp: boolean; maxSpendCents: number | null; actualSpendCents: number; outreachSentTotal: number; runId: string } | null>();
@@ -76,9 +81,16 @@ Deno.serve(async (req) => {
   let drafted = 0;
   const skipped: { id: string; reason: string }[] = [];
 
-  for (const row of due ?? []) {
+  const dueRows = due ?? [];
+  for (let rowIdx = 0; rowIdx < dueRows.length; rowIdx++) {
+    // Soft time budget: stop starting NEW enrolments after ~110s so the run ends cleanly; the rest go first next run.
+    if (Date.now() - startedAt > TIME_BUDGET_MS) {
+      for (const rest of dueRows.slice(rowIdx)) skipped.push({ id: (rest as { id: string }).id, reason: 'time budget' });
+      break;
+    }
+    const row = dueRows[rowIdx]!;
     const enrollment = row as Record<string, unknown> & {
-      id: string; current_step: number; enrolled_by: string | null;
+      id: string; current_step: number; enrolled_by: string | null; next_send_at: string;
       sequence: { steps: Step[]; auto_draft_on_reply: boolean; icp_id?: string | null } | null;
       lead: Record<string, unknown> | null;
     };
@@ -109,11 +121,13 @@ Deno.serve(async (req) => {
       skipped.push({ id: enrollment.id, reason: 'no recipients' });
       const noteText = noRecipientsNoteText();
       const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
-      const { data: existingNote } = await service.from('lead_notes').select('id')
+      const { data: existingNote, error: existingErr } = await service.from('lead_notes').select('id')
         .eq('lead_id', lead.id as string).eq('note_type', 'general').eq('content', noteText).gte('created_at', since).limit(1);
-      if (!existingNote || existingNote.length === 0) {
+      // Fail closed: if we cannot tell whether the note exists, do not risk a duplicate (the enrolment is still paused).
+      if (existingErr) console.error(`no-recipients note check failed for enrollment ${enrollment.id}:`, existingErr.message);
+      else if (!existingNote || existingNote.length === 0) {
         const { error: noteErr } = await service.from('lead_notes').insert({
-          lead_id: lead.id, created_by: enrollment.enrolled_by ?? null, note_type: 'general', content: noteText,
+          lead_id: lead.id, created_by: null, note_type: 'general', content: noteText,
         });
         if (noteErr) console.error(`no-recipients note failed for enrollment ${enrollment.id}:`, noteErr.message);
       }
@@ -126,6 +140,7 @@ Deno.serve(async (req) => {
     const outreach = isOutreachTemplate(step.template_type);
     // Drafts this step may still create under the autopilot daily cap (null = no cap). A multi-contact step uses several.
     let capRemaining: number | null = null;
+    let dailyCap: number | null = null;
 
     // Autopilot daily throttle — only applies to outreach templates in an org with an active run.
     if (outreach) {
@@ -181,6 +196,7 @@ Deno.serve(async (req) => {
         const sentToday = sentTodayByOrg.get(orgId)!;
         if (sentToday >= cap) { skipped.push({ id: enrollment.id, reason: 'autopilot daily cap reached' }); continue; }
         capRemaining = cap - sentToday;
+        dailyCap = cap;
       }
     }
 
@@ -224,7 +240,8 @@ Deno.serve(async (req) => {
     const { data: notesRows } = await service
       .from('lead_notes').select('content').eq('lead_id', lead.id as string)
       .order('created_at', { ascending: false }).limit(5);
-    const noteTexts = (notesRows ?? []).map((n) => (n as { content: string }).content);
+    // This feature's own system notes are not call/meeting context, so they never feed a draft.
+    const noteTexts = (notesRows ?? []).map((n) => (n as { content: string }).content).filter((c) => !isSequenceSystemNote(c));
 
     // Customer profile: the lead's own, else the step's template's, else the sequence's. Supplies
     // {{pain_point}} when the lead has none noted, and context for the AI draft.
@@ -235,9 +252,32 @@ Deno.serve(async (req) => {
     const customVars = await loadCustomVariables(service, orgId, enrollment.enrolled_by);
     const varNotes = [...noteTexts];
 
+    // Who this step is written to (the full list; caps are applied below). A lead with no contact that has an
+    // email is the old single draft to lead.email.
+    const plan = planStepDrafts({ contacts, leadEmail: (lead.email as string | null) ?? null, optedOut: false, capRemaining: null });
+    const multi = plan.kind === 'multi';
+
+    // Idempotency: a draft already created for this step and address (an earlier run that stopped part-way) is
+    // reused, never duplicated. Drafts of earlier steps are older than this step's due time. Fail closed on a read error.
+    const { data: existingDrafts, error: existingDraftsErr } = await service.from('email_logs').select('to_email')
+      .eq('sequence_enrollment_id', enrollment.id).eq('status', 'draft').gte('sent_at', enrollment.next_send_at);
+    if (existingDraftsErr) {
+      console.error(`existing-draft check failed for enrollment ${enrollment.id}:`, existingDraftsErr.message);
+      skipped.push({ id: enrollment.id, reason: 'draft check failed' });
+      continue;
+    }
+    const haveDraft = new Set((existingDrafts ?? []).map((d) => String((d as { to_email: string }).to_email).trim().toLowerCase()));
+    const missing = plan.recipients.filter((r) => !haveDraft.has(r.email.trim().toLowerCase()));
+    const alreadyCovered = plan.recipients.length - missing.length;
+    // A multi-contact step never silently loses contacts to the daily cap: defer it a day if a full day could cover it.
+    const decision = capDecision({ needed: missing.length, capRemaining, dailyCap });
+    if (decision.action === 'defer') { skipped.push({ id: enrollment.id, reason: 'autopilot daily cap reached' }); continue; }
+    const toDraft = missing.slice(0, decision.allow);
+    const capTruncated = decision.action === 'truncate' && toDraft.length < missing.length;
+
     // Outreach steps need the notes-then-draft setup ONCE per enrolment run (never per contact); the notes are reused by every draft.
     let outreachKey: string | null = null;
-    if (outreach) {
+    if (outreach && toDraft.length > 0) {
       const apiKey = await resolveOrgApiKey(service, orgId, 'anthropic');
       if (!apiKey) { skipped.push({ id: enrollment.id, reason: 'no anthropic key configured' }); continue; }
       outreachKey = apiKey;
@@ -253,7 +293,8 @@ Deno.serve(async (req) => {
       const hasAiSummary = (aiSummaryCount ?? 0) > 0;
       const { count: humanNoteCount } = await service.from('lead_notes')
         .select('id', { count: 'exact', head: true })
-        .eq('lead_id', lead.id as string).neq('note_type', 'ai_summary');
+        .eq('lead_id', lead.id as string).neq('note_type', 'ai_summary')
+        .not('content', 'eq', noRecipientsNoteText()).not('content', 'like', 'Sequence follow-up limited:%');
       const hasHumanNote = (humanNoteCount ?? 0) > 0;
 
       // Compatible-lead gate for the notes pass: priority flag, OR tight ICP
@@ -293,17 +334,22 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Who this step is written to. A lead with no contact that has an email is the old single draft to lead.email.
-    const plan = planStepDrafts({ contacts, leadEmail: (lead.email as string | null) ?? null, optedOut: false, capRemaining });
-    const multi = plan.kind === 'multi';
+    // The organisation is read once per enrolment (only when an AI draft needs it).
+    let orgInfo: { name?: string | null; company_context?: string | null } | null | undefined;
+    const getOrg = async () => {
+      if (orgInfo === undefined) {
+        orgInfo = (await service.from('organizations').select('name, company_context').eq('id', orgId).maybeSingle()).data;
+      }
+      return orgInfo;
+    };
 
     const model: ClaudeModel = 'claude-haiku-4-5';
     let draftsCreated = 0;
     const failures: string[] = [];
     let stoppedBySpendCap = false;
 
-    for (let idx = 0; idx < plan.recipients.length; idx++) {
-      const target = plan.recipients[idx]!;
+    for (let idx = 0; idx < toDraft.length; idx++) {
+      const target = toDraft[idx]!;
       // Spend cap is re-checked before every further draft of a multi-contact step.
       if (idx > 0) {
         const apNow = outreach ? autopilotByOrg.get(orgId) : null;
@@ -329,7 +375,7 @@ Deno.serve(async (req) => {
 
       if (outreachKey) {
         try {
-          const { data: org } = await service.from('organizations').select('name, company_context').eq('id', orgId).maybeSingle();
+          const org = await getOrg();
           const orgName = org?.name ?? 'our team';
           const recipientInput = naming
             ? (naming.generalInbox
@@ -351,11 +397,11 @@ Deno.serve(async (req) => {
         const apiKey = await resolveOrgApiKey(service, orgId, 'gemini');
         if (apiKey) {
           try {
-            const { data: org } = await service.from('organizations').select('name, company_context').eq('id', orgId).maybeSingle();
+            const org = await getOrg();
             const orgName = org?.name ?? 'our team';
             // Only the first 3 (of up to 5 fetched) — preserves the exact original
             // note-count this path saw before the outreach gates needed a wider window.
-            const recipientInput = naming ? { recipientTitle: naming.title, generalInbox: naming.generalInbox } : {};
+            const recipientInput = naming ? { recipientTitle: naming.title, recipientName: naming.ownerName, generalInbox: naming.generalInbox } : {};
             const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: leadForDraft, notes: noteTexts.slice(0, 3), contractorName, orgName, companyContext: org?.company_context, icpContext, apiKey, ...recipientInput });
             finalSubject = ai.subject; finalBody = ai.body;
           } catch (e) {
@@ -382,19 +428,30 @@ Deno.serve(async (req) => {
       draftsCreated++;
     }
 
-    if (!shouldAdvance({ draftsCreated, failures: failures.length })) {
-      // Don't advance — the next daily run re-picks this enrollment (intended retry).
-      skipped.push({ id: enrollment.id, reason: multi ? `all ${plan.recipients.length} drafts failed: ${failures.join('; ')}` : failures.join('; ') });
-      continue;
+    // Advance exactly once, and only when a draft exists for EVERY planned recipient (created now or found from an
+    // earlier partial run). A partial result (insert failure, spend cap) never advances: the next run makes the rest.
+    const planned = alreadyCovered + toDraft.length;
+    const covered = alreadyCovered + draftsCreated;
+    const advanceOk = shouldAdvance({ planned, covered });
+    if (advanceOk) {
+      await service.from('sequence_enrollments')
+        .update(advance(enrollment.current_step, steps, new Date()))
+        .eq('id', enrollment.id);
+      if (capTruncated) {
+        // Even a full day's cap is too small for this lead's contacts: say so on the lead.
+        const { error: capNoteErr } = await service.from('lead_notes').insert({
+          lead_id: lead.id, created_by: null, note_type: 'general', content: capLimitedNoteText(enrollment.current_step, covered, plan.recipients.length),
+        });
+        if (capNoteErr) console.error(`cap note failed for enrollment ${enrollment.id}:`, capNoteErr.message);
+        skipped.push({ id: enrollment.id, reason: `daily cap too small: ${covered} of ${plan.recipients.length} contacts drafted, step advanced` });
+      }
+    } else {
+      // Don't advance — the next daily run re-picks this enrollment and creates only the missing drafts (intended retry).
+      const why = [...failures, ...(stoppedBySpendCap ? ['autopilot spend cap reached'] : [])].join('; ');
+      skipped.push({ id: enrollment.id, reason: !multi ? why : (covered === alreadyCovered && alreadyCovered === 0 && failures.length > 0 ? `all ${planned} drafts failed: ${why}` : `incomplete: ${covered} of ${planned} drafts exist, step not advanced; ${why}`) });
     }
-    await service.from('sequence_enrollments')
-      .update(advance(enrollment.current_step, steps, new Date()))
-      .eq('id', enrollment.id);
     drafted += draftsCreated;
-    if (failures.length > 0) skipped.push({ id: enrollment.id, reason: `partial: ${draftsCreated} of ${plan.recipients.length} drafts created, step advanced; ${failures.join('; ')}` });
-    if (plan.limitedByCap || stoppedBySpendCap) {
-      skipped.push({ id: enrollment.id, reason: `limited by autopilot ${stoppedBySpendCap ? 'spend' : 'daily'} cap: ${draftsCreated} of ${plan.totalRecipients} drafts created, step advanced` });
-    }
+    if (draftsCreated > 0) {
     if (outreach) {
       sentTodayByOrg.set(orgId, (sentTodayByOrg.get(orgId) ?? 0) + draftsCreated);
       // outreach_sent_total tracks *drafted* outreach emails (this pipeline
@@ -413,6 +470,7 @@ Deno.serve(async (req) => {
       // Claude/outreach drafts never hit this — Anthropic's limits are far higher and
       // this task doesn't introduce a Claude-side throttle.
       await new Promise((r) => setTimeout(r, 7000));
+    }
     }
   }
 

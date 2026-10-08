@@ -4,7 +4,7 @@ import { ConfirmDeleteButton } from '../ui/ConfirmDeleteButton';
 import { ContactForm } from './ContactForm';
 import { ContactRevealButtons } from './ContactRevealButtons';
 import { contactDisplayName } from '../../../supabase/functions/_shared/contacts';
-import { candidateSourceLabel, hasNoContactDetails, isRegistrySource } from '../../lib/candidateSource';
+import { candidateSourceLabel, hasNoContactDetails, isProviderSource, isRegistrySource } from '../../lib/candidateSource';
 import { contactToForm, isOwnSource, safeLinkedinHref } from '../../lib/leadContacts';
 import type { ContactFormValues } from '../../lib/leadContacts';
 import type { ContactResult } from '../../hooks/useLeadContacts';
@@ -73,6 +73,9 @@ export function ContactRow({ contact, lead, isMain, busy, error, onMakeMain, onT
         </label>
         <ConfirmDeleteButton label={own ? 'Remove' : 'Dismiss'} question={own ? 'Remove this contact?' : 'Dismiss this contact?'} onConfirm={onRemove} />
       </div>
+      {isProviderSource(contact.source) && !contact.include_in_sequences && (
+        <p className="mt-0.5 text-xs text-muted">Found by a search, so it does not receive follow-ups unless you switch this on</p>
+      )}
       {contact.kind === 'general' && !contact.include_in_sequences && (
         <p className="mt-0.5 text-xs text-muted">Turning this off for a general inbox changes which email is treated as main when nothing is marked.</p>
       )}
