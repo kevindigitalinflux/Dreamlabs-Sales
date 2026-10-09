@@ -56,6 +56,13 @@ export function useLeadContacts(leadId: string) {
     return () => { epoch.current++; void supabase.removeChannel(channel); };
   }, [leadId, currentOrg?.id]);
 
+  /** Reloads the list (for rows the server wrote); ignored if the lead changed meanwhile. */
+  const refresh = useCallback(async () => {
+    const mine = epoch.current;
+    const { data } = await supabase.from(TABLE).select('*').eq('lead_id', leadId).is('dismissed_at', null).order('created_at');
+    if (mine === epoch.current && data) setContacts(data as DecisionMakerCandidate[]);
+  }, [leadId]);
+
   const upsertLocal = useCallback((row: DecisionMakerCandidate) => {
     setContacts((prev) => (prev.some((c) => c.id === row.id) ? prev.map((c) => (c.id === row.id ? row : c)) : [...prev, row]));
   }, []);
@@ -115,5 +122,5 @@ export function useLeadContacts(leadId: string) {
     return { error: null };
   }, []);
 
-  return { contacts, loading, loadError, addContact, updateContact, removeContact, setPrimary, setIncludeInSequences };
+  return { contacts, loading, loadError, refresh, addContact, updateContact, removeContact, setPrimary, setIncludeInSequences };
 }

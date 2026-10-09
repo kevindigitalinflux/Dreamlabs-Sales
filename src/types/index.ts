@@ -114,6 +114,36 @@ export interface DecisionMakerCandidate {
   updated_at: string;
 }
 
+/** What the user already knows about a decision maker; sent to find-decision-makers for ONE lead. */
+export interface KnownPersonInput {
+  first_name: string;
+  last_name: string;
+  title?: string;
+  email?: string;
+  linkedin_url?: string;
+  /** Only sent when false; the server default is to use Hunter and Apollo. */
+  use_paid_lookups?: boolean;
+}
+
+/** Who supplied a value on a known-person lookup. */
+export type KnownPersonSource = 'hunter' | 'apollo' | 'you';
+
+/** The `known_person` part of the find-decision-makers response. */
+export interface KnownPersonResult {
+  saved: boolean;
+  contact_id: string;
+  found: { email?: string; phone?: string; linkedin_url?: string };
+  sources: { email?: KnownPersonSource; phone?: KnownPersonSource; linkedin_url?: KnownPersonSource };
+  /** Plain-English problems (a provider failed, a limit was reached). */
+  errors: string[];
+  /** Neutral information (for example a typed value was kept as it was). */
+  notes: string[];
+  /** A second email a provider found that was not saved on the person. */
+  extra_email?: string;
+  apollo_called: boolean;
+  hunter_called: boolean;
+}
+
 export interface Pipeline {
   id: string;
   org_id: string;

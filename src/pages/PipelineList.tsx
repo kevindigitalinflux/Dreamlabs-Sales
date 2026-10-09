@@ -143,6 +143,8 @@ export function PipelineList() {
     return { applied, failed };
   }
 
+  // Bulk search over many leads. The "I already know who to look for" input is deliberately NOT
+  // offered here: `known_person` works for exactly one lead, so it lives in the lead's Contacts card.
   async function handleFindDecisionMaker() {
     const results = await runSearch([...selected]);
     if (results === null) return;

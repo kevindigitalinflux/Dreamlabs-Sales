@@ -15,25 +15,33 @@ interface ContactFormProps {
   /** The LinkedIn link already stored, so leaving it untouched never fails the https rule. */
   storedLinkedin?: string | null;
   onCancel: () => void;
+  /**
+   * When given (people only), an "Also search for more details" box shows, on by default.
+   * With it ticked, saving calls this instead of `onSubmit` (the server saves the person and fills gaps).
+   */
+  onSubmitWithSearch?: (form: ContactFormValues) => Promise<ContactResult>;
 }
 
 /**
  * Add / edit form for one contact. Validates with the shared contact rules before
  * calling `onSubmit` and shows the first problem inline, in plain English.
  */
-export function ContactForm({ initial, submitLabel, onSubmit, onCancel, storedLinkedin }: ContactFormProps) {
+export function ContactForm({ initial, submitLabel, onSubmit, onCancel, storedLinkedin, onSubmitWithSearch }: ContactFormProps) {
   const [form, setForm] = useState<ContactFormValues>(initial);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState(true);
   const isPerson = form.kind === 'person';
+  const searching = isPerson && !!onSubmitWithSearch && search;
   const set = (key: keyof ContactFormValues) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     const check = validateContactForm(form, storedLinkedin);
     if (!check.ok) { setError(check.error); return; }
+    if (searching && form.phone.trim()) { setError('A phone number cannot be sent to the search. Clear it, or untick "Also search for more details".'); return; }
     setBusy(true);
-    const result = await onSubmit(form);
+    const result = await (searching && onSubmitWithSearch ? onSubmitWithSearch(form) : onSubmit(form));
     setBusy(false);
     if (result.error) setError(result.error); else onCancel();
   }
@@ -52,6 +60,12 @@ export function ContactForm({ initial, submitLabel, onSubmit, onCancel, storedLi
       <Input label="Email" type="email" value={form.email} onChange={set('email')} autoComplete="off" />
       <Input label="Phone" type="tel" value={form.phone} onChange={set('phone')} autoComplete="off" />
       {isPerson && <Input label="LinkedIn link" value={form.linkedin_url} onChange={set('linkedin_url')} placeholder="https://" autoComplete="off" />}
+      {isPerson && onSubmitWithSearch && (
+        <label className="flex items-center gap-2 text-sm text-offwhite">
+          <input type="checkbox" checked={search} onChange={(e) => setSearch(e.target.checked)} className="h-4 w-4 accent-violet-500" />
+          Also search for more details
+        </label>
+      )}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       <div className="flex gap-2">
         <Button type="submit" loading={busy}>{busy ? 'Saving…' : submitLabel}</Button>

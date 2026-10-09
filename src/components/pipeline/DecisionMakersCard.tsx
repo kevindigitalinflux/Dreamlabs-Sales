@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { readableInvokeError } from '../../lib/invokeError';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import { additionsPatchFor } from '../../lib/decisionMakerAdditions';
 import { emptyContactForm } from '../../lib/leadContacts';
+import type { ContactFormValues } from '../../lib/leadContacts';
+import { buildKnownPersonPayload } from '../../lib/knownPersonForm';
 import { mainContact, sequenceRecipients } from '../../../supabase/functions/_shared/contacts';
 import { useLeadContacts } from '../../hooks/useLeadContacts';
+import { useKnownPersonFlow } from '../../hooks/useKnownPersonFlow';
 import type { ContactResult } from '../../hooks/useLeadContacts';
 import type { DecisionMakerCandidate, Lead } from '../../types';
 import { Button } from '../ui/Button';
 import { ContactForm } from './ContactForm';
 import { ContactRow } from './ContactRow';
+import { KnownPersonArea } from './KnownPersonArea';
 
 type Adding = 'person' | 'general' | null;
 
@@ -29,8 +33,10 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
+  const [finding, setFinding] = useState(false);
+  const flow = useKnownPersonFlow(leadId, hook.refresh);
 
-  useEffect(() => { setAdding(null); setBusyId(null); setErrors({}); setNotice(null); }, [leadId]);
+  useEffect(() => { setAdding(null); setFinding(false); setBusyId(null); setErrors({}); setNotice(null); }, [leadId]);
 
   function report(id: string, error: string | null) {
     setErrors((prev) => {
@@ -63,6 +69,13 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
     setBusyId(null);
     const apiError = error ? await readableInvokeError(error) : (data as { error?: string } | null)?.error;
     report(c.id, apiError ?? null); // the realtime subscription applies the actual update
+  }
+
+  /** Add person with "Also search" ticked: the server saves the person and fills gaps. */
+  async function addWithSearch(form: ContactFormValues): Promise<ContactResult> {
+    const built = buildKnownPersonPayload(form, true);
+    if (!built.ok) return { error: built.error };
+    return { error: await flow.lookup(built.value) };
   }
 
   if (hook.loading) return <p className="text-sm text-muted">Loading…</p>;
@@ -99,17 +112,20 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
           />
         ))}
       </ul>
+      <KnownPersonArea leadId={leadId} flow={flow} contacts={contacts} finding={finding} onCloseFinding={() => setFinding(false)} refresh={hook.refresh} addContact={hook.addContact} />
       {adding ? (
         <ContactForm
           initial={emptyContactForm(adding)}
           submitLabel={adding === 'person' ? 'Add person' : 'Add general email'}
           onSubmit={(form) => run('new', () => hook.addContact(form))}
+          onSubmitWithSearch={adding === 'person' ? (form) => run('new', () => addWithSearch(form)) : undefined}
           onCancel={() => setAdding(null)}
         />
       ) : (
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => setAdding('person')}><Plus className="h-4 w-4" aria-hidden /> Add person</Button>
           <Button variant="secondary" onClick={() => setAdding('general')}><Plus className="h-4 w-4" aria-hidden /> Add general email</Button>
+          <Button variant="secondary" onClick={() => setFinding(true)} disabled={finding}><Search className="h-4 w-4" aria-hidden /> Find decision maker</Button>
         </div>
       )}
     </div>
