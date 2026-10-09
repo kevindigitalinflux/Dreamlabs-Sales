@@ -37,3 +37,14 @@ describe('parsePostSend / mergePostSend', () => {
     expect(mergePostSend([null])).toBeNull();
   });
 });
+
+describe('buildPostSendPreview London date', () => {
+  it('uses the Europe/London date near midnight in BST', () => {
+    // 23:30 UTC on 9 Oct is 00:30 BST on 10 Oct; step 2 is due 3 days later = 13 Oct London time.
+    const lines = buildPostSendPreview({
+      ...base, now: new Date('2026-10-09T23:30:00.000Z'), todayLocal: '2026-10-10',
+      enrollment: { id: 'e', sequence_id: 's1', current_step: 1, status: 'active', next_send_at: null },
+    });
+    expect(lines?.[1]).toBe('Follow-up set for 2026-10-13');
+  });
+});

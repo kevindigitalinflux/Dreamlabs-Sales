@@ -33,6 +33,10 @@ export interface PostSendInput {
   defaultTemplateIdByType: Record<string, string>;
   /** True when the sequence engine already advanced the enrolment at draft time (log has sequence_enrollment_id). */
   logLinkedToEnrollment: boolean;
+  /** The enrolment id the log is linked to. The draft-time date is only trusted when it equals the enrolment's id. */
+  logEnrollmentId?: string | null;
+  /** True when another email for this lead with the same template was sent in the last 6 hours: a repeat send must not advance again. */
+  alreadyAppliedForTemplate?: boolean;
   currentNextActionDate: string | null;
   /** Today as YYYY-MM-DD in the user's timezone. */
   todayLocal: string;
@@ -76,7 +80,8 @@ export function buildDefaultTemplateIdByType(templates: VisibleTemplate[], orgId
   const fromGlobal: Record<string, string> = {};
   for (const t of templates) {
     if (!t.is_default) continue;
-    if (t.org_id === orgId) out[t.template_type] = t.id;
+    // First default wins in both groups (as check-sequences' chooseTemplate does).
+    if (t.org_id === orgId) { if (!(t.template_type in out)) out[t.template_type] = t.id; }
     else if (t.org_id === null && !(t.template_type in fromGlobal)) fromGlobal[t.template_type] = t.id;
   }
   for (const [type, id] of Object.entries(fromGlobal)) if (!(type in out)) out[type] = id;
@@ -103,7 +108,7 @@ function addDaysYmd(ymd: string, days: number): string {
 }
 
 /** Subject for display in notes: dashes removed (house style), cut to 120 characters. */
-function cleanSubject(subject: string): string {
+export function cleanSubject(subject: string): string {
   return subject.replace(/\s*[—–]\s*/g, ', ').trim().slice(0, 120);
 }
 
@@ -137,11 +142,21 @@ export function decidePostSend(input: PostSendInput): PostSendDecision {
   // 2. The sequence engine already advanced at draft time: keep the date consistent with that enrolment.
   if (input.logLinkedToEnrollment) {
     const seq = enrollment ? sequences.find((s) => s.id === enrollment.sequence_id) : undefined;
-    const due = enrollment && enrollment.status === 'active' && enrollment.next_send_at && seq
-      ? { nextSendAt: enrollment.next_send_at, sequenceName: seq.name, step: enrollment.current_step, total: seq.steps.length }
+    // The enrolment's date is only trusted when it is the enrolment this log is linked to, is still in the future, and the
+    // enrolment has moved past this template's step. Otherwise (e.g. a parked autopilot draft: not advanced at draft time)
+    // its next_send_at is stale and the generic follow-up applies.
+    const stillOnThisStep = !!(enrollment && seq && template && seq.steps[enrollment.current_step - 1]
+      && stepUsesTemplate(seq.steps[enrollment.current_step - 1]!, template, input.defaultTemplateIdByType));
+    const trusted = !!(enrollment && seq && enrollment.status === 'active' && enrollment.next_send_at
+      && !!input.logEnrollmentId && input.logEnrollmentId === enrollment.id
+      && new Date(enrollment.next_send_at).getTime() > input.now.getTime() && !stillOnThisStep);
+    const due = trusted && enrollment && seq
+      ? { nextSendAt: enrollment.next_send_at!, sequenceName: seq.name, step: enrollment.current_step, total: seq.steps.length }
       : null;
-    return finish({ action: 'link_only', enrollmentId: enrollment?.id, sequenceId: seq?.id, sequenceName: seq?.name, reason: 'The sequence was already moved on when this draft was made, so it is not moved again' }, due);
+    return finish({ action: 'link_only', enrollmentId: enrollment?.id, sequenceId: seq?.id, sequenceName: seq?.name, reason: 'No change to the sequence for this email' }, due);
   }
+  // A repeat send of the same template shortly after another one must not move the sequence a second time.
+  const repeat = (): PostSendDecision => finish({ action: 'link_only', enrollmentId: enrollment?.id, sequenceId: enrollment?.sequence_id, reason: 'The same template was just sent to this lead, so the sequence is not moved again' }, null);
 
   // 3 and 4. An active enrolment: advance only when the sent template is its current step's template.
   if (enrollment && enrollment.status === 'active') {
@@ -150,6 +165,7 @@ export function decidePostSend(input: PostSendInput): PostSendDecision {
     if (!seq || !step || !template || !stepUsesTemplate(step, template, input.defaultTemplateIdByType)) {
       return none('This is not the template for the lead\'s current sequence step, so the sequence stays where it is');
     }
+    if (input.alreadyAppliedForTemplate) return repeat();
     // Same arithmetic as nextEnrollmentState: `current_step` is the step that was just sent.
     const next = enrollment.current_step + 1;
     const total = seq.steps.length;
@@ -172,6 +188,7 @@ export function decidePostSend(input: PostSendInput): PostSendDecision {
   if (matches.length > 1) return none('This template is used by more than one sequence, so the lead is not enrolled automatically');
   const { s: seq, idx } = matches[0]!;
   if (idx.length > 1) return none(`This template appears at more than one step of ${seq.name}, so the lead is not enrolled automatically`);
+  if (input.alreadyAppliedForTemplate) return repeat();
   const newCurrentStep = idx[0]! + 2;
   if (newCurrentStep > seq.steps.length) return none(`This is the last step of sequence ${seq.name}, so there is nothing further to enrol into`);
   const nextSendAt = new Date(input.now.getTime() + seq.steps[newCurrentStep - 1]!.delay_days * DAY_MS).toISOString();
@@ -189,7 +206,7 @@ export function describePostSend(d: PostSendDecision): string[] {
   } else if (d.action === 'enrol') {
     lines.push(`Enrols the lead in ${d.sequenceName} at step ${d.newCurrentStep} of ${d.totalSteps}`);
   } else if (d.action === 'link_only') {
-    lines.push('Sequence already updated when this draft was made');
+    lines.push('No change to the sequence for this email');
   } else {
     lines.push('No sequence change');
   }

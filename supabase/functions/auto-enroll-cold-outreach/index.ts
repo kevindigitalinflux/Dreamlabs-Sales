@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { json } from '../_shared/cors.ts';
 import { nextSendAtForDeno } from '../_shared/sequenceMathDeno.ts';
+import { isUniqueViolation } from '../_shared/enrollmentErrors.ts';
 
 const HEADERS = { 'Content-Type': 'application/json' };
 
@@ -48,7 +49,9 @@ Deno.serve(async (req) => {
         next_send_at: nextSendAtForDeno(new Date(), sequence.steps, 1),
         status: 'active', enrolled_by: null,
       });
+      // A unique violation (23505) means the lead already has an open enrolment (migration 055): skip it.
       if (!error) enrolled++;
+      else if (!isUniqueViolation(error)) console.error('auto-enroll: could not enrol a lead');
     }
   }
 

@@ -206,7 +206,7 @@ describe('decidePostSend sequence actions', () => {
   });
 
   it('does not advance again when the log is already linked to an enrolment', () => {
-    const d = decidePostSend({ ...base, logLinkedToEnrollment: true, enrollment: enr({ current_step: 2, next_send_at: '2026-10-14T09:00:00.000Z' }) });
+    const d = decidePostSend({ ...base, logLinkedToEnrollment: true, logEnrollmentId: 'e1', enrollment: enr({ current_step: 2, next_send_at: '2026-10-14T09:00:00.000Z' }) });
     expect(d.action).toBe('link_only');
     expect(d.newCurrentStep).toBeUndefined();
     expect(d.nextAction).toEqual({ set: true, date: '2026-10-14', note: 'Follow up: Cold outreach step 2 of 3' });
@@ -260,6 +260,70 @@ describe('describePostSend', () => {
   });
   it('describes link_only', () => {
     const d = decidePostSend({ ...base, logLinkedToEnrollment: true });
-    expect(describePostSend(d)[0]).toBe('Sequence already updated when this draft was made');
+    expect(describePostSend(d)[0]).toBe('No change to the sequence for this email');
+  });
+});
+
+describe('post-send review fixes', () => {
+  const nurture: SequenceLike = { id: 's2', name: 'Nurture', steps: [
+    { delay_days: 0, template_type: 'intro' }, { delay_days: 7, template_type: 'follow_up' }, { delay_days: 7, template_type: 'follow_up' }, { delay_days: 7, template_type: 'final' },
+  ] };
+  const T2r: TemplateRef = T2;
+  it('consecutive steps sharing a template: a repeat send within the window does not advance again', () => {
+    const e = enr({ sequence_id: 's2', current_step: 3 });
+    const first = decidePostSend({ ...base, templateId: 't2', template: T2r, sequences: [nurture], enrollment: e });
+    expect(first.action).toBe('advance');
+    const repeat = decidePostSend({ ...base, templateId: 't2', template: T2r, sequences: [nurture], enrollment: enr({ sequence_id: 's2', current_step: 4 }), alreadyAppliedForTemplate: true });
+    expect(repeat.action).not.toBe('advance');
+    const again = decidePostSend({ ...base, templateId: 't2', template: T2r, sequences: [nurture], enrollment: e, alreadyAppliedForTemplate: true });
+    expect(again.action).toBe('link_only');
+    expect(again.newCurrentStep).toBeUndefined();
+  });
+  it('two recipients back to back: the second does not enrol or advance', () => {
+    expect(decidePostSend({ ...base, alreadyAppliedForTemplate: true }).action).toBe('link_only');
+    expect(decidePostSend({ ...base, enrollment: enr(), alreadyAppliedForTemplate: true }).action).toBe('link_only');
+  });
+  it('a legitimately later send (guard false) advances', () => {
+    expect(decidePostSend({ ...base, enrollment: enr(), alreadyAppliedForTemplate: false }).action).toBe('advance');
+  });
+  it('step index out of range gives no change', () => {
+    expect(decidePostSend({ ...base, enrollment: enr({ current_step: 9 }) }).action).toBe('none');
+  });
+  it('link_only date: enrolment id mismatch falls back to +3 days', () => {
+    const d = decidePostSend({ ...base, logLinkedToEnrollment: true, logEnrollmentId: 'other', enrollment: enr({ current_step: 2, next_send_at: '2026-10-14T09:00:00.000Z' }) });
+    expect(d.nextAction).toEqual({ set: true, date: '2026-10-12', note: 'Follow up after email: Hello there' });
+  });
+  it('link_only date: past next_send_at falls back to +3 days', () => {
+    const d = decidePostSend({ ...base, logLinkedToEnrollment: true, logEnrollmentId: 'e1', enrollment: enr({ current_step: 2, next_send_at: '2026-10-01T09:00:00.000Z' }) });
+    expect(d.nextAction.note).toBe('Follow up after email: Hello there');
+  });
+  it('parked draft (enrolment still on this template step): no advance, no stale date', () => {
+    const d = decidePostSend({ ...base, logLinkedToEnrollment: true, logEnrollmentId: 'e1', enrollment: enr({ current_step: 1, next_send_at: '2026-10-14T09:00:00.000Z' }) });
+    expect(d.action).toBe('link_only');
+    expect(d.newCurrentStep).toBeUndefined();
+    expect(d.nextAction).toEqual({ set: true, date: '2026-10-12', note: 'Follow up after email: Hello there' });
+  });
+  it('multiple org defaults: first wins; global first wins; org beats global', () => {
+    const map = buildDefaultTemplateIdByType([
+      { id: 'g1', org_id: null, template_type: 'intro', is_default: true },
+      { id: 'g2', org_id: null, template_type: 'intro', is_default: true },
+      { id: 'o1', org_id: 'org1', template_type: 'intro', is_default: true },
+      { id: 'o2', org_id: 'org1', template_type: 'intro', is_default: true },
+      { id: 'g3', org_id: null, template_type: 'final', is_default: true },
+      { id: 'g4', org_id: null, template_type: 'final', is_default: true },
+    ], 'org1');
+    expect(map).toEqual({ intro: 'o1', final: 'g3' });
+  });
+  it('toLocalDate near midnight in BST', () => {
+    const toLocalDate = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date(iso));
+    const d = decidePostSend({ ...base, enrollment: enr(), now: new Date('2026-10-09T22:30:00.000Z'), toLocalDate, todayLocal: '2026-10-09' });
+    // step 2 is due 3 days later at 22:30Z = 23:30 BST on 12 Oct
+    expect(d.nextAction.date).toBe('2026-10-12');
+    const late = decidePostSend({ ...base, enrollment: enr(), now: new Date('2026-10-09T23:30:00.000Z'), toLocalDate, todayLocal: '2026-10-10' });
+    expect(late.nextAction.date).toBe('2026-10-13');
+  });
+  it('null template id with a custom type gives no sequence change', () => {
+    const d = decidePostSend({ ...base, templateId: null, template: { id: 'c', template_type: 'custom', is_default: false } , enrollment: null });
+    expect(d.action).toBe('none');
   });
 });

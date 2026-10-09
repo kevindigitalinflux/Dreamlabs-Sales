@@ -214,6 +214,8 @@ describe('system notes', () => {
     expect(isSequenceSystemNote(capLimitedNoteText(2, 1, 4))).toBe(true);
     expect(isSequenceSystemNote('Sequence paused: because I said so')).toBe(false);
     expect(isSequenceSystemNote('Called, wants a quote')).toBe(false);
+    expect(isSequenceSystemNote('Email sent: Hello (to a@b.co)')).toBe(true);
+    expect(isSequenceSystemNote('I sent an email: hello')).toBe(false);
   });
   it('names how many contacts were drafted', () => {
     expect(capLimitedNoteText(2, 1, 4)).toBe('Sequence follow-up limited: step 2 was drafted for 1 of 4 contacts because the daily send cap is too small to cover them all');

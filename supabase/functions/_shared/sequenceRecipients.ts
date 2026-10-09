@@ -98,9 +98,9 @@ export function capLimitedNoteText(step: number, drafted: number, total: number)
   return `Sequence follow-up limited: step ${step} was drafted for ${drafted} of ${total} contacts because the daily send cap is too small to cover them all`;
 }
 
-/** True for the notes this feature writes itself; they are not human notes and must not feed AI drafts. */
+/** True for the notes this feature (and the post-send updates) write themselves; they are not human notes and must not feed AI drafts. */
 export function isSequenceSystemNote(content: string): boolean {
-  return content === NO_RECIPIENTS_NOTE_TEXT || content.startsWith('Sequence follow-up limited:');
+  return content === NO_RECIPIENTS_NOTE_TEXT || content.startsWith('Sequence follow-up limited:') || content.startsWith('Email sent:');
 }
 
 /** Visible record left on the lead when a due step has nobody to write to. */

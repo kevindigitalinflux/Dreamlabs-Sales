@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
     const warning = result.warning;
     return json({ error: result.error, ...(result.logId !== undefined ? { log_id: result.logId } : {}), ...(warning ? { warning } : {}) }, result.status ?? 400, headers);
   }
-  // Post-send platform updates (note, sequence, follow-up date): additive, never fails or delays the response.
+  // Post-send platform updates (note, sequence, follow-up date): additive, never fails the response; waits at most 8s for it.
   let postSend: { lines: string[]; warnings: string[] } | undefined;
   if (result.logId) {
     const logId = result.logId;
@@ -109,7 +109,10 @@ Deno.serve(async (req) => {
           orgId: r.org_id, leadId: r.lead_id, logId, userId: user.id, subject: r.subject, toEmail: r.to_email,
           recipientLabel: r.to_email, templateId: templateId ?? null,
         });
-      })();
+      })().catch((): PostSendResult | null => null);
+      // The work keeps running after the response is sent (like scrape-google-places). The next send for the same lead may
+      // run concurrently with it: the repeat-send template check and the one-open-enrolment index cover that.
+      (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime?.waitUntil(work);
       const timeout = new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), 8000); });
       const outcome = await Promise.race([work, timeout]);
       if (outcome === 'timeout') postSend = { lines: [], warnings: ['Follow-up updates took too long and may be incomplete'] };

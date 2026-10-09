@@ -2,6 +2,7 @@ import {
   buildDefaultTemplateIdByType, decidePostSend, describePostSend,
   type EnrollmentLike, type SequenceLike, type VisibleTemplate,
 } from '../../supabase/functions/_shared/postSendRules';
+import { localDateString } from '../../supabase/functions/_shared/autopilotEligibility';
 
 /** Everything the preview needs, already loaded by the hooks. */
 export interface PreviewInput {
@@ -34,6 +35,8 @@ export function buildPostSendPreview(input: PreviewInput): string[] | null {
     now: input.now,
     subject: input.subject,
     recipientLabel: input.recipientLabel,
+    // Same zone the server uses, so the date matches near midnight in BST.
+    toLocalDate: (iso: string) => localDateString(new Date(iso), 'Europe/London'),
   });
   return describePostSend(decision);
 }

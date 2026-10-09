@@ -3,8 +3,9 @@
 // Every step is wrapped: a failing step becomes a warning and never throws out of applyPostSendUpdates.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { localDateString } from './autopilotEligibility.ts';
+import { isUniqueViolation } from './enrollmentErrors.ts';
 import {
-  buildDefaultTemplateIdByType, decidePostSend, describePostSend,
+  buildDefaultTemplateIdByType, cleanSubject, decidePostSend, describePostSend,
   type EnrollmentLike, type PostSendDecision, type SequenceLike, type TemplateRef, type VisibleTemplate,
 } from './postSendRules.ts';
 
@@ -64,7 +65,7 @@ async function run(service: Service, ctx: PostSendContext, warnings: string[]): 
   ]);
   if (enrRes.error || seqRes.error || tplRes.error) {
     warnings.push('Sequence and follow-up updates were skipped because the sequence data could not be read');
-    await addNote(service, ctx, `Email sent: ${ctx.subject} (to ${ctx.recipientLabel})`, warnings);
+    await addNote(service, ctx, `Email sent: ${cleanSubject(ctx.subject)} (to ${ctx.recipientLabel})`, warnings);
     return { ok: false, lines: [], warnings };
   }
   const enrollment = ((enrRes.data ?? [])[0] ?? null) as EnrollmentRow | null;
@@ -75,6 +76,18 @@ async function run(service: Service, ctx: PostSendContext, warnings: string[]): 
   const tplRow = templateId ? templates.find((t) => t.id === templateId) : undefined;
   const template: TemplateRef | null = tplRow ? { id: tplRow.id, template_type: tplRow.template_type, is_default: tplRow.is_default } : null;
 
+  // Repeat-send guard: another email for this lead with the same template went out in the last 6 hours, so the
+  // sequence has already been moved for it (stops two consecutive steps that share a template advancing twice).
+  // Fails safe: if the check cannot be read, assume it was already applied and do not move the sequence.
+  let alreadyApplied = false;
+  if (templateId) {
+    const since = new Date(Date.now() - 6 * 3600_000).toISOString();
+    const { data: recent, error: recentErr } = await service.from('email_logs').select('id')
+      .eq('lead_id', ctx.leadId).eq('status', 'sent').eq('template_id', templateId).neq('id', ctx.logId).gte('sent_at', since).limit(1);
+    if (recentErr) { alreadyApplied = true; warnings.push('Sequence step was not moved because recent emails could not be checked'); }
+    else alreadyApplied = (recent ?? []).length > 0;
+  }
+
   const now = new Date();
   const tz = ctx.timezone ?? 'Europe/London';
   const toLocalDate = (iso: string) => localDateString(new Date(iso), tz);
@@ -82,6 +95,8 @@ async function run(service: Service, ctx: PostSendContext, warnings: string[]): 
     templateId: template ? templateId : null, template, enrollment, sequences,
     defaultTemplateIdByType: buildDefaultTemplateIdByType(templates, ctx.orgId),
     logLinkedToEnrollment: !!logRow.sequence_enrollment_id,
+    logEnrollmentId: logRow.sequence_enrollment_id,
+    alreadyAppliedForTemplate: alreadyApplied,
     currentNextActionDate: leadRow.next_action_date,
     todayLocal: localDateString(now, tz), now, subject: ctx.subject, recipientLabel: ctx.recipientLabel, toLocalDate,
   });
@@ -138,6 +153,7 @@ async function applySequence(
     if (existing && existing.length > 0) { warnings.push('The lead was enrolled in a sequence while sending, left as is'); return { applied: false, allowNextAction: false }; }
     const { data: ins, error: insErr } = await service.from('sequence_enrollments')
       .insert({ lead_id: ctx.leadId, sequence_id: d.sequenceId, ...next, enrolled_by: ctx.userId }).select('id').single();
+    if (insErr && isUniqueViolation(insErr)) { warnings.push('The lead was enrolled in a sequence while sending, left as is'); return { applied: false, allowNextAction: false }; }
     if (insErr || !ins) { warnings.push('The lead could not be enrolled in the sequence'); return { applied: false, allowNextAction: false }; }
     await linkLog(service, ctx, (ins as { id: string }).id, warnings);
     return { applied: true, allowNextAction: true };

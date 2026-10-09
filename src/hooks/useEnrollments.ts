@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
+import { enrollErrorMessage } from '../../supabase/functions/_shared/enrollmentErrors';
 import { moveToStep, nextSendAtFor } from '../lib/sequenceMath';
 import type { EmailSequence, SequenceEnrollment } from '../types';
 
@@ -39,7 +40,7 @@ export function useEnrollments(leadId: string) {
       lead_id: leadId, sequence_id: sequenceId, ...start,
       status: 'active', enrolled_by: session?.user.id,
     });
-    if (error) return error.message;
+    if (error) return enrollErrorMessage(error);
     await refresh();
     return null;
   }, [leadId, session, refresh]);
