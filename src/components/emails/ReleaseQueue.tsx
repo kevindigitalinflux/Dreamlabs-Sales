@@ -7,6 +7,9 @@ import { useOrgLeads } from '../../hooks/useOrgLeads';
 import { Button } from '../ui/Button';
 import { EmailReviewQueue } from '../dashboard/EmailReviewQueue';
 import { EmailComposer } from './EmailComposer';
+import { PostSendPreview } from './PostSendPreview';
+import { mergePostSend, parsePostSend } from '../../lib/postSendPreview';
+import type { PostSendReport } from '../../lib/postSendPreview';
 
 /**
  * Same underlying draft queue as the Dashboard's "Emails ready to review"
@@ -21,6 +24,7 @@ export function ReleaseQueue() {
   const [reviewing, setReviewing] = useState<DraftLog | null>(null);
   const [releasing, setReleasing] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
+  const [report, setReport] = useState<PostSendReport | null>(null);
   const reviewLead = reviewing?.lead ? leads.find((l) => l.id === reviewing.lead!.id) ?? null : null;
 
   // A discard (or any other refresh) can drop a draft that's still checked
@@ -51,6 +55,8 @@ export function ReleaseQueue() {
   async function handleRelease() {
     setReleasing(true);
     setSummary(null);
+    setReport(null);
+    const reports: (PostSendReport | null)[] = [];
     let sent = 0;
     let failed = 0;
     let firstFailReason: string | null = null;
@@ -68,9 +74,11 @@ export function ReleaseQueue() {
         if (!firstFailReason) firstFailReason = error ? await readableInvokeError(error) : (result?.error ?? 'Send failed');
       } else {
         sent++;
+        reports.push(parsePostSend(data));
       }
     }
     setReleasing(false);
+    setReport(mergePostSend(reports));
     setSelected(new Set());
     setSummary(failed === 0 ? `Sent ${sent}` : `Sent ${sent} — ${failed} failed${firstFailReason ? `: ${firstFailReason}` : ''}`);
     await refresh();
@@ -86,6 +94,7 @@ export function ReleaseQueue() {
         </div>
       )}
       {summary && <p role="status" className="text-sm text-success">{summary}</p>}
+      {report && <PostSendPreview lines={null} report={report} />}
       <EmailReviewQueue
         drafts={drafts}
         loading={loading}

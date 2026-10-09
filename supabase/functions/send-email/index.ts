@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { loadSenderMailbox, sendLeadEmail } from '../_shared/sendLeadEmail.ts';
+import { applyPostSendUpdates, type PostSendResult } from '../_shared/postSendUpdates.ts';
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -94,5 +95,30 @@ Deno.serve(async (req) => {
     const warning = result.warning;
     return json({ error: result.error, ...(result.logId !== undefined ? { log_id: result.logId } : {}), ...(warning ? { warning } : {}) }, result.status ?? 400, headers);
   }
-  return json({ ok: true, log_id: result.logId, ...(result.warning ? { warning: result.warning } : {}) }, 200, headers);
+  // Post-send platform updates (note, sequence, follow-up date): additive, never fails or delays the response.
+  let postSend: { lines: string[]; warnings: string[] } | undefined;
+  if (result.logId) {
+    const logId = result.logId;
+    let timer: number | undefined;
+    try {
+      const work = (async (): Promise<PostSendResult | null> => {
+        const { data: row } = await service.from('email_logs').select('lead_id, org_id, subject, to_email, status').eq('id', logId).maybeSingle();
+        const r = row as { lead_id: string | null; org_id: string | null; subject: string; to_email: string; status: string } | null;
+        if (!r || r.status !== 'sent' || !r.lead_id || !r.org_id) return null;
+        return applyPostSendUpdates(service, {
+          orgId: r.org_id, leadId: r.lead_id, logId, userId: user.id, subject: r.subject, toEmail: r.to_email,
+          recipientLabel: r.to_email, templateId: templateId ?? null,
+        });
+      })();
+      const timeout = new Promise<'timeout'>((resolve) => { timer = setTimeout(() => resolve('timeout'), 8000); });
+      const outcome = await Promise.race([work, timeout]);
+      if (outcome === 'timeout') postSend = { lines: [], warnings: ['Follow-up updates took too long and may be incomplete'] };
+      else if (outcome) postSend = { lines: outcome.lines, warnings: outcome.warnings };
+    } catch {
+      postSend = { lines: [], warnings: ['Follow-up updates could not be completed'] };
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+  return json({ ok: true, log_id: result.logId, ...(result.warning ? { warning: result.warning } : {}), ...(postSend ? { post_send: postSend } : {}) }, 200, headers);
 });

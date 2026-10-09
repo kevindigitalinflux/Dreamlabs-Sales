@@ -19,6 +19,10 @@ import { buildRecipients, defaultSelection, draftRecipientKey } from '../../lib/
 import type { RecipientDraft } from '../../lib/composerDrafts';
 import { appendLinkToBody } from '../../lib/emailAttachments';
 import type { EmailAttachment } from '../../lib/emailAttachments';
+import { usePostSendPreview } from '../../hooks/usePostSendPreview';
+import { mergePostSend, parsePostSend } from '../../lib/postSendPreview';
+import type { PostSendReport } from '../../lib/postSendPreview';
+import { PostSendPreview } from './PostSendPreview';
 
 interface DiffLine { kind: 'same' | 'removed' | 'added'; text: string }
 
@@ -82,6 +86,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
   });
   const [busy, setBusy] = useState<'load' | 'ai' | 'send' | 'save' | null>(null);
   const [msg, setMsg] = useState<StatusMsg | null>(null);
+  const [report, setReport] = useState<PostSendReport | null>(null);
   const { contacts, loading: contactsLoading } = useLeadContacts(lead.id);
   const [selectedRecipients, setSelectedRecipients] = useState<Set<string>>(new Set(!draft && lead.email ? ['lead'] : []));
   const recipients = useMemo(() => buildRecipients(lead, contacts), [lead, contacts]);
@@ -173,7 +178,8 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
     if (targets.length === 0) return setMsg({ kind: 'err', text: 'Select at least one recipient.' });
     const incomplete = firstIncompleteDraft(targets, drafts);
     if (incomplete) return setMsg({ kind: 'err', text: incomplete });
-    setBusy(asDraft ? 'save' : 'send'); setMsg(null);
+    setBusy(asDraft ? 'save' : 'send'); setMsg(null); setReport(null);
+    const reports: (PostSendReport | null)[] = [];
     let succeeded = 0;
     let firstFailReason: string | null = null;
     for (const target of targets) {
@@ -202,18 +208,22 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
       if (error) { if (!firstFailReason) firstFailReason = await readableInvokeError(error); continue; }
       const r = data as { ok?: boolean; error?: string };
       if (r.error) { if (!firstFailReason) firstFailReason = r.error; continue; }
+      reports.push(parsePostSend(data));
       succeeded++;
     }
     setBusy(null);
+    const merged = mergePostSend(reports);
+    setReport(merged);
     if (succeeded === targets.length) {
       setMsg({ kind: 'ok', text: asDraft ? (targets.length > 1 ? `Saved ${succeeded} drafts to your review queue.` : 'Saved to your review queue.') : (targets.length > 1 ? `Sent ${succeeded} emails ✓` : 'Sent ✓') });
-      if (!asDraft) setTimeout(onClose, 800);
+      if (!asDraft) setTimeout(onClose, merged ? 3500 : 800);
     } else {
       setMsg({ kind: 'err', text: `${succeeded} of ${targets.length} succeeded${firstFailReason ? ` — ${firstFailReason}` : ''}` });
     }
   }
 
   const n = selectedTargets.length;
+  const previewLines = usePostSendPreview(lead.id, templateId, lead.next_action_date, current.subject, selectedTargets[0]?.email ?? '');
 
   return (
     <Modal open={open} onClose={onClose} title={`Email — ${lead.business_name}`}>
@@ -273,6 +283,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
           </>
         )}
 
+        <PostSendPreview lines={previewLines} report={report} multi={multi} />
         {msg && (
           <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : msg.kind === 'warn' ? 'text-warning' : 'text-success'}`}>
             {msg.text}
