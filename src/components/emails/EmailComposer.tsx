@@ -183,6 +183,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
         const { error } = await supabase.from('email_logs').insert({
           lead_id: lead.id, to_email: target.email, subject: d.subject, body: d.body, status: 'draft', attachments: d.attachments,
           decision_maker_candidate_id: target.candidateId,
+          template_id: templateId || null,
           sent_by: (await supabase.auth.getUser()).data.user?.id,
           org_id: currentOrg?.id,
         });
@@ -194,6 +195,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
         body: {
           to_email: target.email, subject: d.subject, body: d.body, lead_id: lead.id,
           decision_maker_candidate_id: target.candidateId, attachments: d.attachments,
+          template_id: templateId || undefined,
           log_id: targets.length === 1 ? draft?.log_id : undefined,
         },
       });

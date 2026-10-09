@@ -422,6 +422,8 @@ Deno.serve(async (req) => {
         // files are carried on the draft so the human release step sends them too.
         to_email: multi ? target.email : lead.email, subject: finalSubject, body: appendLinks(finalBody, parseLinks(template.links)), status: 'draft', org_id: orgId,
         attachments: onlyOrgAttachments(parseAttachments(template.attachments), orgId),
+        // Which template this step used (the resolved row), so sending the draft can update the sequence.
+        template_id: (template.id as string | null) ?? null,
         // Only per-contact drafts record who they were written to (null = the lead's own email).
         ...(multi ? { decision_maker_candidate_id: target.contactId } : {}),
       });

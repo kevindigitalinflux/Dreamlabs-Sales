@@ -252,6 +252,8 @@ export interface EmailLog {
   /** When the row was first created (a draft keeps this when it is released). */
   created_at: string;
   decision_maker_candidate_id: string | null;
+  /** The email template this came from, when known (null for hand-written and reply drafts). */
+  template_id: string | null;
   /** Files this draft carries / this sent email carried. */
   attachments: EmailAttachment[];
 }

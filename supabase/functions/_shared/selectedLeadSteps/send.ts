@@ -17,6 +17,7 @@ export async function insertDraftLog(ctx: PipelineContext, lead: Lead, recipient
     status: 'draft', org_id: ctx.run.org_id, decision_maker_candidate_id: recipient.candidateId, attachments: draft.attachments,
     // Linked to the enrolment so that once a person sends a parked draft, the step-sent guard counts it and replies are detected.
     sequence_enrollment_id: ctx.enrollment?.id ?? null,
+    template_id: draft.templateId ?? null,
   }).select('id').single();
   if (error) { console.error('autopilot: could not save draft'); return null; }
   return (data as { id: string }).id;

@@ -14,6 +14,8 @@ import { raceDeadline, type CandidateRow, type Lead, type Progress, type Sequenc
 
 export interface Draft {
   subject: string; body: string; attachments: EmailAttachment[];
+  /** The template row this draft was built from, stored on the email log. */
+  templateId?: string | null;
   /** Variables the template could not fill (blanked by substituteVariables); the draft must not be sent. */
   missing: string[];
   /** True when the AI draft failed and the plain filled template is shown instead; the draft must not be sent. */
@@ -54,7 +56,7 @@ export async function buildDraft(ctx: PipelineContext, i: DraftInput, progress: 
   const finish = (s: string, b: string) => ({ subject: s, body: withUnsubscribeLine(appendLinks(b, links), unsubscribeUrl) });
 
   // Anything the template could not fill parks the lead, so do not spend on the AI.
-  if (missing.length > 0) return { ...finish(subject.text, body.text), attachments, missing, aiFailed: false, unexpected: [], unsubscribeOk };
+  if (missing.length > 0) return { ...finish(subject.text, body.text), attachments, templateId: template.id, missing, aiFailed: false, unexpected: [], unsubscribeOk };
 
   try {
     progress.costCents += DRAFT_COST_CENTS;
@@ -66,9 +68,9 @@ export async function buildDraft(ctx: PipelineContext, i: DraftInput, progress: 
     const aiSubject = stripAiPunctuation(ai.subject);
     const aiBody = stripAiPunctuation(ai.body);
     const unexpected = unexpectedLinksOrAddresses(`${subject.text} ${body.text}`, `${aiSubject} ${aiBody}`, [unsubscribeUrl, ...links.map((l) => l.url), ...attachments.map((a) => a.name)], (i.lead.website as string | null) ?? null);
-    return { ...finish(aiSubject, aiBody), attachments, missing, aiFailed: false, unexpected, unsubscribeOk };
+    return { ...finish(aiSubject, aiBody), attachments, templateId: template.id, missing, aiFailed: false, unexpected, unsubscribeOk };
   } catch {
     console.error('autopilot: AI draft failed, keeping the plain template for review');
-    return { ...finish(subject.text, body.text), attachments, missing, aiFailed: true, unexpected: [], unsubscribeOk };
+    return { ...finish(subject.text, body.text), attachments, templateId: template.id, missing, aiFailed: true, unexpected: [], unsubscribeOk };
   }
 }

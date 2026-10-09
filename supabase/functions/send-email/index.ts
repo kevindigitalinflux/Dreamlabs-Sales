@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
   const user = userData?.user;
   if (!user) return json({ error: 'Not signed in' }, 401, headers);
 
-  const body = (await req.json()) as { to_email?: string; subject?: string; body?: string; lead_id?: string; log_id?: string; decision_maker_candidate_id?: string; attachments?: unknown };
+  const body = (await req.json()) as { to_email?: string; subject?: string; body?: string; lead_id?: string; log_id?: string; decision_maker_candidate_id?: string; attachments?: unknown; template_id?: string };
   if (!body.to_email || !body.subject || !body.body) {
     return json({ error: 'to_email, subject and body are required' }, 400, headers);
   }
@@ -68,6 +68,13 @@ Deno.serve(async (req) => {
     if (log.status === 'sent') return json({ error: 'This email was already sent' }, 400, headers);
   }
 
+  // Optional: which template this new email came from. Stored only if it is a template of the lead's org or a global one.
+  let templateId: string | undefined;
+  if (body.template_id && !body.log_id && orgId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.template_id)) {
+    const { data: tpl } = await service.from('email_templates').select('id').eq('id', body.template_id).or(`org_id.eq.${orgId},org_id.is.null`).maybeSingle();
+    if (tpl) templateId = body.template_id;
+  }
+
   const result = await sendLeadEmail(service, {
     senderId: user.id,
     to: body.to_email,
@@ -77,6 +84,7 @@ Deno.serve(async (req) => {
     logId: body.log_id,
     decisionMakerCandidateId: body.decision_maker_candidate_id,
     attachments: body.attachments,
+    templateId,
     mailbox,
     orgId,
     leadStage,

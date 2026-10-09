@@ -87,6 +87,7 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
       lead_id: target.leadId, to_email: target.email, subject: result.subject, body: result.body,
       status: 'draft', sent_by: session!.user.id, org_id: currentOrg!.id,
       decision_maker_candidate_id: target.candidateId,
+      template_id: templateId,
       // The template's files go on each draft so releasing it later sends them too.
       attachments: result.attachments ?? [],
     });

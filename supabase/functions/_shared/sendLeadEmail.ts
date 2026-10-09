@@ -45,6 +45,8 @@ export interface SendLeadEmailInput {
   logId?: string | null;
   /** Only written when not undefined (see the comment in the row-building code). */
   decisionMakerCandidateId?: string | null;
+  /** The template this new email came from; only written when a new log row is inserted (an existing draft keeps its own). */
+  templateId?: string | null;
   /** Explicit attachment list; when undefined the stored draft's attachments are used. */
   attachments?: unknown;
   /** Already-loaded mailbox from loadSenderMailbox; loaded here when omitted. */
@@ -195,6 +197,7 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
       logFailed = true;
     }
   } else {
+    if (input.templateId) row.template_id = input.templateId;
     const { data: inserted, error: logErr } = await service.from('email_logs').insert(row).select('id').single();
     if (logErr) {
       console.error('email_logs insert failed:', logErr.message);
