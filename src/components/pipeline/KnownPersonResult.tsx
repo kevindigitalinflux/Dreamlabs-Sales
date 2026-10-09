@@ -8,6 +8,10 @@ interface KnownPersonResultProps {
   result: KnownPersonResultData;
   /** The saved contact, once the list has refreshed; used to explain follow-ups. */
   contact?: DecisionMakerCandidate | null;
+  /** Extra neutral notes (for example about a phone number). */
+  extraNotes?: string[];
+  /** The phone the user typed, if any, so its source shows as You. */
+  typedPhone?: string;
   /** Saves a second email as another contact; resolves to an error message or null. */
   onAddExtraEmail: (email: string, label: string) => Promise<string | null>;
   onClose: () => void;
@@ -18,8 +22,8 @@ interface KnownPersonResultProps {
  * which paid lookups ran, plain-English problems (red) and notes (neutral), and a
  * button to keep a second email a provider found.
  */
-export function KnownPersonResult({ person, result, contact, onAddExtraEmail, onClose }: KnownPersonResultProps) {
-  const summary = summariseKnownPerson(result, person);
+export function KnownPersonResult({ person, result, contact, extraNotes = [], typedPhone, onAddExtraEmail, onClose }: KnownPersonResultProps) {
+  const summary = summariseKnownPerson(result, person, contact, typedPhone);
   const [busy, setBusy] = useState(false);
   const [extraError, setExtraError] = useState<string | null>(null);
   const [extraDone, setExtraDone] = useState(false);
@@ -34,7 +38,7 @@ export function KnownPersonResult({ person, result, contact, onAddExtraEmail, on
   }
 
   return (
-    <div role="status" className="flex flex-col gap-2 rounded-lg border border-line bg-card p-3">
+    <div className="flex flex-col gap-2 rounded-lg border border-line bg-card p-3">
       <p className="text-sm font-semibold text-offwhite">{summary.heading}</p>
       {summary.lines.length > 0 ? (
         <ul className="flex flex-col gap-0.5 text-sm text-offwhite">
@@ -50,7 +54,7 @@ export function KnownPersonResult({ person, result, contact, onAddExtraEmail, on
         <p className="text-sm text-muted">Found by a search, so it does not receive follow-ups unless you switch it on.</p>
       )}
       {summary.errors.map((m) => <p key={m} role="alert" className="text-sm text-danger">{m}</p>)}
-      {summary.notes.map((m) => <p key={m} className="text-sm text-muted">{m}</p>)}
+      {[...summary.notes, ...extraNotes].map((m) => <p key={m} className="text-sm text-muted">{m}</p>)}
       {extra && !extraDone && (
         <div className="flex flex-col gap-1">
           <Button variant="secondary" onClick={() => void addExtra()} loading={busy}>Add {extra} as another contact</Button>

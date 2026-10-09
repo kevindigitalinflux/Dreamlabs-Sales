@@ -41,15 +41,50 @@ export function buildKnownPersonPayload(text: KnownPersonText, usePaidLookups: b
   return { ok: true, value: payload };
 }
 
+/** Name boxes the user may have edited by hand; when present they win over the split. */
+export interface NameOverride { first_name: string; last_name: string }
+
+/** Preview of how a full name will be split, or null when it cannot be split yet. */
+export function namePreview(fullName: string): string | null {
+  const split = splitFullName(fullName);
+  return split.ok ? `First name: ${split.value.first_name}, Last name: ${split.value.last_name}` : null;
+}
+
+/**
+ * The names to send: the hand-edited first and last name when the user opened the
+ * edit boxes, otherwise the split of the full name.
+ */
+export function resolveName(fullName: string, override: NameOverride | null): Built<NameOverride> {
+  return override ? { ok: true, value: override } : splitFullName(fullName);
+}
+
 /** Builds the request from a single full-name box plus the other fields. */
 export function buildFromFullName(
   fullName: string,
   rest: Omit<KnownPersonText, 'first_name' | 'last_name'>,
   usePaidLookups: boolean,
+  override: NameOverride | null = null,
 ): Built<KnownPersonInput> {
-  const split = splitFullName(fullName);
+  const split = resolveName(fullName, override);
   if (!split.ok) return split;
   return buildKnownPersonPayload({ ...rest, ...split.value }, usePaidLookups);
+}
+
+/** What to do with a phone number the user typed after the server saved the person. */
+export type PhoneDecision = { action: 'save'; phone: string } | { action: 'skip' } | { action: 'note'; note: string };
+
+/**
+ * Decides whether the typed phone is saved on the person the server created. It is saved
+ * only when the row has no phone yet; if a provider already filled a different one, the
+ * provider's number stays and the user is told.
+ */
+export function decidePhoneSave(typedPhone: string, rowPhone: string | null | undefined): PhoneDecision {
+  const typed = typedPhone.trim();
+  if (!typed) return { action: 'skip' };
+  const existing = (rowPhone ?? '').trim();
+  if (!existing) return { action: 'save', phone: typed };
+  if (existing === typed) return { action: 'skip' };
+  return { action: 'note', note: `A search already found the phone number ${existing}, so the number you typed (${typed}) was not saved.` };
 }
 
 const SOURCE_LABEL: Record<KnownPersonSource, string> = { hunter: 'Hunter', apollo: 'Apollo', you: 'You' };
@@ -76,22 +111,28 @@ export function classifyMessages(errors: string[] | undefined, notes: string[] |
  * Lines to show after a lookup: the saved name, each value with its source label
  * ('Hunter', 'Apollo', 'You'), which paid lookups ran, and the sorted messages.
  */
-export function summariseKnownPerson(result: KnownPersonResult, typed: KnownPersonInput) {
+export function summariseKnownPerson(
+  result: KnownPersonResult,
+  typed: KnownPersonInput,
+  contact?: Pick<DecisionMakerCandidate, 'title' | 'email' | 'phone' | 'linkedin_url'> | null,
+  typedPhone?: string,
+) {
   const fields: [keyof KnownPersonResult['found'], string, string | undefined][] = [
-    ['email', 'Email', typed.email], ['phone', 'Phone', undefined], ['linkedin_url', 'LinkedIn', typed.linkedin_url],
+    ['email', 'Email', typed.email], ['phone', 'Phone', typedPhone?.trim() || undefined], ['linkedin_url', 'LinkedIn', typed.linkedin_url],
   ];
   const lines: SummaryLine[] = [];
-  if (typed.title) lines.push({ label: 'Position', value: typed.title, source: SOURCE_LABEL.you });
+  const position = contact?.title || typed.title;
+  if (position) lines.push({ label: 'Position', value: position, source: SOURCE_LABEL.you });
   for (const [key, label, typedValue] of fields) {
-    const found = result.found?.[key];
-    const value = found ?? typedValue;
+    // The saved row is the truth when we have it; otherwise what the server reported, then what was typed.
+    const value = contact?.[key] || result.found?.[key] || typedValue;
     if (!value) continue;
-    const src = result.sources?.[key] ?? (found ? undefined : 'you');
+    const src = result.sources?.[key] ?? (value === typedValue ? 'you' : undefined);
     lines.push({ label, value, source: src ? SOURCE_LABEL[src] : 'Search' });
   }
   const lookups = [
     result.hunter_called ? 'Hunter used' : 'Hunter not used',
-    result.apollo_called ? 'Apollo used (1 credit)' : 'Apollo not used',
+    result.apollo_called ? 'Apollo used' : 'Apollo not used',
   ];
   return { heading: `Saved ${personName(typed)}`, lines, lookups, ...classifyMessages(result.errors, result.notes) };
 }

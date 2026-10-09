@@ -7,6 +7,7 @@ import { additionsPatchFor } from '../../lib/decisionMakerAdditions';
 import { emptyContactForm } from '../../lib/leadContacts';
 import type { ContactFormValues } from '../../lib/leadContacts';
 import { buildKnownPersonPayload } from '../../lib/knownPersonForm';
+import { savePhoneAfterLookup } from '../../lib/knownPersonPhone';
 import { mainContact, sequenceRecipients } from '../../../supabase/functions/_shared/contacts';
 import { useLeadContacts } from '../../hooks/useLeadContacts';
 import { useKnownPersonFlow } from '../../hooks/useKnownPersonFlow';
@@ -75,7 +76,10 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
   async function addWithSearch(form: ContactFormValues): Promise<ContactResult> {
     const built = buildKnownPersonPayload(form, true);
     if (!built.ok) return { error: built.error };
-    return { error: await flow.lookup(built.value) };
+    const error = await flow.lookup(built.value, form.phone, (result, rows) => (
+      savePhoneAfterLookup(form.phone, result.contact_id, rows, (row, f) => hook.updateContact(row, f))
+    ));
+    return { error };
   }
 
   if (hook.loading) return <p className="text-sm text-muted">Loading…</p>;
@@ -112,7 +116,10 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
           />
         ))}
       </ul>
-      <KnownPersonArea leadId={leadId} flow={flow} contacts={contacts} finding={finding} onCloseFinding={() => setFinding(false)} refresh={hook.refresh} addContact={hook.addContact} />
+      <KnownPersonArea
+        leadId={leadId} lead={lead} flow={flow} contacts={contacts} finding={finding} onCloseFinding={() => setFinding(false)}
+        refresh={hook.refresh} addContact={hook.addContact} onSave={onSave}
+      />
       {adding ? (
         <ContactForm
           initial={emptyContactForm(adding)}

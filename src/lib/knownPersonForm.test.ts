@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildFromFullName, buildKnownPersonPayload, classifyMessages, needsFollowUpNotice, splitFullName, summariseKnownPerson,
+  buildFromFullName, buildKnownPersonPayload, classifyMessages, decidePhoneSave, namePreview, needsFollowUpNotice, resolveName,
+  splitFullName, summariseKnownPerson,
 } from './knownPersonForm';
 import type { KnownPersonResult } from '../types';
 
@@ -56,7 +57,7 @@ describe('summariseKnownPerson', () => {
       { label: 'Phone', value: '0123', source: 'Apollo' },
       { label: 'LinkedIn', value: 'https://linkedin.com/in/a', source: 'Hunter' },
     ]);
-    expect(s.lookups).toEqual(['Hunter used', 'Apollo used (1 credit)']);
+    expect(s.lookups).toEqual(['Hunter used', 'Apollo used']);
   });
   it('says when no paid lookup ran', () => {
     expect(summariseKnownPerson(base, typed).lookups).toEqual(['Hunter not used', 'Apollo not used']);
@@ -76,5 +77,66 @@ describe('needsFollowUpNotice', () => {
     expect(needsFollowUpNotice({ source: 'hunter', include_in_sequences: true })).toBe(false);
     expect(needsFollowUpNotice({ source: 'manual', include_in_sequences: false })).toBe(false);
     expect(needsFollowUpNotice(null)).toBe(false);
+  });
+});
+
+describe('name preview and override', () => {
+  it('previews the split', () => {
+    expect(namePreview('Mary Jane van der Berg')).toBe('First name: Mary, Last name: Jane van der Berg');
+    expect(namePreview('Andrea')).toBeNull();
+  });
+  it('the hand-edited names win over the split', () => {
+    const o = { first_name: 'Mary Jane', last_name: 'van der Berg' };
+    expect(resolveName('Mary Jane van der Berg', o)).toEqual({ ok: true, value: o });
+    expect(resolveName('Mary Jane van der Berg', null)).toEqual({ ok: true, value: { first_name: 'Mary', last_name: 'Jane van der Berg' } });
+    expect(buildFromFullName('Mary Jane van der Berg', { title: '', email: '', linkedin_url: '' }, true, o))
+      .toEqual({ ok: true, value: { first_name: 'Mary Jane', last_name: 'van der Berg' } });
+    expect(buildFromFullName('Andrea', { title: '', email: '', linkedin_url: '' }, true, { first_name: 'Andrea', last_name: 'Manning' }).ok).toBe(true);
+  });
+  it('sends use_paid_lookups false through buildFromFullName', () => {
+    expect(buildFromFullName('Andrea Manning', { title: '', email: '', linkedin_url: '' }, false))
+      .toEqual({ ok: true, value: { first_name: 'Andrea', last_name: 'Manning', use_paid_lookups: false } });
+  });
+  it('HOK end to end', () => {
+    expect(buildFromFullName('Andrea Manning', { title: ' Office Manager ', email: 'Andrea.Manning@hok.com', linkedin_url: '' }, true))
+      .toEqual({ ok: true, value: { first_name: 'Andrea', last_name: 'Manning', title: 'Office Manager', email: 'andrea.manning@hok.com' } });
+  });
+});
+
+describe('decidePhoneSave', () => {
+  it('saves into a blank row, skips blanks and matches, notes a different provider number', () => {
+    expect(decidePhoneSave(' 0123 ', null)).toEqual({ action: 'save', phone: '0123' });
+    expect(decidePhoneSave('0123', '')).toEqual({ action: 'save', phone: '0123' });
+    expect(decidePhoneSave('  ', '999')).toEqual({ action: 'skip' });
+    expect(decidePhoneSave('0123', '0123')).toEqual({ action: 'skip' });
+    expect(decidePhoneSave('0123', '999')).toEqual({
+      action: 'note', note: 'A search already found the phone number 999, so the number you typed (0123) was not saved.',
+    });
+  });
+});
+
+describe('summariseKnownPerson details', () => {
+  const typed = { first_name: 'Andrea', last_name: 'Manning', email: 'typed@x.com' };
+  it('shows the found value, not the typed one, when they conflict', () => {
+    const s = summariseKnownPerson({ ...base, found: { email: 'found@x.com' }, sources: { email: 'hunter' } }, typed);
+    expect(s.lines).toEqual([{ label: 'Email', value: 'found@x.com', source: 'Hunter' }]);
+  });
+  it('falls back to Search when a found value has no source', () => {
+    const s = summariseKnownPerson({ ...base, found: { phone: '0123' } }, { first_name: 'A', last_name: 'M' });
+    expect(s.lines).toEqual([{ label: 'Phone', value: '0123', source: 'Search' }]);
+  });
+  it('prefers the saved contact row and credits a typed phone to You', () => {
+    const s = summariseKnownPerson(base, typed, { title: 'Owner', email: 'typed@x.com', phone: '0777', linkedin_url: null }, '0777');
+    expect(s.lines).toEqual([
+      { label: 'Position', value: 'Owner', source: 'You' },
+      { label: 'Email', value: 'typed@x.com', source: 'You' },
+      { label: 'Phone', value: '0777', source: 'You' },
+    ]);
+  });
+  it('keeps extra_email out of the lines and the summary otherwise intact', () => {
+    const s = summariseKnownPerson({ ...base, extra_email: 'second@x.com', errors: ['Hunter failed'], notes: ['FYI'] }, typed);
+    expect(s.lines.map((l) => l.value)).toEqual(['typed@x.com']);
+    expect(s.errors).toEqual(['Hunter failed']);
+    expect(s.notes).toEqual(['FYI']);
   });
 });

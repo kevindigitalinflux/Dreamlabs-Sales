@@ -39,7 +39,6 @@ export function ContactForm({ initial, submitLabel, onSubmit, onCancel, storedLi
     e.preventDefault();
     const check = validateContactForm(form, storedLinkedin);
     if (!check.ok) { setError(check.error); return; }
-    if (searching && form.phone.trim()) { setError('A phone number cannot be sent to the search. Clear it, or untick "Also search for more details".'); return; }
     setBusy(true);
     const result = await (searching && onSubmitWithSearch ? onSubmitWithSearch(form) : onSubmit(form));
     setBusy(false);

@@ -56,11 +56,16 @@ export function useLeadContacts(leadId: string) {
     return () => { epoch.current++; void supabase.removeChannel(channel); };
   }, [leadId, currentOrg?.id]);
 
-  /** Reloads the list (for rows the server wrote); ignored if the lead changed meanwhile. */
-  const refresh = useCallback(async () => {
+  /**
+   * Reloads the list (for rows the server wrote); ignored if the lead changed meanwhile.
+   * Resolves to the fresh rows, or null when the reload failed or is no longer relevant.
+   */
+  const refresh = useCallback(async (): Promise<DecisionMakerCandidate[] | null> => {
     const mine = epoch.current;
-    const { data } = await supabase.from(TABLE).select('*').eq('lead_id', leadId).is('dismissed_at', null).order('created_at');
-    if (mine === epoch.current && data) setContacts(data as DecisionMakerCandidate[]);
+    const { data, error } = await supabase.from(TABLE).select('*').eq('lead_id', leadId).is('dismissed_at', null).order('created_at');
+    if (mine !== epoch.current || error || !data) return null;
+    setContacts(data as DecisionMakerCandidate[]);
+    return data as DecisionMakerCandidate[];
   }, [leadId]);
 
   const upsertLocal = useCallback((row: DecisionMakerCandidate) => {
