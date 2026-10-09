@@ -91,3 +91,77 @@ export function plainLookupError(provider: 'hunter' | 'apollo', failure: LookupF
   if (failure === 'timeout') return `${name} took too long to answer. Try again in a moment.`;
   return `${name} could not be reached right now.`;
 }
+
+/** Name key for comparing people: trimmed, whitespace collapsed, lowercase, diacritics removed. */
+export function normName(value: string | null | undefined): string {
+  return (value ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/** True for an https LinkedIn address: host is linkedin.com or a subdomain of it (credentials not allowed). */
+export function isLinkedinUrl(value: string | null | undefined): boolean {
+  const m = /^https:\/\/([^\s/?#@]+)([/?#]\S*)?$/i.exec((value ?? '').trim());
+  if (!m) return false;
+  const host = m[1]!.toLowerCase().replace(/:\d+$/, '');
+  return host === 'linkedin.com' || host.endsWith('.linkedin.com');
+}
+
+const DIRECTORY_DOMAINS = [
+  'facebook.com', 'fb.com', 'instagram.com', 'linkedin.com', 'twitter.com', 'x.com', 'tiktok.com', 'youtube.com',
+  'linktr.ee', 'yell.com', 'google.com', 'google.co.uk', 'goo.gl', 'wixsite.com', 'wordpress.com', 'blogspot.com',
+  'squarespace.com', 'weebly.com', 'business.site', 'yelp.com', 'trustpilot.com', 'checkatrade.com', 'thomsonlocal.com',
+  'companieshouse.gov.uk', 'gov.uk', 'pinterest.com',
+];
+
+/** True when a domain is a social network, site builder or business directory rather than the company's own site. */
+export function isDirectoryDomain(domain: string | null | undefined): boolean {
+  const d = (domain ?? '').toLowerCase();
+  return DIRECTORY_DOMAINS.some((x) => d === x || d.endsWith(`.${x}`));
+}
+
+/** True when an email's domain equals the given domain (case-insensitive). */
+export function emailOnDomain(email: string | null | undefined, domain: string | null | undefined): boolean {
+  const e = email ?? '';
+  const at = e.lastIndexOf('@');
+  return at > 0 && !!domain && e.slice(at + 1).trim().toLowerCase() === domain.toLowerCase();
+}
+
+/** True when another row (not `selfId`) already carries this email, any kind, dismissed or not. */
+export function emailTakenByOther(
+  email: string | null | undefined, rows: { id: string; email?: string | null }[], selfId: string,
+): boolean {
+  const e = (email ?? '').trim().toLowerCase();
+  return e !== '' && rows.some((r) => r.id !== selfId && (r.email ?? '').trim().toLowerCase() === e);
+}
+
+/** What a lookup request is allowed to call, from the person's blank fields and the org's keys. */
+export interface LookupPlanInput {
+  usePaid: boolean;
+  hunterKey: boolean;
+  apolloKey: boolean;
+  domainOk: boolean;
+  hasFirst: boolean;
+  hasLast: boolean;
+  hasEmail: boolean;
+  hasLinkedin: boolean;
+  hasApolloId: boolean;
+}
+
+/**
+ * Hunter only for a blank email and a full name; Apollo only for a blank email or LinkedIn and a contact that is
+ * not already an Apollo record. Both off when paid lookups are off or the lead has no usable domain.
+ */
+export function planLookups(i: LookupPlanInput): { hunter: boolean; apollo: boolean } {
+  if (!i.usePaid || !i.domainOk) return { hunter: false, apollo: false };
+  return {
+    hunter: i.hunterKey && !i.hasEmail && i.hasFirst && i.hasLast,
+    apollo: i.apolloKey && i.hasFirst && !i.hasApolloId && (!i.hasEmail || !i.hasLinkedin),
+  };
+}
+
+/** A rate-limit slot is only used when at least one paid call is planned. */
+export function needsRateSlot(plan: { hunter: boolean; apollo: boolean }): boolean {
+  return plan.hunter || plan.apollo;
+}
+
+/** Fixed message when the daily lookup limit is hit. */
+export const LOOKUP_LIMIT_MESSAGE = 'Daily lookup limit reached for this lead; try again tomorrow';

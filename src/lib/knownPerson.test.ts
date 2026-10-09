@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   domainFromWebsite,
+  emailOnDomain,
+  emailTakenByOther,
+  isDirectoryDomain,
+  isLinkedinUrl,
   mergeFoundIntoPerson,
+  needsRateSlot,
+  normName,
+  planLookups,
+  LOOKUP_LIMIT_MESSAGE,
   plainLookupError,
 } from '../../supabase/functions/_shared/knownPerson';
 
@@ -80,5 +88,85 @@ describe('plainLookupError', () => {
     expect(plainLookupError('hunter', 'timeout')).toBe('Hunter took too long to answer. Try again in a moment.');
     expect(plainLookupError('apollo', 500)).toBe('Apollo could not be reached right now.');
     expect(plainLookupError('apollo', 'network')).toBe('Apollo could not be reached right now.');
+  });
+});
+
+describe('normName', () => {
+  it('trims, collapses spaces, lowercases and strips diacritics', () => {
+    expect(normName('  José   María ')).toBe('jose maria');
+    expect(normName('ÉLODIE')).toBe('elodie');
+    expect(normName(null)).toBe('');
+  });
+});
+
+describe('isLinkedinUrl', () => {
+  it('accepts https linkedin.com hosts only', () => {
+    expect(isLinkedinUrl('https://www.linkedin.com/in/jane')).toBe(true);
+    expect(isLinkedinUrl('https://linkedin.com/in/jane')).toBe(true);
+    expect(isLinkedinUrl('https://uk.linkedin.com/in/jane')).toBe(true);
+    expect(isLinkedinUrl('http://linkedin.com/in/jane')).toBe(false);
+    expect(isLinkedinUrl('https://evil-linkedin.com/in/jane')).toBe(false);
+    expect(isLinkedinUrl('https://linkedin.com.evil.com/in/jane')).toBe(false);
+    expect(isLinkedinUrl('https://linkedin.com@evil.com/')).toBe(false);
+    expect(isLinkedinUrl('')).toBe(false);
+  });
+});
+
+describe('isDirectoryDomain', () => {
+  it('flags social, builder and directory domains and their subdomains', () => {
+    for (const d of ['facebook.com', 'm.facebook.com', 'x.com', 'linktr.ee', 'yell.com', 'acme.wixsite.com', 'acme.wordpress.com']) {
+      expect(isDirectoryDomain(d)).toBe(true);
+    }
+    for (const d of ['acme.com', 'notfacebook.com', 'max.com', null]) expect(isDirectoryDomain(d)).toBe(false);
+  });
+});
+
+describe('emailOnDomain / emailTakenByOther', () => {
+  it('compares the email domain exactly', () => {
+    expect(emailOnDomain('a@Acme.com', 'acme.com')).toBe(true);
+    expect(emailOnDomain('a@mail.acme.com', 'acme.com')).toBe(false);
+    expect(emailOnDomain('a@acme.com', null)).toBe(false);
+  });
+  it('detects an email on another row, any case, ignoring self', () => {
+    const rows = [{ id: '1', email: 'A@x.com' }, { id: '2', email: null }];
+    expect(emailTakenByOther('a@X.com', rows, '2')).toBe(true);
+    expect(emailTakenByOther('a@x.com', rows, '1')).toBe(false);
+    expect(emailTakenByOther('', rows, '2')).toBe(false);
+  });
+});
+
+describe('planLookups', () => {
+  const base = {
+    usePaid: true, hunterKey: true, apolloKey: true, domainOk: true,
+    hasFirst: true, hasLast: true, hasEmail: false, hasLinkedin: false, hasApolloId: false,
+  };
+  it('calls both when email and LinkedIn are blank', () => {
+    expect(planLookups(base)).toEqual({ hunter: true, apollo: true });
+  });
+  it('phone alone never triggers Apollo', () => {
+    expect(planLookups({ ...base, hasEmail: true, hasLinkedin: true })).toEqual({ hunter: false, apollo: false });
+  });
+  it('Apollo still runs for a blank LinkedIn when the email is present; Hunter does not', () => {
+    expect(planLookups({ ...base, hasEmail: true })).toEqual({ hunter: false, apollo: true });
+  });
+  it('skips Apollo for an existing Apollo record', () => {
+    expect(planLookups({ ...base, hasApolloId: true })).toEqual({ hunter: true, apollo: false });
+  });
+  it('opt-out, missing domain, missing keys and missing last name', () => {
+    expect(planLookups({ ...base, usePaid: false })).toEqual({ hunter: false, apollo: false });
+    expect(planLookups({ ...base, domainOk: false })).toEqual({ hunter: false, apollo: false });
+    expect(planLookups({ ...base, hunterKey: false, apolloKey: false })).toEqual({ hunter: false, apollo: false });
+    expect(planLookups({ ...base, hasLast: false })).toEqual({ hunter: false, apollo: true });
+  });
+});
+
+describe('rate limit decision', () => {
+  it('uses a slot only when a paid call is planned', () => {
+    expect(needsRateSlot({ hunter: false, apollo: false })).toBe(false);
+    expect(needsRateSlot({ hunter: true, apollo: false })).toBe(true);
+    expect(needsRateSlot({ hunter: false, apollo: true })).toBe(true);
+  });
+  it('has a fixed plain-English limit message', () => {
+    expect(LOOKUP_LIMIT_MESSAGE).toBe('Daily lookup limit reached for this lead; try again tomorrow');
   });
 });

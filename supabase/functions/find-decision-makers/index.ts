@@ -5,6 +5,7 @@ import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { runBounded } from '../_shared/concurrency.ts';
 import { findAndStoreDecisionMakers } from '../_shared/findDecisionMakers.ts';
 import { validateContactEdit } from '../_shared/contacts.ts';
+import { isLinkedinUrl } from '../_shared/knownPerson.ts';
 import { runKnownPerson } from '../_shared/knownPersonFlow.ts';
 
 const MAX_LEADS = 40;
@@ -37,6 +38,7 @@ Deno.serve(async (req) => {
   if (leadIds.length > MAX_LEADS) return json({ error: `Select ${MAX_LEADS} or fewer leads at once` }, 400, headers);
 
   let knownPerson: ReturnType<typeof validateContactEdit> | null = null;
+  let usePaidLookups = true;
   if (body.known_person !== undefined && body.known_person !== null) {
     if (leadIds.length !== 1) return json({ error: 'known_person works for one lead at a time' }, 400, headers);
     const kp = body.known_person as Record<string, unknown>;
@@ -47,6 +49,10 @@ Deno.serve(async (req) => {
       email: s(kp.email), linkedin_url: s(kp.linkedin_url),
     });
     if (!knownPerson.ok) return json({ error: knownPerson.error }, 400, headers);
+    if (knownPerson.value.linkedin_url && !isLinkedinUrl(knownPerson.value.linkedin_url)) {
+      return json({ error: 'The LinkedIn link must be a linkedin.com address.' }, 400, headers);
+    }
+    usePaidLookups = kp.use_paid_lookups !== false;
   }
 
   const service = createClient(
@@ -79,7 +85,7 @@ Deno.serve(async (req) => {
 
   if (knownPerson && knownPerson.ok) {
     // Targeted lookups only: the generic domain search is skipped so provider cost stays bounded.
-    const outcome = await runKnownPerson(client, service, resolvedLeads[0]!, knownPerson.value, userData.user.id, { hunterKey, apolloKey });
+    const outcome = await runKnownPerson(client, service, resolvedLeads[0]!, knownPerson.value, userData.user.id, { hunterKey, apolloKey }, usePaidLookups);
     if (outcome.error) return json({ error: outcome.error }, outcome.status, headers);
     return json({
       results: [{ lead_id: resolvedLeads[0]!.id, candidates: outcome.candidates }],
