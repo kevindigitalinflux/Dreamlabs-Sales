@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router';
 import { useAuth } from '../../hooks/useAuth';
 import { useOrg } from '../../hooks/useOrg';
 import { useTemplates } from '../../hooks/useTemplates';
+import { useSequences } from '../../hooks/useSequences';
+import { useActiveEnrollments } from '../../hooks/useActiveEnrollments';
+import { buildDefaultTemplateIdByType } from '../../../supabase/functions/_shared/postSendRules';
+import { enrollmentsDiffer, resolveLeadTemplate } from '../../lib/templatePicker';
 import { readableInvokeError } from '../../lib/invokeError';
 import { supabase } from '../../lib/supabase';
 import { categorisedOptions } from '../ui/CategorisedOptions';
@@ -35,10 +39,13 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
   const { session } = useAuth();
   const { currentOrg } = useOrg();
   const { templates } = useTemplates();
+  const { sequences } = useSequences();
   const navigate = useNavigate();
   const [templateId, setTemplateId] = useState('');
   const [useAi, setUseAi] = useState(true);
   const [includeOthers, setIncludeOthers] = useState(false);
+  const [perLead, setPerLead] = useState(false);
+  const { byLead, loading: enrLoading, error: enrError } = useActiveEnrollments(leads.map((l) => l.id), open);
   const [decisionMakers, setDecisionMakers] = useState<DecisionMakerCandidate[]>([]);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -52,6 +59,7 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
     setSummary(null);
     setProgress(0);
     setIncludeOthers(false);
+    setPerLead(false);
     setDecisionMakers([]);
     if (leads.length === 0) return;
     let cancelled = false;
@@ -70,12 +78,26 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
 
   const targets = useMemo(() => buildBulkTargets(leads, decisionMakers, includeOthers), [leads, decisionMakers, includeOthers]);
   const otherCount = useMemo(() => countOtherContacts(leads, decisionMakers), [leads, decisionMakers]);
+  // "Use each lead's own sequence step": only offered when the leads are in different places (and their enrolments loaded).
+  const canUsePerLead = !enrLoading && !enrError && enrollmentsDiffer(leads.map((l) => byLead[l.id] ?? null));
+  const usePerLead = perLead && canUsePerLead;
+  const defaultTemplateIdByType = useMemo(() => buildDefaultTemplateIdByType(
+    templates.map((t) => ({ id: t.id, org_id: (t as { org_id?: string | null }).org_id ?? null, template_type: t.template_type, is_default: t.is_default })),
+    currentOrg?.id ?? '',
+  ), [templates, currentOrg]);
+  /** The template for one lead's email: the single chosen one, or (per-lead mode) its own current step's. */
+  function templateFor(leadId: string): string | null {
+    if (!usePerLead) return templateId || null;
+    return resolveLeadTemplate({ templates, sequences, enrollment: byLead[leadId] ?? null, defaultTemplateIdByType, fallbackTemplateId: templateId }).templateId;
+  }
+  const writable = usePerLead ? targets.filter((t) => templateFor(t.leadId) !== null) : targets;
+  const noTemplateCount = targets.length - writable.length;
   const leadsWithoutAnyone = leads.filter((l) => !targets.some((t) => t.leadId === l.id));
 
-  async function draftOne(target: BulkTarget): Promise<string | null> {
+  async function draftOne(target: BulkTarget, tid: string): Promise<string | null> {
     const { data, error: invokeErr } = await supabase.functions.invoke('generate-email', {
       body: {
-        lead_id: target.leadId, template_id: templateId, use_ai: useAi,
+        lead_id: target.leadId, template_id: tid, use_ai: useAi,
         // A decision-maker is addressed by name and written to by role; the lead's own contact keeps its default.
         recipient_name: target.name ?? undefined, recipient_title: target.title ?? undefined,
       },
@@ -87,7 +109,7 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
       lead_id: target.leadId, to_email: target.email, subject: result.subject, body: result.body,
       status: 'draft', sent_by: session!.user.id, org_id: currentOrg!.id,
       decision_maker_candidate_id: target.candidateId,
-      template_id: templateId,
+      template_id: tid,
       // The template's files go on each draft so releasing it later sends them too.
       attachments: result.attachments ?? [],
     });
@@ -95,25 +117,26 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
   }
 
   async function handleGenerate() {
-    if (!templateId || !currentOrg || !session) return;
+    if ((!templateId && !usePerLead) || !currentOrg || !session) return;
     setBusy(true);
     setProgress(0);
     setSummary(null);
     let drafted = 0;
     let firstFailReason: string | null = null;
     // A few at a time: each person's email is its own AI call, so a big batch is much faster this way.
-    for (let i = 0; i < targets.length; i += CONCURRENCY) {
-      const batch = targets.slice(i, i + CONCURRENCY);
-      const errors = await Promise.all(batch.map((t) => draftOne(t)));
+    for (let i = 0; i < writable.length; i += CONCURRENCY) {
+      const batch = writable.slice(i, i + CONCURRENCY);
+      const errors = await Promise.all(batch.map((t) => draftOne(t, templateFor(t.leadId)!)));
       for (const err of errors) {
         if (err === null) drafted++; else if (!firstFailReason) firstFailReason = err;
       }
-      setProgress(Math.min(targets.length, i + batch.length));
+      setProgress(Math.min(writable.length, i + batch.length));
     }
     setBusy(false);
-    const failed = targets.length - drafted;
+    const failed = writable.length - drafted;
     const parts = [`Drafted ${drafted} ${drafted === 1 ? 'email' : 'emails'}, one for each person`];
     if (leadsWithoutAnyone.length > 0) parts.push(`${leadsWithoutAnyone.length} ${leadsWithoutAnyone.length === 1 ? 'lead' : 'leads'} skipped (nobody to write to)`);
+    if (noTemplateCount > 0) parts.push(`${noTemplateCount} ${noTemplateCount === 1 ? 'email' : 'emails'} skipped (no template)`);
     if (failed > 0) parts.push(`${failed} failed to draft${firstFailReason ? ` (${firstFailReason})` : ''}`);
     setSummary(parts.join(' — '));
     if (drafted > 0) onGenerated?.();
@@ -153,13 +176,22 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
           </span>
         </label>
 
+        {canUsePerLead && (
+          <label className="flex min-h-11 items-start gap-2">
+            <input type="checkbox" checked={perLead} onChange={(e) => setPerLead(e.target.checked)} className="mt-3 h-4 w-4 accent-violet-500" />
+            <span className="py-2.5">
+              Use each lead's own sequence step
+              <span className="block text-xs text-muted">These leads are at different points. Each gets its current step's template; leads not in a sequence use the template chosen above{templateId ? '' : ', or are skipped if none is chosen'}.</span>
+            </span>
+          </label>
+        )}
         <div className="rounded-lg bg-surface/60 p-3 text-sm" aria-live="polite">
-          <p className="font-semibold">{targets.length === 0 ? 'No emails to write' : `Will write ${targets.length} ${targets.length === 1 ? 'email' : 'emails'}`}</p>
+          <p className="font-semibold">{writable.length === 0 ? 'No emails to write' : `Will write ${writable.length} ${writable.length === 1 ? 'email' : 'emails'}`}</p>
           {targets.length > 0 && (
             <ul className="mt-1 flex max-h-32 flex-col gap-0.5 overflow-y-auto text-xs text-muted">
               {targets.map((t) => (
                 <li key={`${t.leadId}-${t.email}`} className="truncate">
-                  {t.name ?? t.email}{t.title ? `, ${t.title}` : ''} at {t.businessName}
+                  {t.name ?? t.email}{t.title ? `, ${t.title}` : ''} at {t.businessName}{usePerLead && templateFor(t.leadId) === null ? ' (skipped: no template)' : ''}
                 </li>
               ))}
             </ul>
@@ -171,13 +203,13 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
           )}
         </div>
 
-        {busy && <p className="text-sm text-muted">{progress} / {targets.length} drafted…</p>}
+        {busy && <p className="text-sm text-muted">{progress} / {writable.length} drafted…</p>}
         {summary && <p role="status" className="text-sm text-success">{summary}</p>}
         <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={onClose}>{summary ? 'Close' : 'Cancel'}</Button>
           {!summary && (
-            <Button onClick={() => void handleGenerate()} disabled={busy || !templateId || targets.length === 0} loading={busy}>
-              {busy ? 'Generating…' : targets.length > 1 ? `Generate ${targets.length} drafts` : 'Generate drafts'}
+            <Button onClick={() => void handleGenerate()} disabled={busy || (usePerLead ? writable.length === 0 : (!templateId || targets.length === 0))} loading={busy}>
+              {busy ? 'Generating…' : writable.length > 1 ? `Generate ${writable.length} drafts` : 'Generate drafts'}
             </Button>
           )}
           {summary && (

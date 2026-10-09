@@ -4,16 +4,17 @@ import { readableInvokeError } from '../../lib/invokeError';
 import { supabase } from '../../lib/supabase';
 import { useOrg } from '../../hooks/useOrg';
 import { useTemplates } from '../../hooks/useTemplates';
+import { useSequences } from '../../hooks/useSequences';
+import { useEnrollments } from '../../hooks/useEnrollments';
 import { useLeadContacts } from '../../hooks/useLeadContacts';
 import type { Lead } from '../../types';
 import { Button } from '../ui/Button';
-import { Input, SelectField, Textarea } from '../ui/Input';
+import { Input, Textarea } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { AttachmentFiles } from './AttachmentFiles';
 import { InsertLink } from './InsertLink';
 import { RecipientDraftCard } from './RecipientDraftCard';
 import { RecipientPicker } from './RecipientPicker';
-import { categorisedOptions } from '../ui/CategorisedOptions';
 import { BLANK_DRAFT, SEED_KEY, firstIncompleteDraft, generationIdentity, patchDraft, unionMissing } from '../../lib/composerDrafts';
 import { buildRecipients, defaultSelection, draftRecipientKey } from '../../lib/composerRecipients';
 import type { RecipientDraft } from '../../lib/composerDrafts';
@@ -23,6 +24,8 @@ import { usePostSendPreview } from '../../hooks/usePostSendPreview';
 import { mergePostSend, parsePostSend } from '../../lib/postSendPreview';
 import type { PostSendReport } from '../../lib/postSendPreview';
 import { PostSendPreview } from './PostSendPreview';
+import { TemplatePicker } from './TemplatePicker';
+import { SuggestedSequence } from './SuggestedSequence';
 
 interface DiffLine { kind: 'same' | 'removed' | 'added'; text: string }
 
@@ -74,7 +77,9 @@ type GenerateResult = {
  * exactly as it always did.
  */
 export function EmailComposer({ lead, open, onClose, draft = null }: EmailComposerProps) {
-  const { templates } = useTemplates();
+  const { templates, loading: tplLoading, error: tplError } = useTemplates();
+  const { sequences, loading: seqLoading, error: seqError } = useSequences();
+  const { enrollment, loading: enrLoading, enroll } = useEnrollments(lead.id);
   const { currentOrg } = useOrg();
   const [templateId, setTemplateId] = useState('');
   // Source of truth for every email being written, keyed by recipient. A draft opened from
@@ -223,17 +228,19 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
   }
 
   const n = selectedTargets.length;
-  const previewLines = usePostSendPreview(lead.id, templateId, lead.next_action_date, current.subject, selectedTargets[0]?.email ?? '');
+  const previewLines = usePostSendPreview(
+    { templates, sequences, enrollment, loading: tplLoading || seqLoading || enrLoading }, templateId, lead.next_action_date, current.subject, selectedTargets[0]?.email ?? '');
 
   return (
     <Modal open={open} onClose={onClose} title={`Email — ${lead.business_name}`}>
       <div className="flex flex-col gap-4">
         {recipients.length === 0 && <p role="alert" className="text-sm text-danger">No email addresses available for this lead or its contacts.</p>}
         {recipients.length > 0 && <RecipientPicker recipients={recipients} selected={selectedRecipients} onToggle={toggleRecipient} multi={multi} />}
-        <SelectField label="Template" value={templateId} onChange={(e) => setTemplateId(e.target.value)} showGroupInValue>
-          <option value="">Choose…</option>
-          {categorisedOptions(templates, (t) => ({ value: t.id }))}
-        </SelectField>
+        {!draft && !enrLoading && !enrollment && <SuggestedSequence leadId={lead.id} onEnroll={(sequenceId) => enroll(sequenceId, 1)} />}
+        <TemplatePicker
+          templates={templates} sequences={sequences} enrollment={enrollment} orgId={currentOrg?.id}
+          loading={tplLoading || seqLoading || enrLoading} error={tplError ?? seqError} value={templateId} onChange={setTemplateId} autoSelect={!draft}
+        />
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => void generate(false)} disabled={busy !== null} loading={busy === 'load'}>
             {busy === 'load' ? 'Loading…' : multi ? `Use template for ${n} people` : 'Use template'}
