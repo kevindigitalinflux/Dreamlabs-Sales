@@ -1,0 +1,186 @@
+import { describe, expect, it, vi } from 'vitest';
+import { runWideLookup, type WideLookupDeps, type WideLookupInput } from '../../supabase/functions/_shared/knownPersonWideRun';
+import type { FoundFields } from '../../supabase/functions/_shared/knownPerson';
+import type { StepId } from '../../supabase/functions/_shared/knownPersonWide';
+
+const input = (over: Partial<WideLookupInput> = {}): WideLookupInput => ({
+  first: 'John', last: 'Sipple',
+  have: { email: null, linkedin_url: null, phone: null },
+  hasApolloId: false, domain: 'x.com', directory: false, website: 'https://x.com', usePaid: true,
+  keys: { hunter: true, apollo: true, gemini: true },
+  ...over,
+});
+
+/** Fakes that find nothing; `absorb` fills blanks like the real flow and records which step filled what. */
+function deps(over: Partial<WideLookupDeps> = {}) {
+  const filled: { found: FoundFields; step: StepId }[] = [];
+  const have: FoundFields = {};
+  const d: WideLookupDeps = {
+    now: () => 0,
+    takeSlot: vi.fn(async () => true),
+    hunterFind: vi.fn(async () => ({ ok: true as const, found: {} })),
+    hunterDomain: vi.fn(async () => ({ ok: true as const, emails: [], pattern: null })),
+    hunterVerify: vi.fn(async () => ({ ok: true as const, verdict: 'unverified' as const })),
+    scanWebsite: vi.fn(async () => ({ ok: true as const, email: null, linkedin_url: null })),
+    webSearch: vi.fn(async () => ({ ok: true as const, found: {} })),
+    apolloMatch: vi.fn(async () => ({ ok: true as const, found: {} })),
+    absorb: (found, step) => {
+      const applied: FoundFields = {};
+      for (const f of ['email', 'linkedin_url', 'phone'] as const) {
+        if (found[f] && !have[f]) { have[f] = found[f]; applied[f] = found[f]; }
+      }
+      if (Object.keys(applied).length) filled.push({ found: applied, step });
+      return applied;
+    },
+    ...over,
+  };
+  return { d, filled };
+}
+const statuses = (steps: { id: string; status: string }[]) => Object.fromEntries(steps.map((s) => [s.id, s.status]));
+
+describe('runWideLookup', () => {
+  it('runs every step in order and reports each one', async () => {
+    const { d } = deps();
+    const r = await runWideLookup(input(), d);
+    expect(r.steps.map((s) => s.id)).toEqual(['hunter_finder', 'hunter_domain', 'pattern', 'website', 'web', 'apollo']);
+    expect(statuses(r.steps)).toEqual({
+      hunter_finder: 'no_match', hunter_domain: 'no_match', pattern: 'no_match', website: 'no_match', web: 'no_match', apollo: 'no_match',
+    });
+    expect(r.steps[1]!.detail).toBe('Hunter searched the domain and found no one called Sipple.');
+    expect(d.takeSlot).toHaveBeenCalledTimes(1);
+    expect(r).toMatchObject({ hunterCalled: true, apolloCalled: true, limitReached: false, suggestions: [] });
+  });
+
+  it('fills email and LinkedIn from the company list and skips later steps', async () => {
+    const { d, filled } = deps({
+      hunterDomain: vi.fn(async () => ({ ok: true as const, pattern: '{first}', emails: [
+        { value: 'john.sipple@x.com', first_name: 'John', last_name: 'Sipple', linkedin: 'https://www.linkedin.com/in/jsipple' },
+      ] })),
+    });
+    const r = await runWideLookup(input(), d);
+    expect(filled).toEqual([{ step: 'hunter_domain', found: { email: 'john.sipple@x.com', linkedin_url: 'https://www.linkedin.com/in/jsipple' } }]);
+    expect(statuses(r.steps)).toMatchObject({ hunter_domain: 'found', pattern: 'skipped', website: 'skipped', web: 'skipped', apollo: 'skipped' });
+    expect(d.scanWebsite).not.toHaveBeenCalled();
+    expect(d.apolloMatch).not.toHaveBeenCalled();
+  });
+
+  it('saves a verified pattern address, but only suggests an unverified one', async () => {
+    const list = vi.fn(async () => ({ ok: true as const, emails: [], pattern: '{first}.{last}' }));
+    const verified = deps({ hunterDomain: list, hunterVerify: vi.fn(async () => ({ ok: true as const, verdict: 'verified' as const })) });
+    const r1 = await runWideLookup(input(), verified.d);
+    expect(verified.filled[0]).toEqual({ step: 'pattern', found: { email: 'john.sipple@x.com' } });
+    expect(r1.suggestions).toEqual([]);
+
+    const unverified = deps({ hunterDomain: list });
+    const r2 = await runWideLookup(input(), unverified.d);
+    expect(unverified.filled).toEqual([]);
+    expect(r2.suggestions).toEqual([{ field: 'email', value: 'john.sipple@x.com', label: 'Guess, unverified' }]);
+
+    const invalid = deps({ hunterDomain: list, hunterVerify: vi.fn(async () => ({ ok: true as const, verdict: 'invalid' as const })) });
+    const r3 = await runWideLookup(input(), invalid.d);
+    expect(r3.suggestions).toEqual([]);
+    expect(statuses(r3.steps).pattern).toBe('no_match');
+  });
+
+  it('drops the unverified guess when a later step saves a real address', async () => {
+    const { d } = deps({
+      hunterDomain: vi.fn(async () => ({ ok: true as const, emails: [], pattern: '{f}{last}' })),
+      scanWebsite: vi.fn(async () => ({ ok: true as const, email: 'john@x.com', linkedin_url: null })),
+    });
+    const r = await runWideLookup(input(), d);
+    expect(r.suggestions).toEqual([]);
+    expect(statuses(r.steps).website).toBe('found');
+  });
+
+  it('never saves web-search finds: they become suggestions', async () => {
+    const { d, filled } = deps({
+      webSearch: vi.fn(async () => ({ ok: true as const, found: { email: 'john.sipple@x.com', linkedin_url: 'https://www.linkedin.com/in/js' } })),
+    });
+    const r = await runWideLookup(input(), d);
+    expect(filled).toEqual([]);
+    expect(r.suggestions).toEqual([
+      { field: 'email', value: 'john.sipple@x.com', label: 'Found by web search, check it' },
+      { field: 'linkedin_url', value: 'https://www.linkedin.com/in/js', label: 'Found by web search, check it' },
+    ]);
+  });
+
+  it('ignores a found address on another domain', async () => {
+    const { d, filled } = deps({
+      hunterFind: vi.fn(async () => ({ ok: true as const, found: { email: 'john@gmail.com' } })),
+      scanWebsite: vi.fn(async () => ({ ok: true as const, email: 'john@other.com', linkedin_url: null })),
+      webSearch: vi.fn(async () => ({ ok: true as const, found: { email: 'john@other.com' } })),
+    });
+    const r = await runWideLookup(input(), d);
+    expect(filled).toEqual([]);
+    expect(r.suggestions).toEqual([]);
+  });
+
+  it('turns a failing or throwing step into a status and carries on', async () => {
+    const { d } = deps({
+      hunterFind: vi.fn(async () => ({ ok: false as const, failure: 401 })),
+      hunterDomain: vi.fn(async () => { throw new Error('boom'); }),
+      scanWebsite: vi.fn(async () => ({ ok: false as const })),
+      webSearch: vi.fn(async () => ({ ok: false as const, failure: 'timeout' as const })),
+      apolloMatch: vi.fn(async () => ({ ok: true as const, found: { phone: '+44 20 7946 0000' } })),
+    });
+    const r = await runWideLookup(input(), d);
+    expect(statuses(r.steps)).toEqual({
+      hunter_finder: 'error', hunter_domain: 'error', pattern: 'skipped', website: 'error', web: 'error', apollo: 'found',
+    });
+    expect(r.steps[0]!.detail).toContain('Hunter did not accept the saved API key');
+  });
+
+  it('treats Apollo refusing the plan as a quiet unavailable step', async () => {
+    for (const [failure, detail] of [[403, 'Apollo is not available on this plan, so it was skipped.'], [402, 'Apollo is not available on this plan, so it was skipped.'], [401, 'Apollo did not accept the saved key, so it was skipped.']] as const) {
+      const { d } = deps({ apolloMatch: vi.fn(async () => ({ ok: false as const, failure })) });
+      const r = await runWideLookup(input(), d);
+      expect(r.steps[5]).toMatchObject({ id: 'apollo', status: 'unavailable', detail });
+    }
+  });
+
+  it('skips steps 2 to 5 for a directory website, without using a slot when nothing can run', async () => {
+    const { d } = deps();
+    const r = await runWideLookup(input({ domain: 'facebook.com', directory: true }), d);
+    expect(r.steps.every((s) => s.status === 'skipped')).toBe(true);
+    expect(r.steps[1]!.detail).toBe('The lead\'s website is a social or directory page, so it was not searched.');
+    expect(d.takeSlot).not.toHaveBeenCalled();
+  });
+
+  it('only reads the website when paid lookups are off', async () => {
+    const { d } = deps();
+    const r = await runWideLookup(input({ usePaid: false }), d);
+    expect(statuses(r.steps)).toEqual({
+      hunter_finder: 'skipped', hunter_domain: 'skipped', pattern: 'skipped', website: 'no_match', web: 'skipped', apollo: 'skipped',
+    });
+    expect(d.takeSlot).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks missing keys as unavailable', async () => {
+    const { d } = deps();
+    const r = await runWideLookup(input({ keys: { hunter: false, apollo: false, gemini: false } }), d);
+    expect(statuses(r.steps)).toMatchObject({ hunter_finder: 'unavailable', web: 'unavailable', apollo: 'unavailable', website: 'no_match' });
+  });
+
+  it('runs nothing when the daily limit is reached', async () => {
+    const { d } = deps({ takeSlot: vi.fn(async () => false) });
+    const r = await runWideLookup(input(), d);
+    expect(r.limitReached).toBe(true);
+    expect(r.steps.every((s) => s.status === 'skipped')).toBe(true);
+    expect(d.hunterFind).not.toHaveBeenCalled();
+  });
+
+  it('skips the rest once the time budget is used up', async () => {
+    let t = 0;
+    const { d } = deps({ now: () => t, hunterFind: vi.fn(async () => { t += 19_000; return { ok: true as const, found: {} }; }) });
+    const r = await runWideLookup(input(), d);
+    expect(statuses(r.steps)).toMatchObject({ hunter_domain: 'skipped', website: 'skipped', web: 'skipped', apollo: 'skipped' });
+    expect(r.steps[1]!.detail).toBe('Skipped to keep the lookup quick.');
+  });
+
+  it('does not run Hunter when the person already has an email, but still looks for LinkedIn', async () => {
+    const { d } = deps();
+    const r = await runWideLookup(input({ have: { email: 'john@x.com', linkedin_url: null, phone: null } }), d);
+    expect(statuses(r.steps)).toMatchObject({ hunter_finder: 'skipped', hunter_domain: 'no_match', pattern: 'skipped', website: 'no_match' });
+    expect(d.hunterFind).not.toHaveBeenCalled();
+  });
+});

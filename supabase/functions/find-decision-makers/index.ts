@@ -10,7 +10,7 @@ import { runKnownPerson } from '../_shared/knownPersonFlow.ts';
 
 const MAX_LEADS = 40;
 
-interface LeadRow { id: string; org_id: string; website: string | null }
+interface LeadRow { id: string; org_id: string; website: string | null; business_name: string | null }
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
   // to see (can_view_lead policy) — matches enrich-leads-bulk's pattern. The
   // org-membership check below stays as a defensive second layer.
   const { data: leads, error: leadsErr } = await client
-    .from('leads').select('id, org_id, website').in('id', leadIds);
+    .from('leads').select('id, org_id, website, business_name').in('id', leadIds);
   if (leadsErr) return json({ error: leadsErr.message }, 500, headers);
   const resolvedLeads = (leads ?? []) as LeadRow[];
   if (resolvedLeads.length === 0) {
@@ -84,8 +84,10 @@ Deno.serve(async (req) => {
   ]);
 
   if (knownPerson && knownPerson.ok) {
-    // Targeted lookups only: the generic domain search is skipped so provider cost stays bounded.
-    const outcome = await runKnownPerson(client, service, resolvedLeads[0]!, knownPerson.value, userData.user.id, { hunterKey, apolloKey }, usePaidLookups);
+    // Targeted lookups for one named person (the generic decision-maker search is skipped). The org's Gemini key
+    // powers the web-search step; it is resolved the same way as every other Gemini caller.
+    const geminiKey = await resolveOrgApiKey(service, orgId, 'gemini');
+    const outcome = await runKnownPerson(client, service, resolvedLeads[0]!, knownPerson.value, userData.user.id, { hunterKey, apolloKey, geminiKey }, usePaidLookups);
     if (outcome.error) return json({ error: outcome.error }, outcome.status, headers);
     return json({
       results: [{ lead_id: resolvedLeads[0]!.id, candidates: outcome.candidates }],

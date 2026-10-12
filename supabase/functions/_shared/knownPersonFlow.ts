@@ -1,16 +1,23 @@
 // supabase/functions/_shared/knownPersonFlow.ts
-// "I know this person" flow for find-decision-makers: save the typed person first, then fill blank fields from Hunter / Apollo.
+// "I know this person" flow for find-decision-makers: save the typed person first, then fill blank fields with the
+// wider lookup (Hunter finder, Hunter company list, email pattern, the company website, web search, Apollo).
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import type { ContactEditValue } from './contacts.ts';
 import {
-  domainFromWebsite, emailOnDomain, emailTakenByOther, isDirectoryDomain, LOOKUP_LIMIT_MESSAGE, mergeFoundIntoPerson,
-  needsRateSlot, normName, planLookups, plainLookupError, type FoundFields,
+  domainFromWebsite, emailTakenByOther, isDirectoryDomain, LOOKUP_LIMIT_MESSAGE, mergeFoundIntoPerson,
+  normName, type FoundFields,
 } from './knownPerson.ts';
-import { apolloMatchPerson, hunterFindEmail, isPublicDomain } from './knownPersonLookup.ts';
+import {
+  apolloMatchPerson, hunterDomainList, hunterFindEmail, hunterVerifyEmail, isPublicDomain, scanWebsiteForPerson,
+  webSearchForPerson,
+} from './knownPersonLookup.ts';
+import { runWideLookup } from './knownPersonWideRun.ts';
+import type { StepId, StepResult, Suggestion } from './knownPersonWide.ts';
 import { checkRateLimit } from './rateLimit.ts';
 
 type Row = Record<string, unknown>;
-type Source = 'hunter' | 'apollo' | 'you';
+/** Who supplied a value: Hunter (finder or company list), Apollo, the email pattern, the company website, or the user. */
+type Source = 'hunter' | 'apollo' | 'pattern' | 'website' | 'you';
 type Fields3 = { email?: string; phone?: string; linkedin_url?: string };
 
 export interface KnownPersonOutcome {
@@ -23,8 +30,21 @@ export interface KnownPersonOutcome {
     sources: { email?: Source; phone?: Source; linkedin_url?: Source };
     errors: string[]; notes: string[]; extra_email?: string;
     hunter_called: boolean; apollo_called: boolean;
+    /** Each lookup step in order, with a fixed plain-English detail. */
+    steps: StepResult[];
+    /** Values found but not saved (web search, unverified pattern guess), for a one-click "Use this". */
+    suggestions: Suggestion[];
+    /** True when a found email was saved and follow-up sequences were switched off for this contact. */
+    sequences_turned_off?: boolean;
   };
 }
+
+/** Steps whose found email is saved but must not be emailed by a sequence until the user switches it on. */
+const WIDER_EMAIL_STEPS: StepId[] = ['hunter_domain', 'pattern', 'website'];
+/** Source label per step. Web-search finds are never saved (they are suggestions), so 'web' never reaches a saved field. */
+const STEP_SOURCE: Record<Exclude<StepId, 'web'>, Exclude<Source, 'you'>> = {
+  hunter_finder: 'hunter', hunter_domain: 'hunter', pattern: 'pattern', website: 'website', apollo: 'apollo',
+};
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
 const lower = (v: unknown): string => (typeof v === 'string' ? v.trim().toLowerCase() : '');
@@ -39,9 +59,9 @@ const EMAIL_TAKEN = 'That email is already on this lead';
  */
 export async function runKnownPerson(
   client: SupabaseClient, service: SupabaseClient,
-  lead: { id: string; org_id: string; website: string | null },
+  lead: { id: string; org_id: string; website: string | null; business_name?: string | null },
   typed: ContactEditValue, userId: string,
-  keys: { hunterKey: string | null; apolloKey: string | null },
+  keys: { hunterKey: string | null; apolloKey: string | null; geminiKey: string | null },
   usePaid: boolean,
 ): Promise<KnownPersonOutcome> {
   const { data: allData, error: readErr } = await service.from('decision_maker_candidates')
@@ -111,7 +131,7 @@ export async function runKnownPerson(
   }
   const saved = row; // the database state; lookups never mutate it
 
-  // (b) lookups: only blank fields, only with keys, never fatal
+  // (b) lookups: only blank fields, only with keys, never fatal; one rate-limit slot for the whole run
   const sources: NonNullable<KnownPersonOutcome['known_person']>['sources'] = {};
   for (const f of ['email', 'phone', 'linkedin_url'] as const) if (str(saved[f])) sources[f] = 'you';
   const work = { title: str(saved.title), email: str(saved.email), phone: str(saved.phone), linkedin_url: str(saved.linkedin_url) };
@@ -120,33 +140,11 @@ export async function runKnownPerson(
   const domain = domainFromWebsite(lead.website);
   const publicDomain = domain && isPublicDomain(domain) ? domain : null;
   const directory = publicDomain !== null && isDirectoryDomain(publicDomain);
-  const planFor = (domainOk: boolean) => planLookups({
-    usePaid, hunterKey: !!keys.hunterKey, apolloKey: !!keys.apolloKey, domainOk,
-    hasFirst: first !== '', hasLast: last !== '', hasEmail: !!work.email, hasLinkedin: !!work.linkedin_url,
-    hasApolloId: !!str(saved.apollo_person_id),
-  });
-  if (directory && needsRateSlot(planFor(true))) {
-    errors.push('The lead\'s website is a social or directory page, so no lookup was run');
-  }
-  let plan = planFor(publicDomain !== null && !directory);
-  if (needsRateSlot(plan)) {
-    let allowed = false;
-    try {
-      allowed = await checkRateLimit(service, `fdm-known:${lead.org_id}:${lead.id}`, 5, 24 * 60)
-        && await checkRateLimit(service, `fdm-known:${lead.org_id}`, 100, 24 * 60);
-    } catch { allowed = false; }
-    if (!allowed) {
-      errors.push(LOOKUP_LIMIT_MESSAGE);
-      plan = { hunter: false, apollo: false };
-    }
-  }
 
   let extraEmail: string | undefined;
-  let hunterCalled = false;
-  let apolloCalled = false;
-  const pending: { applied: FoundFields; source: 'hunter' | 'apollo' }[] = [];
+  const pending: { applied: FoundFields; step: StepId }[] = [];
   const patch: Row = {};
-  const absorb = (from: FoundFields, source: 'hunter' | 'apollo') => {
+  const absorb = (from: FoundFields, step: StepId): FoundFields => {
     const merged = mergeFoundIntoPerson(work, from);
     if (merged.patch.email && emailTakenByOther(merged.patch.email, allRows, saved.id as string)) {
       delete merged.patch.email; delete merged.applied.email; errors.push(EMAIL_TAKEN);
@@ -157,47 +155,70 @@ export async function runKnownPerson(
     }
     Object.assign(work, merged.patch);
     Object.assign(patch, merged.patch);
-    pending.push({ applied: merged.applied, source });
+    pending.push({ applied: merged.applied, step });
+    return merged.applied;
   };
 
-  if (plan.hunter && keys.hunterKey && publicDomain) {
-    hunterCalled = true;
-    const res = await hunterFindEmail(publicDomain, first, last, keys.hunterKey);
-    if (!res.ok) errors.push(plainLookupError('hunter', res.failure));
-    else absorb(res.found.email && emailOnDomain(res.found.email, publicDomain) ? res.found : {}, 'hunter');
-  }
-  const apolloStillUseful = !work.email || !work.linkedin_url;
-  if (plan.apollo && apolloStillUseful && keys.apolloKey && publicDomain) {
-    apolloCalled = true;
-    const res = await apolloMatchPerson(publicDomain, first, last, keys.apolloKey);
-    if (!res.ok) errors.push(plainLookupError('apollo', res.failure));
-    else absorb(res.found, 'apollo');
-  }
+  const hunterKey = keys.hunterKey;
+  const apolloKey = keys.apolloKey;
+  const geminiKey = keys.geminiKey;
+  const wide = await runWideLookup({
+    first, last,
+    have: { email: work.email, linkedin_url: work.linkedin_url, phone: work.phone },
+    hasApolloId: !!str(saved.apollo_person_id),
+    domain: publicDomain, directory, website: str(lead.website), usePaid,
+    keys: { hunter: !!hunterKey, apollo: !!apolloKey, gemini: !!geminiKey },
+  }, {
+    now: () => Date.now(),
+    takeSlot: async () => await checkRateLimit(service, `fdm-known:${lead.org_id}:${lead.id}`, 5, 24 * 60)
+      && await checkRateLimit(service, `fdm-known:${lead.org_id}`, 100, 24 * 60),
+    hunterFind: (d, f, l, t) => hunterFindEmail(d, f, l, hunterKey ?? '', t),
+    hunterDomain: (d, t) => hunterDomainList(d, hunterKey ?? '', t),
+    hunterVerify: (e, t) => hunterVerifyEmail(e, hunterKey ?? '', t),
+    scanWebsite: (w, d, f, l, t) => scanWebsiteForPerson(w, d, f, l, t),
+    webSearch: (t) => webSearchForPerson({
+      first, last, title: work.title, company: str(lead.business_name), domain: publicDomain ?? '',
+    }, geminiKey ?? '', t),
+    apolloMatch: (d, f, l, t) => apolloMatchPerson(d, f, l, apolloKey ?? '', t),
+    absorb,
+  });
+  if (wide.limitReached) errors.push(LOOKUP_LIMIT_MESSAGE);
+  // A found address must not already belong to another contact on this lead.
+  const suggestions = wide.suggestions.filter((s) => s.field !== 'email' || !emailTakenByOther(s.value, allRows, saved.id as string));
 
   // (c) save what was found: blank fields only, via the service client; Apollo-found data follows reveal semantics
   let final = saved;
   const found: Fields3 = {};
+  let sequencesTurnedOff = false;
   if (Object.keys(patch).length > 0) {
-    const apolloApplied = pending.find((p) => p.source === 'apollo')?.applied ?? {};
+    const apolloApplied = pending.find((p) => p.step === 'apollo')?.applied ?? {};
+    const emailStep = pending.find((p) => p.applied.email)?.step;
     const write = async (cols: Row) => service.from('decision_maker_candidates')
       .update({ ...cols, updated_at: new Date().toISOString() }).eq('id', saved.id as string).select('*').single();
     const cols: Row = { ...patch };
     if (apolloApplied.email && patch.email === apolloApplied.email) cols.email_revealed = true;
     if (apolloApplied.phone && patch.phone === apolloApplied.phone) cols.phone_status = 'revealed';
+    // An address found on the company list, by pattern or on the website is never emailed by a sequence until switched on.
+    const turnOff = !!cols.email && !!emailStep && WIDER_EMAIL_STEPS.includes(emailStep) && saved.include_in_sequences === true;
+    if (turnOff) cols.include_in_sequences = false;
     let res = await write(cols);
     if (res.error?.code === '23505' && cols.email) {
-      delete cols.email; delete cols.email_revealed; errors.push(EMAIL_TAKEN);
+      delete cols.email; delete cols.email_revealed; delete cols.include_in_sequences; errors.push(EMAIL_TAKEN);
       res = Object.keys(cols).length > 0 ? await write(cols) : { data: null, error: null } as never;
     }
     if (res.error) {
       errors.push('Details were found but could not be saved. Try again.');
     } else if (res.data) {
       final = res.data as Row;
+      sequencesTurnedOff = cols.include_in_sequences === false && final.include_in_sequences === false;
       for (const p of pending) for (const f of ['email', 'phone', 'linkedin_url'] as const) {
         const v = p.applied[f];
-        if (v && lower(final[f]) === v.toLowerCase()) { found[f] = v; sources[f] = p.source; }
+        if (v && lower(final[f]) === v.toLowerCase()) { found[f] = v; if (p.step !== 'web') sources[f] = STEP_SOURCE[p.step]; }
       }
     }
+  }
+  if (sequencesTurnedOff) {
+    notes.push('The email that was found is not used by follow-up sequences until you switch follow-ups on for this person.');
   }
 
   // LinkedIn auto-capture from values that are actually saved
@@ -218,7 +239,9 @@ export async function runKnownPerson(
     known_person: {
       saved: true, contact_id: final.id as string, found, sources, errors, notes,
       ...(extraEmail ? { extra_email: extraEmail } : {}),
-      hunter_called: hunterCalled, apollo_called: apolloCalled,
+      hunter_called: wide.hunterCalled, apollo_called: wide.apolloCalled,
+      steps: wide.steps, suggestions,
+      ...(sequencesTurnedOff ? { sequences_turned_off: true } : {}),
     },
   };
 }
