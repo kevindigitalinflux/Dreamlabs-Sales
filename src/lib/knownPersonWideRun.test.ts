@@ -42,7 +42,7 @@ describe('runWideLookup', () => {
   it('runs every step in order and reports each one', async () => {
     const { d } = deps();
     const r = await runWideLookup(input(), d);
-    expect(r.steps.map((s) => s.id)).toEqual(['hunter_finder', 'hunter_domain', 'pattern', 'website', 'web', 'apollo']);
+    expect(r.steps.map((s) => s.id)).toEqual(['hunter_finder', 'hunter_domain', 'pattern', 'website', 'apollo', 'web']);
     expect(statuses(r.steps)).toEqual({
       hunter_finder: 'no_match', hunter_domain: 'no_match', pattern: 'no_match', website: 'no_match', web: 'no_match', apollo: 'no_match',
     });
@@ -134,7 +134,7 @@ describe('runWideLookup', () => {
     for (const [failure, detail] of [[403, 'Apollo is not available on this plan, so it was skipped.'], [402, 'Apollo is not available on this plan, so it was skipped.'], [401, 'Apollo did not accept the saved key, so it was skipped.']] as const) {
       const { d } = deps({ apolloMatch: vi.fn(async () => ({ ok: false as const, failure })) });
       const r = await runWideLookup(input(), d);
-      expect(r.steps[5]).toMatchObject({ id: 'apollo', status: 'unavailable', detail });
+      expect(r.steps.find((x) => x.id === 'apollo')).toMatchObject({ status: 'unavailable', detail });
     }
   });
 
@@ -173,8 +173,10 @@ describe('runWideLookup', () => {
     let t = 0;
     const { d } = deps({ now: () => t, hunterFind: vi.fn(async () => { t += 19_000; return { ok: true as const, found: {} }; }) });
     const r = await runWideLookup(input(), d);
-    expect(statuses(r.steps)).toMatchObject({ hunter_domain: 'skipped', website: 'skipped', web: 'skipped', apollo: 'skipped' });
+    // The web search runs last on its own extra time, so it is not starved by the slow first step.
+    expect(statuses(r.steps)).toMatchObject({ hunter_domain: 'skipped', website: 'skipped', apollo: 'skipped', web: 'no_match' });
     expect(r.steps[1]!.detail).toBe('Skipped to keep the lookup quick.');
+    expect(d.webSearch).toHaveBeenCalledWith(11_000);
   });
 
   it('does not run Hunter when the person already has an email, but still looks for LinkedIn', async () => {
@@ -246,5 +248,41 @@ describe('runWideLookup across several company domains', () => {
     const { d } = deps();
     const r = await runWideLookup(input({ domains: [], website: null }), d);
     expect(r.steps[0]).toMatchObject({ id: 'hunter_finder', status: 'skipped', detail: expect.stringContaining('No company domain to search') });
+  });
+});
+
+describe('runWideLookup readable failures', () => {
+  it('skips the web search with a pointer to Deep find when even its extra time is gone', async () => {
+    let t = 0;
+    const { d } = deps({ now: () => t, hunterFind: vi.fn(async () => { t += 27_000; return { ok: true as const, found: {} }; }) });
+    const r = await runWideLookup(input(), d);
+    expect(r.steps.find((s) => s.id === 'web')).toMatchObject({
+      status: 'skipped', detail: 'Skipped to keep the lookup quick: use Deep find for a longer search.',
+    });
+    expect(d.webSearch).not.toHaveBeenCalled();
+  });
+
+  it('says why the web search failed, with a safe reason code', async () => {
+    const cases = [
+      ['timeout', 'The web search ran out of time.', 'timeout'],
+      [429, 'Gemini refused the request (error 429, try again later).', 'rate_limited'],
+      [403, 'Gemini refused the request (error 403): check the Gemini key saved for this organisation.', 'provider_refused_403'],
+      ['bad_reply', 'Gemini sent a reply that could not be read.', 'bad_reply'],
+      ['network', 'Gemini could not be reached for the web search.', 'network'],
+    ] as const;
+    for (const [failure, detail, reason] of cases) {
+      const { d } = deps({ webSearch: vi.fn(async () => ({ ok: false as const, failure })) });
+      const r = await runWideLookup(input(), d);
+      expect(r.steps.find((s) => s.id === 'web')).toMatchObject({ status: 'error', detail, reason });
+    }
+  });
+
+  it('tags missing keys and provider refusals', async () => {
+    const { d } = deps({ hunterFind: vi.fn(async () => ({ ok: false as const, failure: 401 })) });
+    const r = await runWideLookup(input({ keys: { hunter: true, apollo: true, gemini: false } }), d);
+    expect(r.steps[0]).toMatchObject({ status: 'error', reason: 'provider_refused_401' });
+    expect(r.steps.find((s) => s.id === 'web')).toMatchObject({
+      status: 'unavailable', reason: 'no_key', detail: 'No Gemini key is set for this organisation.',
+    });
   });
 });

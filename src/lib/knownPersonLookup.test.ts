@@ -44,7 +44,7 @@ describe('hunterDomainList', () => {
     stubFetch(() => json({ data: { emails: 'nope', pattern: { a: 1 } } }));
     expect(await hunterDomainList('x.com', KEY)).toEqual({ ok: true, emails: [], pattern: null });
     stubFetch(() => html('not json'));
-    expect(await hunterDomainList('x.com', KEY)).toEqual({ ok: true, emails: [], pattern: null });
+    expect(await hunterDomainList('x.com', KEY)).toEqual({ ok: false, failure: 'bad_reply' });
   });
 });
 
@@ -125,5 +125,30 @@ describe('webSearchForPerson', () => {
     const r = await webSearchForPerson(person, KEY);
     expect(r).toEqual({ ok: false, failure: 403 });
     expect(JSON.stringify(r)).not.toContain(KEY);
+  });
+});
+
+describe('geminiFailure', () => {
+  it('reduces errors to a safe failure', async () => {
+    const { geminiFailure } = await import('../../supabase/functions/_shared/knownPersonLookup');
+    expect(geminiFailure(new Error('Gemini 429: quota text'))).toBe(429);
+    expect(geminiFailure(new Error('Gemini request timed out'))).toBe('timeout');
+    expect(geminiFailure(Object.assign(new Error('x'), { name: 'TimeoutError' }))).toBe('timeout');
+    expect(geminiFailure(new Error('Gemini reply could not be read'))).toBe('bad_reply');
+    expect(geminiFailure(new Error('Gemini request failed (network error)'))).toBe('network');
+    expect(geminiFailure('weird')).toBe('network');
+  });
+
+  it('sends the Gemini key in a header, not the address', async () => {
+    const fn = stubFetch(() => json({ candidates: [{ content: { parts: [{ text: 'nothing found {"email":null,"linkedin_url":null}' }] } }] }));
+    await webSearchForPerson({ first: 'A', last: 'B', title: null, company: null, domains: ['x.com'] }, KEY);
+    expect(urls(fn)[0]).not.toContain(KEY);
+    expect((fn.mock.calls[0]![1]!.headers as Record<string, string>)['x-goog-api-key']).toBe(KEY);
+  });
+
+  it('reports an unreadable Gemini reply', async () => {
+    stubFetch(() => html('<html>oops</html>'));
+    expect(await webSearchForPerson({ first: 'A', last: 'B', title: null, company: null, domains: ['x.com'] }, KEY))
+      .toEqual({ ok: false, failure: 'bad_reply' });
   });
 });

@@ -80,7 +80,7 @@ export function domainFromWebsite(website: string | null | undefined): string | 
 }
 
 /** What went wrong with a provider call: an HTTP status, or a non-HTTP failure. */
-export type LookupFailure = number | 'timeout' | 'network';
+export type LookupFailure = number | 'timeout' | 'network' | 'bad_reply';
 
 /** Plain-English message for a failed provider lookup. Fixed strings only: never includes keys or provider text. */
 export function plainLookupError(provider: 'hunter' | 'apollo', failure: LookupFailure): string {
@@ -90,6 +90,7 @@ export function plainLookupError(provider: 'hunter' | 'apollo', failure: LookupF
   if (failure === 402) return `${name} says this account is out of credits, so nothing was looked up.`;
   if (failure === 429) return `${name} is limiting requests right now. Try again in a few minutes.`;
   if (failure === 'timeout') return `${name} took too long to answer. Try again in a moment.`;
+  if (failure === 'bad_reply') return `${name} sent a reply that could not be read, so nothing was looked up.`;
   return `${name} could not be reached right now.`;
 }
 

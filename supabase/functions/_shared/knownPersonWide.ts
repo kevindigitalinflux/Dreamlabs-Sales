@@ -9,8 +9,45 @@ export type StepId = 'hunter_finder' | 'hunter_domain' | 'pattern' | 'website' |
 /** What happened in one step. */
 export type StepStatus = 'found' | 'no_match' | 'skipped' | 'unavailable' | 'error';
 
+/**
+ * A safe, fixed failure code for a step that did not work. Never contains provider text or keys:
+ * `provider_refused_<status>` only ever carries a 3-digit HTTP status number.
+ */
+export type FailureReason = 'timeout' | `provider_refused_${number}` | 'no_key' | 'rate_limited' | 'bad_reply' | 'network';
+
 /** One step as reported to the result panel. `detail` is always a fixed, plain-English sentence. */
-export interface StepResult { id: StepId; label: string; status: StepStatus; detail: string; domain?: string }
+export interface StepResult { id: StepId; label: string; status: StepStatus; detail: string; domain?: string; reason?: FailureReason }
+
+/**
+ * Maps a provider failure (an HTTP status, or a non-HTTP failure) to its safe code. 429 is `rate_limited`; any
+ * other HTTP status becomes `provider_refused_<status>`; anything unrecognised is `network`.
+ */
+export function failureReason(failure: unknown): FailureReason {
+  if (failure === 'timeout' || failure === 'network' || failure === 'bad_reply' || failure === 'no_key' || failure === 'rate_limited') return failure;
+  if (typeof failure === 'number' && Number.isInteger(failure) && failure >= 100 && failure <= 599) {
+    return failure === 429 ? 'rate_limited' : `provider_refused_${failure}`;
+  }
+  return 'network';
+}
+
+/** The HTTP status inside a `provider_refused_<status>` code, else null. */
+function refusedStatus(reason: FailureReason): number | null {
+  const m = /^provider_refused_(\d{3})$/.exec(reason);
+  return m ? Number(m[1]) : null;
+}
+
+/** Plain-English sentence for a failed web search (Gemini). Fixed strings only; the status is a validated number. */
+export function webFailureDetail(reason: FailureReason): string {
+  if (reason === 'timeout') return 'The web search ran out of time.';
+  if (reason === 'no_key') return 'No Gemini key is set for this organisation.';
+  if (reason === 'rate_limited') return 'Gemini refused the request (error 429, try again later).';
+  if (reason === 'bad_reply') return 'Gemini sent a reply that could not be read.';
+  const status = refusedStatus(reason);
+  if (status === 401 || status === 403) return `Gemini refused the request (error ${status}): check the Gemini key saved for this organisation.`;
+  if (status === 402) return 'Gemini refused the request (error 402): the Gemini account has no credit left.';
+  if (status !== null) return `Gemini refused the request (error ${status}). Try again later.`;
+  return 'Gemini could not be reached for the web search.';
+}
 
 /** A value the lookup found but did not save, offered to the user with a one-click "Use this". */
 export interface Suggestion { field: 'email' | 'linkedin_url'; value: string; label: string }
@@ -32,10 +69,11 @@ export const SUGGESTION_LABELS = {
 } as const;
 
 /** Builds one step record with its fixed label; a step run for one domain names it, e.g. "Hunter company list (x.com)". */
-export function stepResult(id: StepId, status: StepStatus, detail: string, domain?: string): StepResult {
-  if (!domain) return { id, label: STEP_LABELS[id], status, detail };
-  const d = safeDomain(domain);
-  return { id, label: `${STEP_LABELS[id]} (${d})`, status, detail, domain: d };
+export function stepResult(id: StepId, status: StepStatus, detail: string, domain?: string, reason?: FailureReason): StepResult {
+  const base: StepResult = domain
+    ? { id, label: `${STEP_LABELS[id]} (${safeDomain(domain)})`, status, detail, domain: safeDomain(domain) }
+    : { id, label: STEP_LABELS[id], status, detail };
+  return reason ? { ...base, reason } : base;
 }
 
 /** A domain safe to put into a fixed sentence: lowercase letters, digits, dots and hyphens only, at most 80 characters. */
@@ -78,7 +116,8 @@ export const STEP_DETAILS = {
   apolloKeyRejected: 'Apollo did not accept the saved key, so it was skipped.',
   noKeyHunter: 'No Hunter key is saved for this organisation.',
   noKeyApollo: 'No Apollo key is saved for this organisation.',
-  noKeyGemini: 'No Gemini key is saved for this organisation.',
+  noKeyGemini: 'No Gemini key is set for this organisation.',
+  webSkippedTime: 'Skipped to keep the lookup quick: use Deep find for a longer search.',
   noWebsite: 'This lead has no usable website.',
   directory: 'The lead\'s website is a social or directory page, so it was not searched.',
   paidOff: 'Paid lookups were switched off for this search.',

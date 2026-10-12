@@ -136,6 +136,8 @@ export interface KnownPersonStep {
   label: string;
   status: 'found' | 'no_match' | 'skipped' | 'unavailable' | 'error';
   detail: string;
+  /** Safe failure code when the step did not work (timeout, provider_refused_<status>, no_key, rate_limited, bad_reply, network). */
+  reason?: string;
 }
 
 /** A value the lookup found but did not save (a web-search find or an unverified guess), offered with "Use this". */

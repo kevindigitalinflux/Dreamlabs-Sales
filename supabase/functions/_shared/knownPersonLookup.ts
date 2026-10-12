@@ -70,6 +70,7 @@ export async function hunterFindEmail(domain: string, first: string, last: strin
     const { status, data } = await callJson(`https://api.hunter.io/v2/email-finder?${params}`, { headers: { 'X-API-KEY': apiKey } }, timeoutMs);
     if (status === 404) return { ok: true, found: {} };
     if (status < 200 || status >= 300) return { ok: false, failure: status };
+    if (data === null) return { ok: false, failure: 'bad_reply' };
     const d = (data as { data?: { email?: string | null; score?: number | null } } | null)?.data;
     const email = (d?.score ?? 0) >= 50 ? cleanFoundField('email', d?.email) : null;
     return { ok: true, found: email ? { email } : {} };
@@ -91,6 +92,7 @@ export async function apolloMatchPerson(domain: string, first: string, last: str
       body: JSON.stringify({ first_name: first, last_name: last, domain, reveal_personal_emails: false }),
     }, timeoutMs);
     if (status < 200 || status >= 300) return { ok: false, failure: status };
+    if (data === null) return { ok: false, failure: 'bad_reply' };
     const person = (data as {
       person?: {
         first_name?: string | null; email?: string | null; linkedin_url?: string | null;
@@ -133,6 +135,7 @@ export async function hunterDomainList(domain: string, apiKey: string, timeoutMs
     let res = await ask(100);
     if (res.status === 400) res = await ask(10);
     if (res.status < 200 || res.status >= 300) return { ok: false, failure: res.status };
+    if (res.data === null) return { ok: false, failure: 'bad_reply' };
     const d = (res.data as { data?: { emails?: unknown; pattern?: unknown } } | null)?.data;
     const pattern = typeof d?.pattern === 'string' && d.pattern.length <= 40 ? d.pattern : null;
     return { ok: true, emails: Array.isArray(d?.emails) ? d.emails : [], pattern };
@@ -155,6 +158,7 @@ export async function hunterVerifyEmail(email: string, apiKey: string, timeoutMs
       { headers: { 'X-API-KEY': apiKey } }, timeoutMs,
     );
     if (status < 200 || status >= 300) return { ok: false, failure: status };
+    if (data === null) return { ok: false, failure: 'bad_reply' };
     const d = (data as { data?: { status?: unknown; result?: unknown } } | null)?.data;
     const byStatus = classifyVerifierStatus(d?.status);
     return { ok: true, verdict: byStatus !== 'unverified' ? byStatus : classifyVerifierStatus(d?.result) };
@@ -245,8 +249,20 @@ export async function webSearchForPerson(p: WebSearchPerson, geminiKey: string, 
     if (linkedin) found.linkedin_url = linkedin;
     return { ok: true, found };
   } catch (err) {
-    const status = /Gemini (\d{3})/.exec(err instanceof Error ? err.message : '')?.[1];
-    if (status) return { ok: false, failure: Number(status) };
-    return { ok: false, failure: err instanceof Error && /timeout|abort/i.test(`${err.name} ${err.message}`) ? 'timeout' : 'network' };
+    return { ok: false, failure: geminiFailure(err) };
   }
+}
+
+/**
+ * Reduces a Gemini error to a safe failure: the HTTP status, a timeout, an unreadable reply, or network. The error
+ * text (which may quote provider output) is only pattern-matched here, never passed on.
+ */
+export function geminiFailure(err: unknown): LookupFailure {
+  const message = err instanceof Error ? err.message : '';
+  const name = err instanceof Error ? err.name : '';
+  const status = /^Gemini (\d{3})\b/.exec(message)?.[1];
+  if (status) return Number(status);
+  if (name === 'AbortError' || name === 'TimeoutError' || /timed out/i.test(message)) return 'timeout';
+  if (/could not be read/i.test(message)) return 'bad_reply';
+  return 'network';
 }

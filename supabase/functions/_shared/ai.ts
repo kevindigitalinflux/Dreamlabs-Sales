@@ -33,7 +33,11 @@ function orgDescriptionLine(orgName: string, companyContext: string | null | und
  * so a failure is rethrown with a fixed message: the key must never reach a log or an error text.
  */
 async function geminiFetch(url: string, init: RequestInit): Promise<Response> {
-  try { return await fetch(url, init); } catch { throw new Error('Gemini request failed (network error or timeout)'); }
+  try { return await fetch(url, init); } catch (err) {
+    const name = err instanceof Error ? err.name : '';
+    if (name === 'AbortError' || name === 'TimeoutError') throw new Error('Gemini request timed out');
+    throw new Error('Gemini request failed (network error)');
+  }
 }
 
 /** `timeoutMs` is optional; when set, the whole call (including reading the reply) is aborted after it. */
@@ -62,27 +66,36 @@ export async function geminiJson(prompt: string, apiKey: string, timeoutMs?: num
  */
 export async function geminiGroundedSearch(prompt: string, apiKey: string, timeoutMs = 25000): Promise<{ text: string; sources: string[] }> {
   if (!apiKey) return { text: '', sources: [] };
-  const res = await geminiFetch(`${GEMINI_URL}/${AI_MODEL}:generateContent?key=${apiKey}`, {
+  // The key goes in the x-goog-api-key header (not the URL), so it can never appear in a logged request address.
+  const res = await geminiFetch(`${GEMINI_URL}/${AI_MODEL}:generateContent`, {
     method: 'POST',
     signal: AbortSignal.timeout(timeoutMs),
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       tools: [{ google_search: {} }],
       generationConfig: { temperature: 0.3 },
     }),
   });
-  if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 300)}`);
-  const data = await res.json() as {
+  if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text().catch(() => '')).slice(0, 300)}`);
+  let data: {
     candidates?: {
       content?: { parts?: { text?: string }[] };
       groundingMetadata?: { groundingChunks?: { web?: { uri?: string } }[] };
     }[];
-  };
-  const candidate = data.candidates?.[0];
-  const text = (candidate?.content?.parts ?? []).map((p) => p.text ?? '').join('');
-  const uris = (candidate?.groundingMetadata?.groundingChunks ?? [])
-    .map((c) => c.web?.uri)
+  } | null;
+  try { data = await res.json(); } catch (err) {
+    const name = err instanceof Error ? err.name : '';
+    if (name === 'AbortError' || name === 'TimeoutError') throw new Error('Gemini request timed out');
+    throw new Error('Gemini reply could not be read');
+  }
+  if (typeof data !== 'object' || data === null) throw new Error('Gemini reply could not be read');
+  const candidate = Array.isArray(data.candidates) ? data.candidates[0] : undefined;
+  const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+  const text = parts.map((p) => (typeof p?.text === 'string' ? p.text : '')).join('');
+  const chunks = Array.isArray(candidate?.groundingMetadata?.groundingChunks) ? candidate.groundingMetadata.groundingChunks : [];
+  const uris = chunks
+    .map((c) => c?.web?.uri)
     .filter((u): u is string => typeof u === 'string' && u.length > 0);
   return { text, sources: [...new Set(uris)] };
 }

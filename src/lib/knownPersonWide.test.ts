@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   STEP_DETAILS,
+  failureReason,
+  webFailureDetail,
   buildPatternEmail,
   candidateDomains,
   cleanCompanyDomain,
@@ -299,5 +301,24 @@ describe('several company domains in page and web parsing', () => {
     const text = 'Max is at max.whatley@loveliving.uk. {"email":"max.whatley@loveliving.uk"}';
     expect(parseWebFindings(text, ['lovelivingmanagement.com', 'loveliving.uk'], 'Max', 'Whatley').email).toBe('max.whatley@loveliving.uk');
     expect(parseWebFindings(text, ['lovelivingmanagement.com'], 'Max', 'Whatley').email).toBeNull();
+  });
+});
+
+describe('failureReason and webFailureDetail', () => {
+  it('maps failures to safe codes', () => {
+    expect(failureReason(429)).toBe('rate_limited');
+    expect(failureReason(503)).toBe('provider_refused_503');
+    expect(failureReason('timeout')).toBe('timeout');
+    expect(failureReason('bad_reply')).toBe('bad_reply');
+    expect(failureReason('Gemini 403: secret text')).toBe('network');
+    expect(failureReason(99)).toBe('network');
+    expect(failureReason(4031)).toBe('network');
+  });
+
+  it('never puts anything but a status number into the sentence', () => {
+    expect(webFailureDetail('provider_refused_500')).toBe('Gemini refused the request (error 500). Try again later.');
+    expect(webFailureDetail('provider_refused_402')).toBe('Gemini refused the request (error 402): the Gemini account has no credit left.');
+    expect(webFailureDetail('no_key')).toBe('No Gemini key is set for this organisation.');
+    expect(webFailureDetail('provider_refused_abc' as never)).toBe('Gemini could not be reached for the web search.');
   });
 });

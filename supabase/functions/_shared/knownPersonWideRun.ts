@@ -3,7 +3,8 @@
 // equally pure knownPerson.ts / knownPersonWide.ts and runs in both Deno and Vitest.
 import { emailOnDomain, plainLookupError, type FoundFields, type LookupFailure } from './knownPerson.ts';
 import {
-  STEP_DETAILS, SUGGESTION_LABELS, buildPatternEmail, emailDomain, inferPattern, matchHunterPerson, onAnyDomain, stepResult,
+  STEP_DETAILS, SUGGESTION_LABELS, buildPatternEmail, emailDomain, failureReason, inferPattern, matchHunterPerson, onAnyDomain, stepResult,
+  webFailureDetail,
   type StepId, type StepResult, type Suggestion, type VerifierClass,
 } from './knownPersonWide.ts';
 
@@ -44,8 +45,10 @@ export interface WideLookupInput {
   knownAddresses?: KnownAddress[];
   usePaid: boolean;
   keys: { hunter: boolean; apollo: boolean; gemini: boolean };
-  /** Whole-run wall-time budget. */
+  /** Whole-run wall-time budget for every step except the web search. */
   budgetMs?: number;
+  /** Extra time the web search (always the last step) may use beyond budgetMs. */
+  webExtraMs?: number;
 }
 
 /** What the run did. */
@@ -58,6 +61,9 @@ export interface WideLookupOutcome {
 }
 
 export const WIDE_BUDGET_MS = 20_000;
+/** The web search runs last and may use this much more than WIDE_BUDGET_MS, so it is not starved by earlier steps. */
+export const WEB_EXTRA_MS = 10_000;
+const WEB_MAX_MS = 15_000;
 const MAX_DOMAINS = 3;
 const MIN_START_MS: Record<StepId, number> = {
   hunter_finder: 1_500, hunter_domain: 1_500, pattern: 1_500, website: 3_000, web: 4_000, apollo: 2_000,
@@ -86,6 +92,7 @@ export async function runWideLookup(input: WideLookupInput, deps: WideLookupDeps
   const budget = input.budgetMs ?? WIDE_BUDGET_MS;
   const start = deps.now();
   const remaining = () => budget - (deps.now() - start);
+  const webRemaining = () => budget + (input.webExtraMs ?? WEB_EXTRA_MS) - (deps.now() - start);
   const state = { ...input.have };
   const { first, last } = input;
   const domains = input.domains.slice(0, MAX_DOMAINS);
@@ -109,9 +116,9 @@ export async function runWideLookup(input: WideLookupInput, deps: WideLookupDeps
   /** Why a step cannot run at all (before any call is made), or null. */
   const blockedBy = (id: StepId): StepResult | null => {
     if (id !== 'website' && !input.usePaid) return stepResult(id, 'skipped', STEP_DETAILS.paidOff);
-    if ((id === 'hunter_finder' || id === 'hunter_domain' || id === 'pattern') && !input.keys.hunter) return stepResult(id, 'unavailable', STEP_DETAILS.noKeyHunter);
-    if (id === 'web' && !input.keys.gemini) return stepResult(id, 'unavailable', STEP_DETAILS.noKeyGemini);
-    if (id === 'apollo' && !input.keys.apollo) return stepResult(id, 'unavailable', STEP_DETAILS.noKeyApollo);
+    if ((id === 'hunter_finder' || id === 'hunter_domain' || id === 'pattern') && !input.keys.hunter) return stepResult(id, 'unavailable', STEP_DETAILS.noKeyHunter, undefined, 'no_key');
+    if (id === 'web' && !input.keys.gemini) return stepResult(id, 'unavailable', STEP_DETAILS.noKeyGemini, undefined, 'no_key');
+    if (id === 'apollo' && !input.keys.apollo) return stepResult(id, 'unavailable', STEP_DETAILS.noKeyApollo, undefined, 'no_key');
     if (id === 'website') {
       if (!input.website) return stepResult(id, 'skipped', input.websiteDirectory ? STEP_DETAILS.directory : STEP_DETAILS.noWebsite);
     } else if (domains.length === 0) {
@@ -124,7 +131,8 @@ export async function runWideLookup(input: WideLookupInput, deps: WideLookupDeps
   const notNeeded = (id: StepId): boolean => (id === 'hunter_finder' || id === 'pattern' ? !!state.email : bothDone());
 
   const hunterIds: StepId[] = ['hunter_finder', 'hunter_domain', 'pattern'];
-  const laterIds: StepId[] = ['website', 'web', 'apollo'];
+  // The web search is last: it is the slowest step and has its own extra time (webExtraMs).
+  const laterIds: StepId[] = ['website', 'apollo', 'web'];
   const wouldRun = [...hunterIds, ...laterIds].some((id) => !blockedBy(id) && !notNeeded(id));
   let limitReached = false;
   if (wouldRun) {
@@ -136,9 +144,12 @@ export async function runWideLookup(input: WideLookupInput, deps: WideLookupDeps
   /** Runs one step with the shared skip rules; `run` does the work. */
   const attempt = async (id: StepId, domain: string | undefined, run: () => Promise<StepResult>) => {
     if (notNeeded(id)) { steps.push(stepResult(id, 'skipped', STEP_DETAILS.alreadyFilled, domain)); return; }
-    if (limitReached) { steps.push(stepResult(id, 'skipped', STEP_DETAILS.limit, domain)); return; }
-    if (remaining() < MIN_START_MS[id]) { steps.push(stepResult(id, 'skipped', STEP_DETAILS.timeUp, domain)); return; }
-    try { steps.push(await run()); } catch { steps.push(stepResult(id, 'error', STEP_DETAILS.failed, domain)); }
+    if (limitReached) { steps.push(stepResult(id, 'skipped', STEP_DETAILS.limit, domain, 'rate_limited')); return; }
+    if (id === 'web' ? webRemaining() < MIN_START_MS.web : remaining() < MIN_START_MS[id]) {
+      steps.push(stepResult(id, 'skipped', id === 'web' ? STEP_DETAILS.webSkippedTime : STEP_DETAILS.timeUp, domain));
+      return;
+    }
+    try { steps.push(await run()); } catch { steps.push(stepResult(id, 'error', STEP_DETAILS.failed, domain, 'network')); }
   };
 
   // (1-3) Hunter, once per company domain
@@ -153,7 +164,7 @@ export async function runWideLookup(input: WideLookupInput, deps: WideLookupDeps
       await attempt('hunter_finder', d, async () => {
         hunterCalled = true;
         const res = await deps.hunterFind(d, first, last, t(5_000));
-        if (!res.ok) return stepResult('hunter_finder', 'error', plainLookupError('hunter', res.failure), d);
+        if (!res.ok) return stepResult('hunter_finder', 'error', plainLookupError('hunter', res.failure), d, failureReason(res.failure));
         const email = res.found.email && emailOnDomain(res.found.email, d) ? res.found.email : undefined;
         return filledAny(absorb(email ? { email } : {}, 'hunter_finder'))
           ? stepResult('hunter_finder', 'found', STEP_DETAILS.hunterFinderFound(d), d)
@@ -162,7 +173,7 @@ export async function runWideLookup(input: WideLookupInput, deps: WideLookupDeps
       await attempt('hunter_domain', d, async () => {
         hunterCalled = true;
         const res = await deps.hunterDomain(d, t(5_000));
-        if (!res.ok) return stepResult('hunter_domain', 'error', plainLookupError('hunter', res.failure), d);
+        if (!res.ok) return stepResult('hunter_domain', 'error', plainLookupError('hunter', res.failure), d, failureReason(res.failure));
         listRan = true;
         listPattern = res.pattern;
         const match = matchHunterPerson(res.emails, first, last);
@@ -207,15 +218,18 @@ export async function runWideLookup(input: WideLookupInput, deps: WideLookupDeps
   async function runLater(id: StepId): Promise<StepResult> {
     if (id === 'website') {
       const res = await deps.scanWebsite(input.website as string, domains, first, last, t(8_000));
-      if (!res.ok) return stepResult(id, 'error', STEP_DETAILS.websiteUnreadable);
+      if (!res.ok) return stepResult(id, 'error', STEP_DETAILS.websiteUnreadable, undefined, 'network');
       const found: FoundFields = {};
       if (res.email && onAnyDomain(res.email, domains)) found.email = res.email;
       if (res.linkedin_url) found.linkedin_url = res.linkedin_url;
       return filledAny(absorb(found, id)) ? stepResult(id, 'found', STEP_DETAILS.websiteFound) : stepResult(id, 'no_match', STEP_DETAILS.websiteNone);
     }
     if (id === 'web') {
-      const res = await deps.webSearch(t(10_000));
-      if (!res.ok) return stepResult(id, 'error', STEP_DETAILS.webFailed);
+      const res = await deps.webSearch(Math.max(1, Math.min(WEB_MAX_MS, webRemaining())));
+      if (!res.ok) {
+        const reason = failureReason(res.failure);
+        return stepResult(id, 'error', webFailureDetail(reason), undefined, reason);
+      }
       let any = false;
       if (res.found.email && !state.email && onAnyDomain(res.found.email, domains)) {
         suggestions.push({ field: 'email', value: res.found.email, label: SUGGESTION_LABELS.web });
@@ -230,9 +244,9 @@ export async function runWideLookup(input: WideLookupInput, deps: WideLookupDeps
     apolloCalled = true;
     const res = await deps.apolloMatch(domains[0]!, first, last, t(8_000));
     if (!res.ok) {
-      if (res.failure === 401) return stepResult(id, 'unavailable', STEP_DETAILS.apolloKeyRejected);
-      if (res.failure === 402 || res.failure === 403) return stepResult(id, 'unavailable', STEP_DETAILS.apolloUnavailable);
-      return stepResult(id, 'error', plainLookupError('apollo', res.failure));
+      if (res.failure === 401) return stepResult(id, 'unavailable', STEP_DETAILS.apolloKeyRejected, undefined, failureReason(401));
+      if (res.failure === 402 || res.failure === 403) return stepResult(id, 'unavailable', STEP_DETAILS.apolloUnavailable, undefined, failureReason(res.failure));
+      return stepResult(id, 'error', plainLookupError('apollo', res.failure), undefined, failureReason(res.failure));
     }
     return filledAny(absorb(res.found, id)) ? stepResult(id, 'found', STEP_DETAILS.apolloFound) : stepResult(id, 'no_match', STEP_DETAILS.apolloNone);
   }
