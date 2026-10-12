@@ -86,7 +86,8 @@ export function EmailFormatToolbar({ active, onBold, onBullets, onHeading, onLin
             onChange={(e) => { setUrl(e.target.value); setError(null); }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') { e.preventDefault(); addLink(); }
-              if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+              // stopPropagation: Escape here closes only the link field, not the dialog around the editor.
+              if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancel(); }
             }}
           />
           <div className="flex gap-2">
