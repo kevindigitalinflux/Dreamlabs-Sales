@@ -181,7 +181,7 @@ LANGUAGE sql
 SECURITY DEFINER
 STABLE
 SET search_path = ''
-AS $
+AS $$
   SELECT EXISTS (
     SELECT 1 FROM public.leads l JOIN public.pipelines p ON p.id = l.pipeline_id
      WHERE l.id = target_lead AND (
@@ -192,7 +192,7 @@ AS $
        OR (NOT p.is_default AND p.created_by = target_user)
      )
   );
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.deep_find_creator_can_edit(UUID, UUID) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.deep_find_creator_can_edit(UUID, UUID) TO service_role;
