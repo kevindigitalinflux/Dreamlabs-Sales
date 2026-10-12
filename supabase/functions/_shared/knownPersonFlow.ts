@@ -170,7 +170,7 @@ export async function runKnownPerson(
     keys: { hunter: !!hunterKey, apollo: !!apolloKey, gemini: !!geminiKey },
   }, {
     now: () => Date.now(),
-    takeSlot: async () => await checkRateLimit(service, `fdm-known:${lead.org_id}:${lead.id}`, 5, 24 * 60)
+    takeSlot: async () => await checkRateLimit(service, `fdm-known:${lead.org_id}:${lead.id}`, 20, 24 * 60)
       && await checkRateLimit(service, `fdm-known:${lead.org_id}`, 100, 24 * 60),
     hunterFind: (d, f, l, t) => hunterFindEmail(d, f, l, hunterKey ?? '', t),
     hunterDomain: (d, t) => hunterDomainList(d, hunterKey ?? '', t),
