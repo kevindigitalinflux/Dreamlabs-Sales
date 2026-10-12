@@ -23,6 +23,16 @@ Last updated 2026-10-12. Ask for any item by number or name.
 - W3. Consider the same wider net (company list, pattern, website, web search) for the generic "Find decision maker" search.
 - W4. Watch Hunter credits: a company list of up to 100 people may cost several credits per lookup.
 
+### Deep find (built 2026-10-12, not yet applied or deployed)
+
+- D1. Apply migrations 056 (`leads.email_domains`) then 057 (Deep find tables, policies, RPCs, cron) after the security review, then deploy `run-deep-find` (new, `verify_jwt = false`) and redeploy `find-decision-makers`.
+- D2. Retest on Love Living: "Add person" for John Sipple with no typed domain should find loveliving.uk by itself (step "Company domains"). Then run "Deep find this lead": check the people added (source shown, follow-ups off), the company domains line, and the names to check.
+- D3. Retest on HOK (Andrea Manning) the same way.
+- D4. Consider running Deep find automatically on new leads, or as a step inside the selected-leads autopilot.
+- D5. Apollo upgrade note: the free plan refuses people/match, so Deep find does not use Apollo at all. Revisit after an upgrade.
+- D6. People named only by the web search or the website are listed as "To check" and never saved (no honest contact source exists for them). Consider a one-click "Add as contact" that saves them as your own manual contact.
+- D7. Watch Hunter credits: defaults are 60 Hunter calls and 25 AI calls per run (editable, max 500 / 200).
+
 ### Email formatting (built 2026-10-12, not yet deployed)
 
 - F1. Test: send a formatted test email (bold, bullets, a heading, a link, plus the unsubscribe line) to your own address and check it in Gmail on desktop AND on a phone. Also send one with no formatting and confirm it still arrives as plain text.
