@@ -81,8 +81,8 @@ describe('domainFromWebsite', () => {
 
 describe('plainLookupError', () => {
   it('explains each failure in plain English', () => {
-    expect(plainLookupError('hunter', 401)).toBe('Hunter did not accept the saved API key, so nothing was looked up.');
-    expect(plainLookupError('apollo', 403)).toBe('Apollo did not accept the saved API key, so nothing was looked up.');
+    expect(plainLookupError('hunter', 401)).toBe('Hunter did not accept the saved API key (error 401), so nothing was looked up.');
+    expect(plainLookupError('apollo', 403)).toBe('Apollo refused this lookup (error 403): the saved key may lack permission, or your Apollo plan may not include it. Nothing was looked up.');
     expect(plainLookupError('apollo', 402)).toBe('Apollo says this account is out of credits, so nothing was looked up.');
     expect(plainLookupError('hunter', 429)).toBe('Hunter is limiting requests right now. Try again in a few minutes.');
     expect(plainLookupError('hunter', 'timeout')).toBe('Hunter took too long to answer. Try again in a moment.');
