@@ -5,7 +5,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { localDateString } from './autopilotEligibility.ts';
 import { isUniqueViolation } from './enrollmentErrors.ts';
 import {
-  buildDefaultTemplateIdByType, cleanSubject, decidePostSend, describePostSend,
+  buildDefaultTemplateIdByType, cleanSubject, decidePostSend, describePostSend, isEarlierSendInWindow,
   type EnrollmentLike, type PostSendDecision, type SequenceLike, type TemplateRef, type VisibleTemplate,
 } from './postSendRules.ts';
 
@@ -48,8 +48,8 @@ export async function applyPostSendUpdates(service: Service, ctx: PostSendContex
 async function run(service: Service, ctx: PostSendContext, warnings: string[]): Promise<PostSendResult> {
   // 1. The log must be this lead's and this org's, or nothing is touched.
   const { data: log, error: logErr } = await service.from('email_logs')
-    .select('id, lead_id, org_id, template_id, sequence_enrollment_id').eq('id', ctx.logId).maybeSingle();
-  const logRow = log as { lead_id: string | null; org_id: string | null; template_id: string | null; sequence_enrollment_id: string | null } | null;
+    .select('id, lead_id, org_id, template_id, sequence_enrollment_id, sent_at').eq('id', ctx.logId).maybeSingle();
+  const logRow = log as { lead_id: string | null; org_id: string | null; template_id: string | null; sequence_enrollment_id: string | null; sent_at: string | null } | null;
   if (logErr || !logRow || logRow.lead_id !== ctx.leadId || logRow.org_id !== ctx.orgId) return { ok: false, lines: [], warnings: [FAIL_CLOSED] };
 
   const { data: lead, error: leadErr } = await service.from('leads')
@@ -81,11 +81,14 @@ async function run(service: Service, ctx: PostSendContext, warnings: string[]): 
   // Fails safe: if the check cannot be read, assume it was already applied and do not move the sequence.
   let alreadyApplied = false;
   if (templateId) {
-    const since = new Date(Date.now() - 6 * 3600_000).toISOString();
-    const { data: recent, error: recentErr } = await service.from('email_logs').select('id')
-      .eq('lead_id', ctx.leadId).eq('status', 'sent').eq('template_id', templateId).neq('id', ctx.logId).gte('sent_at', since).limit(1);
-    if (recentErr) { alreadyApplied = true; warnings.push('Sequence step was not moved because recent emails could not be checked'); }
-    else alreadyApplied = (recent ?? []).length > 0;
+    const WINDOW = 6 * 3600_000;
+    const mine = { id: ctx.logId, sent_at: logRow.sent_at };
+    const since = new Date((logRow.sent_at ? new Date(logRow.sent_at).getTime() : Date.now()) - WINDOW).toISOString();
+    // Only EARLIER sends count (see isEarlierSendInWindow), so two overlapping post-sends cannot skip each other forever.
+    const { data: recent, error: recentErr } = await service.from('email_logs').select('id, sent_at')
+      .eq('lead_id', ctx.leadId).eq('status', 'sent').eq('template_id', templateId).neq('id', ctx.logId).gte('sent_at', since).limit(50);
+    if (recentErr || !logRow.sent_at) { alreadyApplied = true; warnings.push('Sequence step was not moved because recent emails could not be checked'); }
+    else alreadyApplied = ((recent ?? []) as { id: string; sent_at: string | null }[]).some((o) => isEarlierSendInWindow(o, mine, WINDOW));
   }
 
   const now = new Date();

@@ -74,7 +74,10 @@ export function ReleaseQueue() {
         if (!firstFailReason) firstFailReason = error ? await readableInvokeError(error) : (result?.error ?? 'Send failed');
       } else {
         sent++;
-        reports.push(parsePostSend(data));
+        // Keep which lead each line is about: prefix with the business name (lines then stay distinct per lead).
+        const rep = parsePostSend(data);
+        const who = draft.lead?.business_name ?? draft.to_email;
+        reports.push(rep ? { lines: rep.lines.map((l) => `${who}: ${l}`), warnings: rep.warnings.map((w) => `${who}: ${w}`) } : null);
       }
     }
     setReleasing(false);

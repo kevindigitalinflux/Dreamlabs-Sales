@@ -3,6 +3,7 @@ import {
   buildDefaultTemplateIdByType,
   decidePostSend,
   describePostSend,
+  isEarlierSendInWindow,
   stepUsesTemplate,
   type EnrollmentLike,
   type SequenceLike,
@@ -325,5 +326,40 @@ describe('post-send review fixes', () => {
   it('null template id with a custom type gives no sequence change', () => {
     const d = decidePostSend({ ...base, templateId: null, template: { id: 'c', template_type: 'custom', is_default: false } , enrollment: null });
     expect(d.action).toBe('none');
+  });
+});
+
+describe('second contact and asymmetric repeat guard', () => {
+  it('sent to 2 contacts: second email is linked, not advanced, even if the step moved on', () => {
+    // Enrolled at step 2 (follow_up), template t2 sent to contact A (advanced to step 3), now sent to contact B.
+    const second = decidePostSend({ ...base, templateId: 't2', template: T2, enrollment: enr({ current_step: 3 }), alreadyAppliedForTemplate: true });
+    expect(second.action).toBe('link_only');
+    expect(second.enrollmentId).toBe('e1');
+    expect(second.newCurrentStep).toBeUndefined();
+    const first = decidePostSend({ ...base, templateId: 't2', template: T2, enrollment: enr({ current_step: 2 }) });
+    expect(first.action).toBe('advance');
+  });
+  it('nurture-style consecutive shared template still advances only once', () => {
+    const nur: SequenceLike = { id: 's2', name: 'Nurture', steps: [{ delay_days: 0, template_type: 'intro' }, { delay_days: 7, template_type: 'follow_up' }, { delay_days: 7, template_type: 'follow_up' }, { delay_days: 7, template_type: 'final' }] };
+    const a = decidePostSend({ ...base, templateId: 't2', template: T2, sequences: [nur], enrollment: enr({ sequence_id: 's2', current_step: 2 }) });
+    expect(a.action).toBe('advance');
+    const b = decidePostSend({ ...base, templateId: 't2', template: T2, sequences: [nur], enrollment: enr({ sequence_id: 's2', current_step: 3 }), alreadyAppliedForTemplate: true });
+    expect(b.action).toBe('link_only');
+  });
+});
+
+describe('isEarlierSendInWindow', () => {
+  const H = 3600_000;
+  const mine = { id: 'b', sent_at: '2026-10-09T10:00:00.000Z' };
+  it('counts only earlier sends inside the window', () => {
+    expect(isEarlierSendInWindow({ id: 'x', sent_at: '2026-10-09T09:00:00.000Z' }, mine, 6 * H)).toBe(true);
+    expect(isEarlierSendInWindow({ id: 'x', sent_at: '2026-10-09T11:00:00.000Z' }, mine, 6 * H)).toBe(false);
+    expect(isEarlierSendInWindow({ id: 'x', sent_at: '2026-10-09T03:00:00.000Z' }, mine, 6 * H)).toBe(false);
+    expect(isEarlierSendInWindow({ id: 'x', sent_at: null }, mine, 6 * H)).toBe(false);
+  });
+  it('ties break by id so exactly one of two overlapping sends sees the other as earlier', () => {
+    const a = { id: 'a', sent_at: mine.sent_at };
+    expect(isEarlierSendInWindow(a, mine, 6 * H)).toBe(true);
+    expect(isEarlierSendInWindow(mine, a, 6 * H)).toBe(false);
   });
 });

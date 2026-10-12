@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { draftEmail } from '../_shared/ai.ts';
+import { isSequenceSystemNote } from '../_shared/sequenceRecipients.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { buildTemplateVars, substituteVariables } from '../_shared/templateVars.ts';
 import { appendLinks, onlyOrgAttachments, parseAttachments, parseLinks } from '../_shared/emailAttachments.ts';
@@ -46,7 +47,7 @@ Deno.serve(async (req) => {
   const { data: notes } = await client
     .from('lead_notes').select('content').eq('lead_id', body.lead_id)
     .order('created_at', { ascending: false }).limit(3);
-  const noteTexts = (notes ?? []).map((n) => (n as { content: string }).content);
+  const noteTexts = (notes ?? []).map((n) => (n as { content: string }).content).filter((c) => !isSequenceSystemNote(c));
   const { data: profile } = await client.from('profiles').select('full_name, email').eq('id', userData.user.id).single();
   const contractorName = (profile?.full_name ?? profile?.email ?? 'The Dreamlabs team').split(' ')[0]!;
 

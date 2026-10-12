@@ -1,6 +1,7 @@
 // Step 1 and 2: load what the pipeline needs, and confirm the run's creator may send for this lead.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { resolveOrgApiKey } from '../orgApiKeys.ts';
+import { isSequenceSystemNote } from '../sequenceRecipients.ts';
 import { canCreatorViewLead, senderFirstName } from '../selectedLeadPipelineRules.ts';
 import type { PipelineRun } from '../selectedLeadPipeline.ts';
 import type { CandidateRow, Lead, OrgKeys, SequenceRow, TemplateRow } from './types.ts';
@@ -47,7 +48,7 @@ export async function loadSequencesAndTemplates(service: SupabaseClient, orgId: 
 /** Newest 5 note contents for a lead. */
 export async function loadNotes(service: SupabaseClient, leadId: string): Promise<string[]> {
   const { data } = await service.from('lead_notes').select('content').eq('lead_id', leadId).order('created_at', { ascending: false }).limit(5);
-  return (data ?? []).map((n) => (n as { content: string }).content);
+  return (data ?? []).map((n) => (n as { content: string }).content).filter((c) => !isSequenceSystemNote(c));
 }
 
 /**

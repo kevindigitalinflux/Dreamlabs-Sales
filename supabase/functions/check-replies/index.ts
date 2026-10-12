@@ -1,6 +1,7 @@
 import { replySenderMatches } from '../_shared/replyMatch.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { ImapFlow } from 'npm:imapflow@1';
+import { isSequenceSystemNote } from '../_shared/sequenceRecipients.ts';
 import { json } from '../_shared/cors.ts';
 import { classifyReply, draftEmailClaude } from '../_shared/ai.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
@@ -145,7 +146,7 @@ Deno.serve(async (req) => {
           if (!apiKey) continue;
           const { data: notesRows } = await service.from('lead_notes')
             .select('content').eq('lead_id', sentLog.lead_id).order('created_at', { ascending: false }).limit(5);
-          const noteTexts = (notesRows ?? []).map((n) => (n as { content: string }).content);
+          const noteTexts = (notesRows ?? []).map((n) => (n as { content: string }).content).filter((c) => !isSequenceSystemNote(c));
 
           try {
             const complexity = await classifyReply({ replyBody: bodyText, apiKey });

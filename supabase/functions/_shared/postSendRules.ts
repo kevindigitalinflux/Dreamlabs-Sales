@@ -107,6 +107,23 @@ function addDaysYmd(ymd: string, days: number): string {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
+/**
+ * True when `other` is an EARLIER send than `mine` (by sent_at, then by id on a tie) and within `windowMs` before it.
+ * Asymmetric on purpose: two overlapping post-sends can never both see each other as the earlier one.
+ */
+export function isEarlierSendInWindow(
+  other: { id: string; sent_at: string | null },
+  mine: { id: string; sent_at: string | null },
+  windowMs: number,
+): boolean {
+  if (!other.sent_at || !mine.sent_at) return false;
+  const o = new Date(other.sent_at).getTime();
+  const m = new Date(mine.sent_at).getTime();
+  if (Number.isNaN(o) || Number.isNaN(m)) return false;
+  if (o > m || m - o > windowMs) return false;
+  return o < m || other.id < mine.id;
+}
+
 /** Subject for display in notes: dashes removed (house style), cut to 120 characters. */
 export function cleanSubject(subject: string): string {
   return subject.replace(/\s*[—–]\s*/g, ', ').trim().slice(0, 120);
@@ -161,11 +178,13 @@ export function decidePostSend(input: PostSendInput): PostSendDecision {
   // 3 and 4. An active enrolment: advance only when the sent template is its current step's template.
   if (enrollment && enrollment.status === 'active') {
     const seq = sequences.find((s) => s.id === enrollment.sequence_id);
+    // The same template was just sent to this lead (e.g. a second contact): link the log to the enrolment so a reply
+    // pauses the sequence, but never move it again. Checked before the step test, which that second email may fail.
+    if (input.alreadyAppliedForTemplate) return repeat();
     const step = seq?.steps[enrollment.current_step - 1];
     if (!seq || !step || !template || !stepUsesTemplate(step, template, input.defaultTemplateIdByType)) {
       return none('This is not the template for the lead\'s current sequence step, so the sequence stays where it is');
     }
-    if (input.alreadyAppliedForTemplate) return repeat();
     // Same arithmetic as nextEnrollmentState: `current_step` is the step that was just sent.
     const next = enrollment.current_step + 1;
     const total = seq.steps.length;
