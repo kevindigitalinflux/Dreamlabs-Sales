@@ -27,7 +27,7 @@ export interface ResearchResult { summary: string; sources: string[]; costCents:
  * internal one). Each page gets its own timeout that also covers the body read, combined
  * with the overall research deadline. Returns null on any failure or non-HTML response.
  */
-async function fetchPageHtml(rawUrl: string, deadline: AbortSignal): Promise<{ html: string; finalUrl: string } | null> {
+export async function fetchPageHtml(rawUrl: string, deadline: AbortSignal): Promise<{ html: string; finalUrl: string } | null> {
   try {
     const signal = AbortSignal.any([deadline, AbortSignal.timeout(PAGE_TIMEOUT_MS)]);
     let url = parseSafeWebsiteUrl(rawUrl);
@@ -51,7 +51,8 @@ async function fetchPageHtml(rawUrl: string, deadline: AbortSignal): Promise<{ h
   }
 }
 
-function extractHrefs(html: string): string[] {
+/** Every href value of an anchor tag in the HTML (unresolved, as written). */
+export function extractHrefs(html: string): string[] {
   const hrefs: string[] = [];
   for (const m of html.matchAll(/<a\b[^>]*?\shref\s*=\s*["']([^"']+)["']/gi)) hrefs.push(m[1]);
   return hrefs;
