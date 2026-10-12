@@ -1,4 +1,5 @@
 import { sendMail } from './smtp.ts';
+import { buildMailContent } from './emailFormat.ts';
 import { ATTACHMENT_BUCKET, MAX_TOTAL_ATTACHMENT_BYTES, parseAttachments, safeFilename } from './emailAttachments.ts';
 
 // deno-lint-ignore no-explicit-any
@@ -156,9 +157,12 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
       if (loadedBytes > MAX_TOTAL_ATTACHMENT_BYTES) throw new Error('Attachments are over the 10 MB limit for one email');
       files.push({ filename: safeFilename(a.name), contentType: a.type, content: bytes });
     }
+    // A formatted body goes out as plain text + HTML; an unformatted one exactly as before.
+    // email_logs.body (below) keeps the raw marker text so history and queues re-render it.
+    const mail = buildMailContent(input.body);
     const result = await sendMail(
       { host: settings.smtp_host, port: settings.smtp_port, user: settings.smtp_user, pass, fromName: settings.from_name },
-      { to: input.to, subject: input.subject, body: input.body, attachments: files },
+      { to: input.to, subject: input.subject, body: mail.content, html: mail.html, attachments: files },
     );
     messageId = result.messageId;
   } catch (e) {

@@ -218,3 +218,13 @@ export function renderEmailText(body: string): string {
     })
     .join('\n\n');
 }
+
+/**
+ * What to hand the mailer for a body. No markers: exactly the body, plain text
+ * only (unchanged from before formatting existed). With markers: a plain-text
+ * copy plus the HTML version, sent together as multipart/alternative.
+ */
+export function buildMailContent(body: string): { content: string; html?: string } {
+  if (!hasFormatting(body)) return { content: body };
+  return { content: renderEmailText(body), html: renderEmailHtml(body) };
+}

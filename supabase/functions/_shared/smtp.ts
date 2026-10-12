@@ -9,14 +9,15 @@ export interface SmtpConfig {
 }
 
 /**
- * Sends one plain-text email. Port 465 = implicit TLS; anything else attempts
+ * Sends one email: plain text, plus an HTML alternative when `html` is given
+ * (denomailer then builds multipart/alternative, attachments alongside). Port 465 = implicit TLS; anything else attempts
  * STARTTLS. Generates and sets an explicit Message-ID (denomailer doesn't
  * expose one from its send result) and returns it, so the caller can store
  * it for later reply-matching via In-Reply-To/References headers.
  */
 export async function sendMail(
   cfg: SmtpConfig,
-  msg: { to: string; subject: string; body: string; attachments?: { filename: string; contentType: string; content: Uint8Array }[] },
+  msg: { to: string; subject: string; body: string; html?: string; attachments?: { filename: string; contentType: string; content: Uint8Array }[] },
 ): Promise<{ messageId: string }> {
   const client = new SMTPClient({
     connection: {
@@ -38,6 +39,7 @@ export async function sendMail(
       to,
       subject,
       content: msg.body,
+      ...(msg.html ? { html: msg.html } : {}),
       headers: { 'Message-ID': messageId },
       // denomailer base64-encodes 'binary' attachments itself. Filenames must already be
       // safe (see safeFilename): it writes them into MIME headers unquoted.
