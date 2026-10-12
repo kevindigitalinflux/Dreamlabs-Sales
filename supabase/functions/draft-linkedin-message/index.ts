@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
       subject: 'LinkedIn DM', body: templateText,
       lead: { full_name: contact.full_name, context_signal: contact.context_signal },
       notes: [], contractorName, orgName: org?.name ?? 'our team', companyContext: org?.company_context, icpContext,
-      apiKey, model: 'claude-sonnet-5',
+      apiKey, model: 'claude-sonnet-5', channel: 'linkedin',
     });
 
     const { data: inserted, error: insertErr } = await service.from('linkedin_drafts').insert({

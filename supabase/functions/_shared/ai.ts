@@ -1,4 +1,5 @@
 import { stripAiPunctuation } from './textGuardrails.ts';
+import { EMAIL_FORMAT_PROMPT_LINE } from './emailFormatPrompt.ts';
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 // gemini-2.5-flash was retired by Google ("no longer available to new users")
@@ -146,7 +147,8 @@ export async function draftEmail(input: {
 }): Promise<{ subject: string; body: string }> {
   const result = await geminiJson(
 `${orgDescriptionLine(input.orgName, input.companyContext)}
-Personalise this follow-up email using the lead data and call notes. Keep it plain text, warm, brief, UK English.
+Personalise this follow-up email using the lead data and call notes. Keep it warm, brief, UK English.
+${EMAIL_FORMAT_PROMPT_LINE}
 Do not invent facts not present in the data. Keep any URLs intact. ${DASH_GUARDRAIL_LINE} Return JSON: {"subject": string, "body": string}.
 ${input.icpContext ? `
 IDEAL CUSTOMER PROFILE for this lead (who they are most like). Use it to choose which pain points, goals and objections to speak to, and the wording and tone that will resonate with them. Use it as background, not as text to quote, and never state a fact about this lead that is not in the lead data:
@@ -403,7 +405,12 @@ export async function draftEmailClaude(input: {
   untrustedData?: boolean;
   /** Optional (per-contact sequence drafts only): the email goes to a shared inbox, so no person is named. */
   generalInbox?: boolean;
+  /** 'linkedin' for a LinkedIn DM: stays plain text. Defaults to 'email', which keeps and uses the email formatting syntax. */
+  channel?: 'email' | 'linkedin';
 }): Promise<{ subject: string; body: string }> {
+  const formatLine = input.channel === 'linkedin'
+    ? 'Keep it plain text, warm, brief, UK English.'
+    : `Keep it warm, brief, UK English. ${EMAIL_FORMAT_PROMPT_LINE}`;
   const recipientLine = input.generalInbox
     ? '\nThis email goes to a shared inbox. Greet with "Hi there". Never address or name a specific person.'
     : input.recipient
@@ -416,7 +423,7 @@ export async function draftEmailClaude(input: {
 `${orgDescriptionLine(input.orgName, input.companyContext)}
 Personalise this outreach email using the lead data and any notes (which may include AI-generated
 personalization talking points from an earlier research pass — use them as real context, not as
-text to quote verbatim). Keep it plain text, warm, brief, UK English. Do not invent facts not
+text to quote verbatim). ${formatLine} Do not invent facts not
 present in the data. Keep any URLs intact. ${DASH_GUARDRAIL_LINE} Return JSON: {"subject": string, "body": string}.
 ${input.icpContext ? `
 IDEAL CUSTOMER PROFILE for this lead (who they are most like). Use it to choose which pain points, goals and objections to speak to, and the wording and tone that will resonate with them. Use it as background, not as text to quote, and never state a fact about this lead that is not in the lead data:
