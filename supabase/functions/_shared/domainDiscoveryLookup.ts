@@ -64,10 +64,13 @@ export async function discoverLeadDomains(
   }, DOMAIN_CHECKS);
 
   const fresh = outcome.discovered.filter((d) => !d.needs_check && d.domain !== websiteDomain).map((d) => d.domain);
-  const next = [...already, ...fresh.filter((d) => !already.includes(d))].slice(0, MAX_SAVED_DOMAINS);
-  if (next.length !== already.length) {
-    const { error } = await service.from('leads').update({ email_domains: next }).eq('id', lead.id).eq('org_id', lead.org_id);
+  const toAdd = fresh.filter((d) => !already.includes(d)).slice(0, Math.max(0, MAX_SAVED_DOMAINS - already.length));
+  let saved = already;
+  if (toAdd.length > 0) {
+    // Atomic append (migration 056 RPC): dedupes and caps in one locked statement, so two lookups never drop each other's.
+    const { data, error } = await service.rpc('lead_add_email_domains', { target_lead: lead.id, new_domains: toAdd });
     if (error) console.error('Could not save discovered domains');
+    else saved = savedDomains(data);
   }
-  return { ...outcome, saved: next };
+  return { ...outcome, saved };
 }

@@ -7,12 +7,14 @@ describe('readDeepFindDetails', () => {
       domains: [{ domain: 'loveliving.uk', sources: ['hunter_name'], needs_check: false }, { domain: 'x.com', needs_check: true }, 5, { domain: '' }],
       named_by_web: [{ name: 'David Cox', role: 'Owner' }, { role: 'no name' }],
       named_on_site: 'nope',
+      unverified_people: [{ name: 'Tom Reed', role: 'Director', email: 'tom@x.com' }],
     })).toEqual({
       domains: [{ domain: 'loveliving.uk', needs_check: false }, { domain: 'x.com', needs_check: true }],
       namedByWeb: [{ name: 'David Cox', role: 'Owner' }],
       namedOnSite: [],
+      unverified: [{ name: 'Tom Reed', role: 'Director' }],
     });
-    expect(readDeepFindDetails(null)).toEqual({ domains: [], namedByWeb: [], namedOnSite: [] });
+    expect(readDeepFindDetails(null)).toEqual({ domains: [], namedByWeb: [], namedOnSite: [], unverified: [] });
   });
 });
 

@@ -25,13 +25,14 @@ Last updated 2026-10-12. Ask for any item by number or name.
 
 ### Deep find (built 2026-10-12, not yet applied or deployed)
 
-- D1. Apply migrations 056 (`leads.email_domains`) then 057 (Deep find tables, policies, RPCs, cron) after the security review, then deploy `run-deep-find` (new, `verify_jwt = false`) and redeploy `find-decision-makers`.
+- D1. Order: apply 056, redeploy `find-decision-makers`, deploy `run-deep-find` (new, `verify_jwt = false`, check its CRON_SECRET equals the vault `cron_secret`), then apply 057 (its cron starts ticking at once), then push the client.
 - D2. Retest on Love Living: "Add person" for John Sipple with no typed domain should find loveliving.uk by itself (step "Company domains"). Then run "Deep find this lead": check the people added (source shown, follow-ups off), the company domains line, and the names to check.
 - D3. Retest on HOK (Andrea Manning) the same way.
 - D4. Consider running Deep find automatically on new leads, or as a step inside the selected-leads autopilot.
 - D5. Apollo upgrade note: the free plan refuses people/match, so Deep find does not use Apollo at all. Revisit after an upgrade.
 - D6. People named only by the web search or the website are listed as "To check" and never saved (no honest contact source exists for them). Consider a one-click "Add as contact" that saves them as your own manual contact.
-- D7. Watch Hunter credits: defaults are 60 Hunter calls and 25 AI calls per run (editable, max 500 / 200).
+- D7. Watch Hunter credits: defaults are 60 Hunter credits and 25 AI calls per run (editable, max 500 / 200). Compare `hunter_used` with the Hunter dashboard after the first run.
+- D8. Not fixed (review notes only): Gemini error messages still carry up to 300 characters of provider text inside the thrown error (never logged or returned by Deep find); migration 057 is not re-runnable (apply once, in one transaction).
 
 ### Email formatting (built 2026-10-12, not yet deployed)
 

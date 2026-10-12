@@ -35,7 +35,7 @@ export function DeepFindProgress({ runId }: { runId: string }) {
         {headline} {p.people === 1 ? '1 person added so far.' : `${p.people} people added so far.`}
       </p>
       <p className="text-xs text-muted">
-        Hunter calls used: {run.hunter_used} of {run.credit_cap_hunter}. AI calls used: {run.ai_used} of {run.credit_cap_ai}.
+        Hunter credits used: about {run.hunter_used} of {run.credit_cap_hunter}. AI calls used: {run.ai_used} of {run.credit_cap_ai}.
         {active && ' You can close this window: Deep find keeps going in the background.'}
       </p>
       {rows.length === 0 && <p className="text-sm text-muted">No leads in this Deep find.</p>}

@@ -84,12 +84,15 @@ describe('extractTeamMembers', () => {
 describe('deepFindSummary', () => {
   const base: LeadStats = {
     hunterPeople: 0, officersAdded: 0, officerEmails: 0, domainsShown: [], domainsToCheck: 0, namedByWeb: 0, namedOnSite: 0,
-    hunterCapHit: false, aiCapHit: false, noHunterKey: false, noWebsite: false, failures: 0,
+    hunterCapHit: false, aiCapHit: false, noHunterKey: false, noWebsite: false, failures: 0, unverifiedPeople: 0,
   };
   it('says what was found in plain English', () => {
     expect(deepFindSummary({ ...base, hunterPeople: 3, officersAdded: 1, domainsShown: ['loveliving.uk'], namedByWeb: 2, hunterCapHit: true }))
       .toBe('Found 4 new people (3 from Hunter, 1 from Companies House). Company domains: loveliving.uk. The web search named 2 people not confirmed elsewhere: see suggestions. The Hunter credit cap was reached, so some searches were skipped. New people are not added to follow-up sequences until you switch them on.');
     expect(deepFindSummary(base)).toBe('No new people found. New people are not added to follow-up sequences until you switch them on.');
+  });
+  it('mentions people on an unconfirmed domain', () => {
+    expect(deepFindSummary({ ...base, unverifiedPeople: 2 })).toContain("Hunter lists 2 people on a domain that could not be confirmed as this company's: see suggestions.");
   });
   it('never puts unsafe characters into the sentence', () => {
     expect(deepFindSummary({ ...base, domainsShown: ['<b>x.com'] })).toContain('Company domains: bx.com.');

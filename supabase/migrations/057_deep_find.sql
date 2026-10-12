@@ -4,22 +4,26 @@
 -- SECURITY NOTE (needs review before applying; what changes on which table):
 -- * NEW TABLE deep_find_runs. RLS ENABLED.
 --     SELECT: any member of the run's org (is_org_member(org_id)).
---     INSERT: only into an org you belong to, as yourself (created_by = auth.uid()), with status 'active', zero
---             counters, no finish time / cancel reason, 1 to 25 leads and caps inside the CHECK bounds.
+--     INSERT / DELETE: NO client privileges. Runs are created only by the run-deep-find edge function with the
+--             service client, after its own checks (signed-in user, org membership, can_edit_lead per lead, 5 active
+--             runs per org, 30 creates per user per day, lead not already queued or running).
 --     UPDATE: authenticated may change ONLY (status, cancel_reason) (column grant), only on a run they created or
---             as an org admin (policy), and a guard trigger only allows active -> cancelled from a signed-in request.
---     DELETE: no client delete (grant revoked). anon: no privileges at all.
+--             as an org admin (policy), and a guard trigger only allows an ACTIVE run to become cancelled from a
+--             signed-in request (finished runs cannot be edited at all).
+--     anon: no privileges.
 -- * NEW TABLE deep_find_leads. RLS ENABLED.
 --     SELECT: members of the org who can also see that lead (is_org_member AND can_view_lead), so a restricted
 --             contractor never sees discovered domains / names for a lead outside their pipelines (lesson of 036).
---     INSERT: only status 'queued' rows with empty engine columns, into an ACTIVE run the caller created in the same
---             org, for a lead in that org the caller can edit (can_edit_lead). A SECURITY DEFINER trigger caps the
---             rows per run at the run's lead_count (max 25).
---     UPDATE / DELETE: none for clients (grants revoked). Only the engine (service role) changes rows.
+--     INSERT / UPDATE / DELETE: NO client privileges. Only the edge function / engine (service role) writes rows.
+--     A partial unique index allows at most one queued or running row per lead, so two runs can never process the
+--     same lead at once.
 -- * NEW SECURITY DEFINER FUNCTIONS, all SET search_path = '', EXECUTE revoked from PUBLIC/anon/authenticated and
 --   granted to service_role only: deep_find_increment (counter adjustment), deep_find_reserve (atomic
 --   check-and-spend against the caps, the no-overspend guard), deep_find_claim (atomic claim with FOR UPDATE SKIP
---   LOCKED, the overlapping-tick guard), deep_find_leads_cap (trigger).
+--   LOCKED, the overlapping-tick guard), deep_find_creator_can_edit (can_edit_lead for an explicit user id, used by
+--   the engine to re-check the run creator's rights before each lead; can_edit_lead itself reads auth.uid()).
+-- * The Hunter cap and counter are in Hunter CREDITS (one unit per Hunter request the engine makes, each request
+--   limited so it costs at most about one credit).
 -- * NEW pg_cron JOB run-deep-find-tick every 2 minutes, same vault cron_secret pattern as migration 049
 --   (x-cron-secret header read from vault.decrypted_secrets inside the job; the secret is never in this file).
 -- * Both tables join the supabase_realtime publication (postgres_changes respects the SELECT policies above).
@@ -32,6 +36,7 @@ CREATE TABLE deep_find_runs (
   created_by UUID NOT NULL REFERENCES profiles(id),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'cancelled')),
   lead_count INT NOT NULL CHECK (lead_count BETWEEN 1 AND 25),
+  -- Hunter CREDITS (see the security note), not calls.
   credit_cap_hunter INT NOT NULL DEFAULT 60 CHECK (credit_cap_hunter BETWEEN 0 AND 500),
   credit_cap_ai INT NOT NULL DEFAULT 25 CHECK (credit_cap_ai BETWEEN 0 AND 200),
   hunter_used INT NOT NULL DEFAULT 0 CHECK (hunter_used >= 0),
@@ -63,6 +68,8 @@ CREATE TABLE deep_find_leads (
 CREATE INDEX idx_deep_find_leads_run ON deep_find_leads(run_id, status);
 CREATE INDEX idx_deep_find_leads_lead ON deep_find_leads(lead_id);
 CREATE INDEX idx_deep_find_leads_queued ON deep_find_leads(updated_at) WHERE status = 'queued';
+-- One queued or running row per lead across all runs (two runs never process one lead at once).
+CREATE UNIQUE INDEX deep_find_leads_one_open_per_lead ON deep_find_leads(lead_id) WHERE status IN ('queued', 'running');
 
 ALTER TABLE deep_find_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE deep_find_leads ENABLE ROW LEVEL SECURITY;
@@ -70,35 +77,19 @@ ALTER TABLE deep_find_leads ENABLE ROW LEVEL SECURITY;
 -- 2. Grants (tables in public get broad default grants: narrow them explicitly) --------
 REVOKE ALL ON deep_find_runs FROM anon, authenticated;
 REVOKE ALL ON deep_find_leads FROM anon, authenticated;
-GRANT SELECT, INSERT ON deep_find_runs TO authenticated;
+GRANT SELECT ON deep_find_runs TO authenticated;
 GRANT UPDATE (status, cancel_reason) ON deep_find_runs TO authenticated;
-GRANT SELECT, INSERT ON deep_find_leads TO authenticated;
+GRANT SELECT ON deep_find_leads TO authenticated;
 GRANT ALL ON deep_find_runs, deep_find_leads TO service_role;
 
 -- 3. Policies -------------------------------------------------------------------------
 CREATE POLICY "deep_find_runs_select" ON deep_find_runs FOR SELECT USING (is_org_member(org_id));
-CREATE POLICY "deep_find_runs_insert" ON deep_find_runs FOR INSERT
-  WITH CHECK (
-    is_org_member(org_id) AND created_by = auth.uid()
-    AND status = 'active' AND hunter_used = 0 AND ai_used = 0
-    AND finished_at IS NULL AND cancel_reason IS NULL
-  );
 CREATE POLICY "deep_find_runs_update" ON deep_find_runs FOR UPDATE
   USING (is_org_member(org_id) AND (created_by = auth.uid() OR is_org_admin(org_id)))
   WITH CHECK (is_org_member(org_id) AND (created_by = auth.uid() OR is_org_admin(org_id)));
 
 CREATE POLICY "deep_find_leads_select" ON deep_find_leads FOR SELECT
   USING (is_org_member(org_id) AND can_view_lead(lead_id));
-CREATE POLICY "deep_find_leads_insert" ON deep_find_leads FOR INSERT
-  WITH CHECK (
-    is_org_member(org_id) AND status = 'queued'
-    AND reason IS NULL AND people_found = 0 AND domains = '{}'::jsonb AND attempts = 0
-    AND claimed_at IS NULL AND finished_at IS NULL
-    AND EXISTS (SELECT 1 FROM deep_find_runs r WHERE r.id = deep_find_leads.run_id AND r.org_id = deep_find_leads.org_id
-                AND r.created_by = auth.uid() AND r.status = 'active')
-    AND EXISTS (SELECT 1 FROM leads l WHERE l.id = deep_find_leads.lead_id AND l.org_id = deep_find_leads.org_id)
-    AND can_edit_lead(lead_id)
-  );
 
 -- 4. Guards ---------------------------------------------------------------------------
 -- A signed-in request may only cancel an active run. Service role (engine) has no auth.uid() and is unrestricted.
@@ -112,8 +103,9 @@ BEGIN
     NEW.updated_at := now();
     RETURN NEW;
   END IF;
-  IF NEW.status = OLD.status OR (NEW.status = 'cancelled' AND OLD.status = 'active') THEN
-    IF NEW.status = 'cancelled' AND OLD.status = 'active' THEN NEW.finished_at := now(); END IF;
+  -- Signed-in requests may only touch an ACTIVE run, and may only leave it active or cancel it.
+  IF OLD.status = 'active' AND NEW.status IN ('active', 'cancelled') THEN
+    IF NEW.status = 'cancelled' THEN NEW.finished_at := now(); END IF;
     NEW.updated_at := now();
     RETURN NEW;
   END IF;
@@ -122,28 +114,6 @@ END;
 $$;
 CREATE TRIGGER deep_find_runs_guard_status BEFORE UPDATE ON deep_find_runs
   FOR EACH ROW EXECUTE FUNCTION public.deep_find_runs_guard_status();
-
--- At most lead_count rows per run (max 25), checked with definer rights so RLS cannot hide rows from the count.
-CREATE OR REPLACE FUNCTION public.deep_find_leads_cap()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = ''
-AS $$
-DECLARE
-  cap INT;
-  have INT;
-BEGIN
-  SELECT r.lead_count INTO cap FROM public.deep_find_runs r WHERE r.id = NEW.run_id FOR UPDATE;
-  IF cap IS NULL THEN RAISE EXCEPTION 'Unknown deep find run'; END IF;
-  SELECT count(*) INTO have FROM public.deep_find_leads l WHERE l.run_id = NEW.run_id;
-  IF have >= cap THEN RAISE EXCEPTION 'This deep find already has all its leads'; END IF;
-  RETURN NEW;
-END;
-$$;
-REVOKE ALL ON FUNCTION public.deep_find_leads_cap() FROM PUBLIC, anon, authenticated;
-CREATE TRIGGER deep_find_leads_cap BEFORE INSERT ON deep_find_leads
-  FOR EACH ROW EXECUTE FUNCTION public.deep_find_leads_cap();
 
 -- 5. Engine RPCs (service role only) ----------------------------------------------------
 -- Adjusts the counters (never below zero). Used to record work that was already done.
@@ -202,6 +172,30 @@ AS $$
   RETURNING l.*;
 $$;
 
+-- can_edit_lead (migrations 018/019) for an explicit user instead of auth.uid(): admin of the lead's org; or, in the
+-- org's default pipeline, a member who created, owns (created_by NULL) or is assigned the lead; or, in a named
+-- pipeline, its creator (can_edit_pipeline). Keep in step with can_edit_lead / can_edit_pipeline.
+CREATE OR REPLACE FUNCTION public.deep_find_creator_can_edit(target_user UUID, target_lead UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = ''
+AS $
+  SELECT EXISTS (
+    SELECT 1 FROM public.leads l JOIN public.pipelines p ON p.id = l.pipeline_id
+     WHERE l.id = target_lead AND (
+       EXISTS (SELECT 1 FROM public.org_members m WHERE m.org_id = p.org_id AND m.user_id = target_user AND m.role = 'admin')
+       OR (p.is_default
+           AND EXISTS (SELECT 1 FROM public.org_members m WHERE m.org_id = p.org_id AND m.user_id = target_user)
+           AND (l.created_by IS NULL OR l.created_by = target_user OR l.assigned_to = target_user))
+       OR (NOT p.is_default AND p.created_by = target_user)
+     )
+  );
+$;
+
+REVOKE ALL ON FUNCTION public.deep_find_creator_can_edit(UUID, UUID) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.deep_find_creator_can_edit(UUID, UUID) TO service_role;
 REVOKE ALL ON FUNCTION public.deep_find_increment(UUID, INT, INT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.deep_find_reserve(UUID, INT, INT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.deep_find_claim(INT) FROM PUBLIC, anon, authenticated;

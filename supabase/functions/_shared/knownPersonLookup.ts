@@ -125,15 +125,18 @@ export type DomainListResult = { ok: true; emails: unknown[]; pattern: string | 
  * Hunter domain-search for the lead's domain, asking for up to 100 addresses. Some Hunter plans refuse more than 10
  * per call (HTTP 400), so a 400 is retried once with limit=10. The response is not trusted: `emails` is only passed
  * on when it is an array, and `pattern` only when it is a short string.
+ * `limit` (default 100) caps the addresses asked for; Hunter bills about one credit per 10 addresses returned, so
+ * Deep find passes 10 (at most about one credit per call, and no retry is needed).
  */
-export async function hunterDomainList(domain: string, apiKey: string, timeoutMs = 5000): Promise<DomainListResult> {
+export async function hunterDomainList(domain: string, apiKey: string, timeoutMs = 5000, limit = 100): Promise<DomainListResult> {
   try {
     const ask = (limit: number) => callJson(
       `https://api.hunter.io/v2/domain-search?${new URLSearchParams({ domain, limit: String(limit) })}`,
       { headers: { 'X-API-KEY': apiKey } }, timeoutMs, DOMAIN_LIST_MAX_BYTES,
     );
-    let res = await ask(100);
-    if (res.status === 400) res = await ask(10);
+    const first = Math.max(1, Math.min(100, Math.floor(limit)));
+    let res = await ask(first);
+    if (res.status === 400 && first > 10) res = await ask(10);
     if (res.status < 200 || res.status >= 300) return { ok: false, failure: res.status };
     if (res.data === null) return { ok: false, failure: 'bad_reply' };
     const d = (res.data as { data?: { emails?: unknown; pattern?: unknown } } | null)?.data;

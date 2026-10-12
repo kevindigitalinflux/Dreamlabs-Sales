@@ -16,7 +16,13 @@ export interface DeepFindDomain { domain: string; needs_check: boolean }
 export interface DeepFindNamed { name: string; role: string | null }
 
 /** The engine's per-lead details, read defensively (the JSON is engine-written but typed as unknown). */
-export interface DeepFindDetails { domains: DeepFindDomain[]; namedByWeb: DeepFindNamed[]; namedOnSite: DeepFindNamed[] }
+export interface DeepFindDetails {
+  domains: DeepFindDomain[];
+  namedByWeb: DeepFindNamed[];
+  namedOnSite: DeepFindNamed[];
+  /** People Hunter lists on a domain that could not be confirmed as the company's (never stored). */
+  unverified: DeepFindNamed[];
+}
 
 const text = (v: unknown, max: number): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim().slice(0, max) : null);
 
@@ -37,7 +43,7 @@ export function readDeepFindDetails(value: unknown): DeepFindDetails {
     const domain = text(x.domain, 253);
     return domain ? [{ domain, needs_check: x.needs_check === true }] : [];
   });
-  return { domains, namedByWeb: named(o.named_by_web), namedOnSite: named(o.named_on_site) };
+  return { domains, namedByWeb: named(o.named_by_web), namedOnSite: named(o.named_on_site), unverified: named(o.unverified_people) };
 }
 
 /** "Company domains: loveliving.uk (found automatically)" for the lead card, or null when there are none. */

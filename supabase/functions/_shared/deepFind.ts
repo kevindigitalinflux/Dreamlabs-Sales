@@ -33,7 +33,11 @@ interface ClaimedRow { id: string; run_id: string; org_id: string; lead_id: stri
 type Contact = ExistingContact & Record<string, unknown>;
 interface LeadOutcome { status: 'done' | 'failed' | 'skipped'; reason: string; people_found?: number; domains?: Record<string, unknown> }
 
-/** Spends run credits through the atomic deep_find_reserve RPC (the no-overspend guard). */
+/**
+ * Spends run credits through the atomic deep_find_reserve RPC (the no-overspend guard). One Hunter unit per Hunter
+ * request (company search and lists limited to 10 addresses, finder, verifier), so hunter_used approximates real
+ * Hunter credits; one AI unit per Gemini call.
+ */
 class Spend {
   hunterHit = false;
   aiHit = false;
@@ -111,10 +115,14 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const lead = leadData as (Record<string, unknown> & { id: string; org_id: string }) | null;
   if (!lead) return { status: 'skipped', reason: 'The lead no longer exists.' };
   if (lead.org_id !== run.org_id || row.org_id !== run.org_id) return { status: 'skipped', reason: 'The lead is not in this organisation.' };
-  if (!await checkRateLimit(service, `deep-find:${run.org_id}:${lead.id}`, 3, 24 * 60)) {
+  // Re-check, as the run's creator, the same edit rights can_edit_lead gives (they may have changed since create).
+  const { data: canEdit, error: canEditErr } = await service.rpc('deep_find_creator_can_edit', { target_user: run.created_by, target_lead: lead.id });
+  if (canEditErr) return { status: 'failed', reason: 'Could not check access to this lead.' };
+  if (canEdit !== true) return { status: 'skipped', reason: 'The person who started this Deep find can no longer edit this lead.' };
+  if (!await checkRateLimit(service, `deep-find:${run.org_id}:${lead.id}`, 3, 24 * 60, true)) {
     return { status: 'skipped', reason: 'Deep find already ran 3 times on this lead today. Try again tomorrow.' };
   }
-  if (!await checkRateLimit(service, `deep-find:${run.org_id}`, 200, 24 * 60)) {
+  if (!await checkRateLimit(service, `deep-find:${run.org_id}`, 200, 24 * 60, true)) {
     return { status: 'skipped', reason: 'This organisation reached its daily Deep find limit. Try again tomorrow.' };
   }
 
@@ -130,8 +138,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const created: Contact[] = [];
   const stats: LeadStats = {
     hunterPeople: 0, officersAdded: 0, officerEmails: 0, domainsShown: [], domainsToCheck: 0, namedByWeb: 0, namedOnSite: 0,
-    hunterCapHit: false, aiCapHit: false, noHunterKey: !hunterKey, noWebsite: false, failures: 0,
+    hunterCapHit: false, aiCapHit: false, noHunterKey: !hunterKey, noWebsite: false, failures: 0, unverifiedPeople: 0,
   };
+  /** Contacts this run created or filled, the only ones whose LinkedIn link is captured. */
+  const touched = new Set<string>();
   const suggestions: { name: string; field: string; value: string; label: string }[] = [];
 
   // (0) the registered company and the website pages, read once
@@ -155,6 +165,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   });
   stats.failures += discovery.failures.filter((f) => !f.endsWith('cap_reached')).length;
   const domains = discovery.domains.map((d) => d.domain);
+  // People are only stored from corroborated domains (Review Focus 2); the rest give suggestions only.
+  const verified = new Set(discovery.domains.filter((d) => !d.needs_check).map((d) => d.domain));
   stats.domainsShown = discovery.domains.filter((d) => !d.needs_check && d.domain !== siteDomain).map((d) => d.domain);
   stats.domainsToCheck = discovery.domains.filter((d) => d.needs_check).length;
   const webPeople: WebPerson[] = discovery.people;
@@ -164,11 +176,17 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   for (const d of domains) {
     if (!hunterKey || left() < 20_000) break;
     if (!await spend.hunter()) break;
-    const res = await hunterDomainList(d, hunterKey, 6_000);
+    // limit 10: Hunter bills about 1 credit per 10 addresses, so one reserved credit covers this call.
+    const res = await hunterDomainList(d, hunterKey, 6_000, 10);
     if (res.ok) lists.set(d, { emails: res.emails, pattern: res.pattern }); else stats.failures++;
   }
-  const found = rankPeople([...lists.entries()].flatMap(([d, l]) => hunterPeople(l.emails, d, cleanEmail, cleanLinkedinProfile)), webPeople)
-    .slice(0, MAX_HUNTER_PEOPLE_PER_LEAD);
+  const listed = [...lists.entries()].flatMap(([d, l]) => hunterPeople(l.emails, d, cleanEmail, cleanLinkedinProfile).map((p) => ({ ...p, domain: d })));
+  const found = rankPeople(listed.filter((p) => verified.has(p.domain)), webPeople).slice(0, MAX_HUNTER_PEOPLE_PER_LEAD);
+  // People on a domain that is not corroborated are never stored: they are listed for the user to check.
+  const unverifiedPeople = rankPeople(listed.filter((p) => !verified.has(p.domain)), webPeople)
+    .filter((p) => !emailOnLead(rows, p.email)).slice(0, 10)
+    .map((p) => ({ name: `${p.first_name} ${p.last_name}`.slice(0, 80), role: p.title.slice(0, 60), email: p.email, domain: p.domain }));
+  stats.unverifiedPeople = unverifiedPeople.length;
   const toInsert: Record<string, unknown>[] = [];
   for (const p of found) {
     if (emailOnLead([...rows, ...created], p.email) || toInsert.some((r) => r.email === p.email)) continue;
@@ -177,7 +195,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       // The same person is already on the lead (for example a registry officer): fill their blanks, never add twice.
       if (!same.dismissed_at && !str(same.email)) {
         const saved = await fillBlanks(service, same, { email: p.email, title: p.title, ...(p.linkedin_url ? { linkedin_url: p.linkedin_url } : {}) });
-        if (saved) { Object.assign(same, saved); stats.officerEmails++; }
+        if (saved) { Object.assign(same, saved); touched.add(same.id); stats.officerEmails++; }
       }
       continue;
     }
@@ -189,6 +207,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }
   const insertedHunter = await insertContacts(service, toInsert);
   created.push(...insertedHunter);
+  for (const c of insertedHunter) touched.add(c.id);
   stats.hunterPeople = insertedHunter.length;
 
   // (3) Companies House officers, then a wide lookup for each officer without an email
@@ -211,15 +230,16 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     && !r.dismissed_at && !str(r.email) && str(r.first_name) && str(r.last_name)), webPeople).slice(0, MAX_OFFICER_LOOKUPS);
   const knownAddresses: KnownAddress[] = all().filter((r) => r.kind !== 'general' && str(r.email))
     .map((r) => ({ email: str(r.email)!, first: str(r.first_name), last: str(r.last_name) }));
+  const verifiedDomains = domains.filter((d) => verified.has(d)).slice(0, 4);
   for (const officer of officersToLook) {
-    if (left() < 15_000 || domains.length === 0) break;
+    if (left() < 15_000 || verifiedDomains.length === 0) break;
     const first = str(officer.first_name)!;
     const last = str(officer.last_name)!;
     const work: FoundFields = { email: null, phone: str(officer.phone), linkedin_url: str(officer.linkedin_url) };
     const patch: Record<string, string> = {};
     const wide = await runWideLookup({
       first, last, have: { email: null, linkedin_url: work.linkedin_url ?? null, phone: work.phone ?? null }, hasApolloId: false,
-      domains: domains.slice(0, 4), website: usableSite ? str(lead.website) : null,
+      domains: verifiedDomains, website: usableSite ? str(lead.website) : null,
       websiteDirectory: !!siteDomain && isDirectoryDomain(siteDomain), knownAddresses, usePaid: true,
       keys: { hunter: !!hunterKey, apollo: false, gemini: !!geminiKey },
       budgetMs: Math.min(15_000, left() - 8_000), webExtraMs: 5_000,
@@ -230,12 +250,12 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       hunterDomain: async (d, t) => {
         const cached = lists.get(d);
         if (cached) return { ok: true, ...cached };
-        return await spend.hunter() ? hunterDomainList(d, hunterKey ?? '', t) : { ok: false, failure: 429 };
+        return await spend.hunter() ? hunterDomainList(d, hunterKey ?? '', t, 10) : { ok: false, failure: 429 };
       },
       hunterVerify: async (e, t) => (await spend.hunter() ? hunterVerifyEmail(e, hunterKey ?? '', t) : { ok: false, failure: 429 }),
       scanWebsite: (w, d, f, l, t) => scanWebsiteForPerson(w, d, f, l, t),
       webSearch: async (t) => (await spend.ai()
-        ? webSearchForPerson({ first, last, title: str(officer.title), company: str(lead.business_name), domains }, geminiKey ?? '', t)
+        ? webSearchForPerson({ first, last, title: str(officer.title), company: str(lead.business_name), domains: verifiedDomains }, geminiKey ?? '', t)
         : { ok: false, failure: 429 }),
       apolloMatch: async () => ({ ok: false, failure: 403 }),
       absorb: (f) => {
@@ -251,7 +271,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     }
     if (Object.keys(patch).length > 0) {
       const saved = await fillBlanks(service, officer, patch);
-      if (saved) { Object.assign(officer, saved); if (patch.email) stats.officerEmails++; }
+      if (saved) { Object.assign(officer, saved); touched.add(officer.id); if (patch.email) stats.officerEmails++; }
     }
   }
 
@@ -269,8 +289,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   stats.aiCapHit = spend.aiHit;
 
   // LinkedIn auto-capture, like findDecisionMakers, for contacts this run created or filled
-  for (const c of [...created, ...rows.filter((r) => str(r.linkedin_url))]) {
-    if (!str(c.linkedin_url) || c.dismissed_at) continue;
+  for (const c of all()) {
+    if (!touched.has(c.id) || !str(c.linkedin_url) || c.dismissed_at) continue;
     const fullName = `${str(c.first_name) ?? ''} ${str(c.last_name) ?? ''}`.trim() || 'Unknown';
     const { error } = await service.from('linkedin_contacts').upsert({
       org_id: run.org_id, lead_id: lead.id, decision_maker_candidate_id: c.id, full_name: fullName,
@@ -288,6 +308,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       named_by_web: namedByWeb,
       named_on_site: namedOnSite,
       suggestions: suggestions.slice(0, 10),
+      unverified_people: unverifiedPeople,
       registered_name: registry.name,
     },
   };

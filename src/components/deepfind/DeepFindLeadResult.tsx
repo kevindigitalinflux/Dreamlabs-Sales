@@ -14,7 +14,7 @@ const STATUS_CLASSES: Record<DeepFindRowWithLead['status'], string> = {
 export function DeepFindLeadResult({ row }: { row: DeepFindRowWithLead }) {
   const details = readDeepFindDetails(row.domains);
   const shown = details.domains.filter((d) => !d.needs_check);
-  const toCheck = [...details.namedByWeb, ...details.namedOnSite];
+  const toCheck = [...details.unverified, ...details.namedByWeb, ...details.namedOnSite];
   return (
     <li className="flex flex-col gap-1 rounded-lg border border-line p-3">
       <div className="flex flex-wrap items-center gap-2">

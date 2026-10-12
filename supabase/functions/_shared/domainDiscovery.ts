@@ -7,13 +7,31 @@
 /** Where a domain came from, strongest first (see SOURCE_RANK). */
 export type DomainSource =
   | 'typed' | 'website' | 'saved' | 'lead_email' | 'contact_email'
-  | 'hunter_name' | 'website_email' | 'website_link' | 'web';
+  | 'hunter_name' | 'hunter_name_weak' | 'website_email' | 'website_link' | 'web';
 
 /** One sighting of a domain. */
 export interface DomainCandidate { domain: string; source: DomainSource }
 
-/** A ranked, de-duplicated domain. `needs_check` is true when only the web search named it. */
+/**
+ * A ranked, de-duplicated domain. `needs_check` is true when the domain is NOT corroborated (see isCorroborated):
+ * it may be searched, but people found on it are only suggestions, and it is never saved or shown as fact.
+ */
 export interface DiscoveredDomain { domain: string; sources: DomainSource[]; needs_check: boolean }
+
+/** Sources that on their own make a domain the company's: known to the user or the lead, or a strong Hunter name match. */
+const STRONG_SOURCES: DomainSource[] = ['typed', 'website', 'saved', 'lead_email', 'contact_email', 'hunter_name'];
+/** Independent weak signals: two different ones together corroborate a domain. */
+const WEAK_SOURCES: DomainSource[] = ['hunter_name_weak', 'website_email', 'website_link', 'web'];
+
+/**
+ * True when a domain's sightings make it the company's own: one strong source (a typed domain, the lead's website, a
+ * saved domain, the lead's or a contact's email domain, a strong Hunter company-name match), or at least two DIFFERENT
+ * weak signals (a weak Hunter match, an email or link on the website, the web search).
+ */
+export function isCorroborated(sources: DomainSource[]): boolean {
+  if (sources.some((s) => STRONG_SOURCES.includes(s))) return true;
+  return new Set(sources.filter((s) => WEAK_SOURCES.includes(s))).size >= 2;
+}
 
 /** A person the web search named, used only to rank people other sources found (never saved on its own). */
 export interface WebPerson { name: string; role: string | null }
@@ -25,8 +43,26 @@ export interface DomainChecks { clean: (value: unknown) => string | null; usable
 export const MAX_DISCOVERED_DOMAINS = 4;
 
 const SOURCE_RANK: Record<DomainSource, number> = {
-  typed: 0, website: 1, saved: 2, lead_email: 3, contact_email: 4, hunter_name: 5, website_email: 6, website_link: 7, web: 8,
+  typed: 0, website: 1, saved: 2, lead_email: 3, contact_email: 4, hunter_name: 5, hunter_name_weak: 6, website_email: 7,
+  website_link: 8, web: 9,
 };
+
+/**
+ * Industry and trade words. They may be part of a company's name (and of its domain), but they never identify WHICH
+ * company it is: "Sparkle Cleaning" is identified by "sparkle", not "cleaning". Strict matches require the
+ * distinctive words (brand words minus these).
+ */
+export const INDUSTRY_WORDS = new Set([
+  'cleaning', 'cleaners', 'cleaner', 'clean', 'property', 'properties', 'homes', 'home', 'housing', 'lettings',
+  'letting', 'lets', 'estates', 'estate', 'agents', 'agent', 'agency', 'rentals', 'rental', 'design', 'designs',
+  'web', 'digital', 'media', 'marketing', 'consulting', 'consultancy', 'consultants', 'builders', 'building', 'construction',
+  'plumbing', 'plumbers', 'electrical', 'electricians', 'roofing', 'care', 'health', 'healthcare', 'dental', 'clinic',
+  'legal', 'law', 'solicitors', 'accountants', 'accounting', 'finance', 'financial', 'insurance', 'travel', 'cars',
+  'motors', 'garage', 'salon', 'beauty', 'hair', 'cafe', 'restaurant', 'studio', 'studios', 'facilities', 'maintenance',
+  'office', 'offices', 'commercial', 'residential', 'domestic', 'logistics', 'transport', 'recruitment', 'staffing',
+  'events', 'catering', 'training', 'education', 'school', 'nursery', 'fitness', 'gym', 'tech', 'technology', 'systems',
+  'software', 'it', 'network', 'networks', 'print', 'printing', 'supplies', 'supply', 'hire', 'repairs', 'repair',
+]);
 
 /**
  * Words that say nothing about which company it is. A name made only of these has no brand words, and no domain is
@@ -94,66 +130,86 @@ export function domainFitsBrand(domain: string, brand: string[], required: strin
   return segmentable(label, [...brand, ...GENERIC_COMPANY_WORDS]);
 }
 
-/**
- * Loose fit, only for domains seen on the company's OWN website: the domain shares a brand word of at least four
- * letters, or one company part contains the other (lovelivingmanagement and loveliving).
- */
-export function domainSharesBrand(domain: string, brand: string[], websiteDomain: string | null): boolean {
-  const label = domainLabel(domain);
-  if (!label) return false;
-  if (brand.some((t) => t.length >= 4 && label.includes(t))) return true;
-  const site = websiteDomain ? domainLabel(websiteDomain) : null;
-  return !!site && site !== label && Math.min(site.length, label.length) >= 4 && (site.includes(label) || label.includes(site));
+/** The words that identify WHICH company it is: brand words without industry words ("Sparkle Cleaning" gives sparkle). */
+export function distinctiveTokens(name: unknown): string[] {
+  return brandTokens(name).filter((w) => !INDUSTRY_WORDS.has(w));
 }
 
 /**
- * Whether Hunter's best match for a company-name search plausibly IS this company. Requires, for one of the lead's
- * names (trading name or registered name): Hunter's organisation name has no distinctive word the lead's name lacks,
- * shares at least two of its words (or all, for a one-word brand), and the domain fits the brand strictly.
- * A national brand that merely shares a word ("Living Social") or adds one ("Love Living Brands") is refused.
+ * Strict brand fit for one of the company's names: the domain's company part contains EVERY distinctive word in
+ * full and is made only of the name's own words plus generic words. A name with no distinctive word
+ * ("London Cleaning Services") fits nothing, so a supplier's domain such as cleaningwebdesigns.co.uk never fits.
  */
-export function hunterNameMatches(leadNames: string[], organization: unknown, domain: string): boolean {
-  const org = brandTokens(organization);
-  for (const name of leadNames) {
-    const brand = brandTokens(name);
-    if (brand.length === 0) continue;
-    if (org.length > 0) {
-      if (org.some((t) => !brand.includes(t))) continue;
-      if (org.length < Math.min(2, brand.length)) continue;
-    }
-    if (domainFitsBrand(domain, brand, org.length > 0 ? org : brand)) return true;
+export function domainFitsNames(domain: string, names: string[]): boolean {
+  const label = domainLabel(domain);
+  if (!label) return false;
+  for (const name of names) {
+    const distinct = distinctiveTokens(name);
+    if (distinct.length === 0) continue;
+    if (!distinct.every((t) => label.includes(t))) continue;
+    if (segmentable(label, [...brandTokens(name), ...GENERIC_COMPANY_WORDS])) return true;
   }
   return false;
+}
+
+/** How strongly Hunter's company-name answer points at this company. */
+export type HunterNameMatch = 'strong' | 'weak' | 'none';
+
+/**
+ * Whether Hunter's best match for a company-name search plausibly IS this company, for one of the lead's names
+ * (trading or registered):
+ * - none: the domain does not fit the name strictly, or Hunter's organisation name has a distinctive word the
+ *   lead's name lacks, or shares none of its distinctive words ("Living Social", "Love Living Brands").
+ * - strong: Hunter gave an organisation name, it carries every distinctive word, and there are at least two of them.
+ * - weak: everything else that fits (no organisation name from Hunter, or a one-word brand such as "Bloom" where a
+ *   namesake is likely). A weak match is only accepted with a second, independent signal (see isCorroborated).
+ */
+export function hunterNameMatches(leadNames: string[], organization: unknown, domain: string): HunterNameMatch {
+  const org = distinctiveTokens(organization);
+  const orgAll = brandTokens(organization);
+  let best: HunterNameMatch = 'none';
+  for (const name of leadNames) {
+    const brand = brandTokens(name);
+    const distinct = distinctiveTokens(name);
+    if (distinct.length === 0 || !domainFitsNames(domain, [name])) continue;
+    if (orgAll.length > 0) {
+      if (orgAll.some((t) => !brand.includes(t))) continue;
+      if (!org.some((t) => distinct.includes(t))) continue;
+      if (distinct.length >= 2 && distinct.every((t) => org.includes(t))) return 'strong';
+    }
+    best = 'weak';
+  }
+  return best;
 }
 
 const EMAIL_IN_HTML = /(?:mailto:)?([a-z0-9._%+-]{1,64}@([a-z0-9-]+(?:\.[a-z0-9-]+)+))/gi;
 const HREF_IN_HTML = /href\s*=\s*["']\s*(https?:\/\/[^"'\s<>]{1,300})/gi;
 
 /**
- * Other domains the company's own website points at: email addresses (mailto or plain text) on a different domain
- * that shares a brand word with the business name or the website's domain, and outbound links whose domain fits the
- * brand strictly. Free-mail, social, directory and internal hosts are refused through `checks`. The page is data only.
+ * Other domains the company's own website points at: email addresses (mailto or plain text) and outbound links on a
+ * different domain that fits one of the company's names strictly (domainFitsNames). Free-mail, social, directory and
+ * internal hosts are refused through `checks`. The page is data only. Each is one weak signal on its own.
  */
 export function domainHintsFromHtml(
   html: unknown, names: string[], websiteDomain: string | null, checks: DomainChecks,
 ): DomainCandidate[] {
   if (typeof html !== 'string') return [];
   const page = html.slice(0, 600_000);
-  const brand = [...new Set(names.flatMap((n) => brandTokens(n)))];
   const own = websiteDomain ? checks.clean(websiteDomain) : null;
-  const out = new Map<string, DomainSource>();
-  const add = (raw: unknown, source: DomainSource, fits: (d: string) => boolean) => {
+  const out: DomainCandidate[] = [];
+  const add = (raw: unknown, source: DomainSource) => {
     const d = checks.clean(raw);
-    if (!d || d === own || out.has(d) || out.size >= 12 || !checks.usable(d) || !fits(d)) return;
-    out.set(d, source);
+    if (!d || d === own || out.length >= 12 || out.some((c) => c.domain === d && c.source === source)) return;
+    if (!checks.usable(d) || !domainFitsNames(d, names)) return;
+    out.push({ domain: d, source });
   };
-  for (const m of page.matchAll(EMAIL_IN_HTML)) add(m[2], 'website_email', (d) => domainSharesBrand(d, brand, own));
+  for (const m of page.matchAll(EMAIL_IN_HTML)) add(m[2], 'website_email');
   for (const m of page.matchAll(HREF_IN_HTML)) {
     let host = '';
     try { host = new URL(m[1]!).hostname; } catch { continue; }
-    add(host, 'website_link', (d) => domainFitsBrand(d, brand));
+    add(host, 'website_link');
   }
-  return [...out.entries()].map(([domain, source]) => ({ domain, source }));
+  return out;
 }
 
 /** A person's name as the web search gave it: letters, spaces, apostrophes, dots and hyphens, two words or more. */
@@ -173,7 +229,7 @@ function cleanRole(value: unknown): string | null {
 /**
  * Strictly reads the company web-search answer. Only one JSON object counts:
  * {"websites": [...], "email_domains": [...], "people": [{"name": ..., "role": ...}]}. Every domain must pass
- * `checks` and fit the brand strictly; people need a plain two-word name. At most 6 domains and 8 people. Anything
+ * `checks` and fit one of the company's names strictly (domainFitsNames); people need a plain two-word name. At most 6 domains and 8 people. Anything
  * else in the answer is ignored.
  */
 export function parseDiscoveryAnswer(
@@ -188,12 +244,11 @@ export function parseDiscoveryAnswer(
   try { obj = JSON.parse(text.slice(open, close + 1)); } catch { return none; }
   if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return none;
   const o = obj as Record<string, unknown>;
-  const brand = [...new Set(names.flatMap((n) => brandTokens(n)))];
   const list = (v: unknown): unknown[] => (Array.isArray(v) ? v.slice(0, 10) : []);
   const domains: string[] = [];
   for (const raw of [...list(o.websites), ...list(o.email_domains)]) {
     const d = checks.clean(typeof raw === 'string' ? raw.replace(/^.*@/, '') : null);
-    if (d && !domains.includes(d) && domains.length < 6 && checks.usable(d) && domainFitsBrand(d, brand)) domains.push(d);
+    if (d && !domains.includes(d) && domains.length < 6 && checks.usable(d) && domainFitsNames(d, names)) domains.push(d);
   }
   const people: WebPerson[] = [];
   for (const raw of list(o.people)) {
@@ -207,7 +262,8 @@ export function parseDiscoveryAnswer(
 
 /**
  * Merges sightings into one entry per domain (cleaned and checked again), strongest source first, and keeps at most
- * `max`. A domain only the web search named is `needs_check`: it may be searched, but is never shown as fact.
+ * `max`, corroborated domains first. A domain that is not corroborated (isCorroborated) is `needs_check`: it may be
+ * searched, but people found on it are suggestions only and it is never saved or shown as fact.
  */
 export function rankDomains(candidates: DomainCandidate[], checks: DomainChecks, max = MAX_DISCOVERED_DOMAINS): DiscoveredDomain[] {
   const byDomain = new Map<string, DomainSource[]>();
@@ -222,9 +278,9 @@ export function rankDomains(candidates: DomainCandidate[], checks: DomainChecks,
   return [...byDomain.entries()]
     .map(([domain, sources]) => ({
       domain, sources: [...sources].sort((a, b) => SOURCE_RANK[a] - SOURCE_RANK[b]),
-      needs_check: sources.every((s) => s === 'web'),
+      needs_check: !isCorroborated(sources),
     }))
-    .sort((a, b) => best(a.sources) - best(b.sources) || a.domain.localeCompare(b.domain))
+    .sort((a, b) => Number(a.needs_check) - Number(b.needs_check) || best(a.sources) - best(b.sources) || a.domain.localeCompare(b.domain))
     .slice(0, max);
 }
 
@@ -240,14 +296,15 @@ export function discoveryDetail(found: DiscoveredDomain[]): string {
   if (shown.length === 0 && checking === 0) return 'Looked for the company\'s other domains but found none.';
   const parts: string[] = [];
   if (shown.length > 0) parts.push(`found ${shown.join(', ')}`);
-  if (checking > 0) parts.push(`${checking} more from a web search, used for searching only`);
+  if (checking > 0) parts.push(`${checking} more seen only once, used for searching only`);
   return `Looked for the company's other domains: ${parts.join('; ')}.`;
 }
 
 /** Plain label for where a domain came from, for the results view. */
 export const DOMAIN_SOURCE_LABELS: Record<DomainSource, string> = {
   typed: 'typed by you', website: 'the lead\'s website', saved: 'found earlier', lead_email: 'the lead\'s email',
-  contact_email: 'a contact\'s email', hunter_name: 'Hunter company search', website_email: 'an email on the website',
+  contact_email: 'a contact\'s email', hunter_name: 'Hunter company search',
+  hunter_name_weak: 'Hunter company search (needs a second sign)', website_email: 'an email on the website',
   website_link: 'a link on the website', web: 'web search, check it',
 };
 
@@ -288,7 +345,7 @@ export interface DiscoveryOutcome {
 }
 
 /**
- * Discovers the company's other domains: Hunter company-name search for each name (accepted only when
+ * Discovers the company's other domains: Hunter company-name search for each name (strong or weak per
  * hunterNameMatches), domains the company's own website points at, and finally a web search (last, with whatever
  * time is left). Each source only runs when allowed and while budget remains; a failure never stops the next.
  */
@@ -309,7 +366,8 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
       const res = await deps.hunterByName(name, Math.min(5_000, left())).catch(() => ({ ok: false as const, failure: 'network' }));
       if (!res.ok) { failures.push(`hunter:${String(res.failure).slice(0, 20)}`); continue; }
       const d = checks.clean(res.domain);
-      if (d && checks.usable(d) && hunterNameMatches(names, res.organization, d)) seen.push({ domain: d, source: 'hunter_name' });
+      const match = d && checks.usable(d) ? hunterNameMatches(names, res.organization, d) : 'none';
+      if (d && match !== 'none') seen.push({ domain: d, source: match === 'strong' ? 'hunter_name' : 'hunter_name_weak' });
     }
   }
   if (input.allow.site && input.website && left() >= 3_000) {

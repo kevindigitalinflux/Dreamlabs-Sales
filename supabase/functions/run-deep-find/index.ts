@@ -1,17 +1,19 @@
 // supabase/functions/run-deep-find/index.ts
 // DEPLOY WITH verify_jwt = false (see supabase/config.toml): the pg_cron tick sends only x-cron-secret, no Authorization
 // header, so the gateway would answer 401. The function authenticates every action itself:
-//   create  signed-in user: validates the leads (same org, caller is a member and can edit each one), max 25, then
-//           inserts the run and its queued rows WITH THE CALLER'S RLS CLIENT (migration 057 policies are a second lock)
-//           and starts processing in the background.
+//   create  signed-in user: validates the leads (RLS read, same org, caller is a member and can edit each one), max 25,
+//           30 creates per user per day, 5 active runs per org, leads not already queued or running; then inserts the
+//           run and its queued rows with the SERVICE client (clients have no INSERT on the 057 tables) and starts
+//           processing in the background.
 //   cancel  signed-in user who created the run, or an org admin.
-//   tick    cron only (x-cron-secret).
+//   tick    cron only (x-cron-secret, compared in constant time; refused when CRON_SECRET is not set).
 // Deep find never emails anyone and never touches sequences. Keys never leave the providers' request headers.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 import { cancelDeepFindRun, runDeepFindTick } from '../_shared/deepFind.ts';
 import { isUuid, parseCreateRequest } from '../_shared/deepFindRules.ts';
+import { cronSecretMatches } from '../_shared/timingSafe.ts';
 
 const MAX_ACTIVE_RUNS_PER_ORG = 5;
 
@@ -34,8 +36,7 @@ Deno.serve(async (req) => {
   const service = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
   if (body.action === 'tick') {
-    const cronSecret = Deno.env.get('CRON_SECRET');
-    if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) return json({ error: 'Forbidden' }, 403, headers);
+    if (!await cronSecretMatches(req.headers.get('x-cron-secret'), Deno.env.get('CRON_SECRET'))) return json({ error: 'Forbidden' }, 403, headers);
     await background(runDeepFindTick(service, startedAt).catch(() => console.error('deep find tick failed')));
     return json({ ok: true }, 202, headers);
   }
@@ -62,7 +63,7 @@ Deno.serve(async (req) => {
   // create
   const parsed = parseCreateRequest(body);
   if (!parsed.ok) return json({ error: parsed.error }, 400, headers);
-  if (!await checkRateLimit(service, `deep-find-create:${caller.id}`, 30, 24 * 60)) {
+  if (!await checkRateLimit(service, `deep-find-create:${caller.id}`, 30, 24 * 60, true)) {
     return json({ error: 'You have started a lot of Deep finds today. Try again tomorrow.' }, 429, headers);
   }
 
@@ -91,18 +92,30 @@ Deno.serve(async (req) => {
   const leadIds = parsed.leadIds.filter((id) => !busyIds.has(id));
   if (leadIds.length === 0) return json({ error: 'Deep find is already working on these leads' }, 409, headers);
 
-  const { data: runRow, error: runErr } = await client.from('deep_find_runs').insert({
+  // Service-client inserts: every check above has passed. One row per lead, so a lead another run picked up in the
+  // meantime (partial unique index deep_find_leads_one_open_per_lead, 23505) is simply left out.
+  const { data: runRow, error: runErr } = await service.from('deep_find_runs').insert({
     org_id: orgId, created_by: caller.id, lead_count: leadIds.length,
     credit_cap_hunter: parsed.caps.hunter, credit_cap_ai: parsed.caps.ai,
   }).select('id').single();
   if (runErr || !runRow) return json({ error: 'Could not start Deep find' }, 500, headers);
   const runId = (runRow as { id: string }).id;
-  const { error: rowsErr } = await client.from('deep_find_leads').insert(leadIds.map((lead_id) => ({ run_id: runId, org_id: orgId, lead_id })));
-  if (rowsErr) {
-    await service.from('deep_find_runs').delete().eq('id', runId);
-    return json({ error: 'Could not queue the selected leads' }, 500, headers);
+  let queued = 0;
+  let raced = 0;
+  for (const lead_id of leadIds) {
+    const { error } = await service.from('deep_find_leads').insert({ run_id: runId, org_id: orgId, lead_id });
+    if (!error) queued++;
+    else if (error.code === '23505') raced++;
+    else console.error('deep find: queue insert failed');
   }
+  if (queued === 0) {
+    await service.from('deep_find_runs').delete().eq('id', runId);
+    return raced > 0
+      ? json({ error: 'Deep find is already working on these leads' }, 409, headers)
+      : json({ error: 'Could not queue the selected leads' }, 500, headers);
+  }
+  if (queued !== leadIds.length) await service.from('deep_find_runs').update({ lead_count: queued }).eq('id', runId);
 
   await background(runDeepFindTick(service, startedAt).catch(() => console.error('deep find start failed')));
-  return json({ run_id: runId, queued: leadIds.length, already_running: busyIds.size }, 202, headers);
+  return json({ run_id: runId, queued, already_running: busyIds.size + raced }, 202, headers);
 });

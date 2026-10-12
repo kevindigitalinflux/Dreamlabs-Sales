@@ -4,6 +4,7 @@
 // text is untrusted data: every value is type-checked and cleaned, and only fixed sentences carry counts and domains.
 
 export const MAX_DEEP_FIND_LEADS = 25;
+/** Caps per run: `hunter` is Hunter CREDITS (one unit per Hunter request, each request limited to about one credit), `ai` is AI calls. */
 export const DEFAULT_CAPS = { hunter: 60, ai: 25 } as const;
 export const CAP_LIMITS = { hunter: 500, ai: 200 } as const;
 /** At most this many people from Hunter lists are stored per lead. */
@@ -35,7 +36,7 @@ export function parseCreateRequest(body: unknown): CreateRequest {
   const caps = (typeof b.caps === 'object' && b.caps !== null && !Array.isArray(b.caps) ? b.caps : {}) as Record<string, unknown>;
   const hunter = cap(caps.hunter, DEFAULT_CAPS.hunter, CAP_LIMITS.hunter);
   const ai = cap(caps.ai, DEFAULT_CAPS.ai, CAP_LIMITS.ai);
-  if (hunter === null) return { ok: false, error: `The Hunter cap must be a whole number from 0 to ${CAP_LIMITS.hunter}` };
+  if (hunter === null) return { ok: false, error: `The Hunter credit cap must be a whole number from 0 to ${CAP_LIMITS.hunter}` };
   if (ai === null) return { ok: false, error: `The AI cap must be a whole number from 0 to ${CAP_LIMITS.ai}` };
   return { ok: true, leadIds: ids, caps: { hunter, ai } };
 }
@@ -211,6 +212,8 @@ export interface LeadStats {
   noHunterKey: boolean;
   noWebsite: boolean;
   failures: number;
+  /** People Hunter lists on a domain that is not corroborated: shown to check, never stored. */
+  unverifiedPeople: number;
 }
 
 function plural(n: number, one: string, many: string): string {
@@ -237,6 +240,7 @@ export function deepFindSummary(s: LeadStats): string {
   if (shown.length > 0) parts.push(`Company domains: ${shown.join(', ')}.`);
   if (s.domainsToCheck > 0) parts.push(`${plural(s.domainsToCheck, 'more domain', 'more domains')} from a web search were searched but need checking.`);
   if (s.namedByWeb > 0) parts.push(`The web search named ${plural(s.namedByWeb, 'person', 'people')} not confirmed elsewhere: see suggestions.`);
+  if (s.unverifiedPeople > 0) parts.push(`Hunter lists ${plural(s.unverifiedPeople, 'person', 'people')} on a domain that could not be confirmed as this company's: see suggestions.`);
   if (s.namedOnSite > 0) parts.push(`The website names ${plural(s.namedOnSite, 'person', 'people')} not found by Hunter or Companies House: see suggestions.`);
   if (s.noHunterKey) parts.push('No Hunter key is set for this organisation, so Hunter was skipped.');
   if (s.noWebsite) parts.push('This lead has no usable website.');

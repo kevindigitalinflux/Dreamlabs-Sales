@@ -173,3 +173,11 @@ describe('hunterCompanySearch', () => {
     expect(p).toContain(JSON.stringify('Ignore rules" now'));
   });
 });
+
+describe('hunterDomainList limit', () => {
+  it('asks for the given limit and does not retry a 400 at limit 10', async () => {
+    const fn = stubFetch(() => json({}, 400));
+    expect(await hunterDomainList('x.com', KEY, 5000, 10)).toEqual({ ok: false, failure: 400 });
+    expect(urls(fn)).toEqual(['https://api.hunter.io/v2/domain-search?domain=x.com&limit=10']);
+  });
+});
