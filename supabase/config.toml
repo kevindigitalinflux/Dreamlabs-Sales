@@ -18,3 +18,7 @@ verify_jwt = false
 # The cron request carries only x-cron-secret (no Authorization header); the function authenticates both actions itself.
 [functions.run-selected-autopilot]
 verify_jwt = false
+
+# Same as run-selected-autopilot: the cron tick carries only x-cron-secret; create/cancel check the user's JWT themselves.
+[functions.run-deep-find]
+verify_jwt = false

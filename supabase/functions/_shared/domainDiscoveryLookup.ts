@@ -32,6 +32,10 @@ export async function discoverLeadDomains(
     keys: { hunterKey: string | null; geminiKey: string | null };
     allow: { hunter: boolean; site: boolean; web: boolean };
     budgetMs: number;
+    /** Website pages the caller already read (readCompanyPages), so the site is not fetched twice. */
+    pages?: string[];
+    /** Spends one credit before each paid call; false means the cap is reached and the call is not made. */
+    guard?: { hunter: () => Promise<boolean>; ai: () => Promise<boolean> };
   },
 ): Promise<DiscoveryOutcome & { saved: string[] }> {
   const websiteDomain = (() => {
@@ -53,9 +57,10 @@ export async function discoverLeadDomains(
     budgetMs: opts.budgetMs,
   }, {
     now: () => Date.now(),
-    hunterByName: (name, t) => hunterCompanySearch(name, hunterKey ?? '', t),
-    readSite: (w, t) => readCompanyPages(w, t),
-    webSearch: (t) => webSearchCompanyDomains({ names, town: lead.city ?? null, postcode: lead.postcode ?? null, website: lead.website }, geminiKey ?? '', t),
+    hunterByName: async (name, t) => (!opts.guard || await opts.guard.hunter()
+      ? hunterCompanySearch(name, hunterKey ?? '', t) : { ok: false as const, failure: 'cap_reached' }),
+    readSite: (w, t) => (opts.pages ? Promise.resolve(opts.pages) : readCompanyPages(w, t)),
+    webSearch: async (t) => (opts.guard && !(await opts.guard.ai())) ? { ok: false as const, failure: 'cap_reached' } : webSearchCompanyDomains({ names, town: lead.city ?? null, postcode: lead.postcode ?? null, website: lead.website }, geminiKey ?? '', t),
   }, DOMAIN_CHECKS);
 
   const fresh = outcome.discovered.filter((d) => !d.needs_check && d.domain !== websiteDomain).map((d) => d.domain);
