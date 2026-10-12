@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
-import { Download, Inbox, PenLine, Plus, Radar, Tag, Trash2, UserSearch } from 'lucide-react';
+import { Download, Inbox, PenLine, Plus, Radar, Tag, Telescope, Trash2, UserSearch } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLeads } from '../hooks/useLeads';
 import { useProfiles } from '../hooks/useProfiles';
@@ -21,6 +21,8 @@ import { BulkProfileModal } from '../components/pipeline/BulkProfileModal';
 import { useIcps } from '../hooks/useIcps';
 import { EnrichmentReview } from '../components/pipeline/EnrichmentReview';
 import { DecisionMakerReview } from '../components/pipeline/DecisionMakerReview';
+import { DeepFindModal } from '../components/deepfind/DeepFindModal';
+import { DEEP_FIND_MAX_LEADS } from '../lib/deepFindView';
 import { FilterBar } from '../components/pipeline/FilterBar';
 import { ListTable } from '../components/pipeline/ListTable';
 import { LeadPanel } from '../components/pipeline/LeadPanel';
@@ -58,6 +60,7 @@ export function PipelineList() {
   const { searching: findingDecisionMakers, error: decisionMakerError, runSearch } = useDecisionMakers();
   const [decisionMakerResults, setDecisionMakerResults] = useState<Record<string, DecisionMakerCandidate[]>>({});
   const [decisionMakerReviewOpen, setDecisionMakerReviewOpen] = useState(false);
+  const [deepFindOpen, setDeepFindOpen] = useState(false);
   const [moveTargetId, setMoveTargetId] = useState('');
   const [moving, setMoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -251,6 +254,11 @@ export function PipelineList() {
             <UserSearch className="h-4 w-4" aria-hidden />
             {findingDecisionMakers ? 'Searching…' : 'Find decision maker'}
           </Button>
+          <Button variant="secondary" onClick={() => setDeepFindOpen(true)} disabled={selected.size > DEEP_FIND_MAX_LEADS}
+            title={selected.size > DEEP_FIND_MAX_LEADS ? `Deep find works on ${DEEP_FIND_MAX_LEADS} leads or fewer at a time` : undefined}>
+            <Telescope className="h-4 w-4" aria-hidden />
+            Deep find
+          </Button>
           {otherPipelines.length > 0 && (
             <div className="flex items-center gap-2">
               <Listbox
@@ -330,6 +338,7 @@ export function PipelineList() {
         onClose={() => setDraftModalOpen(false)}
         onGenerated={() => setSelected(new Set())}
       />
+      <DeepFindModal open={deepFindOpen} leadIds={[...selected]} onClose={() => setDeepFindOpen(false)} />
       <DecisionMakerReview
         open={decisionMakerReviewOpen}
         resultsByLead={decisionMakerResults}

@@ -583,3 +583,32 @@ export interface IdealCustomerProfile {
   created_at: string;
   updated_at: string;
 }
+
+/** A Deep find run (migration 057). Counters and status are written by the run-deep-find engine only. */
+export interface DeepFindRun {
+  id: string;
+  org_id: string;
+  created_by: string;
+  status: 'active' | 'completed' | 'cancelled';
+  lead_count: number;
+  credit_cap_hunter: number;
+  credit_cap_ai: number;
+  hunter_used: number;
+  ai_used: number;
+  started_at: string;
+  finished_at: string | null;
+  cancel_reason: string | null;
+}
+
+/** One lead of a Deep find run. `domains` is the engine's summary JSON (read it with readDeepFindDetails). */
+export interface DeepFindLeadRow {
+  id: string;
+  run_id: string;
+  org_id: string;
+  lead_id: string;
+  status: 'queued' | 'running' | 'done' | 'failed' | 'skipped';
+  reason: string | null;
+  people_found: number;
+  domains: unknown;
+  updated_at: string;
+}

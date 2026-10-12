@@ -17,6 +17,7 @@ import { Button } from '../ui/Button';
 import { ContactForm } from './ContactForm';
 import { ContactRow } from './ContactRow';
 import { KnownPersonArea } from './KnownPersonArea';
+import { DeepFindLeadControls } from '../deepfind/DeepFindLeadControls';
 
 type Adding = 'person' | 'general' | null;
 
@@ -136,6 +137,7 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
           <Button variant="secondary" onClick={() => setFinding(true)} disabled={finding}><Search className="h-4 w-4" aria-hidden /> Find decision maker</Button>
         </div>
       )}
+      <DeepFindLeadControls lead={lead} />
     </div>
   );
 }
