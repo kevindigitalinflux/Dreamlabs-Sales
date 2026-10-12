@@ -10,7 +10,7 @@ Last updated 2026-10-12. Ask for any item by number or name.
 
 ### New follow-ups from the contacts / post-send build
 
-- A1. Apply migration 052 (moves old additional emails into contacts) now the UI is live.
+- A1. DONE 2026-10-12: migration 052 applied.
 - A2. Test: add Andrea Manning + london@hok.com as contacts, send one email to each, confirm the lead note, sequence step and follow-up date update.
 - A3. Store the step number on `email_logs` (replaces the time heuristic) and honour blocklists in check-sequences / the send path.
 - A4. `pickRecipient` should honour `include_in_sequences`; defer `next_send_at` when enrolling from a suggestion.

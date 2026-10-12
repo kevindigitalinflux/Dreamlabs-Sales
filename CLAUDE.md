@@ -188,7 +188,7 @@ vite.config.ts
 
 ---
 
-## Current Status (updated 2026-10-02 — newest work is the "Session 2026-10-01 → 2026-10-02" entry at the end of this section, after "Session 2026-09-29 → 2026-10-01")
+## Current Status (updated 2026-10-12 — newest work is the "Session 2026-10-08 → 2026-10-12" entry at the end of this section, after "Session 2026-09-29 → 2026-10-01")
 **Working:** Cycle 1-2 (single-tenant foundation, full pipeline, email automation incl. AI-personalised
 composer/sequences/review queue) — see prior status below, all still functional. **Cycle 3 (multi-tenant
 foundation) is FULLY COMPLETE** — Tasks 1-12 done, controller-verified, and pushed:
@@ -1006,6 +1006,16 @@ before relying on the next build.
   `.env`. Note: Claude Code's own auto-mode safety classifier blocks *this assistant* from writing a
   plaintext credential into `settings.json` directly (flagged as "Credential Leakage") even when it's the
   documented correct location — the user has to add it themselves.
+
+### Session 2026-10-08 → 2026-10-12 (contacts, known people, post-send updates) — all LIVE
+
+- **Selected-leads autopilot + CRO key + registry officers** live since 2026-10-08 (`59f6f51`). CRO response shape is unverified until Valentina's key arrives.
+- **Piece A, contacts per lead.** `decision_maker_candidates` is the contact table (kind person|general, label, `is_primary` = "use this one", `include_in_sequences`; migrations 050, 053). Client RLS: INSERT only source manual/dream_agent, DELETE only own rows, 12-column UPDATE grant, guard trigger on provider columns. Migration 052 (old `additional_emails` copied to general contacts, include_in_sequences=false) applied 2026-10-12. Sequences draft one email per eligible contact per step (`sequenceRecipients`); Dream Agent proposes contact adds/edits with per-row confirm.
+- **Piece B, known person.** Name+position (+email) in Find decision maker or "Add person"; always saved, Hunter then Apollo lookups fill blanks only (`find-decision-makers` `known_person`).
+- **Piece C, post-send.** `send-email` handler (not `sendLeadEmail`) runs `decidePostSend` after a successful send: advance/enrol/link, note "Email sent: …", follow-up date from sequence delay else +3 days (never overwrites a chosen future date). `email_logs.template_id` (051), one open enrolment per lead unique index (055), `suggest-sequence` function, sequence-aware template picker with "Show all templates", "What happens after sending" preview. Verified live on the DI Dreamlabs test lead 2026-10-12.
+- **Bug fixed 2026-10-12:** white screen on opening a lead. `EmailComposer` (always mounted in LeadPanel) and the Contacts card both called `useLeadContacts`, which subscribed to the same realtime channel name; Supabase reuses channels by name and throws on `.on()` after subscribe. Each hook instance now uses `useId()` in its channel name. **Rule: any hook used by two mounted components needs a per-instance channel name.** There is no ErrorBoundary in the app, so any render error blanks the screen (candidate follow-up).
+- **Known follow-ups** (full list in `docs/TODO.md`): store step number on `email_logs`; blocklist in check-sequences/send path; `pickRecipient` honour `include_in_sequences`; note limit applied before system-note filter; add an ErrorBoundary.
+- **Ops notes:** sends go through the user's own Gmail SMTP (`user_email_settings`, smtp.gmail.com:465); log status `sent` means Gmail accepted it. The browser tools are signed out of the app (cannot enter passwords), so UI bugs need a console error from Kevin.
 
 ---
 
