@@ -16,6 +16,13 @@ Last updated 2026-10-12. Ask for any item by number or name.
 - A4. `pickRecipient` should honour `include_in_sequences`; defer `next_send_at` when enrolling from a suggestion.
 - A5. The note limit is applied before the system-note filter, so leads with many system notes feed the AI fewer than 3-5 notes.
 
+### Wider person lookup (built 2026-10-12, not yet deployed)
+
+- W1. Test: Love Living (add Max Whatley and John Sipple) and HOK (Andrea Manning). Check each step line in the result, that a saved found email has follow-ups switched off, and that "Use this" on a suggestion fills the person's email.
+- W2. Consider an Apollo plan upgrade later: the free plan refuses people/match, so Apollo has found nobody so far.
+- W3. Consider the same wider net (company list, pattern, website, web search) for the generic "Find decision maker" search.
+- W4. Watch Hunter credits: a company list of up to 100 people may cost several credits per lookup.
+
 ### Email formatting (built 2026-10-12, not yet deployed)
 
 - F1. Test: send a formatted test email (bold, bullets, a heading, a link, plus the unsubscribe line) to your own address and check it in Gmail on desktop AND on a phone. Also send one with no formatting and confirm it still arrives as plain text.
