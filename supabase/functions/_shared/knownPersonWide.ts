@@ -370,13 +370,14 @@ export function cleanCompanyDomain(input: unknown): string | null {
 
 /**
  * The domains to search for a person, in order and without repeats, at most `max`: a typed company domain first, then
- * the lead's website domain, then the domains of other known addresses. Free-mail providers and anything `usable`
+ * the lead's website domain, then domains saved on the lead (leads.email_domains), then the domains of other known
+ * addresses. Free-mail providers and anything `usable`
  * refuses (internal hosts, social or directory sites) are left out.
  */
 export function candidateDomains(
-  input: { typed?: string | null; website?: string | null; emails?: (string | null | undefined)[] },
+  input: { typed?: string | null; website?: string | null; saved?: (string | null | undefined)[]; emails?: (string | null | undefined)[] },
   usable: (domain: string) => boolean,
-  max = 3,
+  max = 4,
 ): string[] {
   const out: string[] = [];
   const add = (d: string | null | undefined) => {
@@ -386,6 +387,7 @@ export function candidateDomains(
   };
   add(input.typed);
   add(input.website);
+  for (const d of input.saved ?? []) add(d);
   for (const e of input.emails ?? []) add(emailDomain(e));
   return out;
 }

@@ -11,7 +11,10 @@ import { cleanCompanyDomain } from '../_shared/knownPersonWide.ts';
 
 const MAX_LEADS = 40;
 
-interface LeadRow { id: string; org_id: string; website: string | null; business_name: string | null; email: string | null }
+interface LeadRow {
+  id: string; org_id: string; website: string | null; business_name: string | null; email: string | null;
+  city: string | null; postcode: string | null; email_domains?: unknown; raw_lead_id?: string | null;
+}
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -70,7 +73,8 @@ Deno.serve(async (req) => {
   // to see (can_view_lead policy) — matches enrich-leads-bulk's pattern. The
   // org-membership check below stays as a defensive second layer.
   const { data: leads, error: leadsErr } = await client
-    .from('leads').select('id, org_id, website, business_name, email').in('id', leadIds);
+    // '*' so this keeps working whether or not migration 056 (email_domains) is applied yet.
+    .from('leads').select('*').in('id', leadIds);
   if (leadsErr) return json({ error: leadsErr.message }, 500, headers);
   const resolvedLeads = (leads ?? []) as LeadRow[];
   if (resolvedLeads.length === 0) {

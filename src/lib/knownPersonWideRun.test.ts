@@ -237,10 +237,10 @@ describe('runWideLookup across several company domains', () => {
     expect(r.suggestions).toEqual([]);
   });
 
-  it('uses the first domain for Apollo and caps the run at three domains', async () => {
+  it('uses the first domain for Apollo and caps the run at four domains', async () => {
     const { d } = deps();
-    await runWideLookup(loveLiving({ domains: ['a.com', 'b.com', 'c.com', 'd.com'], knownAddresses: [] }), d);
-    expect(d.hunterFind).toHaveBeenCalledTimes(3);
+    await runWideLookup(loveLiving({ domains: ['a.com', 'b.com', 'c.com', 'd.com', 'e.com'], knownAddresses: [] }), d);
+    expect(d.hunterFind).toHaveBeenCalledTimes(4);
     expect(d.apolloMatch).toHaveBeenCalledWith('a.com', 'Max', 'Whatley', expect.any(Number));
   });
 

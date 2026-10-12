@@ -265,12 +265,15 @@ describe('company domains', () => {
     for (const d of ['loveliving.uk', 'liveworks.co.uk', 'skyscanner.net', 'hok.com']) expect(isFreeMailDomain(d)).toBe(false);
   });
 
-  it('orders typed, website, then other addresses; drops free mail, refused and repeated domains; max 3', () => {
+  it('orders typed, website, saved, then other addresses; drops free mail, refused and repeated domains; max 4', () => {
     const usable = (d: string) => d !== 'facebook.com';
     expect(candidateDomains({
       typed: 'hok.com', website: 'lovelivingmanagement.com',
-      emails: ['david@loveliving.uk', 'x@gmail.com', 'y@LoveLiving.uk', null, 'z@facebook.com', 'w@fourth.com'],
-    }, usable)).toEqual(['hok.com', 'lovelivingmanagement.com', 'loveliving.uk']);
+      emails: ['david@loveliving.uk', 'x@gmail.com', 'y@LoveLiving.uk', null, 'z@facebook.com', 'w@fourth.com', 'v@fifth.com'],
+    }, usable)).toEqual(['hok.com', 'lovelivingmanagement.com', 'loveliving.uk', 'fourth.com']);
+    expect(candidateDomains({
+      website: 'lovelivingmanagement.com', saved: ['loveliving.uk', 'facebook.com'], emails: ['a@other.com'],
+    }, usable)).toEqual(['lovelivingmanagement.com', 'loveliving.uk', 'other.com']);
     expect(candidateDomains({ website: null, emails: ['a@hotmail.co.uk'] }, usable)).toEqual([]);
   });
 });

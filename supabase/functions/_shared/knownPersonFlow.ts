@@ -14,6 +14,7 @@ import {
 import { runWideLookup, type KnownAddress } from './knownPersonWideRun.ts';
 import { candidateDomains, type StepId, type StepResult, type Suggestion } from './knownPersonWide.ts';
 import { checkRateLimit } from './rateLimit.ts';
+import { savedDomains } from './domainChecks.ts';
 
 type Row = Record<string, unknown>;
 /** Who supplied a value: Hunter (finder or company list), Apollo, the email pattern, the company website, or the user. */
@@ -59,7 +60,10 @@ const EMAIL_TAKEN = 'That email is already on this lead';
  */
 export async function runKnownPerson(
   client: SupabaseClient, service: SupabaseClient,
-  lead: { id: string; org_id: string; website: string | null; business_name?: string | null; email?: string | null },
+  lead: {
+    id: string; org_id: string; website: string | null; business_name?: string | null; email?: string | null;
+    city?: string | null; postcode?: string | null; email_domains?: unknown;
+  },
   typed: ContactEditValue, userId: string,
   keys: { hunterKey: string | null; apolloKey: string | null; geminiKey: string | null },
   usePaid: boolean,
@@ -142,11 +146,12 @@ export async function runKnownPerson(
   const domain = domainFromWebsite(lead.website);
   const publicDomain = domain && isPublicDomain(domain) ? domain : null;
   const directory = publicDomain !== null && isDirectoryDomain(publicDomain);
-  // Every domain the company uses: a typed one first, the website's, then those of other addresses on this lead.
+  // Every domain the company uses: a typed one first, the website's, those saved on the lead, then other addresses' domains.
   const others = allRows.filter((r) => r.id !== saved.id && !r.dismissed_at);
   const domains = candidateDomains({
     typed: companyDomain,
     website: publicDomain,
+    saved: savedDomains(lead.email_domains),
     emails: [...others.map((r) => str(r.email)), str(lead.email), typed.email, work.email],
   }, (d) => isPublicDomain(d) && !isDirectoryDomain(d));
   const knownAddresses: KnownAddress[] = others

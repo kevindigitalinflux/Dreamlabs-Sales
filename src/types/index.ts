@@ -52,6 +52,8 @@ export interface Lead {
   additional_phones: string[];
   additional_websites: string[];
   additional_owners: string[];
+  /** Other domains the company uses, found by domain discovery (migration 056; missing before it is applied). */
+  email_domains?: string[];
   address: string | null;
   city: string | null;
   postcode: string | null;

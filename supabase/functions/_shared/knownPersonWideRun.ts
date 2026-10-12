@@ -35,7 +35,7 @@ export interface WideLookupInput {
   last: string;
   have: { email: string | null; linkedin_url: string | null; phone: string | null };
   hasApolloId: boolean;
-  /** The company domains to search, in order (see candidateDomains), at most 3. */
+  /** The company domains to search, in order (see candidateDomains), at most 4. */
   domains: string[];
   /** The lead's own website when it is a usable company site, else null. */
   website: string | null;
@@ -64,7 +64,7 @@ export const WIDE_BUDGET_MS = 20_000;
 /** The web search runs last and may use this much more than WIDE_BUDGET_MS, so it is not starved by earlier steps. */
 export const WEB_EXTRA_MS = 10_000;
 const WEB_MAX_MS = 15_000;
-const MAX_DOMAINS = 3;
+const MAX_DOMAINS = 4;
 const MIN_START_MS: Record<StepId, number> = {
   hunter_finder: 1_500, hunter_domain: 1_500, pattern: 1_500, website: 3_000, web: 4_000, apollo: 2_000,
 };
