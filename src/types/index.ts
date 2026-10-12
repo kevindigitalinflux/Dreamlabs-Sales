@@ -134,7 +134,7 @@ export type KnownPersonSource = 'hunter' | 'apollo' | 'pattern' | 'website' | 'y
 
 /** One step of the known-person lookup, in the order it ran. `detail` is a fixed plain-English sentence. */
 export interface KnownPersonStep {
-  id: 'hunter_finder' | 'hunter_domain' | 'pattern' | 'website' | 'web' | 'apollo';
+  id: 'hunter_finder' | 'hunter_domain' | 'pattern' | 'discover' | 'website' | 'web' | 'apollo';
   label: string;
   status: 'found' | 'no_match' | 'skipped' | 'unavailable' | 'error';
   detail: string;

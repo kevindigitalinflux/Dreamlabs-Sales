@@ -4,7 +4,7 @@
 // untrusted data: values are validated and only fixed strings or validated fields ever leave these functions.
 
 /** The lookup steps, in the order they run. */
-export type StepId = 'hunter_finder' | 'hunter_domain' | 'pattern' | 'website' | 'web' | 'apollo';
+export type StepId = 'hunter_finder' | 'hunter_domain' | 'pattern' | 'discover' | 'website' | 'web' | 'apollo';
 
 /** What happened in one step. */
 export type StepStatus = 'found' | 'no_match' | 'skipped' | 'unavailable' | 'error';
@@ -57,6 +57,7 @@ export const STEP_LABELS: Record<StepId, string> = {
   hunter_finder: 'Hunter email finder',
   hunter_domain: 'Hunter company list',
   pattern: 'Company email pattern',
+  discover: 'Company domains',
   website: 'Company website',
   web: 'Web search',
   apollo: 'Apollo',
@@ -66,6 +67,7 @@ export const STEP_LABELS: Record<StepId, string> = {
 export const SUGGESTION_LABELS = {
   guess: 'Guess, unverified',
   web: 'Found by web search, check it',
+  ambiguous: 'One of several people with this name on Hunter\'s list, check it',
 } as const;
 
 /** Builds one step record with its fixed label; a step run for one domain names it, e.g. "Hunter company list (x.com)". */
@@ -118,6 +120,7 @@ export const STEP_DETAILS = {
   noKeyApollo: 'No Apollo key is saved for this organisation.',
   noKeyGemini: 'No Gemini key is set for this organisation.',
   webSkippedTime: 'Skipped to keep the lookup quick: use Deep find for a longer search.',
+  discoverNone: 'Looked for the company\'s other domains but found none.',
   noWebsite: 'This lead has no usable website.',
   directory: 'The lead\'s website is a social or directory page, so it was not searched.',
   paidOff: 'Paid lookups were switched off for this search.',
@@ -231,13 +234,13 @@ function hunterFirstAgrees(hunterFirst: string, typedFirst: string, email: strin
 export type HunterMatch =
   | { status: 'match'; email: string; linkedin_url: string | null }
   | { status: 'none' }
-  | { status: 'ambiguous' };
+  | { status: 'ambiguous'; emails: string[] };
 
 /**
  * Picks the typed person out of Hunter's domain list (`data.emails[]`). Requires an exact surname match (accents,
  * spaces and hyphens ignored) AND an agreeing first name: the same name, a known nickname, or a missing/initial-only
  * first name on either side with the same initial. Entries with no surname are never used. When two different
- * addresses match, nothing is picked. Every field is checked for type, so an odd response just matches no one.
+ * addresses match, nothing is picked (the candidates are returned, at most 3, to be offered as suggestions only). Every field is checked for type, so an odd response just matches no one.
  */
 export function matchHunterPerson(emails: unknown, first: string, last: string): HunterMatch {
   if (!Array.isArray(emails)) return { status: 'none' };
@@ -257,7 +260,7 @@ export function matchHunterPerson(emails: unknown, first: string, last: string):
     hits.set(email, hits.get(email) ?? linkedin);
   }
   if (hits.size === 0) return { status: 'none' };
-  if (hits.size > 1) return { status: 'ambiguous' };
+  if (hits.size > 1) return { status: 'ambiguous', emails: [...hits.keys()].slice(0, 3) };
   const [email, linkedin] = [...hits.entries()][0]!;
   return { status: 'match', email, linkedin_url: linkedin ?? null };
 }

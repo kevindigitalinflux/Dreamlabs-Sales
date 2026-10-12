@@ -286,3 +286,40 @@ describe('runWideLookup readable failures', () => {
     });
   });
 });
+
+describe('runWideLookup domain discovery', () => {
+  it('discovers other domains once when the known ones fail, then searches the new ones', async () => {
+    const discover = vi.fn(async () => ({ domains: ['x.com', 'loveliving.uk'], detail: 'Looked for the company\'s other domains: found loveliving.uk.' }));
+    const { d, filled } = deps({
+      discover,
+      hunterFind: vi.fn(async (domain: string) => ({ ok: true as const, found: domain === 'loveliving.uk' ? { email: 'john@loveliving.uk' } : {} })),
+    });
+    const r = await runWideLookup(input(), d);
+    expect(discover).toHaveBeenCalledTimes(1);
+    expect(r.steps.find((s) => s.id === 'discover')).toMatchObject({ status: 'found', detail: 'Looked for the company\'s other domains: found loveliving.uk.' });
+    expect(r.steps.filter((s) => s.id === 'hunter_finder').map((s) => s.domain)).toEqual(['x.com', 'loveliving.uk']);
+    expect(filled).toEqual([{ found: { email: 'john@loveliving.uk' }, step: 'hunter_finder' }]);
+  });
+
+  it('does not discover when the email is already found, and keeps at most four domains', async () => {
+    const discover = vi.fn(async () => ({ domains: ['e.com', 'f.com'], detail: 'x' }));
+    const found = deps({ discover, hunterFind: vi.fn(async () => ({ ok: true as const, found: { email: 'john@x.com' } })) });
+    await runWideLookup(input(), found.d);
+    expect(discover).not.toHaveBeenCalled();
+    const many = deps({ discover });
+    const r = await runWideLookup(input({ domains: ['a.com', 'b.com', 'c.com'] }), many.d);
+    expect(r.steps.filter((s) => s.id === 'hunter_finder').map((s) => s.domain)).toEqual(['a.com', 'b.com', 'c.com', 'e.com']);
+  });
+
+  it('offers every same-name match as a suggestion, never picking one', async () => {
+    const { d, filled } = deps({
+      hunterDomain: vi.fn(async () => ({ ok: true as const, pattern: null, emails: [
+        { value: 'john@x.com', first_name: 'John', last_name: 'Sipple' },
+        { value: 'j.sipple@x.com', first_name: 'J', last_name: 'Sipple' },
+      ] })),
+    });
+    const r = await runWideLookup(input(), d);
+    expect(filled).toEqual([]);
+    expect(r.suggestions.map((s) => s.value)).toEqual(['john@x.com', 'j.sipple@x.com']);
+  });
+});

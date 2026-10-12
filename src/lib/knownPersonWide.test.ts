@@ -62,7 +62,8 @@ describe('matchHunterPerson', () => {
 
   it('returns ambiguous when two different addresses match', () => {
     const r = matchHunterPerson([H('john@x.com', 'John', 'Sipple'), H('j.sipple@x.com', 'J', 'Sipple')], 'John', 'Sipple');
-    expect(r).toEqual({ status: 'ambiguous' });
+    expect(r).toMatchObject({ status: 'ambiguous' });
+    expect((r as { emails: string[] }).emails.length).toBe(2);
   });
 
   it('treats the same address listed twice as one person', () => {

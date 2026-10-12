@@ -15,6 +15,8 @@ import { runWideLookup, type KnownAddress } from './knownPersonWideRun.ts';
 import { candidateDomains, type StepId, type StepResult, type Suggestion } from './knownPersonWide.ts';
 import { checkRateLimit } from './rateLimit.ts';
 import { savedDomains } from './domainChecks.ts';
+import { discoverLeadDomains } from './domainDiscoveryLookup.ts';
+import { discoveryDetail, type DomainCandidate } from './domainDiscovery.ts';
 
 type Row = Record<string, unknown>;
 /** Who supplied a value: Hunter (finder or company list), Apollo, the email pattern, the company website, or the user. */
@@ -43,7 +45,7 @@ export interface KnownPersonOutcome {
 /** Steps whose found email is saved but must not be emailed by a sequence until the user switches it on. */
 const WIDER_EMAIL_STEPS: StepId[] = ['hunter_domain', 'pattern', 'website'];
 /** Source label per step. Web-search finds are never saved (they are suggestions), so 'web' never reaches a saved field. */
-const STEP_SOURCE: Record<Exclude<StepId, 'web'>, Exclude<Source, 'you'>> = {
+const STEP_SOURCE: Record<Exclude<StepId, 'web' | 'discover'>, Exclude<Source, 'you'>> = {
   hunter_finder: 'hunter', hunter_domain: 'hunter', pattern: 'pattern', website: 'website', apollo: 'apollo',
 };
 
@@ -154,6 +156,7 @@ export async function runKnownPerson(
     saved: savedDomains(lead.email_domains),
     emails: [...others.map((r) => str(r.email)), str(lead.email), typed.email, work.email],
   }, (d) => isPublicDomain(d) && !isDirectoryDomain(d));
+  const searchedFirst = new Set(domains);
   const knownAddresses: KnownAddress[] = others
     .filter((r) => r.kind === 'person' && str(r.email))
     .map((r) => ({ email: str(r.email) as string, first: str(r.first_name), last: str(r.last_name) }));
@@ -197,6 +200,15 @@ export async function runKnownPerson(
       first, last, title: work.title, company: str(lead.business_name), domains,
     }, geminiKey ?? '', t),
     apolloMatch: (d, f, l, t) => apolloMatchPerson(d, f, l, apolloKey ?? '', t),
+    // Once per run, only when the known domains did not give the email: find the company's other domains (Hunter
+    // company-name search, the website's own links and emails, web search) and save them on the lead.
+    discover: async (t) => {
+      const extraKnown: DomainCandidate[] = domains.map((d, i) => ({ domain: d, source: i === 0 && companyDomain ? 'typed' : 'contact_email' }));
+      const out = await discoverLeadDomains(service, lead, {
+        extraKnown, keys: { hunterKey, geminiKey }, allow: { hunter: true, site: !directory, web: true }, budgetMs: t,
+      });
+      return { domains: out.discovered.map((d) => d.domain), detail: discoveryDetail(out.discovered) };
+    },
     absorb,
   });
   if (wide.limitReached) errors.push(LOOKUP_LIMIT_MESSAGE);
@@ -216,7 +228,9 @@ export async function runKnownPerson(
     if (apolloApplied.email && patch.email === apolloApplied.email) cols.email_revealed = true;
     if (apolloApplied.phone && patch.phone === apolloApplied.phone) cols.phone_status = 'revealed';
     // An address found on the company list, by pattern or on the website is never emailed by a sequence until switched on.
-    const turnOff = !!cols.email && !!emailStep && WIDER_EMAIL_STEPS.includes(emailStep) && saved.include_in_sequences === true;
+    // The same applies to an address on a domain discovery found (it may belong to someone else, Review Focus 2).
+    const onDiscovered = typeof cols.email === 'string' && !searchedFirst.has(cols.email.slice(cols.email.lastIndexOf('@') + 1));
+    const turnOff = !!cols.email && !!emailStep && (WIDER_EMAIL_STEPS.includes(emailStep) || onDiscovered) && saved.include_in_sequences === true;
     if (turnOff) cols.include_in_sequences = false;
     let res = await write(cols);
     if (res.error?.code === '23505' && cols.email) {
@@ -230,7 +244,7 @@ export async function runKnownPerson(
       sequencesTurnedOff = cols.include_in_sequences === false && final.include_in_sequences === false;
       for (const p of pending) for (const f of ['email', 'phone', 'linkedin_url'] as const) {
         const v = p.applied[f];
-        if (v && lower(final[f]) === v.toLowerCase()) { found[f] = v; if (p.step !== 'web') sources[f] = STEP_SOURCE[p.step]; }
+        if (v && lower(final[f]) === v.toLowerCase()) { found[f] = v; if (p.step !== 'web' && p.step !== 'discover') sources[f] = STEP_SOURCE[p.step]; }
       }
     }
   }

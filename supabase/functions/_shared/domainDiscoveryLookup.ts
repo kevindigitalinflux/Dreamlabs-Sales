@@ -14,7 +14,7 @@ export const MAX_SAVED_DOMAINS = 6;
 
 /** The lead fields discovery reads. */
 export interface DiscoveryLead {
-  id: string; org_id: string; business_name: string | null; website: string | null; email: string | null;
+  id: string; org_id: string; business_name?: string | null; website: string | null; email?: string | null;
   city?: string | null; postcode?: string | null; email_domains?: unknown;
 }
 

@@ -22,6 +22,11 @@ export interface WideLookupDeps {
   scanWebsite: (website: string, domains: string[], first: string, last: string, budgetMs: number) => Promise<{ ok: true; email: string | null; linkedin_url: string | null } | { ok: false }>;
   webSearch: (timeoutMs: number) => Promise<Lookup>;
   apolloMatch: (domain: string, first: string, last: string, timeoutMs: number) => Promise<Lookup>;
+  /**
+   * Optional: discovers the company's other domains (run at most once, only when the known domains did not give the
+   * email). Returns the new domains to search (already cleaned) and a fixed sentence for the step, or null.
+   */
+  discover?: (timeoutMs: number) => Promise<{ domains: string[]; detail: string } | null>;
   /** Fills blank fields of the saved person with what a step found and returns what was actually filled. */
   absorb: (found: FoundFields, step: StepId) => FoundFields;
 }
@@ -66,7 +71,7 @@ export const WEB_EXTRA_MS = 10_000;
 const WEB_MAX_MS = 15_000;
 const MAX_DOMAINS = 4;
 const MIN_START_MS: Record<StepId, number> = {
-  hunter_finder: 1_500, hunter_domain: 1_500, pattern: 1_500, website: 3_000, web: 4_000, apollo: 2_000,
+  hunter_finder: 1_500, hunter_domain: 1_500, pattern: 1_500, discover: 4_000, website: 3_000, web: 4_000, apollo: 2_000,
 };
 
 /** The single pattern other contacts' addresses on `domain` agree on, or null. */
@@ -96,6 +101,7 @@ export async function runWideLookup(input: WideLookupInput, deps: WideLookupDeps
   const state = { ...input.have };
   const { first, last } = input;
   const domains = input.domains.slice(0, MAX_DOMAINS);
+  let discoveredDomains = 0;
   const hasName = first.trim() !== '' && last.trim() !== '';
   const bothDone = () => !!state.email && !!state.linkedin_url;
   const steps: StepResult[] = [];
@@ -128,7 +134,7 @@ export async function runWideLookup(input: WideLookupInput, deps: WideLookupDeps
     if (id === 'apollo' && input.hasApolloId) return stepResult(id, 'skipped', STEP_DETAILS.alreadyFilled);
     return null;
   };
-  const notNeeded = (id: StepId): boolean => (id === 'hunter_finder' || id === 'pattern' ? !!state.email : bothDone());
+  const notNeeded = (id: StepId): boolean => (id === 'hunter_finder' || id === 'pattern' || id === 'discover' ? !!state.email : bothDone());
 
   const hunterIds: StepId[] = ['hunter_finder', 'hunter_domain', 'pattern'];
   // The web search is last: it is the slowest step and has its own extra time (webExtraMs).
@@ -157,8 +163,25 @@ export async function runWideLookup(input: WideLookupInput, deps: WideLookupDeps
   if (hunterBlocked) {
     for (const id of hunterIds) steps.push({ ...hunterBlocked, id, label: stepResult(id, 'skipped', '').label });
   } else {
-    for (const [i, d] of domains.entries()) {
-      if (i > 0 && state.email) break; // the person's email is found: stop searching more domains
+    await huntDomains(domains, true);
+    // Nothing found on the known domains: look for the company's other domains once, then search the new ones.
+    if (!state.email && deps.discover) {
+      await attempt('discover', undefined, async () => {
+        const res = await deps.discover!(Math.max(1, Math.min(10_000, remaining() - 3_000)));
+        const fresh = (res?.domains ?? []).filter((d) => !domains.includes(d)).slice(0, MAX_DOMAINS - domains.length);
+        if (fresh.length === 0) return stepResult('discover', 'no_match', res?.detail ?? STEP_DETAILS.discoverNone);
+        domains.push(...fresh);
+        discoveredDomains = fresh.length;
+        return stepResult('discover', 'found', res!.detail);
+      });
+      if (discoveredDomains > 0) await huntDomains(domains.slice(domains.length - discoveredDomains), false);
+    }
+  }
+
+  /** Hunter finder, company list and email pattern for each domain in turn, stopping once the email is found. */
+  async function huntDomains(list: string[], initial: boolean): Promise<void> {
+    for (const [i, d] of list.entries()) {
+      if ((i > 0 || !initial) && state.email) break; // the person's email is found: stop searching more domains
       let listPattern: string | null = null;
       let listRan = false;
       await attempt('hunter_finder', d, async () => {
@@ -177,7 +200,11 @@ export async function runWideLookup(input: WideLookupInput, deps: WideLookupDeps
         listRan = true;
         listPattern = res.pattern;
         const match = matchHunterPerson(res.emails, first, last);
-        if (match.status === 'ambiguous') return stepResult('hunter_domain', 'no_match', STEP_DETAILS.domainAmbiguous(last, d), d);
+        if (match.status === 'ambiguous') {
+          // Never picks between two different people: each candidate is only offered as a suggestion to check.
+          for (const e of match.emails) if (emailOnDomain(e, d)) suggestions.push({ field: 'email', value: e, label: SUGGESTION_LABELS.ambiguous });
+          return stepResult('hunter_domain', 'no_match', STEP_DETAILS.domainAmbiguous(last, d), d);
+        }
         if (match.status === 'none' || !emailOnDomain(match.email, d)) return stepResult('hunter_domain', 'no_match', STEP_DETAILS.domainNone(last, d), d);
         const found: FoundFields = { email: match.email };
         if (match.linkedin_url) found.linkedin_url = match.linkedin_url;
