@@ -126,7 +126,18 @@ export interface KnownPersonInput {
 }
 
 /** Who supplied a value on a known-person lookup. */
-export type KnownPersonSource = 'hunter' | 'apollo' | 'you';
+export type KnownPersonSource = 'hunter' | 'apollo' | 'pattern' | 'website' | 'you';
+
+/** One step of the known-person lookup, in the order it ran. `detail` is a fixed plain-English sentence. */
+export interface KnownPersonStep {
+  id: 'hunter_finder' | 'hunter_domain' | 'pattern' | 'website' | 'web' | 'apollo';
+  label: string;
+  status: 'found' | 'no_match' | 'skipped' | 'unavailable' | 'error';
+  detail: string;
+}
+
+/** A value the lookup found but did not save (a web-search find or an unverified guess), offered with "Use this". */
+export interface KnownPersonSuggestion { field: 'email' | 'linkedin_url'; value: string; label: string }
 
 /** The `known_person` part of the find-decision-makers response. */
 export interface KnownPersonResult {
@@ -142,6 +153,12 @@ export interface KnownPersonResult {
   extra_email?: string;
   apollo_called: boolean;
   hunter_called: boolean;
+  /** Each lookup step (missing from older servers). */
+  steps?: KnownPersonStep[];
+  /** Found values that were not saved, for a one-click "Use this". */
+  suggestions?: KnownPersonSuggestion[];
+  /** True when a found email was saved and follow-ups were switched off for this person. */
+  sequences_turned_off?: boolean;
 }
 
 export interface Pipeline {

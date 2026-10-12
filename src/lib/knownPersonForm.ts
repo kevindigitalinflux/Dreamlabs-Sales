@@ -1,6 +1,9 @@
 import { validateContactEdit } from '../../supabase/functions/_shared/contacts';
-import type { DecisionMakerCandidate, KnownPersonInput, KnownPersonResult, KnownPersonSource } from '../types';
-import { isOwnSource } from './leadContacts';
+import type {
+  DecisionMakerCandidate, KnownPersonInput, KnownPersonResult, KnownPersonSource, KnownPersonStep, KnownPersonSuggestion,
+} from '../types';
+import { contactToForm, editStrategy, isOwnSource } from './leadContacts';
+import type { ContactFormValues } from './leadContacts';
 
 /** Typed details for a known person, as raw form text. */
 export interface KnownPersonText {
@@ -87,7 +90,9 @@ export function decidePhoneSave(typedPhone: string, rowPhone: string | null | un
   return { action: 'note', note: `A search already found the phone number ${existing}, so the number you typed (${typed}) was not saved.` };
 }
 
-const SOURCE_LABEL: Record<KnownPersonSource, string> = { hunter: 'Hunter', apollo: 'Apollo', you: 'You' };
+const SOURCE_LABEL: Record<KnownPersonSource, string> = {
+  hunter: 'Hunter', apollo: 'Apollo', pattern: 'Email pattern', website: 'Company website', you: 'You',
+};
 
 /** One value shown in the result, with who supplied it. */
 export interface SummaryLine { label: string; value: string; source: string }
@@ -130,14 +135,67 @@ export function summariseKnownPerson(
     const src = result.sources?.[key] ?? (value === typedValue ? 'you' : undefined);
     lines.push({ label, value, source: src ? SOURCE_LABEL[src] : 'Search' });
   }
-  const lookups = [
+  // Older servers send no steps: fall back to the single "Hunter used. Apollo used." line.
+  const steps = (result.steps ?? []).map(stepLine);
+  const lookups = result.steps ? [] : [
     result.hunter_called ? 'Hunter used' : 'Hunter not used',
     result.apollo_called ? 'Apollo used' : 'Apollo not used',
   ];
-  return { heading: `Saved ${personName(typed)}`, lines, lookups, ...classifyMessages(result.errors, result.notes) };
+  return { heading: `Saved ${personName(typed)}`, lines, steps, lookups, ...classifyMessages(result.errors, result.notes) };
 }
 
 /** True when the matched contact came from a search and is not set to receive follow-ups. */
 export function needsFollowUpNotice(contact: Pick<DecisionMakerCandidate, 'source' | 'include_in_sequences'> | null | undefined): boolean {
   return !!contact && !isOwnSource(contact.source) && !contact.include_in_sequences;
+}
+
+/** How a step line looks: a tick for found, a dash otherwise; red for an error, muted for anything not found. */
+export type StepTone = 'found' | 'muted' | 'error';
+
+/** One lookup step as shown in the result panel. */
+export interface StepLine { id: KnownPersonStep['id']; label: string; detail: string; tone: StepTone }
+
+/** Maps a server step to its display line. Apollo being unavailable on a plan is muted, never an error. */
+export function stepLine(step: KnownPersonStep): StepLine {
+  const tone: StepTone = step.status === 'found' ? 'found' : step.status === 'error' ? 'error' : 'muted';
+  return { id: step.id, label: step.label, detail: step.detail, tone };
+}
+
+/** Suggestions still worth offering: only for a field the saved person has left blank, one per value. */
+export function visibleSuggestions(
+  result: Pick<KnownPersonResult, 'suggestions'>,
+  contact?: Pick<DecisionMakerCandidate, 'email' | 'linkedin_url'> | null,
+): KnownPersonSuggestion[] {
+  const seen = new Set<string>();
+  return (result.suggestions ?? []).filter((s) => {
+    const key = `${s.field}:${s.value.toLowerCase()}`;
+    if (seen.has(key) || (contact && (contact[s.field] ?? '').trim() !== '')) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** How "Use this" saves a suggestion through the normal contact edit path. */
+export type SuggestionPlan =
+  | { ok: false; error: string }
+  | { ok: true; contact: DecisionMakerCandidate; form: ContactFormValues; switchOffAfter: boolean };
+
+/**
+ * Plans saving a suggestion onto the person: only into a blank field. For an email, follow-ups must stay off: an
+ * edit that re-saves a provider row as a new contact copies `include_in_sequences` from the contact it is given,
+ * so that copy is passed with it switched off; an in-place edit switches it off afterwards (`switchOffAfter`).
+ */
+export function planSuggestionUse(contact: DecisionMakerCandidate | null | undefined, s: KnownPersonSuggestion): SuggestionPlan {
+  if (!contact) return { ok: false, error: 'This person could not be found. Reload the page and try again.' };
+  if ((contact[s.field] ?? '').trim() !== '') {
+    return { ok: false, error: s.field === 'email' ? 'This person already has an email, so the suggestion was not used.' : 'This person already has a LinkedIn link, so the suggestion was not used.' };
+  }
+  const form = { ...contactToForm(contact), [s.field]: s.value };
+  if (s.field !== 'email') return { ok: true, contact, form, switchOffAfter: false };
+  const inline = editStrategy(contact, { email: s.value }) === 'inline';
+  return {
+    ok: true, form,
+    contact: { ...contact, include_in_sequences: false },
+    switchOffAfter: inline && contact.include_in_sequences,
+  };
 }

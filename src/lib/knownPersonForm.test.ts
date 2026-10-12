@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildFromFullName, buildKnownPersonPayload, classifyMessages, decidePhoneSave, namePreview, needsFollowUpNotice, resolveName,
-  splitFullName, summariseKnownPerson,
+  planSuggestionUse, splitFullName, stepLine, summariseKnownPerson, visibleSuggestions,
 } from './knownPersonForm';
-import type { KnownPersonResult } from '../types';
+import type { DecisionMakerCandidate, KnownPersonResult, KnownPersonStep } from '../types';
 
 const blank = { first_name: '', last_name: '', title: '', email: '', linkedin_url: '' };
 const base: KnownPersonResult = {
@@ -138,5 +138,66 @@ describe('summariseKnownPerson details', () => {
     expect(s.lines.map((l) => l.value)).toEqual(['typed@x.com']);
     expect(s.errors).toEqual(['Hunter failed']);
     expect(s.notes).toEqual(['FYI']);
+  });
+});
+
+const step = (id: KnownPersonStep['id'], status: KnownPersonStep['status'], detail = 'd'): KnownPersonStep => ({ id, label: id, status, detail });
+
+describe('lookup steps in the summary', () => {
+  const typed = { first_name: 'John', last_name: 'Sipple' };
+  it('shows each step on its own line instead of the old Hunter/Apollo line', () => {
+    const s = summariseKnownPerson({
+      ...base, steps: [step('hunter_finder', 'found'), step('hunter_domain', 'no_match'), step('apollo', 'unavailable'), step('web', 'error')],
+    }, typed);
+    expect(s.lookups).toEqual([]);
+    expect(s.steps.map((l) => [l.id, l.tone])).toEqual([
+      ['hunter_finder', 'found'], ['hunter_domain', 'muted'], ['apollo', 'muted'], ['web', 'error'],
+    ]);
+  });
+  it('labels the new sources', () => {
+    const s = summariseKnownPerson({ ...base, steps: [], found: { email: 'j@x.com', linkedin_url: 'https://www.linkedin.com/in/j' }, sources: { email: 'website', linkedin_url: 'pattern' } }, typed);
+    expect(s.lines.map((l) => l.source)).toEqual(['Company website', 'Email pattern']);
+  });
+  it('treats Apollo being unavailable as muted', () => {
+    expect(stepLine(step('apollo', 'unavailable', 'Apollo is not available on this plan, so it was skipped.')).tone).toBe('muted');
+  });
+});
+
+const person = (over: Partial<DecisionMakerCandidate> = {}): DecisionMakerCandidate => ({
+  id: 'c1', lead_id: 'l1', source: 'manual', kind: 'person', label: null, is_primary: false, include_in_sequences: true,
+  apollo_person_id: null, first_name: 'John', last_name: 'Sipple', name_obfuscated: false, title: null, email: null,
+  email_revealed: false, phone: null, phone_status: 'not_requested', linkedin_url: null, dismissed_at: null,
+  created_at: '', updated_at: '', ...over,
+});
+
+describe('suggestions', () => {
+  const email = { field: 'email' as const, value: 'john@x.com', label: 'Guess, unverified' };
+  const link = { field: 'linkedin_url' as const, value: 'https://www.linkedin.com/in/js', label: 'Found by web search, check it' };
+
+  it('only offers suggestions for blank fields, once each', () => {
+    expect(visibleSuggestions({ suggestions: [email, { ...email, value: 'JOHN@x.com' }, link] }, person({ linkedin_url: 'https://www.linkedin.com/in/a' })))
+      .toEqual([email]);
+    expect(visibleSuggestions({})).toEqual([]);
+  });
+
+  it('fills a blank email and switches follow-ups off', () => {
+    const plan = planSuggestionUse(person(), email);
+    expect(plan.ok && plan.form.email).toBe('john@x.com');
+    expect(plan.ok && plan.switchOffAfter).toBe(true);
+    expect(plan.ok && plan.contact.include_in_sequences).toBe(false);
+  });
+
+  it('passes follow-ups off into a provider row that is re-saved as a new contact', () => {
+    const plan = planSuggestionUse(person({ source: 'hunter', include_in_sequences: true }), email);
+    expect(plan.ok && plan.switchOffAfter).toBe(false);
+    expect(plan.ok && plan.contact.include_in_sequences).toBe(false);
+  });
+
+  it('leaves follow-ups alone for a LinkedIn link and refuses a filled field', () => {
+    const plan = planSuggestionUse(person(), link);
+    expect(plan.ok && plan.switchOffAfter).toBe(false);
+    expect(plan.ok && plan.contact.include_in_sequences).toBe(true);
+    expect(planSuggestionUse(person({ email: 'a@x.com' }), email)).toEqual({ ok: false, error: 'This person already has an email, so the suggestion was not used.' });
+    expect(planSuggestionUse(undefined, email).ok).toBe(false);
   });
 });

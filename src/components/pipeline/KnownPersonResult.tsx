@@ -1,7 +1,11 @@
 import { useState } from 'react';
-import { needsFollowUpNotice, personName, summariseKnownPerson } from '../../lib/knownPersonForm';
-import type { DecisionMakerCandidate, KnownPersonInput, KnownPersonResult as KnownPersonResultData } from '../../types';
+import { needsFollowUpNotice, personName, summariseKnownPerson, visibleSuggestions } from '../../lib/knownPersonForm';
+import type {
+  DecisionMakerCandidate, KnownPersonInput, KnownPersonResult as KnownPersonResultData, KnownPersonSuggestion,
+} from '../../types';
 import { Button } from '../ui/Button';
+import { LookupSteps } from './LookupSteps';
+import { LookupSuggestions } from './LookupSuggestions';
 
 interface KnownPersonResultProps {
   person: KnownPersonInput;
@@ -14,15 +18,18 @@ interface KnownPersonResultProps {
   typedPhone?: string;
   /** Saves a second email as another contact; resolves to an error message or null. */
   onAddExtraEmail: (email: string, label: string) => Promise<string | null>;
+  /** Saves a suggested value on the person (blank field only); resolves to an error message or null. */
+  onUseSuggestion: (s: KnownPersonSuggestion) => Promise<string | null>;
   onClose: () => void;
 }
 
 /**
  * What a known-person lookup did: the saved person, each value with who supplied it,
- * which paid lookups ran, plain-English problems (red) and notes (neutral), and a
- * button to keep a second email a provider found.
+ * each lookup step on its own line, values found but not saved with a "Use this" button,
+ * plain-English problems (red) and notes (neutral), and a button to keep a second email
+ * a provider found.
  */
-export function KnownPersonResult({ person, result, contact, extraNotes = [], typedPhone, onAddExtraEmail, onClose }: KnownPersonResultProps) {
+export function KnownPersonResult({ person, result, contact, extraNotes = [], typedPhone, onAddExtraEmail, onUseSuggestion, onClose }: KnownPersonResultProps) {
   const summary = summariseKnownPerson(result, person, contact, typedPhone);
   const [busy, setBusy] = useState(false);
   const [extraError, setExtraError] = useState<string | null>(null);
@@ -49,12 +56,18 @@ export function KnownPersonResult({ person, result, contact, extraNotes = [], ty
       ) : (
         <p className="text-sm text-muted">No extra details were found.</p>
       )}
-      <p className="text-xs text-muted">{summary.lookups.join('. ')}.</p>
+      <LookupSteps steps={summary.steps} />
+      {summary.lookups.length > 0 && <p className="text-xs text-muted">{summary.lookups.join('. ')}.</p>}
       {needsFollowUpNotice(contact) && (
         <p className="text-sm text-muted">Found by a search, so it does not receive follow-ups unless you switch it on.</p>
       )}
       {summary.errors.map((m) => <p key={m} role="alert" className="text-sm text-danger">{m}</p>)}
       {[...summary.notes, ...extraNotes].map((m) => <p key={m} className="text-sm text-muted">{m}</p>)}
+      <LookupSuggestions
+        suggestions={visibleSuggestions(result)}
+        filled={{ email: !!contact?.email?.trim(), linkedin_url: !!contact?.linkedin_url?.trim() }}
+        onUse={onUseSuggestion}
+      />
       {extra && !extraDone && (
         <div className="flex flex-col gap-1">
           <Button variant="secondary" onClick={() => void addExtra()} loading={busy}>Add {extra} as another contact</Button>
