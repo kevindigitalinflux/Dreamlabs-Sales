@@ -1,12 +1,20 @@
 # Dreamlabs Sales: to-do list
 
-Last updated 2026-10-08. Ask for any item by number or name.
+Last updated 2026-10-12. Ask for any item by number or name.
 
-## A. Urgent (flagged by Kevin 2026-10-08, being scoped)
+## A. Urgent items: BUILT and live 2026-10-12 (contacts, known person, post-send updates). Still need your real-world test.
 
 1. **Known decision-maker input.** An optional step when finding decision makers: type the full name and position of a person you already know (example: Andrea Manning, Office Manager at HOK), and the app looks for or stores that specific person, including an email you already have (andrea.manning@hok.com).
 2. **Edit / add contact details per person from notes and Dream Agent.** Add or change extra email addresses and assign each to a specific person or to the company's general inbox (example: Andrea's own address plus london@hok.com for reception). Today, asking Dream Agent to update the lead's records says it cannot edit anything.
 3. **Sent emails should update the platform and follow the sequence.** After emails waiting for review are released, the lead's sequence position, next step and follow-up date should change. When writing an email for a lead already in a sequence, the template picker should suggest (or be limited to) that sequence's templates.
+
+### New follow-ups from the contacts / post-send build
+
+- A1. Apply migration 052 (moves old additional emails into contacts) now the UI is live.
+- A2. Test: add Andrea Manning + london@hok.com as contacts, send one email to each, confirm the lead note, sequence step and follow-up date update.
+- A3. Store the step number on `email_logs` (replaces the time heuristic) and honour blocklists in check-sequences / the send path.
+- A4. `pickRecipient` should honour `include_in_sequences`; defer `next_send_at` when enrolling from a suggestion.
+- A5. The note limit is applied before the system-note filter, so leads with many system notes feed the AI fewer than 3-5 notes.
 
 ## B. Testing you need to do (selected-leads autopilot + registry work went live 2026-10-08)
 
