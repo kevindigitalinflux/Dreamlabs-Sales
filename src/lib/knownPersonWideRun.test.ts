@@ -6,7 +6,7 @@ import type { StepId } from '../../supabase/functions/_shared/knownPersonWide';
 const input = (over: Partial<WideLookupInput> = {}): WideLookupInput => ({
   first: 'John', last: 'Sipple',
   have: { email: null, linkedin_url: null, phone: null },
-  hasApolloId: false, domain: 'x.com', directory: false, website: 'https://x.com', usePaid: true,
+  hasApolloId: false, domains: ['x.com'], website: 'https://x.com', websiteDirectory: false, usePaid: true,
   keys: { hunter: true, apollo: true, gemini: true },
   ...over,
 });
@@ -46,7 +46,7 @@ describe('runWideLookup', () => {
     expect(statuses(r.steps)).toEqual({
       hunter_finder: 'no_match', hunter_domain: 'no_match', pattern: 'no_match', website: 'no_match', web: 'no_match', apollo: 'no_match',
     });
-    expect(r.steps[1]!.detail).toBe('Hunter searched the domain and found no one called Sipple.');
+    expect(r.steps[1]!.detail).toBe('Hunter searched x.com and found no one called Sipple.');
     expect(d.takeSlot).toHaveBeenCalledTimes(1);
     expect(r).toMatchObject({ hunterCalled: true, apolloCalled: true, limitReached: false, suggestions: [] });
   });
@@ -140,7 +140,7 @@ describe('runWideLookup', () => {
 
   it('skips steps 2 to 5 for a directory website, without using a slot when nothing can run', async () => {
     const { d } = deps();
-    const r = await runWideLookup(input({ domain: 'facebook.com', directory: true }), d);
+    const r = await runWideLookup(input({ domains: [], website: null, websiteDirectory: true }), d);
     expect(r.steps.every((s) => s.status === 'skipped')).toBe(true);
     expect(r.steps[1]!.detail).toBe('The lead\'s website is a social or directory page, so it was not searched.');
     expect(d.takeSlot).not.toHaveBeenCalled();
@@ -182,5 +182,69 @@ describe('runWideLookup', () => {
     const r = await runWideLookup(input({ have: { email: 'john@x.com', linkedin_url: null, phone: null } }), d);
     expect(statuses(r.steps)).toMatchObject({ hunter_finder: 'skipped', hunter_domain: 'no_match', pattern: 'skipped', website: 'no_match' });
     expect(d.hunterFind).not.toHaveBeenCalled();
+  });
+});
+
+describe('runWideLookup across several company domains', () => {
+  const loveLiving = (over: Partial<WideLookupInput> = {}) => input({
+    first: 'Max', last: 'Whatley', domains: ['lovelivingmanagement.com', 'loveliving.uk'],
+    website: 'https://lovelivingmanagement.com',
+    knownAddresses: [{ email: 'david@loveliving.uk', first: 'David', last: null }],
+    ...over,
+  });
+
+  it('runs the Hunter steps per domain, labelled with the domain, and stops once the email is found', async () => {
+    const { d, filled } = deps({
+      hunterDomain: vi.fn(async (domain: string) => (domain === 'loveliving.uk'
+        ? { ok: true as const, pattern: null, emails: [{ value: 'max@loveliving.uk', first_name: 'Max', last_name: 'Whatley' }] }
+        : { ok: true as const, pattern: null, emails: [] })),
+    });
+    const r = await runWideLookup(loveLiving({ domains: ['lovelivingmanagement.com', 'loveliving.uk', 'third.co.uk'] }), d);
+    expect(r.steps.slice(0, 6).map((s) => s.label)).toEqual([
+      'Hunter email finder (lovelivingmanagement.com)', 'Hunter company list (lovelivingmanagement.com)', 'Company email pattern (lovelivingmanagement.com)',
+      'Hunter email finder (loveliving.uk)', 'Hunter company list (loveliving.uk)', 'Company email pattern (loveliving.uk)',
+    ]);
+    expect(filled[0]).toEqual({ step: 'hunter_domain', found: { email: 'max@loveliving.uk' } });
+    expect(d.hunterFind).toHaveBeenCalledTimes(2);
+    expect(r.steps.some((s) => s.domain === 'third.co.uk')).toBe(false);
+  });
+
+  it('learns the pattern from another contact on the same domain and verifies the built address', async () => {
+    const { d, filled } = deps({ hunterVerify: vi.fn(async () => ({ ok: true as const, verdict: 'verified' as const })) });
+    const r = await runWideLookup(loveLiving(), d);
+    expect(d.hunterVerify).toHaveBeenCalledWith('max@loveliving.uk', expect.any(Number));
+    expect(filled).toEqual([{ step: 'pattern', found: { email: 'max@loveliving.uk' } }]);
+    const step = r.steps.find((s) => s.id === 'pattern' && s.domain === 'loveliving.uk');
+    expect(step?.detail).toBe('Built from the pattern of another address on this domain (loveliving.uk) and Hunter verified it.');
+  });
+
+  it('offers an unverified learned address as a guess', async () => {
+    const { d } = deps();
+    const r = await runWideLookup(loveLiving(), d);
+    expect(r.suggestions).toEqual([{ field: 'email', value: 'max@loveliving.uk', label: 'Guess, unverified' }]);
+  });
+
+  it('accepts a website or web-search email on any company domain, never another one', async () => {
+    const site = deps({ scanWebsite: vi.fn(async () => ({ ok: true as const, email: 'max.whatley@loveliving.uk', linkedin_url: null })) });
+    await runWideLookup(loveLiving({ knownAddresses: [] }), site.d);
+    expect(site.filled).toEqual([{ step: 'website', found: { email: 'max.whatley@loveliving.uk' } }]);
+    expect(site.d.scanWebsite).toHaveBeenCalledWith('https://lovelivingmanagement.com', ['lovelivingmanagement.com', 'loveliving.uk'], 'Max', 'Whatley', expect.any(Number));
+
+    const web = deps({ webSearch: vi.fn(async () => ({ ok: true as const, found: { email: 'max@gmail.com' } })) });
+    const r = await runWideLookup(loveLiving({ knownAddresses: [] }), web.d);
+    expect(r.suggestions).toEqual([]);
+  });
+
+  it('uses the first domain for Apollo and caps the run at three domains', async () => {
+    const { d } = deps();
+    await runWideLookup(loveLiving({ domains: ['a.com', 'b.com', 'c.com', 'd.com'], knownAddresses: [] }), d);
+    expect(d.hunterFind).toHaveBeenCalledTimes(3);
+    expect(d.apolloMatch).toHaveBeenCalledWith('a.com', 'Max', 'Whatley', expect.any(Number));
+  });
+
+  it('says there is no domain to search when there is none', async () => {
+    const { d } = deps();
+    const r = await runWideLookup(input({ domains: [], website: null }), d);
+    expect(r.steps[0]).toMatchObject({ id: 'hunter_finder', status: 'skipped', detail: expect.stringContaining('No company domain to search') });
   });
 });

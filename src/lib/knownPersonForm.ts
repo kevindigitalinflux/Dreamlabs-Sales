@@ -1,4 +1,5 @@
 import { validateContactEdit } from '../../supabase/functions/_shared/contacts';
+import { cleanCompanyDomain } from '../../supabase/functions/_shared/knownPersonWide';
 import type {
   DecisionMakerCandidate, KnownPersonInput, KnownPersonResult, KnownPersonSource, KnownPersonStep, KnownPersonSuggestion,
 } from '../types';
@@ -12,6 +13,8 @@ export interface KnownPersonText {
   title: string;
   email: string;
   linkedin_url: string;
+  /** Optional company website or email domain, when different from the lead's website. */
+  company_domain?: string;
 }
 
 export type Built<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -30,10 +33,12 @@ export function splitFullName(full: string): Built<{ first_name: string; last_na
 
 /**
  * Validates the typed details with the shared contact rules and builds the request:
- * values trimmed, blanks left out, and `use_paid_lookups` sent only when it is off.
+ * values trimmed, blanks left out, and `use_paid_lookups` sent only when it is off. An optional company domain is
+ * cleaned to a bare hostname (scheme, path and www. removed) and refused when it is not one.
  */
 export function buildKnownPersonPayload(text: KnownPersonText, usePaidLookups: boolean): Built<KnownPersonInput> {
-  const check = validateContactEdit({ kind: 'person', ...text });
+  const { company_domain: typedDomain, ...fields } = text;
+  const check = validateContactEdit({ kind: 'person', ...fields });
   if (!check.ok) return { ok: false, error: check.error };
   const v = check.value;
   const payload: KnownPersonInput = { first_name: v.first_name ?? '', last_name: v.last_name ?? '' };
@@ -41,6 +46,11 @@ export function buildKnownPersonPayload(text: KnownPersonText, usePaidLookups: b
   if (v.email) payload.email = v.email;
   if (v.linkedin_url) payload.linkedin_url = v.linkedin_url;
   if (!usePaidLookups) payload.use_paid_lookups = false;
+  if (typedDomain?.trim()) {
+    const domain = cleanCompanyDomain(typedDomain);
+    if (!domain) return { ok: false, error: 'Enter the company domain like loveliving.uk (or leave it blank).' };
+    payload.company_domain = domain;
+  }
   return { ok: true, value: payload };
 }
 
@@ -132,8 +142,10 @@ export function summariseKnownPerson(
     // The saved row is the truth when we have it; otherwise what the server reported, then what was typed.
     const value = contact?.[key] || result.found?.[key] || typedValue;
     if (!value) continue;
-    const src = result.sources?.[key] ?? (value === typedValue ? 'you' : undefined);
-    lines.push({ label, value, source: src ? SOURCE_LABEL[src] : 'Search' });
+    // No source: it is "Search" only when the lookup reported finding exactly this value; otherwise it was already there.
+    const reportedFound = !!result.found?.[key] && result.found[key]!.toLowerCase() === value.toLowerCase();
+    const src = result.sources?.[key] ?? (reportedFound ? undefined : 'you');
+    lines.push({ label, value, source: src ? (SOURCE_LABEL[src] ?? 'Search') : 'Search' });
   }
   // Older servers send no steps: fall back to the single "Hunter used. Apollo used." line.
   const steps = (result.steps ?? []).map(stepLine);

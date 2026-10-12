@@ -73,8 +73,8 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
   }
 
   /** Add person with "Also search" ticked: the server saves the person and fills gaps. */
-  async function addWithSearch(form: ContactFormValues): Promise<ContactResult> {
-    const built = buildKnownPersonPayload(form, true);
+  async function addWithSearch(form: ContactFormValues, companyDomain: string): Promise<ContactResult> {
+    const built = buildKnownPersonPayload({ ...form, company_domain: companyDomain }, true);
     if (!built.ok) return { error: built.error };
     const error = await flow.lookup(built.value, form.phone, (result, rows) => (
       savePhoneAfterLookup(form.phone, result.contact_id, rows, (row, f) => hook.updateContact(row, f))
@@ -126,7 +126,7 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
           initial={emptyContactForm(adding)}
           submitLabel={adding === 'person' ? 'Add person' : 'Add general email'}
           onSubmit={(form) => run('new', () => hook.addContact(form))}
-          onSubmitWithSearch={adding === 'person' ? (form) => run('new', () => addWithSearch(form)) : undefined}
+          onSubmitWithSearch={adding === 'person' ? (form, domain) => run('new', () => addWithSearch(form, domain)) : undefined}
           onCancel={() => setAdding(null)}
         />
       ) : (

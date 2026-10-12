@@ -7,10 +7,11 @@ import { findAndStoreDecisionMakers } from '../_shared/findDecisionMakers.ts';
 import { validateContactEdit } from '../_shared/contacts.ts';
 import { isLinkedinUrl } from '../_shared/knownPerson.ts';
 import { runKnownPerson } from '../_shared/knownPersonFlow.ts';
+import { cleanCompanyDomain } from '../_shared/knownPersonWide.ts';
 
 const MAX_LEADS = 40;
 
-interface LeadRow { id: string; org_id: string; website: string | null; business_name: string | null }
+interface LeadRow { id: string; org_id: string; website: string | null; business_name: string | null; email: string | null }
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -39,6 +40,7 @@ Deno.serve(async (req) => {
 
   let knownPerson: ReturnType<typeof validateContactEdit> | null = null;
   let usePaidLookups = true;
+  let companyDomain: string | null = null;
   if (body.known_person !== undefined && body.known_person !== null) {
     if (leadIds.length !== 1) return json({ error: 'known_person works for one lead at a time' }, 400, headers);
     const kp = body.known_person as Record<string, unknown>;
@@ -53,6 +55,10 @@ Deno.serve(async (req) => {
       return json({ error: 'The LinkedIn link must be a linkedin.com address.' }, 400, headers);
     }
     usePaidLookups = kp.use_paid_lookups !== false;
+    if (typeof kp.company_domain === 'string' && kp.company_domain.trim() !== '') {
+      companyDomain = cleanCompanyDomain(kp.company_domain);
+      if (!companyDomain) return json({ error: 'Enter the company domain like loveliving.uk (no spaces, ports or IP addresses).' }, 400, headers);
+    }
   }
 
   const service = createClient(
@@ -64,7 +70,7 @@ Deno.serve(async (req) => {
   // to see (can_view_lead policy) — matches enrich-leads-bulk's pattern. The
   // org-membership check below stays as a defensive second layer.
   const { data: leads, error: leadsErr } = await client
-    .from('leads').select('id, org_id, website, business_name').in('id', leadIds);
+    .from('leads').select('id, org_id, website, business_name, email').in('id', leadIds);
   if (leadsErr) return json({ error: leadsErr.message }, 500, headers);
   const resolvedLeads = (leads ?? []) as LeadRow[];
   if (resolvedLeads.length === 0) {
@@ -87,7 +93,7 @@ Deno.serve(async (req) => {
     // Targeted lookups for one named person (the generic decision-maker search is skipped). The org's Gemini key
     // powers the web-search step; it is resolved the same way as every other Gemini caller.
     const geminiKey = await resolveOrgApiKey(service, orgId, 'gemini');
-    const outcome = await runKnownPerson(client, service, resolvedLeads[0]!, knownPerson.value, userData.user.id, { hunterKey, apolloKey, geminiKey }, usePaidLookups);
+    const outcome = await runKnownPerson(client, service, resolvedLeads[0]!, knownPerson.value, userData.user.id, { hunterKey, apolloKey, geminiKey }, usePaidLookups, companyDomain);
     if (outcome.error) return json({ error: outcome.error }, outcome.status, headers);
     return json({
       results: [{ lead_id: resolvedLeads[0]!.id, candidates: outcome.candidates }],

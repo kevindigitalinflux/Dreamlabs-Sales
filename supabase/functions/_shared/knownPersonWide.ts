@@ -10,7 +10,7 @@ export type StepId = 'hunter_finder' | 'hunter_domain' | 'pattern' | 'website' |
 export type StepStatus = 'found' | 'no_match' | 'skipped' | 'unavailable' | 'error';
 
 /** One step as reported to the result panel. `detail` is always a fixed, plain-English sentence. */
-export interface StepResult { id: StepId; label: string; status: StepStatus; detail: string }
+export interface StepResult { id: StepId; label: string; status: StepStatus; detail: string; domain?: string }
 
 /** A value the lookup found but did not save, offered to the user with a one-click "Use this". */
 export interface Suggestion { field: 'email' | 'linkedin_url'; value: string; label: string }
@@ -31,9 +31,16 @@ export const SUGGESTION_LABELS = {
   web: 'Found by web search, check it',
 } as const;
 
-/** Builds one step record with its fixed label. */
-export function stepResult(id: StepId, status: StepStatus, detail: string): StepResult {
-  return { id, label: STEP_LABELS[id], status, detail };
+/** Builds one step record with its fixed label; a step run for one domain names it, e.g. "Hunter company list (x.com)". */
+export function stepResult(id: StepId, status: StepStatus, detail: string, domain?: string): StepResult {
+  if (!domain) return { id, label: STEP_LABELS[id], status, detail };
+  const d = safeDomain(domain);
+  return { id, label: `${STEP_LABELS[id]} (${d})`, status, detail, domain: d };
+}
+
+/** A domain safe to put into a fixed sentence: lowercase letters, digits, dots and hyphens only, at most 80 characters. */
+export function safeDomain(value: string | null | undefined): string {
+  return (value ?? '').toLowerCase().replace(/[^a-z0-9.-]/g, '').slice(0, 80) || 'the domain';
 }
 
 /** A name safe to put into a fixed detail sentence: letters, spaces, apostrophes and hyphens only, at most 60 characters. */
@@ -44,17 +51,21 @@ export function displayName(value: string | null | undefined): string {
 
 /** Fixed detail sentences. Only `displayName` output is ever interpolated. */
 export const STEP_DETAILS = {
-  hunterFinderFound: 'Hunter found an email address for this person.',
-  hunterFinderNone: 'Hunter could not find an email address for this person.',
-  domainFound: (last: string) => `Hunter's list for the company includes ${displayName(last)}.`,
-  domainNone: (last: string) => `Hunter searched the domain and found no one called ${displayName(last)}.`,
-  domainAmbiguous: (last: string) => `Hunter lists more than one person called ${displayName(last)}, so none was picked.`,
-  domainNothingNew: (last: string) => `Hunter's list for the company includes ${displayName(last)}, but nothing new could be saved.`,
-  patternVerified: 'Built an address from the company email pattern and Hunter verified it.',
-  patternGuess: 'Built an address from the company email pattern, but it could not be verified. It is offered below as a guess.',
-  patternInvalid: 'Built an address from the company email pattern, but Hunter says it does not exist.',
-  patternNothingNew: 'Built and verified an address from the company email pattern, but it could not be saved.',
-  patternNone: 'Hunter does not know this company\'s email pattern, or the name cannot be turned into an address.',
+  hunterFinderFound: (d: string) => `Hunter found an email address for this person at ${safeDomain(d)}.`,
+  hunterFinderNone: (d: string) => `Hunter could not find an email address for this person at ${safeDomain(d)}.`,
+  domainFound: (last: string, d: string) => `Hunter's list for ${safeDomain(d)} includes ${displayName(last)}.`,
+  domainNone: (last: string, d: string) => `Hunter searched ${safeDomain(d)} and found no one called ${displayName(last)}.`,
+  domainAmbiguous: (last: string, d: string) => `Hunter lists more than one person called ${displayName(last)} at ${safeDomain(d)}, so none was picked.`,
+  domainNothingNew: (last: string, d: string) => `Hunter's list for ${safeDomain(d)} includes ${displayName(last)}, but nothing new could be saved.`,
+  patternVerified: (d: string) => `Built an address from the ${safeDomain(d)} email pattern and Hunter verified it.`,
+  patternGuess: (d: string) => `Built an address from the ${safeDomain(d)} email pattern, but it could not be verified. It is offered below as a guess.`,
+  patternInvalid: (d: string) => `Built an address from the ${safeDomain(d)} email pattern, but Hunter says it does not exist.`,
+  patternNothingNew: (d: string) => `Built and verified an address from the ${safeDomain(d)} email pattern, but it could not be saved.`,
+  patternNone: (d: string) => `No email pattern is known for ${safeDomain(d)}, or the name cannot be turned into an address.`,
+  otherPatternVerified: (d: string) => `Built from the pattern of another address on this domain (${safeDomain(d)}) and Hunter verified it.`,
+  otherPatternGuess: (d: string) => `Built from the pattern of another address on this domain (${safeDomain(d)}), but it could not be verified. It is offered below as a guess.`,
+  otherPatternInvalid: (d: string) => `Built from the pattern of another address on this domain (${safeDomain(d)}), but Hunter says it does not exist.`,
+  noDomain: 'No company domain to search: add the lead\'s website, or type the company\'s email domain.',
   websiteFound: 'Found details for this person on the company website.',
   websiteNone: 'Read the company website but found no details for this person.',
   websiteUnreadable: 'The company website could not be read.',
@@ -73,7 +84,7 @@ export const STEP_DETAILS = {
   paidOff: 'Paid lookups were switched off for this search.',
   needName: 'A first and last name are needed for this step.',
   alreadyFilled: 'Not needed: the details were already found.',
-  noPattern: 'Not run: Hunter did not give a company email pattern.',
+  noPattern: (d: string) => `Not run: no email pattern is known for ${safeDomain(d)}.`,
   timeUp: 'Skipped to keep the lookup quick.',
   limit: 'Skipped: the daily lookup limit for this lead has been reached.',
   failed: 'This step did not work this time.',
@@ -224,17 +235,25 @@ function emailNamePart(value: string): string | null {
  * written in plain letters, or a result that is not a valid address gives null.
  */
 export function buildPatternEmail(pattern: unknown, first: string, last: string, domain: string): string | null {
-  if (typeof pattern !== 'string' || pattern.length === 0 || pattern.length > 40) return null;
   const f = emailNamePart(first);
   const l = emailNamePart(last);
   if (!f || !l) return null;
-  const tokens: Record<string, string> = { first: f, last: l, f: f[0]!, l: l[0]! };
+  const local = patternLocal(pattern, f, l);
+  if (!local) return null;
+  const email = cleanEmail(`${local}@${domain}`);
+  return email && onDomain(email, domain) ? email : null;
+}
+
+/** The local part a pattern gives for already-cleaned name parts; null for an unusable pattern or a missing surname it needs. */
+function patternLocal(pattern: unknown, f: string, l: string | null): string | null {
+  if (typeof pattern !== 'string' || pattern.length === 0 || pattern.length > 40) return null;
+  const tokens: Record<string, string | null> = { first: f, last: l, f: f[0]!, l: l ? l[0]! : null };
   let local = '';
   let usedToken = false;
   for (const m of pattern.matchAll(/\{([a-z]+)\}|([^{}])/g)) {
     if (m[1] !== undefined) {
       const v = tokens[m[1]];
-      if (v === undefined) return null;
+      if (v === undefined || v === null) return null;
       local += v;
       usedToken = true;
     } else if (m[2] !== undefined && /^[._-]$/.test(m[2])) {
@@ -244,8 +263,92 @@ export function buildPatternEmail(pattern: unknown, first: string, last: string,
     }
   }
   if (!usedToken || pattern.replace(/\{[a-z]+\}|[._-]/g, '') !== '') return null;
-  const email = cleanEmail(`${local}@${domain}`);
-  return email && onDomain(email, domain) ? email : null;
+  return local;
+}
+
+/** Patterns tried when learning a company's pattern from someone else's address. */
+const KNOWN_PATTERNS = [
+  '{first}', '{last}', '{first}.{last}', '{first}{last}', '{f}{last}', '{f}.{last}', '{first}_{last}', '{first}-{last}',
+  '{last}.{first}', '{last}{first}', '{first}{l}', '{first}.{l}', '{last}{f}', '{last}.{f}', '{l}{first}',
+];
+
+/**
+ * Learns a company's email pattern from one known address and its owner's name (for example david@x.com owned by
+ * David gives `{first}`). Only a single, unambiguous match counts: when no pattern or two different patterns produce
+ * the address, null. Patterns that need a surname are skipped when the owner's surname is unknown.
+ */
+export function inferPattern(address: string, first: string | null | undefined, last: string | null | undefined): string | null {
+  const email = cleanEmail(address);
+  const f = emailNamePart(first ?? '');
+  if (!email || !f || f.length < 2) return null;
+  const l = emailNamePart(last ?? '') || null;
+  const local = email.slice(0, email.indexOf('@'));
+  const hits = KNOWN_PATTERNS.filter((p) => patternLocal(p, f, l) === local);
+  return hits.length === 1 ? hits[0]! : null;
+}
+
+/** Free-mail and shared mailbox providers: an address there says nothing about the company's own domain. */
+export const FREE_MAIL_DOMAINS = [
+  'gmail.com', 'googlemail.com', 'outlook.com', 'live.com', 'msn.com', 'icloud.com', 'me.com', 'mac.com', 'aol.com',
+  'proton.me', 'protonmail.com', 'pm.me', 'btinternet.com', 'btopenworld.com', 'sky.com', 'talktalk.net',
+  'virginmedia.com', 'ntlworld.com', 'blueyonder.co.uk', 'tiscali.co.uk', 'gmx.com', 'gmx.co.uk', 'mail.com', 'zoho.com',
+  'yandex.com', 'fastmail.com', 'tutanota.com', 'hey.com',
+];
+/** Providers that use many country endings (hotmail.co.uk, yahoo.fr and so on). */
+const FREE_MAIL_FAMILIES = ['hotmail', 'yahoo', 'ymail', 'outlook', 'live', 'aol', 'gmx', 'msn', 'windowslive'];
+
+/** True when a domain belongs to a free-mail or shared mailbox provider (including subdomains and country endings). */
+export function isFreeMailDomain(domain: string | null | undefined): boolean {
+  const d = (domain ?? '').trim().toLowerCase();
+  if (!d) return false;
+  if (FREE_MAIL_DOMAINS.some((x) => d === x || d.endsWith(`.${x}`))) return true;
+  const first = d.split('.')[0] ?? '';
+  return FREE_MAIL_FAMILIES.includes(first) && /^[a-z]+(\.[a-z]{2,3}){1,2}$/.test(d);
+}
+
+/** The domain part of an email address, lowercased, or null. */
+export function emailDomain(email: string | null | undefined): string | null {
+  const e = cleanEmail(email);
+  return e ? e.slice(e.indexOf('@') + 1) : null;
+}
+
+/**
+ * A company domain typed by the user: scheme, path, query, `www.` and a leading `@` are removed and it is lowercased.
+ * Refused (null): IP addresses, ports, credentials or any other `@`, odd characters, no dot, a non-letter ending.
+ */
+export function cleanCompanyDomain(input: unknown): string | null {
+  if (typeof input !== 'string') return null;
+  let s = input.trim().toLowerCase();
+  if (!s || s.length > 253) return null;
+  s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//, '').replace(/^@/, '');
+  s = s.split(/[/?#]/)[0] ?? '';
+  if (s.includes('@') || s.includes(':') || s.includes('[')) return null;
+  s = s.replace(/^www\./, '').replace(/\.+$/, '');
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(s)) return null;
+  if (!/\.[a-z]{2,}$/.test(s)) return null; // rejects IPv4 literals and numeric endings
+  return s;
+}
+
+/**
+ * The domains to search for a person, in order and without repeats, at most `max`: a typed company domain first, then
+ * the lead's website domain, then the domains of other known addresses. Free-mail providers and anything `usable`
+ * refuses (internal hosts, social or directory sites) are left out.
+ */
+export function candidateDomains(
+  input: { typed?: string | null; website?: string | null; emails?: (string | null | undefined)[] },
+  usable: (domain: string) => boolean,
+  max = 3,
+): string[] {
+  const out: string[] = [];
+  const add = (d: string | null | undefined) => {
+    const v = (d ?? '').trim().toLowerCase();
+    if (!v || out.length >= max || out.includes(v) || isFreeMailDomain(v) || !usable(v)) return;
+    out.push(v);
+  };
+  add(input.typed);
+  add(input.website);
+  for (const e of input.emails ?? []) add(emailDomain(e));
+  return out;
 }
 
 /** How a Hunter email-verifier status is treated. */
@@ -290,17 +393,17 @@ const PLAIN_EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+/gi;
 const LINKEDIN_RE = /(?:https?:)?\/\/(?:[a-z]{2,3}\.|www\.)?linkedin\.com\/in\/[A-Za-z0-9_%-]{3,100}/gi;
 
 /** Same-domain, non-generic addresses in a stretch of HTML (mailto links, query strings dropped, and plain text). */
-function emailsIn(html: string, domain: string): string[] {
+function emailsIn(html: string, domains: string[]): string[] {
   const out = new Set<string>();
   for (const m of html.matchAll(MAILTO_RE)) {
     let target = m[1]!.split('?')[0]!;
     try { target = decodeURIComponent(target); } catch { continue; }
     const e = cleanEmail(target);
-    if (e && onDomain(e, domain) && !isGenericMailbox(e)) out.add(e);
+    if (e && onAnyDomain(e, domains) && !isGenericMailbox(e)) out.add(e);
   }
   for (const m of html.matchAll(PLAIN_EMAIL_RE)) {
     const e = cleanEmail(m[0]);
-    if (e && onDomain(e, domain) && !isGenericMailbox(e)) out.add(e);
+    if (e && onAnyDomain(e, domains) && !isGenericMailbox(e)) out.add(e);
   }
   return [...out];
 }
@@ -312,6 +415,16 @@ function linkedinsIn(html: string): string[] {
     if (v) out.add(v);
   }
   return [...out];
+}
+
+/** One or more domains as a clean lowercase list. */
+function domainList(domain: string | string[]): string[] {
+  return (Array.isArray(domain) ? domain : [domain]).map((x) => x.trim().toLowerCase()).filter(Boolean);
+}
+
+/** True when an email sits exactly on one of the given domains. */
+export function onAnyDomain(email: string, domains: string[]): boolean {
+  return domains.some((x) => onDomain(email, x));
 }
 
 function escapeRegex(s: string): string {
@@ -327,9 +440,9 @@ export interface WebsiteFindings { emails: string[]; linkedin_urls: string[] }
  * Obfuscated addresses ("name [at] domain") are ignored, other domains' addresses are ignored, and shared
  * mailboxes such as info@ are never taken. The page is data only; nothing in it is followed or obeyed.
  */
-export function extractWebsiteFindings(html: string, domain: string, first: string, last: string): WebsiteFindings {
-  const d = domain.trim().toLowerCase();
-  if (!d || typeof html !== 'string' || !first.trim() || !last.trim()) return { emails: [], linkedin_urls: [] };
+export function extractWebsiteFindings(html: string, domain: string | string[], first: string, last: string): WebsiteFindings {
+  const d = domainList(domain);
+  if (d.length === 0 || typeof html !== 'string' || !first.trim() || !last.trim()) return { emails: [], linkedin_urls: [] };
   const named = emailsIn(html, d).filter((e) => localPartNamesPerson(e, first, last));
   const nearEmails = new Set<string>();
   const nearLinks = new Set<string>();
@@ -397,7 +510,7 @@ export function pickPersonPages(homeUrl: string, hrefs: string[], max = 5): stri
  * its profile path also appears in the prose. Anything else in the answer is ignored.
  */
 export function parseWebFindings(
-  text: unknown, domain: string, first: string, last: string,
+  text: unknown, domain: string | string[], first: string, last: string,
 ): { email: string | null; linkedin_url: string | null } {
   const none = { email: null, linkedin_url: null };
   if (typeof text !== 'string' || text.length > 20_000) return none;
@@ -409,9 +522,9 @@ export function parseWebFindings(
   if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return none;
   const o = obj as Record<string, unknown>;
   const prose = `${text.slice(0, open)} ${text.slice(close + 1)}`.toLowerCase();
-  const d = domain.trim().toLowerCase();
+  const d = domainList(domain);
   let email = cleanEmail(o.email);
-  if (email && !(onDomain(email, d) && !isGenericMailbox(email) && localPartNamesPerson(email, first, last) && prose.includes(email))) {
+  if (email && !(onAnyDomain(email, d) && !isGenericMailbox(email) && localPartNamesPerson(email, first, last) && prose.includes(email))) {
     email = null;
   }
   let linkedin = cleanLinkedinProfile(o.linkedin_url);

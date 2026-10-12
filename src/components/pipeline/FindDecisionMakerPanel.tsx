@@ -32,6 +32,7 @@ export function FindDecisionMakerPanel({ leadId, lookingUp, onLookup, onSearched
   const [title, setTitle] = useState('');
   const [email, setEmail] = useState('');
   const [linkedin, setLinkedin] = useState('');
+  const [companyDomain, setCompanyDomain] = useState('');
   const [usePaid, setUsePaid] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -55,7 +56,7 @@ export function FindDecisionMakerPanel({ leadId, lookingUp, onLookup, onSearched
       setNote(`Search finished. ${found[leadId]?.length ?? 0} people found for this lead.${warning ? ` ${warning}` : ''}`);
       return;
     }
-    const built = buildFromFullName(fullName, { title, email, linkedin_url: linkedin }, usePaid, override);
+    const built = buildFromFullName(fullName, { title, email, linkedin_url: linkedin, company_domain: companyDomain }, usePaid, override);
     if (!built.ok) { setError(built.error); return; }
     setWorking(true);
     const failure = await onLookup(built.value);
@@ -90,11 +91,12 @@ export function FindDecisionMakerPanel({ leadId, lookingUp, onLookup, onSearched
           <Input label="Position (optional)" value={title} onChange={(e) => setTitle(e.target.value)} autoComplete="off" />
           <Input label="Email (optional)" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" />
           <Input label="LinkedIn URL (optional)" value={linkedin} onChange={(e) => setLinkedin(e.target.value)} placeholder="https://" autoComplete="off" />
+          <Input label="Company website or email domain (if different)" value={companyDomain} onChange={(e) => setCompanyDomain(e.target.value)} placeholder="loveliving.uk" autoComplete="off" />
           <label className="flex items-center gap-2 text-sm text-offwhite">
             <input type="checkbox" checked={usePaid} onChange={(e) => setUsePaid(e.target.checked)} className="h-4 w-4 accent-violet-500" />
             Use paid lookups (Hunter / Apollo)
           </label>
-          <p className="text-xs text-muted">May use one Hunter and one Apollo credit.</p>
+          <p className="text-xs text-muted">May use several Hunter credits (up to three company domains) and one Apollo credit.</p>
         </div>
       )}
       {shownError && <p role="alert" className="text-sm text-danger">{shownError}</p>}

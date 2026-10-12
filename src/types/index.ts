@@ -123,6 +123,8 @@ export interface KnownPersonInput {
   linkedin_url?: string;
   /** Only sent when false; the server default is to use Hunter and Apollo. */
   use_paid_lookups?: boolean;
+  /** The company's website or email domain when it differs from the lead's website (bare hostname). */
+  company_domain?: string;
 }
 
 /** Who supplied a value on a known-person lookup. */

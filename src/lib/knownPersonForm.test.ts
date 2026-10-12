@@ -201,3 +201,21 @@ describe('suggestions', () => {
     expect(planSuggestionUse(undefined, email).ok).toBe(false);
   });
 });
+
+describe('company domain and You labels', () => {
+  it('cleans an optional company domain and rejects a bad one', () => {
+    const text = { ...blank, first_name: 'Max', last_name: 'Whatley' };
+    expect(buildKnownPersonPayload({ ...text, company_domain: 'https://www.LoveLiving.uk/team' }, true))
+      .toEqual({ ok: true, value: { first_name: 'Max', last_name: 'Whatley', company_domain: 'loveliving.uk' } });
+    expect(buildKnownPersonPayload({ ...text, company_domain: '  ' }, true)).toEqual({ ok: true, value: { first_name: 'Max', last_name: 'Whatley' } });
+    expect(buildKnownPersonPayload({ ...text, company_domain: '10.0.0.1' }, true).ok).toBe(false);
+  });
+
+  it('labels a value the saved contact already held as You, not Search', () => {
+    const typed = { first_name: 'David', last_name: 'Love' };
+    const s = summariseKnownPerson(base, typed, { title: null, email: 'david@loveliving.uk', phone: null, linkedin_url: null });
+    expect(s.lines).toEqual([{ label: 'Email', value: 'david@loveliving.uk', source: 'You' }]);
+    const typedEmail = summariseKnownPerson(base, { ...typed, email: 'david@loveliving.uk' }, { title: null, email: 'David@LoveLiving.uk', phone: null, linkedin_url: null });
+    expect(typedEmail.lines[0]!.source).toBe('You');
+  });
+});

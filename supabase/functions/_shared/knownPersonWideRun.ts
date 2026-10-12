@@ -3,7 +3,7 @@
 // equally pure knownPerson.ts / knownPersonWide.ts and runs in both Deno and Vitest.
 import { emailOnDomain, plainLookupError, type FoundFields, type LookupFailure } from './knownPerson.ts';
 import {
-  STEP_DETAILS, SUGGESTION_LABELS, buildPatternEmail, matchHunterPerson, stepResult,
+  STEP_DETAILS, SUGGESTION_LABELS, buildPatternEmail, emailDomain, inferPattern, matchHunterPerson, onAnyDomain, stepResult,
   type StepId, type StepResult, type Suggestion, type VerifierClass,
 } from './knownPersonWide.ts';
 
@@ -17,12 +17,16 @@ export interface WideLookupDeps {
   hunterFind: (domain: string, first: string, last: string, timeoutMs: number) => Promise<Lookup>;
   hunterDomain: (domain: string, timeoutMs: number) => Promise<{ ok: true; emails: unknown[]; pattern: string | null } | { ok: false; failure: LookupFailure }>;
   hunterVerify: (email: string, timeoutMs: number) => Promise<{ ok: true; verdict: VerifierClass } | { ok: false; failure: LookupFailure }>;
-  scanWebsite: (website: string, domain: string, first: string, last: string, budgetMs: number) => Promise<{ ok: true; email: string | null; linkedin_url: string | null } | { ok: false }>;
+  /** Reads the lead's website; an email is acceptable on any of `domains`. */
+  scanWebsite: (website: string, domains: string[], first: string, last: string, budgetMs: number) => Promise<{ ok: true; email: string | null; linkedin_url: string | null } | { ok: false }>;
   webSearch: (timeoutMs: number) => Promise<Lookup>;
   apolloMatch: (domain: string, first: string, last: string, timeoutMs: number) => Promise<Lookup>;
   /** Fills blank fields of the saved person with what a step found and returns what was actually filled. */
   absorb: (found: FoundFields, step: StepId) => FoundFields;
 }
+
+/** Another contact's address with its owner's name, used to learn a domain's email pattern. */
+export interface KnownAddress { email: string; first: string | null; last: string | null }
 
 /** What is known before the run starts. */
 export interface WideLookupInput {
@@ -30,11 +34,14 @@ export interface WideLookupInput {
   last: string;
   have: { email: string | null; linkedin_url: string | null; phone: string | null };
   hasApolloId: boolean;
-  /** The lead's public domain, or null when it has none. */
-  domain: string | null;
-  /** True when the domain is a social network or directory page. */
-  directory: boolean;
+  /** The company domains to search, in order (see candidateDomains), at most 3. */
+  domains: string[];
+  /** The lead's own website when it is a usable company site, else null. */
   website: string | null;
+  /** True when the lead's website is a social network or directory page. */
+  websiteDirectory: boolean;
+  /** Other contacts' addresses, for learning a domain's pattern when Hunter has none. */
+  knownAddresses?: KnownAddress[];
   usePaid: boolean;
   keys: { hunter: boolean; apollo: boolean; gemini: boolean };
   /** Whole-run wall-time budget. */
@@ -51,23 +58,38 @@ export interface WideLookupOutcome {
 }
 
 export const WIDE_BUDGET_MS = 20_000;
-const MIN_START_MS = { hunter: 1_500, website: 3_000, web: 4_000, apollo: 2_000 };
+const MAX_DOMAINS = 3;
+const MIN_START_MS: Record<StepId, number> = {
+  hunter_finder: 1_500, hunter_domain: 1_500, pattern: 1_500, website: 3_000, web: 4_000, apollo: 2_000,
+};
+
+/** The single pattern other contacts' addresses on `domain` agree on, or null. */
+export function patternFromAddresses(addresses: KnownAddress[], domain: string): string | null {
+  const found = new Set<string>();
+  for (const a of addresses) {
+    if (emailDomain(a.email) !== domain) continue;
+    const p = inferPattern(a.email, a.first, a.last);
+    if (p) found.add(p);
+  }
+  return found.size === 1 ? [...found][0]! : null;
+}
 
 /**
- * Runs the six steps in order (Hunter finder, Hunter company list, email pattern, the company website, web search,
- * Apollo), cheapest first. Each step only works on blank fields; later steps are skipped once email AND LinkedIn
- * are filled; one rate-limit slot covers the whole run; every step gets its own timeout inside the overall budget.
- * A failing step becomes a step status and never stops the next step. Web-search finds and unverified pattern
- * guesses are never saved: they come back as suggestions.
+ * Runs the steps cheapest first: for each company domain in turn (stopping once the person's email is found)
+ * Hunter finder, Hunter company list and the email pattern (Hunter's, or one learned from another contact's address
+ * on that domain) with Hunter's verifier; then the lead's website, web search and Apollo. Each step only works on
+ * blank fields; later steps are skipped once email AND LinkedIn are filled; one rate-limit slot covers the whole
+ * run; every call gets its own timeout inside the overall budget. A failing step becomes a step status and never
+ * stops the next one. Web-search finds and unverified pattern guesses are never saved: they become suggestions.
  */
 export async function runWideLookup(input: WideLookupInput, deps: WideLookupDeps): Promise<WideLookupOutcome> {
   const budget = input.budgetMs ?? WIDE_BUDGET_MS;
   const start = deps.now();
   const remaining = () => budget - (deps.now() - start);
   const state = { ...input.have };
-  const { first, last, domain } = input;
+  const { first, last } = input;
+  const domains = input.domains.slice(0, MAX_DOMAINS);
   const hasName = first.trim() !== '' && last.trim() !== '';
-  const domainOk = domain !== null && !input.directory;
   const bothDone = () => !!state.email && !!state.linkedin_url;
   const steps: StepResult[] = [];
   const suggestions: Suggestion[] = [];
@@ -81,27 +103,29 @@ export async function runWideLookup(input: WideLookupInput, deps: WideLookupDeps
     return applied;
   };
   const filledAny = (a: FoundFields) => !!(a.email || a.linkedin_url || a.phone);
+  const t = (cap: number) => Math.max(1, Math.min(cap, remaining()));
+  const noDomain = () => stepResult('hunter_finder', 'skipped', input.websiteDirectory ? STEP_DETAILS.directory : STEP_DETAILS.noDomain);
 
   /** Why a step cannot run at all (before any call is made), or null. */
   const blockedBy = (id: StepId): StepResult | null => {
-    const paid = id !== 'website';
-    if (paid && !input.usePaid) return stepResult(id, 'skipped', STEP_DETAILS.paidOff);
+    if (id !== 'website' && !input.usePaid) return stepResult(id, 'skipped', STEP_DETAILS.paidOff);
     if ((id === 'hunter_finder' || id === 'hunter_domain' || id === 'pattern') && !input.keys.hunter) return stepResult(id, 'unavailable', STEP_DETAILS.noKeyHunter);
     if (id === 'web' && !input.keys.gemini) return stepResult(id, 'unavailable', STEP_DETAILS.noKeyGemini);
     if (id === 'apollo' && !input.keys.apollo) return stepResult(id, 'unavailable', STEP_DETAILS.noKeyApollo);
-    if (input.directory) return stepResult(id, 'skipped', STEP_DETAILS.directory);
-    if (!domainOk || (id === 'website' && !input.website)) return stepResult(id, 'skipped', STEP_DETAILS.noWebsite);
+    if (id === 'website') {
+      if (!input.website) return stepResult(id, 'skipped', input.websiteDirectory ? STEP_DETAILS.directory : STEP_DETAILS.noWebsite);
+    } else if (domains.length === 0) {
+      return { ...noDomain(), id, label: stepResult(id, 'skipped', '').label };
+    }
     if (id === 'apollo' ? first.trim() === '' : !hasName) return stepResult(id, 'skipped', STEP_DETAILS.needName);
     if (id === 'apollo' && input.hasApolloId) return stepResult(id, 'skipped', STEP_DETAILS.alreadyFilled);
     return null;
   };
-  const notNeeded = (id: StepId): boolean => {
-    if (id === 'hunter_finder' || id === 'pattern') return !!state.email;
-    return bothDone();
-  };
+  const notNeeded = (id: StepId): boolean => (id === 'hunter_finder' || id === 'pattern' ? !!state.email : bothDone());
 
-  const order: StepId[] = ['hunter_finder', 'hunter_domain', 'pattern', 'website', 'web', 'apollo'];
-  const wouldRun = order.some((id) => !blockedBy(id) && !notNeeded(id));
+  const hunterIds: StepId[] = ['hunter_finder', 'hunter_domain', 'pattern'];
+  const laterIds: StepId[] = ['website', 'web', 'apollo'];
+  const wouldRun = [...hunterIds, ...laterIds].some((id) => !blockedBy(id) && !notNeeded(id));
   let limitReached = false;
   if (wouldRun) {
     let allowed = false;
@@ -109,102 +133,108 @@ export async function runWideLookup(input: WideLookupInput, deps: WideLookupDeps
     limitReached = !allowed;
   }
 
-  let pattern: string | null = null;
-  let domainListRan = false;
-  for (const id of order) {
-    const blocked = blockedBy(id);
-    if (blocked) { steps.push(blocked); continue; }
-    if (notNeeded(id)) { steps.push(stepResult(id, 'skipped', STEP_DETAILS.alreadyFilled)); continue; }
-    if (limitReached) { steps.push(stepResult(id, 'skipped', STEP_DETAILS.limit)); continue; }
-    if (id === 'pattern' && !domainListRan) { steps.push(stepResult(id, 'skipped', STEP_DETAILS.noPattern)); continue; }
-    const minStart = id === 'website' ? MIN_START_MS.website : id === 'web' ? MIN_START_MS.web : id === 'apollo' ? MIN_START_MS.apollo : MIN_START_MS.hunter;
-    if (remaining() < minStart) { steps.push(stepResult(id, 'skipped', STEP_DETAILS.timeUp)); continue; }
-    try {
-      steps.push(await runStep(id));
-    } catch {
-      steps.push(stepResult(id, 'error', STEP_DETAILS.failed));
+  /** Runs one step with the shared skip rules; `run` does the work. */
+  const attempt = async (id: StepId, domain: string | undefined, run: () => Promise<StepResult>) => {
+    if (notNeeded(id)) { steps.push(stepResult(id, 'skipped', STEP_DETAILS.alreadyFilled, domain)); return; }
+    if (limitReached) { steps.push(stepResult(id, 'skipped', STEP_DETAILS.limit, domain)); return; }
+    if (remaining() < MIN_START_MS[id]) { steps.push(stepResult(id, 'skipped', STEP_DETAILS.timeUp, domain)); return; }
+    try { steps.push(await run()); } catch { steps.push(stepResult(id, 'error', STEP_DETAILS.failed, domain)); }
+  };
+
+  // (1-3) Hunter, once per company domain
+  const hunterBlocked = blockedBy('hunter_finder');
+  if (hunterBlocked) {
+    for (const id of hunterIds) steps.push({ ...hunterBlocked, id, label: stepResult(id, 'skipped', '').label });
+  } else {
+    for (const [i, d] of domains.entries()) {
+      if (i > 0 && state.email) break; // the person's email is found: stop searching more domains
+      let listPattern: string | null = null;
+      let listRan = false;
+      await attempt('hunter_finder', d, async () => {
+        hunterCalled = true;
+        const res = await deps.hunterFind(d, first, last, t(5_000));
+        if (!res.ok) return stepResult('hunter_finder', 'error', plainLookupError('hunter', res.failure), d);
+        const email = res.found.email && emailOnDomain(res.found.email, d) ? res.found.email : undefined;
+        return filledAny(absorb(email ? { email } : {}, 'hunter_finder'))
+          ? stepResult('hunter_finder', 'found', STEP_DETAILS.hunterFinderFound(d), d)
+          : stepResult('hunter_finder', 'no_match', STEP_DETAILS.hunterFinderNone(d), d);
+      });
+      await attempt('hunter_domain', d, async () => {
+        hunterCalled = true;
+        const res = await deps.hunterDomain(d, t(5_000));
+        if (!res.ok) return stepResult('hunter_domain', 'error', plainLookupError('hunter', res.failure), d);
+        listRan = true;
+        listPattern = res.pattern;
+        const match = matchHunterPerson(res.emails, first, last);
+        if (match.status === 'ambiguous') return stepResult('hunter_domain', 'no_match', STEP_DETAILS.domainAmbiguous(last, d), d);
+        if (match.status === 'none' || !emailOnDomain(match.email, d)) return stepResult('hunter_domain', 'no_match', STEP_DETAILS.domainNone(last, d), d);
+        const found: FoundFields = { email: match.email };
+        if (match.linkedin_url) found.linkedin_url = match.linkedin_url;
+        return filledAny(absorb(found, 'hunter_domain'))
+          ? stepResult('hunter_domain', 'found', STEP_DETAILS.domainFound(last, d), d)
+          : stepResult('hunter_domain', 'no_match', STEP_DETAILS.domainNothingNew(last, d), d);
+      });
+      const learned = listPattern ? null : patternFromAddresses(input.knownAddresses ?? [], d);
+      const pattern = listPattern ?? learned;
+      if (!pattern && !listRan && !state.email) { steps.push(stepResult('pattern', 'skipped', STEP_DETAILS.noPattern(d), d)); continue; }
+      await attempt('pattern', d, async () => {
+        const guess = pattern ? buildPatternEmail(pattern, first, last, d) : null;
+        if (!guess) return stepResult('pattern', 'no_match', STEP_DETAILS.patternNone(d), d);
+        const other = !listPattern;
+        hunterCalled = true;
+        const v = await deps.hunterVerify(guess, t(5_000));
+        if (v.ok && v.verdict === 'invalid') {
+          return stepResult('pattern', 'no_match', other ? STEP_DETAILS.otherPatternInvalid(d) : STEP_DETAILS.patternInvalid(d), d);
+        }
+        if (v.ok && v.verdict === 'verified') {
+          return absorb({ email: guess }, 'pattern').email
+            ? stepResult('pattern', 'found', other ? STEP_DETAILS.otherPatternVerified(d) : STEP_DETAILS.patternVerified(d), d)
+            : stepResult('pattern', 'no_match', STEP_DETAILS.patternNothingNew(d), d);
+        }
+        suggestions.push({ field: 'email', value: guess, label: SUGGESTION_LABELS.guess });
+        return stepResult('pattern', 'found', other ? STEP_DETAILS.otherPatternGuess(d) : STEP_DETAILS.patternGuess(d), d);
+      });
     }
   }
 
-  async function runStep(id: StepId): Promise<StepResult> {
-    const d = domain as string;
-    const t = (cap: number) => Math.max(1, Math.min(cap, remaining()));
-    switch (id) {
-      case 'hunter_finder': {
-        hunterCalled = true;
-        const res = await deps.hunterFind(d, first, last, t(5_000));
-        if (!res.ok) return stepResult(id, 'error', plainLookupError('hunter', res.failure));
-        const email = res.found.email && emailOnDomain(res.found.email, d) ? res.found.email : undefined;
-        return filledAny(absorb(email ? { email } : {}, id))
-          ? stepResult(id, 'found', STEP_DETAILS.hunterFinderFound)
-          : stepResult(id, 'no_match', STEP_DETAILS.hunterFinderNone);
-      }
-      case 'hunter_domain': {
-        hunterCalled = true;
-        const res = await deps.hunterDomain(d, t(5_000));
-        if (!res.ok) return stepResult(id, 'error', plainLookupError('hunter', res.failure));
-        domainListRan = true;
-        pattern = res.pattern;
-        const match = matchHunterPerson(res.emails, first, last);
-        if (match.status === 'ambiguous') return stepResult(id, 'no_match', STEP_DETAILS.domainAmbiguous(last));
-        if (match.status === 'none' || !emailOnDomain(match.email, d)) return stepResult(id, 'no_match', STEP_DETAILS.domainNone(last));
-        const found: FoundFields = { email: match.email };
-        if (match.linkedin_url) found.linkedin_url = match.linkedin_url;
-        return filledAny(absorb(found, id))
-          ? stepResult(id, 'found', STEP_DETAILS.domainFound(last))
-          : stepResult(id, 'no_match', STEP_DETAILS.domainNothingNew(last));
-      }
-      case 'pattern': {
-        const guess = pattern ? buildPatternEmail(pattern, first, last, d) : null;
-        if (!guess) return stepResult(id, 'no_match', STEP_DETAILS.patternNone);
-        hunterCalled = true;
-        const v = await deps.hunterVerify(guess, t(5_000));
-        if (v.ok && v.verdict === 'invalid') return stepResult(id, 'no_match', STEP_DETAILS.patternInvalid);
-        if (v.ok && v.verdict === 'verified') {
-          return absorb({ email: guess }, id).email
-            ? stepResult(id, 'found', STEP_DETAILS.patternVerified)
-            : stepResult(id, 'no_match', STEP_DETAILS.patternNothingNew);
-        }
-        suggestions.push({ field: 'email', value: guess, label: SUGGESTION_LABELS.guess });
-        return stepResult(id, 'found', STEP_DETAILS.patternGuess);
-      }
-      case 'website': {
-        const res = await deps.scanWebsite(input.website as string, d, first, last, t(8_000));
-        if (!res.ok) return stepResult(id, 'error', STEP_DETAILS.websiteUnreadable);
-        const found: FoundFields = {};
-        if (res.email && emailOnDomain(res.email, d)) found.email = res.email;
-        if (res.linkedin_url) found.linkedin_url = res.linkedin_url;
-        return filledAny(absorb(found, id))
-          ? stepResult(id, 'found', STEP_DETAILS.websiteFound)
-          : stepResult(id, 'no_match', STEP_DETAILS.websiteNone);
-      }
-      case 'web': {
-        const res = await deps.webSearch(t(10_000));
-        if (!res.ok) return stepResult(id, 'error', STEP_DETAILS.webFailed);
-        let any = false;
-        if (res.found.email && !state.email && emailOnDomain(res.found.email, d)) {
-          suggestions.push({ field: 'email', value: res.found.email, label: SUGGESTION_LABELS.web });
-          any = true;
-        }
-        if (res.found.linkedin_url && !state.linkedin_url) {
-          suggestions.push({ field: 'linkedin_url', value: res.found.linkedin_url, label: SUGGESTION_LABELS.web });
-          any = true;
-        }
-        return any ? stepResult(id, 'found', STEP_DETAILS.webFound) : stepResult(id, 'no_match', STEP_DETAILS.webNone);
-      }
-      case 'apollo': {
-        apolloCalled = true;
-        const res = await deps.apolloMatch(d, first, last, t(8_000));
-        if (!res.ok) {
-          if (res.failure === 401) return stepResult(id, 'unavailable', STEP_DETAILS.apolloKeyRejected);
-          if (res.failure === 402 || res.failure === 403) return stepResult(id, 'unavailable', STEP_DETAILS.apolloUnavailable);
-          return stepResult(id, 'error', plainLookupError('apollo', res.failure));
-        }
-        return filledAny(absorb(res.found, id))
-          ? stepResult(id, 'found', STEP_DETAILS.apolloFound)
-          : stepResult(id, 'no_match', STEP_DETAILS.apolloNone);
-      }
+  // (4-6) the lead's website, web search, Apollo
+  for (const id of laterIds) {
+    const blocked = blockedBy(id);
+    if (blocked) { steps.push(blocked); continue; }
+    await attempt(id, undefined, () => runLater(id));
+  }
+
+  async function runLater(id: StepId): Promise<StepResult> {
+    if (id === 'website') {
+      const res = await deps.scanWebsite(input.website as string, domains, first, last, t(8_000));
+      if (!res.ok) return stepResult(id, 'error', STEP_DETAILS.websiteUnreadable);
+      const found: FoundFields = {};
+      if (res.email && onAnyDomain(res.email, domains)) found.email = res.email;
+      if (res.linkedin_url) found.linkedin_url = res.linkedin_url;
+      return filledAny(absorb(found, id)) ? stepResult(id, 'found', STEP_DETAILS.websiteFound) : stepResult(id, 'no_match', STEP_DETAILS.websiteNone);
     }
+    if (id === 'web') {
+      const res = await deps.webSearch(t(10_000));
+      if (!res.ok) return stepResult(id, 'error', STEP_DETAILS.webFailed);
+      let any = false;
+      if (res.found.email && !state.email && onAnyDomain(res.found.email, domains)) {
+        suggestions.push({ field: 'email', value: res.found.email, label: SUGGESTION_LABELS.web });
+        any = true;
+      }
+      if (res.found.linkedin_url && !state.linkedin_url) {
+        suggestions.push({ field: 'linkedin_url', value: res.found.linkedin_url, label: SUGGESTION_LABELS.web });
+        any = true;
+      }
+      return any ? stepResult(id, 'found', STEP_DETAILS.webFound) : stepResult(id, 'no_match', STEP_DETAILS.webNone);
+    }
+    apolloCalled = true;
+    const res = await deps.apolloMatch(domains[0]!, first, last, t(8_000));
+    if (!res.ok) {
+      if (res.failure === 401) return stepResult(id, 'unavailable', STEP_DETAILS.apolloKeyRejected);
+      if (res.failure === 402 || res.failure === 403) return stepResult(id, 'unavailable', STEP_DETAILS.apolloUnavailable);
+      return stepResult(id, 'error', plainLookupError('apollo', res.failure));
+    }
+    return filledAny(absorb(res.found, id)) ? stepResult(id, 'found', STEP_DETAILS.apolloFound) : stepResult(id, 'no_match', STEP_DETAILS.apolloNone);
   }
 
   // Suggestions only for fields that are still blank, one per value.

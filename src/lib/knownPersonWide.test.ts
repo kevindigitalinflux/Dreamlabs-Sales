@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   STEP_DETAILS,
   buildPatternEmail,
+  candidateDomains,
+  cleanCompanyDomain,
+  inferPattern,
+  isFreeMailDomain,
   classifyVerifierStatus,
   cleanEmail,
   cleanLinkedinProfile,
@@ -227,11 +231,73 @@ describe('parseWebFindings', () => {
 
 describe('step records', () => {
   it('uses fixed labels and only safe name text in details', () => {
-    expect(stepResult('hunter_domain', 'no_match', STEP_DETAILS.domainNone('Sipple'))).toEqual({
-      id: 'hunter_domain', label: 'Hunter company list', status: 'no_match',
-      detail: 'Hunter searched the domain and found no one called Sipple.',
+    expect(stepResult('hunter_domain', 'no_match', STEP_DETAILS.domainNone('Sipple', 'loveliving.uk'), 'loveliving.uk')).toEqual({
+      id: 'hunter_domain', label: 'Hunter company list (loveliving.uk)', status: 'no_match', domain: 'loveliving.uk',
+      detail: 'Hunter searched loveliving.uk and found no one called Sipple.',
     });
+    expect(stepResult('web', 'found', 'd').label).toBe('Web search');
     expect(displayName('<script>x</script>')).toBe('scriptxscript');
     expect(displayName('')).toBe('this person');
+  });
+});
+
+describe('company domains', () => {
+  it('cleans a typed company domain', () => {
+    expect(cleanCompanyDomain('https://www.LoveLiving.uk/about?x=1')).toBe('loveliving.uk');
+    expect(cleanCompanyDomain(' @loveliving.uk ')).toBe('loveliving.uk');
+    expect(cleanCompanyDomain('loveliving.co.uk.')).toBe('loveliving.co.uk');
+  });
+
+  it('refuses IPs, ports, credentials, emails and junk', () => {
+    for (const bad of ['10.0.0.1', 'http://127.0.0.1/', 'loveliving.uk:8080', 'user:pass@loveliving.uk', 'david@loveliving.uk',
+      '[::1]', 'localhost', 'love living.uk', '', 42, 'x.123']) {
+      expect(cleanCompanyDomain(bad)).toBeNull();
+    }
+  });
+
+  it('recognises free-mail providers, including country endings', () => {
+    for (const d of ['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.co.uk', 'hotmail.fr', 'yahoo.co.uk', 'live.com',
+      'icloud.com', 'proton.me', 'protonmail.com', 'aol.com', 'msn.com', 'btinternet.com', 'sky.com', 'me.com']) {
+      expect(isFreeMailDomain(d)).toBe(true);
+    }
+    for (const d of ['loveliving.uk', 'liveworks.co.uk', 'skyscanner.net', 'hok.com']) expect(isFreeMailDomain(d)).toBe(false);
+  });
+
+  it('orders typed, website, then other addresses; drops free mail, refused and repeated domains; max 3', () => {
+    const usable = (d: string) => d !== 'facebook.com';
+    expect(candidateDomains({
+      typed: 'hok.com', website: 'lovelivingmanagement.com',
+      emails: ['david@loveliving.uk', 'x@gmail.com', 'y@LoveLiving.uk', null, 'z@facebook.com', 'w@fourth.com'],
+    }, usable)).toEqual(['hok.com', 'lovelivingmanagement.com', 'loveliving.uk']);
+    expect(candidateDomains({ website: null, emails: ['a@hotmail.co.uk'] }, usable)).toEqual([]);
+  });
+});
+
+describe('inferPattern', () => {
+  it('learns a pattern from one address when exactly one pattern fits', () => {
+    expect(inferPattern('david@loveliving.uk', 'David', null)).toBe('{first}');
+    expect(inferPattern('john.sipple@x.com', 'John', 'Sipple')).toBe('{first}.{last}');
+    expect(inferPattern('jsipple@x.com', 'John', 'Sipple')).toBe('{f}{last}');
+    expect(inferPattern('sipple.j@x.com', 'John', 'Sipple')).toBe('{last}.{f}');
+  });
+  it('refuses unknown or ambiguous shapes and missing names', () => {
+    expect(inferPattern('boss@x.com', 'John', 'Sipple')).toBeNull();
+    expect(inferPattern('dsmith@x.com', 'David', null)).toBeNull();
+    expect(inferPattern('aa@x.com', 'A', 'A')).toBeNull();
+    expect(inferPattern('david@x.com', null, null)).toBeNull();
+    expect(inferPattern('not an email', 'David', null)).toBeNull();
+  });
+  it('builds the right address for a learned pattern', () => {
+    expect(buildPatternEmail(inferPattern('david@loveliving.uk', 'David', null), 'Max', 'Whatley', 'loveliving.uk')).toBe('max@loveliving.uk');
+  });
+});
+
+describe('several company domains in page and web parsing', () => {
+  it('accepts addresses on any of the company domains only', () => {
+    const html = '<p>Max Whatley</p><a href="mailto:max@loveliving.uk">e</a> max@gmail.com';
+    expect(extractWebsiteFindings(html, ['lovelivingmanagement.com', 'loveliving.uk'], 'Max', 'Whatley').emails).toEqual(['max@loveliving.uk']);
+    const text = 'Max is at max.whatley@loveliving.uk. {"email":"max.whatley@loveliving.uk"}';
+    expect(parseWebFindings(text, ['lovelivingmanagement.com', 'loveliving.uk'], 'Max', 'Whatley').email).toBe('max.whatley@loveliving.uk');
+    expect(parseWebFindings(text, ['lovelivingmanagement.com'], 'Max', 'Whatley').email).toBeNull();
   });
 });

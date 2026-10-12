@@ -19,7 +19,7 @@ interface ContactFormProps {
    * When given (people only), an "Also search for more details" box shows, on by default.
    * With it ticked, saving calls this instead of `onSubmit` (the server saves the person and fills gaps).
    */
-  onSubmitWithSearch?: (form: ContactFormValues) => Promise<ContactResult>;
+  onSubmitWithSearch?: (form: ContactFormValues, companyDomain: string) => Promise<ContactResult>;
 }
 
 /**
@@ -31,6 +31,7 @@ export function ContactForm({ initial, submitLabel, onSubmit, onCancel, storedLi
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState(true);
+  const [companyDomain, setCompanyDomain] = useState('');
   const isPerson = form.kind === 'person';
   const searching = isPerson && !!onSubmitWithSearch && search;
   const set = (key: keyof ContactFormValues) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }));
@@ -40,7 +41,7 @@ export function ContactForm({ initial, submitLabel, onSubmit, onCancel, storedLi
     const check = validateContactForm(form, storedLinkedin);
     if (!check.ok) { setError(check.error); return; }
     setBusy(true);
-    const result = await (searching && onSubmitWithSearch ? onSubmitWithSearch(form) : onSubmit(form));
+    const result = await (searching && onSubmitWithSearch ? onSubmitWithSearch(form, companyDomain) : onSubmit(form));
     setBusy(false);
     if (result.error) setError(result.error); else onCancel();
   }
@@ -64,6 +65,15 @@ export function ContactForm({ initial, submitLabel, onSubmit, onCancel, storedLi
           <input type="checkbox" checked={search} onChange={(e) => setSearch(e.target.checked)} className="h-4 w-4 accent-violet-500" />
           Also search for more details
         </label>
+      )}
+      {searching && (
+        <Input
+          label="Company website or email domain (if different)"
+          value={companyDomain}
+          onChange={(e) => setCompanyDomain(e.target.value)}
+          placeholder="loveliving.uk"
+          autoComplete="off"
+        />
       )}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       <div className="flex gap-2">

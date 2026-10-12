@@ -11,8 +11,8 @@ import {
   apolloMatchPerson, hunterDomainList, hunterFindEmail, hunterVerifyEmail, isPublicDomain, scanWebsiteForPerson,
   webSearchForPerson,
 } from './knownPersonLookup.ts';
-import { runWideLookup } from './knownPersonWideRun.ts';
-import type { StepId, StepResult, Suggestion } from './knownPersonWide.ts';
+import { runWideLookup, type KnownAddress } from './knownPersonWideRun.ts';
+import { candidateDomains, type StepId, type StepResult, type Suggestion } from './knownPersonWide.ts';
 import { checkRateLimit } from './rateLimit.ts';
 
 type Row = Record<string, unknown>;
@@ -59,10 +59,12 @@ const EMAIL_TAKEN = 'That email is already on this lead';
  */
 export async function runKnownPerson(
   client: SupabaseClient, service: SupabaseClient,
-  lead: { id: string; org_id: string; website: string | null; business_name?: string | null },
+  lead: { id: string; org_id: string; website: string | null; business_name?: string | null; email?: string | null },
   typed: ContactEditValue, userId: string,
   keys: { hunterKey: string | null; apolloKey: string | null; geminiKey: string | null },
   usePaid: boolean,
+  /** A company domain the user typed (already cleaned with cleanCompanyDomain); searched first. */
+  companyDomain: string | null = null,
 ): Promise<KnownPersonOutcome> {
   const { data: allData, error: readErr } = await service.from('decision_maker_candidates')
     .select('*').eq('lead_id', lead.id);
@@ -140,6 +142,16 @@ export async function runKnownPerson(
   const domain = domainFromWebsite(lead.website);
   const publicDomain = domain && isPublicDomain(domain) ? domain : null;
   const directory = publicDomain !== null && isDirectoryDomain(publicDomain);
+  // Every domain the company uses: a typed one first, the website's, then those of other addresses on this lead.
+  const others = allRows.filter((r) => r.id !== saved.id && !r.dismissed_at);
+  const domains = candidateDomains({
+    typed: companyDomain,
+    website: publicDomain,
+    emails: [...others.map((r) => str(r.email)), str(lead.email), typed.email, work.email],
+  }, (d) => isPublicDomain(d) && !isDirectoryDomain(d));
+  const knownAddresses: KnownAddress[] = others
+    .filter((r) => r.kind === 'person' && str(r.email))
+    .map((r) => ({ email: str(r.email) as string, first: str(r.first_name), last: str(r.last_name) }));
 
   let extraEmail: string | undefined;
   const pending: { applied: FoundFields; step: StepId }[] = [];
@@ -166,7 +178,7 @@ export async function runKnownPerson(
     first, last,
     have: { email: work.email, linkedin_url: work.linkedin_url, phone: work.phone },
     hasApolloId: !!str(saved.apollo_person_id),
-    domain: publicDomain, directory, website: str(lead.website), usePaid,
+    domains, website: publicDomain && !directory ? str(lead.website) : null, websiteDirectory: directory, knownAddresses, usePaid,
     keys: { hunter: !!hunterKey, apollo: !!apolloKey, gemini: !!geminiKey },
   }, {
     now: () => Date.now(),
@@ -177,7 +189,7 @@ export async function runKnownPerson(
     hunterVerify: (e, t) => hunterVerifyEmail(e, hunterKey ?? '', t),
     scanWebsite: (w, d, f, l, t) => scanWebsiteForPerson(w, d, f, l, t),
     webSearch: (t) => webSearchForPerson({
-      first, last, title: work.title, company: str(lead.business_name), domain: publicDomain ?? '',
+      first, last, title: work.title, company: str(lead.business_name), domains,
     }, geminiKey ?? '', t),
     apolloMatch: (d, f, l, t) => apolloMatchPerson(d, f, l, apolloKey ?? '', t),
     absorb,
@@ -217,6 +229,8 @@ export async function runKnownPerson(
       }
     }
   }
+  // Anything the saved contact holds that no lookup supplied was already there (typed or saved earlier): label it "You".
+  for (const f of ['email', 'phone', 'linkedin_url'] as const) if (str(final[f]) && !sources[f]) sources[f] = 'you';
   if (sequencesTurnedOff) {
     notes.push('The email that was found is not used by follow-up sequences until you switch follow-ups on for this person.');
   }
