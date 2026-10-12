@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { dismissDecisionMaker } from '../lib/dismissDecisionMaker';
 import { useAuth } from './useAuth';
@@ -28,6 +28,9 @@ export function useLeadContacts(leadId: string) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const epoch = useRef(0);
+  // Every mounted copy of this hook (the Contacts card and the composer both use it) needs its OWN channel:
+  // Supabase reuses a channel by name and refuses new listeners on one that is already subscribed.
+  const instance = useId();
   const listRef = useRef<DecisionMakerCandidate[]>([]);
   listRef.current = contacts;
 
@@ -41,7 +44,7 @@ export function useLeadContacts(leadId: string) {
       setLoading(false);
     });
     const channel = supabase
-      .channel(`lead-contacts-${leadId}`)
+      .channel(`lead-contacts-${leadId}-${instance}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: TABLE, filter: `lead_id=eq.${leadId}` }, (payload) => {
         if (mine !== epoch.current) return;
         if (payload.eventType === 'DELETE') {
@@ -54,7 +57,7 @@ export function useLeadContacts(leadId: string) {
       })
       .subscribe();
     return () => { epoch.current++; void supabase.removeChannel(channel); };
-  }, [leadId, currentOrg?.id]);
+  }, [leadId, currentOrg?.id, instance]);
 
   /**
    * Reloads the list (for rows the server wrote); ignored if the lead changed meanwhile.
