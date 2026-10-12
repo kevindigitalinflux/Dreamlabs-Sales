@@ -1,10 +1,11 @@
 import { UserRound } from 'lucide-react';
 import { appendLinkToBody } from '../../lib/emailAttachments';
 import type { RecipientDraft } from '../../lib/composerDrafts';
-import { Input, Textarea } from '../ui/Input';
+import { Input } from '../ui/Input';
 import type { RecipientKind } from '../../lib/composerRecipients';
 import { AttachmentFiles } from './AttachmentFiles';
 import { InsertLink } from './InsertLink';
+import { EmailTextEditor } from './EmailTextEditor';
 import { GeneralInboxTag } from './RecipientPicker';
 
 interface RecipientDraftCardProps {
@@ -38,7 +39,7 @@ export function RecipientDraftCard({ name, title, kind, email, draft, onChange, 
         {!written && <span className="ml-auto text-xs text-warning">Not written yet</span>}
       </header>
       <Input label="Subject" value={draft.subject} onChange={(e) => onChange({ subject: e.target.value })} />
-      <Textarea label="Body" rows={8} value={draft.body} onChange={(e) => onChange({ body: e.target.value })} />
+      <EmailTextEditor label="Body" rows={8} value={draft.body} onChange={(body) => onChange({ body })} />
       {draft.missing.length > 0 && (
         <p className="text-xs text-warning">No value for: {draft.missing.map((m) => `{{${m}}}`).join(', ')}. Those spots are blank.</p>
       )}

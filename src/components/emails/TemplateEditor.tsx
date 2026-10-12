@@ -11,10 +11,12 @@ import { CategoryField } from './CategoryControls';
 import type { TemplateInput } from '../../hooks/useTemplates';
 import type { EmailTemplate } from '../../types';
 import { Button } from '../ui/Button';
-import { Input, Textarea } from '../ui/Input';
+import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { AttachmentFiles } from './AttachmentFiles';
 import { LinksEditor } from './LinksEditor';
+import { EmailTextEditor } from './EmailTextEditor';
+import { FormattedEmail } from './FormattedEmail';
 
 const SAMPLE_VARS: Record<string, string> = {
   first_name: 'Ana', business_name: 'Shiny Cleaners', owner_name: 'Ana Diaz',
@@ -109,7 +111,7 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
           ))}
         </div>
         <p className="-mt-2 text-xs text-muted">Need another placeholder, like a meeting link? Add your own in Settings, Custom placeholders.</p>
-        <Textarea ref={bodyRef} label="Body" rows={8} value={form.body} onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))} />
+        <EmailTextEditor ref={bodyRef} label="Body" rows={8} value={form.body} onChange={(body) => setForm((f) => ({ ...f, body }))} showPreview={false} />
         {isAdmin && (
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.is_default} onChange={(e) => setForm((f) => ({ ...f, is_default: e.target.checked }))} className="h-4 w-4 accent-violet-500" />
@@ -118,8 +120,8 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
         )}
         <div className="rounded-lg bg-surface/60 p-3">
           <p className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Preview (sample lead)</p>
-          <p className="whitespace-pre-wrap text-sm">{preview}</p>
-          {form.links.length > 0 && <p className="mt-3 whitespace-pre-wrap text-sm">{linksBlock(form.links)}</p>}
+          <FormattedEmail body={preview} />
+          {form.links.length > 0 && <FormattedEmail body={linksBlock(form.links)} className="mt-3" />}
           {form.attachments.length > 0 && (
             <p className="mt-3 text-xs text-muted">Attached: {form.attachments.map((a) => a.name).join(', ')}</p>
           )}

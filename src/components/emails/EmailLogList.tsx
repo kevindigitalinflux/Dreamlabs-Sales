@@ -10,6 +10,7 @@ import type { EmailLog, EmailLogStatus } from '../../types';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 import { Skeleton } from '../ui/Skeleton';
+import { FormattedEmail } from './FormattedEmail';
 import { SelectField } from '../ui/Input';
 
 interface LogFilters {
@@ -173,9 +174,9 @@ export function EmailLogList() {
                   </tr>
                   {expanded && (
                     <tr className="border-b border-line bg-surface/30 last:border-0">
-                      <td colSpan={5} className="whitespace-pre-wrap px-3 py-3 text-sm">
+                      <td colSpan={5} className="px-3 py-3 text-sm">
                         <p className="mb-1 text-xs text-muted">To: {log.to_email}</p>
-                        {log.body}
+                        <FormattedEmail body={log.body} emptyText="(No body)" />
                         {(log.attachments ?? []).length > 0 && (
                           <p className="mt-2 flex items-center gap-1 text-xs text-muted">
                             <Paperclip className="h-3 w-3" aria-hidden /> {(log.attachments ?? []).map((a) => a.name).join(', ')}

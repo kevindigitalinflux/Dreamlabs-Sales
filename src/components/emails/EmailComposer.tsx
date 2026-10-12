@@ -9,10 +9,11 @@ import { useEnrollments } from '../../hooks/useEnrollments';
 import { useLeadContacts } from '../../hooks/useLeadContacts';
 import type { Lead } from '../../types';
 import { Button } from '../ui/Button';
-import { Input, Textarea } from '../ui/Input';
+import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { AttachmentFiles } from './AttachmentFiles';
 import { InsertLink } from './InsertLink';
+import { EmailTextEditor } from './EmailTextEditor';
 import { RecipientDraftCard } from './RecipientDraftCard';
 import { RecipientPicker } from './RecipientPicker';
 import { BLANK_DRAFT, SEED_KEY, firstIncompleteDraft, generationIdentity, patchDraft, unionMissing } from '../../lib/composerDrafts';
@@ -286,7 +287,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
                 <button type="button" onClick={() => update(shownKey, { showDiff: false })} className="mt-1 flex min-h-11 cursor-pointer items-center text-cyan">Hide diff</button>
               </div>
             )}
-            <Textarea label="Body (plain text — lands in inboxes better)" rows={10} value={current.body} onChange={(e) => update(shownKey, { body: e.target.value })} />
+            <EmailTextEditor label="Body" rows={10} value={current.body} onChange={(body) => update(shownKey, { body })} />
           </>
         )}
 

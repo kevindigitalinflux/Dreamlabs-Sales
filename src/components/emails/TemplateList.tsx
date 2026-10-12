@@ -10,6 +10,7 @@ import { Skeleton } from '../ui/Skeleton';
 import { TemplateEditor } from './TemplateEditor';
 import { CategoryBadge, CategoryFilter } from './CategoryControls';
 import { distinctCategories, matchesCategory, normalizeCategory } from '../../lib/categories';
+import { renderEmailText } from '../../../supabase/functions/_shared/emailFormat';
 
 /** Template library: defaults first, then own; click to edit (own or admin), New to create. */
 export function TemplateList() {
@@ -57,7 +58,7 @@ export function TemplateList() {
                 )}
               </div>
               <p className="mt-1 truncate text-sm text-muted">{t.subject}</p>
-              <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-xs text-muted">{t.body}</p>
+              <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-xs text-muted">{renderEmailText(t.body)}</p>
             </button>
           </li>
         ))}
