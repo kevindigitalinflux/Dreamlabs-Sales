@@ -55,6 +55,7 @@ Last updated 2026-10-14. Ask for any item by number or name.
 - E3. Deep find calls the worker (scraper, pattern guess + verify) and Firecrawl (team page) after our own scanner; provenance and confidence label on every found address.
 - E4. Footer company-number match against Companies House candidates (auto-pick), free and small.
 - E5. Per-org monthly Firecrawl credit cap; Hunter allowance shown in the confirm dialog (built).
+- E5b. Per-org keys/quotas for the new tools: providers `firecrawl` (BYO key, no global fallback) and `lookup_worker` (URL+secret, default to Kevin's VPS for his own orgs only), per-org worker quotas, per-provider allowance shown in the Deep find confirm dialog.
 - E6. Personal-data safeguards: source+date on every contact, sole-trader flag, delete-on-request path.
 
 ## B. Testing you need to do (selected-leads autopilot + registry work went live 2026-10-08)
