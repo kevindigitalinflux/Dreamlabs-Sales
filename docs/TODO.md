@@ -34,6 +34,15 @@ Last updated 2026-10-12. Ask for any item by number or name.
 - D7. Watch Hunter credits: defaults are 60 Hunter credits and 25 AI calls per run (editable, max 500 / 200). Compare `hunter_used` with the Hunter dashboard after the first run.
 - D8. Not fixed (review notes only): Gemini error messages still carry up to 300 characters of provider text inside the thrown error (never logged or returned by Deep find); migration 057 is not re-runnable (apply once, in one transaction).
 
+### Deep find v2 (built 2026-10-13, not yet applied or deployed)
+
+- V1. Apply 058 after 056 and 057, then redeploy `find-decision-makers` and deploy `run-deep-find`.
+- V2. Retest Love Living with the real town typed on the lead (Hackney): expect the right Companies House company (or a choice of 3), Max Whatley added as an officer, loveliving.uk confirmed (MX + a known person on Hunter's list), lovelivinguk.co.uk NOT saved, and the website flagged as possibly another company. Try "Not their domain" on lovelivingmanagement.com.
+- V3. Retest HOK (Andrea Manning) the same way.
+- V4. Check the Companies House search item fields (`title`, `company_number`, `company_status`, `address.postal_code`, `address_snippet`), Hunter email-finder by company (`data.email`, `data.score`) and the Cloudflare DoH answer shape against real replies on the first run.
+- V5. Apollo: a paid plan would add people/match and phone numbers; the free plan refuses it, so Deep find does not use Apollo.
+- V6. Consider auto-running Deep find on new leads (or inside the selected-leads autopilot) once a few manual runs look right.
+
 ### Email formatting (built 2026-10-12, not yet deployed)
 
 - F1. Test: send a formatted test email (bold, bullets, a heading, a link, plus the unsubscribe line) to your own address and check it in Gmail on desktop AND on a phone. Also send one with no formatting and confirm it still arrives as plain text.
