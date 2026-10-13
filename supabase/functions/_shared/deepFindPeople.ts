@@ -14,7 +14,18 @@ import { emailOnLead, type ExistingContact, type PersonToLookUp } from './deepFi
 type Contact = ExistingContact & Record<string, unknown>;
 
 /** A provider-credit gate: true when one more unit may be spent. */
-export interface SpendGate { hunter: () => Promise<boolean>; ai: () => Promise<boolean> }
+export interface SpendGate {
+  hunter: () => Promise<boolean>;
+  ai: () => Promise<boolean>;
+  /** Stops every later Hunter call in this lead (Hunter's searches are used up, or it asked us to slow down). */
+  stopHunter?: () => void;
+}
+
+/** Passes a Hunter result through, stopping Hunter for the lead when the account is used up or rate limited. */
+function watchHunter<T extends { ok: boolean; failure?: unknown }>(gate: SpendGate, res: T): T {
+  if (!res.ok && (res.failure === 'usage_exhausted' || res.failure === 'rate_limited')) gate.stopHunter?.();
+  return res;
+}
 
 /** What the people step needs. */
 export interface PeopleContext {
@@ -60,7 +71,7 @@ const nowIso = () => new Date().toISOString();
 function reasonCode(reason: string): string {
   const m = /^provider_refused_(\d{3})$/.exec(reason);
   if (m) return m[1]!;
-  return reason === 'rate_limited' ? '429' : reason;
+  return reason;
 }
 
 /** Fills blank fields of an existing contact, never overwriting; an email turns its follow-ups off. */
@@ -105,13 +116,13 @@ export async function lookUpPeople(ctx: PeopleContext): Promise<PeopleOutcome> {
     }, {
       now: () => Date.now(),
       takeSlot: async () => true, // the lead's own Deep find slot already covers this
-      hunterFind: async (d, f, l, t) => (await gate(ctx.spend.hunter()) ? hunterFindEmail(d, f, l, hunterKey ?? '', t) : { ok: false, failure: 429 }),
+      hunterFind: async (d, f, l, t) => (await gate(ctx.spend.hunter()) ? watchHunter(ctx.spend, await hunterFindEmail(d, f, l, hunterKey ?? '', t)) : { ok: false, failure: 429 }),
       hunterDomain: async (d, t) => {
         const cached = ctx.lists.get(d);
         if (cached) return { ok: true, ...cached };
-        return await gate(ctx.spend.hunter()) ? hunterDomainList(d, hunterKey ?? '', t, 10) : { ok: false, failure: 429 };
+        return await gate(ctx.spend.hunter()) ? watchHunter(ctx.spend, await hunterDomainList(d, hunterKey ?? '', t, 10)) : { ok: false, failure: 429 };
       },
-      hunterVerify: async (e, t) => (await gate(ctx.spend.hunter()) ? hunterVerifyEmail(e, hunterKey ?? '', t) : { ok: false, failure: 429 }),
+      hunterVerify: async (e, t) => (await gate(ctx.spend.hunter()) ? watchHunter(ctx.spend, await hunterVerifyEmail(e, hunterKey ?? '', t)) : { ok: false, failure: 429 }),
       scanWebsite: (w, d, f, l, t) => scanWebsiteForPerson(w, d, f, l, t),
       webSearch: async (t) => (await gate(ctx.spend.ai())
         ? webSearchForPerson({ first: person.first, last: person.last, title: person.title, company: ctx.lead.business_name, domains: ctx.domains }, geminiKey ?? '', t)

@@ -8,6 +8,8 @@
 //   cancel  signed-in user who created the run, or an org admin.
 //   choose_company  signed-in user who can edit the lead: "Use this company" (deepFindLeadActions.ts).
 //   block_domain    signed-in user who can edit the lead: "Not their domain" (deepFindLeadActions.ts).
+//   hunter_account  signed-in org member: Hunter searches left this month (free endpoint, key resolved server side,
+//                   only numbers returned).
 //   tick    cron only (x-cron-secret, compared in constant time; refused when CRON_SECRET is not set).
 // Deep find never emails anyone and never touches sequences. Keys never leave the providers' request headers.
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -17,6 +19,9 @@ import { cancelDeepFindRun, runDeepFindTick } from '../_shared/deepFind.ts';
 import { isUuid, parseCreateRequest } from '../_shared/deepFindRules.ts';
 import { cronSecretMatches } from '../_shared/timingSafe.ts';
 import { blockDomain, chooseCompany, queueRun } from '../_shared/deepFindLeadActions.ts';
+import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
+import { hunterAccount } from '../_shared/knownPersonLookup.ts';
+import { hunterAccountEmpty } from '../_shared/hunterLimits.ts';
 
 const MAX_ACTIVE_RUNS_PER_ORG = 5;
 
@@ -44,7 +49,7 @@ Deno.serve(async (req) => {
     return json({ ok: true }, 202, headers);
   }
 
-  if (!['create', 'cancel', 'choose_company', 'block_domain'].includes(String(body.action))) return json({ error: 'Unknown action' }, 400, headers);
+  if (!['create', 'cancel', 'choose_company', 'block_domain', 'hunter_account'].includes(String(body.action))) return json({ error: 'Unknown action' }, 400, headers);
   const client = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
     global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
   });
@@ -67,6 +72,27 @@ Deno.serve(async (req) => {
     const result = await chooseCompany(client, service, caller.id, body);
     if (result.body.queued === true) await background(runDeepFindTick(service, startedAt).catch(() => console.error('deep find start failed')));
     return json(result.body, result.status, headers);
+  }
+
+  if (body.action === 'hunter_account') {
+    if (!isUuid(body.org_id)) return json({ error: 'org_id is required' }, 400, headers);
+    const { data: member } = await service.from('org_members').select('role').eq('org_id', body.org_id).eq('user_id', caller.id).maybeSingle();
+    if (!member) return json({ error: 'Not a member of this organisation' }, 403, headers);
+    if (!await checkRateLimit(service, `deep-find-hunter-account:${caller.id}`, 120, 24 * 60, true)) {
+      return json({ error: 'Too many checks today. Try again tomorrow.' }, 429, headers);
+    }
+    const key = await resolveOrgApiKey(service, String(body.org_id), 'hunter');
+    if (!key) return json({ configured: false }, 200, headers);
+    const acc = await hunterAccount(key, 5_000);
+    if (!acc.ok) {
+      // Only fixed codes go back: never the key or provider text.
+      return json({ configured: true, available: false, used_up: acc.failure === 'usage_exhausted' }, 200, headers);
+    }
+    const a = acc.account;
+    return json({
+      configured: true, available: !!a, used_up: hunterAccountEmpty(a),
+      searches_left: a?.searchesLeft ?? null, searches_available: a?.searchesAvailable ?? null, credits_left: a?.creditsLeft ?? null,
+    }, 200, headers);
   }
 
   if (body.action === 'block_domain') {

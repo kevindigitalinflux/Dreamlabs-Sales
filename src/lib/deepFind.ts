@@ -50,3 +50,36 @@ export async function blockDeepFindDomain(leadId: string, domain: string): Promi
   const d = (data ?? {}) as { error?: unknown };
   return typeof d.error === 'string' ? d.error : null;
 }
+
+/** Hunter's allowance this month, as the server read it from Hunter's free account endpoint (numbers only). */
+export interface HunterAllowance {
+  configured: boolean;
+  available: boolean;
+  usedUp: boolean;
+  searchesLeft: number | null;
+  creditsLeft: number | null;
+}
+
+const numOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : null);
+
+/** Asks the server how many Hunter searches this organisation has left this month. Null when it could not be checked. */
+export async function fetchHunterAllowance(orgId: string): Promise<HunterAllowance | null> {
+  const { data, error } = await supabase.functions.invoke('run-deep-find', { body: { action: 'hunter_account', org_id: orgId } });
+  if (error) return null;
+  const d = (data ?? {}) as Record<string, unknown>;
+  if (typeof d.configured !== 'boolean') return null;
+  return {
+    configured: d.configured, available: d.available === true, usedUp: d.used_up === true,
+    searchesLeft: numOrNull(d.searches_left), creditsLeft: numOrNull(d.credits_left),
+  };
+}
+
+/** The plain sentence for the allowance, e.g. "Hunter: 5 searches left this month." */
+export function hunterAllowanceText(a: HunterAllowance | null): string | null {
+  if (!a) return null;
+  if (!a.configured) return 'No Hunter key is set, so Deep find will only use the free steps.';
+  if (a.usedUp) return 'Hunter says this account\'s searches for the month are used up. Deep find will still run the free steps (Companies House, website and DNS checks, web search).';
+  if (a.searchesLeft !== null) return `Hunter: ${a.searchesLeft} ${a.searchesLeft === 1 ? 'search' : 'searches'} left this month.`;
+  if (a.creditsLeft !== null) return `Hunter: ${a.creditsLeft} ${a.creditsLeft === 1 ? 'credit' : 'credits'} left this month.`;
+  return null;
+}

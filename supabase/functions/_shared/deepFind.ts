@@ -10,7 +10,8 @@ import { registryStep, resolveRegistry } from './deepFindRegistry.ts';
 import { lookUpPeople } from './deepFindPeople.ts';
 import { discoverLeadDomains } from './domainDiscoveryLookup.ts';
 import { DOMAIN_CHECKS, savedDomains } from './domainChecks.ts';
-import { hunterDomainList, readCompanyPages } from './knownPersonLookup.ts';
+import { hunterAccount, hunterDomainList, readCompanyPages } from './knownPersonLookup.ts';
+import { hunterAccountEmpty, hunterAccountLine, type HunterAccount } from './hunterLimits.ts';
 import { cleanEmail, cleanLinkedinProfile, emailDomain } from './knownPersonWide.ts';
 import { domainFromWebsite, isDirectoryDomain } from './knownPerson.ts';
 import { rankPeople } from './peopleRanking.ts';
@@ -48,8 +49,11 @@ class Spend {
     const { data, error } = await this.service.rpc('deep_find_reserve', { run_id: this.runId, hunter, ai });
     return !error && data === true;
   }
+  /** Set when Hunter's searches are used up or it asked us to slow down: no more Hunter calls for this lead. */
+  hunterStopped = false;
+  stopHunter(): void { this.hunterStopped = true; }
   async hunter(step = 'other'): Promise<boolean> {
-    if (this.hunterHit) return false;
+    if (this.hunterHit || this.hunterStopped) return false;
     const ok = await this.reserve(1, 0);
     if (!ok) this.hunterHit = true;
     else this.used.hunter[step] = (this.used.hunter[step] ?? 0) + 1;
@@ -135,6 +139,21 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const steps: string[] = [];
   const all = () => [...rows, ...created];
 
+  // Hunter's free account check (no search credits): how many searches are left, and stop early when none are.
+  let hunterAccountInfo: HunterAccount | null = null;
+  if (hunterKey) {
+    const acc = await hunterAccount(hunterKey, 5_000);
+    if (acc.ok) {
+      hunterAccountInfo = acc.account;
+      const line = hunterAccountLine(acc.account);
+      if (line) steps.push(line);
+      if (hunterAccountEmpty(acc.account)) { spend.stopHunter(); problems.push({ step: 'hunter_company', target: 'account', failure: 'usage_exhausted' }); }
+    } else if (acc.failure === 'usage_exhausted' || acc.failure === 'rate_limited') {
+      spend.stopHunter();
+      problems.push({ step: 'hunter_company', target: 'account', failure: acc.failure });
+    }
+  }
+
   // (0) the registered company and its officers (officers become companies_house contacts, as before)
   const registry = await resolveRegistry(service, lead, chKey);
   steps.push(registryStep(registry));
@@ -186,6 +205,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     guard: { hunter: () => spend.hunter('company domains'), ai: () => spend.ai('web search') },
   });
   problems.push(...discovery.problems);
+  if (discovery.problems.some((p) => p.step.startsWith('hunter') && (p.failure === 'usage_exhausted' || p.failure === 'rate_limited'))) spend.stopHunter();
   const domains = discovery.domains.map((d) => d.domain);
   // People are only stored from corroborated domains (Review Focus 2); the rest give suggestions only.
   const verified = new Set(discovery.domains.filter((d) => !d.needs_check).map((d) => d.domain));
@@ -206,7 +226,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     // limit 10: Hunter bills about 1 credit per 10 addresses, so one reserved credit covers this call.
     const res = await hunterDomainList(d, hunterKey, 6_000, 10);
     if (res.ok) lists.set(d, { emails: res.emails, pattern: res.pattern });
-    else problems.push({ step: 'hunter_list', target: d, failure: safeFailure(res.failure) });
+    else {
+      problems.push({ step: 'hunter_list', target: d, failure: safeFailure(res.failure) });
+      if (res.failure === 'usage_exhausted' || res.failure === 'rate_limited') { spend.stopHunter(); break; }
+    }
   }
   const listed = [...lists.entries()].flatMap(([d, l]) => hunterPeople(l.emails, d, cleanEmail, cleanLinkedinProfile).map((p) => ({ ...p, domain: d })));
   const found = rankPeople(listed.filter((p) => verified.has(p.domain)), webPeople).slice(0, MAX_HUNTER_PEOPLE_PER_LEAD);
@@ -245,7 +268,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     service, run, lead: { id: lead.id, website: str(lead.website), business_name: str(lead.business_name) }, people,
     contacts: all, domains: verifiedDomains, website: usableSite ? str(lead.website) : null,
     websiteDirectory: !!siteDomain && isDirectoryDomain(siteDomain), lists, keys: { hunterKey, geminiKey },
-    spend: { hunter: () => spend.hunter('people'), ai: () => spend.ai('people') }, left,
+    spend: { hunter: () => spend.hunter('people'), ai: () => spend.ai('people'), stopHunter: () => spend.stopHunter() }, left,
   });
   created.push(...peopleOut.created);
   for (const c of peopleOut.touched) touched.add(c.id);
@@ -301,6 +324,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       people: peopleOut.results,
       steps,
       credits: spend.used,
+      hunter_account: hunterAccountInfo,
     },
   };
 }

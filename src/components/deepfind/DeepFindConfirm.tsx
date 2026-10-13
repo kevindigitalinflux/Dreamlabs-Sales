@@ -1,5 +1,6 @@
 import { Input } from '../ui/Input';
 import { DEEP_FIND_CAP_LIMITS } from '../../lib/deepFindView';
+import { HunterAllowanceLine } from './HunterAllowanceLine';
 
 interface DeepFindConfirmProps {
   leadCount: number;
@@ -25,6 +26,7 @@ export function DeepFindConfirm({ leadCount, hunterCap, aiCap, onHunterCap, onAi
         People it finds on the company&apos;s confirmed domains are added as contacts with their source shown. They are never emailed and never added to
         follow-up sequences until you switch them on. People found only on a domain it could not confirm, or named only by the web search or the website, are listed for you to check.
       </p>
+      <HunterAllowanceLine />
       <div className="grid grid-cols-2 gap-3">
         <Input label={`Hunter credits (max ${DEEP_FIND_CAP_LIMITS.hunter})`} inputMode="numeric" value={hunterCap} onChange={(e) => onHunterCap(e.target.value)} />
         <Input label={`AI calls (max ${DEEP_FIND_CAP_LIMITS.ai})`} inputMode="numeric" value={aiCap} onChange={(e) => onAiCap(e.target.value)} />

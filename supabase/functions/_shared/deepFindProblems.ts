@@ -1,7 +1,8 @@
 // supabase/functions/_shared/deepFindProblems.ts
 // Turns the search steps that gave no answer into one plain-English line each ("Hunter company search (loveliving):
-// Hunter refused the request (error 429, too many requests, try again later)"). No imports on purpose: tested from
-// src/lib. Only fixed sentences, safe failure codes and cleaned names or domains ever reach a line.
+// Hunter refused the request (error 429, too many requests, try again later)"). Imports only import-free modules:
+// tested from src/lib. Only fixed sentences, safe failure codes and cleaned names or domains ever reach a line.
+import { HUNTER_RATE_LIMITED_LINE, HUNTER_USAGE_EXHAUSTED_LINE } from './hunterLimits.ts';
 
 /** One step that gave no answer. `failure` is a safe code: an HTTP status, timeout, network, bad_reply, no_mx, dns_error. */
 export interface ProblemInput { step: string; target: string; failure: string }
@@ -52,7 +53,10 @@ function personProvider(target: string): string {
   return 'The website';
 }
 
-/** One line per problem, de-duplicated, at most MAX_PROBLEM_LINES (the most useful steps first, in order seen). */
+/**
+ * One line per problem, de-duplicated, at most MAX_PROBLEM_LINES (the most useful steps first, in order seen). Hunter's
+ * used-up searches and "slow down" answers are each ONE fixed line, however many steps they hit.
+ */
 export function problemLines(problems: ProblemInput[]): string[] {
   const out: string[] = [];
   for (const p of problems.slice(0, 100)) {
@@ -60,7 +64,11 @@ export function problemLines(problems: ProblemInput[]): string[] {
     if (!meta || typeof p.failure !== 'string') continue;
     const target = cleanTarget(p.target) || 'company';
     const provider = meta.provider || personProvider(target);
-    const line = `${meta.label(target)}: ${problemReason(provider, p.failure)}.`;
+    const fixed = provider !== 'Hunter' ? null
+      : p.failure === 'usage_exhausted' ? HUNTER_USAGE_EXHAUSTED_LINE : p.failure === 'rate_limited' ? HUNTER_RATE_LIMITED_LINE : null;
+    if (fixed) { if (!out.includes(fixed)) out.push(fixed); if (out.length >= MAX_PROBLEM_LINES) break; continue; }
+    const failure = p.failure === 'rate_limited' ? '429' : p.failure;
+    const line = `${meta.label(target)}: ${problemReason(provider, failure)}.`;
     if (!out.includes(line)) out.push(line);
     if (out.length >= MAX_PROBLEM_LINES) break;
   }

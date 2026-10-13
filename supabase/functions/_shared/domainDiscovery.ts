@@ -428,7 +428,7 @@ export interface StepProblem {
 export function safeFailure(failure: unknown): string {
   if (typeof failure === 'number' && Number.isInteger(failure) && failure >= 100 && failure <= 599) return String(failure);
   const f = String(failure);
-  return ['timeout', 'network', 'bad_reply', 'no_mx', 'dns_error', 'cap_reached'].includes(f) ? f : 'network';
+  return ['timeout', 'network', 'bad_reply', 'no_mx', 'dns_error', 'cap_reached', 'usage_exhausted', 'rate_limited'].includes(f) ? f : 'network';
 }
 
 /**
@@ -579,8 +579,8 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
     const f = safeFailure(failure);
     if (f === 'cap_reached') { hunterRefused = step.startsWith('hunter') || hunterRefused; return; }
     problems.push({ step, target: target.slice(0, 80), failure: f });
-    // A refused key, an empty plan or "too many requests" will not change within this run: stop asking Hunter.
-    if (step.startsWith('hunter') && (f === '401' || f === '402' || f === '429')) hunterRefused = true;
+    // A refused key, used-up searches or "slow down" (already retried once) will not change within this run: stop asking Hunter.
+    if (step.startsWith('hunter') && ['401', '402', '429', 'usage_exhausted', 'rate_limited'].includes(f)) hunterRefused = true;
   };
   const confirmed = () => seen.some((s) => isCorroborated(seen.filter((x) => x.domain === s.domain).map((x) => x.source))
     && !input.known.some((k) => k.domain === s.domain));

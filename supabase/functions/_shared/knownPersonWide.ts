@@ -13,7 +13,7 @@ export type StepStatus = 'found' | 'no_match' | 'skipped' | 'unavailable' | 'err
  * A safe, fixed failure code for a step that did not work. Never contains provider text or keys:
  * `provider_refused_<status>` only ever carries a 3-digit HTTP status number.
  */
-export type FailureReason = 'timeout' | `provider_refused_${number}` | 'no_key' | 'rate_limited' | 'bad_reply' | 'network';
+export type FailureReason = 'timeout' | `provider_refused_${number}` | 'no_key' | 'rate_limited' | 'usage_exhausted' | 'bad_reply' | 'network';
 
 /** One step as reported to the result panel. `detail` is always a fixed, plain-English sentence. */
 export interface StepResult { id: StepId; label: string; status: StepStatus; detail: string; domain?: string; reason?: FailureReason }
@@ -23,7 +23,7 @@ export interface StepResult { id: StepId; label: string; status: StepStatus; det
  * other HTTP status becomes `provider_refused_<status>`; anything unrecognised is `network`.
  */
 export function failureReason(failure: unknown): FailureReason {
-  if (failure === 'timeout' || failure === 'network' || failure === 'bad_reply' || failure === 'no_key' || failure === 'rate_limited') return failure;
+  if (failure === 'timeout' || failure === 'network' || failure === 'bad_reply' || failure === 'no_key' || failure === 'rate_limited' || failure === 'usage_exhausted') return failure;
   if (typeof failure === 'number' && Number.isInteger(failure) && failure >= 100 && failure <= 599) {
     return failure === 429 ? 'rate_limited' : `provider_refused_${failure}`;
   }

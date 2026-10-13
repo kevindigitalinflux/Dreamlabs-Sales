@@ -11,6 +11,9 @@ import {
 import { extractHrefs, fetchPageHtml } from './leadResearch.ts';
 import { geminiGroundedSearch } from './ai.ts';
 import { runBounded } from './concurrency.ts';
+import {
+  classifyHunter429, parseHunterAccount, retryWaitMs, HUNTER_GAP_MS, type Hunter429, type HunterAccount,
+} from './hunterLimits.ts';
 
 export type LookupResult = { ok: true; found: FoundFields } | { ok: false; failure: LookupFailure };
 
@@ -39,11 +42,21 @@ export function cleanFoundField(field: 'email' | 'phone' | 'linkedin_url', value
 /** One provider call: the deadline covers headers AND body, and at most `maxBytes` (default ~200 KB) of body is read. */
 async function callJson(
   url: string, init: RequestInit, timeoutMs: number, maxBytes = MAX_RESPONSE_BYTES,
-): Promise<{ status: number; data: unknown }> {
+): Promise<{ status: number; data: unknown; retryAfter?: string | null }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { ...init, signal: controller.signal });
+    if (res.status === 429) {
+      // Read at most ~2 KB of a 429 so it can be classified (used-up searches vs slow down); never passed on.
+      const retryAfter = res.headers.get('retry-after');
+      let body: unknown = null;
+      try {
+        const text = await readCapped(res, controller.signal, 2_000);
+        try { body = JSON.parse(text); } catch { body = text.slice(0, 2_000); }
+      } catch { body = null; }
+      return { status: 429, data: body, retryAfter };
+    }
     if (!res.ok) {
       await cancelBody(res);
       return { status: res.status, data: null };
@@ -60,6 +73,66 @@ async function callJson(
   }
 }
 
+/** Hunter calls run strictly one at a time with a small gap (shared by everything in this isolate). */
+let hunterQueue: Promise<void> = Promise.resolve();
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Waits for the previous Hunter call to finish plus HUNTER_GAP_MS, then runs `fn`. */
+async function inHunterQueue<T>(fn: () => Promise<T>): Promise<T> {
+  const before = hunterQueue;
+  let release!: () => void;
+  hunterQueue = new Promise<void>((r) => { release = r; });
+  try {
+    await before;
+    return await fn();
+  } finally {
+    setTimeout(release, HUNTER_GAP_MS);
+  }
+}
+
+/**
+ * One Hunter request (key in the X-API-KEY header): sequential with a gap, and a 429 is classified. A "slow down"
+ * 429 is retried once after Retry-After when that is at most 3 s; a used-up account is never retried.
+ * `limit` tells the caller which kind of 429 it was.
+ */
+async function hunterJson(
+  url: string, apiKey: string, timeoutMs: number, maxBytes = MAX_RESPONSE_BYTES,
+): Promise<{ status: number; data: unknown; limit?: Hunter429 }> {
+  const once = () => inHunterQueue(() => callJson(url, { headers: { 'X-API-KEY': apiKey } }, timeoutMs, maxBytes));
+  let res = await once();
+  if (res.status !== 429) return res;
+  let limit = classifyHunter429(res.data);
+  if (limit === 'rate_limited') {
+    const wait = retryWaitMs(res.retryAfter ?? null);
+    if (wait !== null) {
+      await sleep(wait);
+      res = await once();
+      if (res.status !== 429) return res;
+      limit = classifyHunter429(res.data);
+    }
+  }
+  return { status: 429, data: null, limit };
+}
+
+/** The failure to report for a non-2xx Hunter answer: the classified 429, else the status. */
+function hunterFailure(res: { status: number; limit?: Hunter429 }): LookupFailure {
+  return res.status === 429 ? (res.limit ?? 'rate_limited') : res.status;
+}
+
+/**
+ * Hunter's free account endpoint (GET /v2/account; does not use search credits): searches and credits left this
+ * month, read defensively. The key goes in the header and is never returned.
+ */
+export async function hunterAccount(apiKey: string, timeoutMs = 5000): Promise<{ ok: true; account: HunterAccount | null } | { ok: false; failure: LookupFailure }> {
+  try {
+    const res = await hunterJson('https://api.hunter.io/v2/account', apiKey, timeoutMs);
+    if (res.status < 200 || res.status >= 300) return { ok: false, failure: hunterFailure(res) };
+    return { ok: true, account: parseHunterAccount(res.data) };
+  } catch (err) {
+    return { ok: false, failure: failureOf(err) };
+  }
+}
+
 /**
  * Hunter email-finder for one named person at a domain. The key goes in the X-API-KEY header, not the URL.
  * Only a reasonably confident match (score >= 50) is used, like lookupHunterOwnerEmail.
@@ -67,9 +140,10 @@ async function callJson(
 export async function hunterFindEmail(domain: string, first: string, last: string, apiKey: string, timeoutMs = 5000): Promise<LookupResult> {
   try {
     const params = new URLSearchParams({ domain, first_name: first, last_name: last });
-    const { status, data } = await callJson(`https://api.hunter.io/v2/email-finder?${params}`, { headers: { 'X-API-KEY': apiKey } }, timeoutMs);
+    const hres = await hunterJson(`https://api.hunter.io/v2/email-finder?${params}`, apiKey, timeoutMs);
+    const { status, data } = hres;
     if (status === 404) return { ok: true, found: {} };
-    if (status < 200 || status >= 300) return { ok: false, failure: status };
+    if (status < 200 || status >= 300) return { ok: false, failure: hunterFailure(hres) };
     if (data === null) return { ok: false, failure: 'bad_reply' };
     const d = (data as { data?: { email?: string | null; score?: number | null } } | null)?.data;
     const email = (d?.score ?? 0) >= 50 ? cleanFoundField('email', d?.email) : null;
@@ -131,14 +205,14 @@ export type DomainListResult = { ok: true; emails: unknown[]; pattern: string | 
  */
 export async function hunterDomainList(domain: string, apiKey: string, timeoutMs = 5000, limit = 100): Promise<DomainListResult> {
   try {
-    const ask = (limit: number) => callJson(
+    const ask = (limit: number) => hunterJson(
       `https://api.hunter.io/v2/domain-search?${new URLSearchParams({ domain, limit: String(limit) })}`,
-      { headers: { 'X-API-KEY': apiKey } }, timeoutMs, DOMAIN_LIST_MAX_BYTES,
+      apiKey, timeoutMs, DOMAIN_LIST_MAX_BYTES,
     );
     const first = Math.max(1, Math.min(100, Math.floor(limit)));
     let res = await ask(first);
     if (res.status === 400 && first > 10) res = await ask(10);
-    if (res.status < 200 || res.status >= 300) return { ok: false, failure: res.status };
+    if (res.status < 200 || res.status >= 300) return { ok: false, failure: hunterFailure(res) };
     if (res.data === null) return { ok: false, failure: 'bad_reply' };
     const d = (res.data as { data?: { emails?: unknown; pattern?: unknown; organization?: unknown } } | null)?.data;
     const pattern = typeof d?.pattern === 'string' && d.pattern.length <= 40 ? d.pattern : null;
@@ -158,11 +232,9 @@ export type VerifyResult = { ok: true; verdict: VerifierClass } | { ok: false; f
  */
 export async function hunterVerifyEmail(email: string, apiKey: string, timeoutMs = 5000): Promise<VerifyResult> {
   try {
-    const { status, data } = await callJson(
-      `https://api.hunter.io/v2/email-verifier?${new URLSearchParams({ email })}`,
-      { headers: { 'X-API-KEY': apiKey } }, timeoutMs,
-    );
-    if (status < 200 || status >= 300) return { ok: false, failure: status };
+    const hres = await hunterJson(`https://api.hunter.io/v2/email-verifier?${new URLSearchParams({ email })}`, apiKey, timeoutMs);
+    const { status, data } = hres;
+    if (status < 200 || status >= 300) return { ok: false, failure: hunterFailure(hres) };
     if (data === null) return { ok: false, failure: 'bad_reply' };
     const d = (data as { data?: { status?: unknown; result?: unknown } } | null)?.data;
     const byStatus = classifyVerifierStatus(d?.status);
@@ -285,8 +357,9 @@ export type CompanySearchResult =
 export async function hunterCompanySearch(company: string, apiKey: string, timeoutMs = 5000): Promise<CompanySearchResult> {
   try {
     const params = new URLSearchParams({ company: company.slice(0, 120), limit: '10' });
-    const { status, data } = await callJson(`https://api.hunter.io/v2/domain-search?${params}`, { headers: { 'X-API-KEY': apiKey } }, timeoutMs, DOMAIN_LIST_MAX_BYTES);
-    if (status < 200 || status >= 300) return { ok: false, failure: status };
+    const hres = await hunterJson(`https://api.hunter.io/v2/domain-search?${params}`, apiKey, timeoutMs, DOMAIN_LIST_MAX_BYTES);
+    const { status, data } = hres;
+    if (status < 200 || status >= 300) return { ok: false, failure: hunterFailure(hres) };
     if (data === null) return { ok: false, failure: 'bad_reply' };
     const d = (data as { data?: { domain?: unknown; organization?: unknown; emails?: unknown; pattern?: unknown } } | null)?.data;
     const text = (v: unknown, max: number) => (typeof v === 'string' && v.length > 0 && v.length <= max ? v : null);
@@ -374,9 +447,10 @@ export async function hunterFindByCompany(
 ): Promise<{ ok: true; email: unknown; score: unknown } | { ok: false; failure: LookupFailure }> {
   try {
     const params = new URLSearchParams({ company: company.slice(0, 120), first_name: first.slice(0, 40), last_name: last.slice(0, 40) });
-    const { status, data } = await callJson(`https://api.hunter.io/v2/email-finder?${params}`, { headers: { 'X-API-KEY': apiKey } }, timeoutMs);
+    const hres = await hunterJson(`https://api.hunter.io/v2/email-finder?${params}`, apiKey, timeoutMs);
+    const { status, data } = hres;
     if (status === 404) return { ok: true, email: null, score: 0 };
-    if (status < 200 || status >= 300) return { ok: false, failure: status };
+    if (status < 200 || status >= 300) return { ok: false, failure: hunterFailure(hres) };
     if (data === null) return { ok: false, failure: 'bad_reply' };
     const d = (data as { data?: { email?: unknown; score?: unknown } } | null)?.data;
     return { ok: true, email: typeof d?.email === 'string' ? cleanFoundField('email', d.email) : null, score: typeof d?.score === 'number' ? d.score : 0 };

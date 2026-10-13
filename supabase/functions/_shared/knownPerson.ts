@@ -80,7 +80,7 @@ export function domainFromWebsite(website: string | null | undefined): string | 
 }
 
 /** What went wrong with a provider call: an HTTP status, or a non-HTTP failure. */
-export type LookupFailure = number | 'timeout' | 'network' | 'bad_reply';
+export type LookupFailure = number | 'timeout' | 'network' | 'bad_reply' | 'usage_exhausted' | 'rate_limited';
 
 /** Plain-English message for a failed provider lookup. Fixed strings only: never includes keys or provider text. */
 export function plainLookupError(provider: 'hunter' | 'apollo', failure: LookupFailure): string {
@@ -88,7 +88,8 @@ export function plainLookupError(provider: 'hunter' | 'apollo', failure: LookupF
   if (failure === 401) return `${name} did not accept the saved API key (error 401), so nothing was looked up.`;
   if (failure === 403) return `${name} refused this lookup (error 403): the saved key may lack permission, or your ${name} plan may not include it. Nothing was looked up.`;
   if (failure === 402) return `${name} says this account is out of credits, so nothing was looked up.`;
-  if (failure === 429) return `${name} is limiting requests right now. Try again in a few minutes.`;
+  if (failure === 429 || failure === 'rate_limited') return `${name} asked us to slow down. Try again in a few minutes.`;
+  if (failure === 'usage_exhausted') return `${name} says this account's searches for the month are used up, so ${name} steps were skipped.`;
   if (failure === 'timeout') return `${name} took too long to answer. Try again in a moment.`;
   if (failure === 'bad_reply') return `${name} sent a reply that could not be read, so nothing was looked up.`;
   return `${name} could not be reached right now.`;
