@@ -4,8 +4,9 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { domainFromWebsite } from './knownPerson.ts';
 import {
-  hunterCompanySearch, hunterDomainList, hunterFindByCompany, readCompanyPages, webSearchCompanyDomains,
+  apolloOrgSearch, hunterCompanySearch, hunterDomainList, hunterFindByCompany, readCompanyPages, webSearchCompanyDomains,
 } from './knownPersonLookup.ts';
+import { companyNameVariants } from './nameVariants.ts';
 import { lookupMx } from './dnsLookup.ts';
 import { runDomainDiscovery, type DiscoveryOutcome, type DomainCandidate, type KnownPersonName } from './domainDiscovery.ts';
 import { DOMAIN_CHECKS, savedDomains } from './domainChecks.ts';
@@ -38,8 +39,10 @@ export async function discoverLeadDomains(
     /** True when the lead's website may belong to another company: it only counts as a weak signal and is not read. */
     websiteSuspect?: boolean;
     extraKnown?: DomainCandidate[];
-    keys: { hunterKey: string | null; geminiKey: string | null };
-    allow: { hunter: boolean; site: boolean; web: boolean };
+    keys: { hunterKey: string | null; geminiKey: string | null; apolloKey?: string | null };
+    allow: { hunter: boolean; site: boolean; web: boolean; apollo?: boolean };
+    /** At most this many Hunter requests in discovery (default 12). */
+    hunterCap?: number;
     budgetMs: number;
     /** Website pages the caller already read (readCompanyPages), so the site is not fetched twice. */
     pages?: string[];
@@ -60,12 +63,15 @@ export async function discoverLeadDomains(
   ];
   const names = [lead.business_name ?? '', opts.registeredName ?? ''].filter((n) => n.trim() !== '');
   const { hunterKey, geminiKey } = opts.keys;
+  const apolloKey = opts.keys.apolloKey ?? null;
+  // Spellings to SEARCH with; every domain found is still judged against the real names.
+  const variants = companyNameVariants(names).map((v) => v.text);
   const blocked = savedDomains(lead.blocked_domains);
   const spendHunter = async () => !opts.guard || await opts.guard.hunter();
   const outcome = await runDomainDiscovery({
-    names, registeredName: opts.registeredName ?? null, people: opts.people ?? [], websiteSuspect: !!opts.websiteSuspect, blocked,
+    names, variants, hunterCap: opts.hunterCap, registeredName: opts.registeredName ?? null, people: opts.people ?? [], websiteSuspect: !!opts.websiteSuspect, blocked,
     website: websiteDomain ? lead.website : null, websiteDomain, known,
-    allow: { hunter: opts.allow.hunter && !!hunterKey, site: opts.allow.site && !!websiteDomain, web: opts.allow.web && !!geminiKey },
+    allow: { hunter: opts.allow.hunter && !!hunterKey, site: opts.allow.site && !!websiteDomain, web: opts.allow.web && !!geminiKey, apollo: !!opts.allow.apollo && !!apolloKey },
     budgetMs: opts.budgetMs,
   }, {
     now: () => Date.now(),
@@ -74,8 +80,9 @@ export async function discoverLeadDomains(
     readSite: (w, t) => (opts.pages ? Promise.resolve(opts.pages) : readCompanyPages(w, t)),
     webSearch: async (t) => (opts.guard && !(await opts.guard.ai())) ? { ok: false as const, failure: 'cap_reached' } : webSearchCompanyDomains({
       names, town: lead.city ?? null, postcode: lead.postcode ?? null, website: lead.website,
-      registeredAddress: opts.registeredAddress ?? null, websiteSuspect: !!opts.websiteSuspect,
+      registeredAddress: opts.registeredAddress ?? null, websiteSuspect: !!opts.websiteSuspect, variants,
     }, geminiKey ?? '', t),
+    apolloOrg: (n, t) => apolloOrgSearch(n, apolloKey ?? '', t),
     mx: (d, t) => lookupMx(d, t),
     // Each Hunter call reserves a credit first (limit 10 = at most about one credit); a refusal stops the probing.
     hunterList: async (d, t) => {

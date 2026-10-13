@@ -14,7 +14,8 @@ import { hunterDomainList, readCompanyPages } from './knownPersonLookup.ts';
 import { cleanEmail, cleanLinkedinProfile, emailDomain } from './knownPersonWide.ts';
 import { domainFromWebsite, isDirectoryDomain } from './knownPerson.ts';
 import { rankPeople } from './peopleRanking.ts';
-import { DOMAIN_SOURCE_LABELS, websiteSuspicion, type KnownPersonName, type WebPerson } from './domainDiscovery.ts';
+import { DOMAIN_SOURCE_LABELS, safeFailure, websiteSuspicion, type KnownPersonName, type WebPerson } from './domainDiscovery.ts';
+import { creditLine, problemLines, type ProblemInput } from './deepFindProblems.ts';
 import {
   MAX_HUNTER_PEOPLE_PER_LEAD, deepFindSummary, emailOnLead, extractTeamMembers, findSamePerson,
   hunterPeople, namedPersonIsStored, parseLeadPersonName, peopleToLookUp, stuckAction, type ExistingContact, type LeadStats, type SitePerson,
@@ -40,21 +41,25 @@ interface LeadOutcome { status: 'done' | 'failed' | 'skipped'; reason: string; p
 class Spend {
   hunterHit = false;
   aiHit = false;
+  /** Credits actually reserved, per step, for the results view. */
+  used: { hunter: Record<string, number>; ai: Record<string, number> } = { hunter: {}, ai: {} };
   constructor(private service: SupabaseClient, private runId: string) {}
   private async reserve(hunter: number, ai: number): Promise<boolean> {
     const { data, error } = await this.service.rpc('deep_find_reserve', { run_id: this.runId, hunter, ai });
     return !error && data === true;
   }
-  async hunter(): Promise<boolean> {
+  async hunter(step = 'other'): Promise<boolean> {
     if (this.hunterHit) return false;
     const ok = await this.reserve(1, 0);
     if (!ok) this.hunterHit = true;
+    else this.used.hunter[step] = (this.used.hunter[step] ?? 0) + 1;
     return ok;
   }
-  async ai(): Promise<boolean> {
+  async ai(step = 'other'): Promise<boolean> {
     if (this.aiHit) return false;
     const ok = await this.reserve(0, 1);
     if (!ok) this.aiHit = true;
+    else this.used.ai[step] = (this.used.ai[step] ?? 0) + 1;
     return ok;
   }
 }
@@ -106,10 +111,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     return { status: 'skipped', reason: 'This organisation reached its daily Deep find limit. Try again tomorrow.' };
   }
 
-  const [hunterKey, geminiKey, chKey] = await Promise.all([
+  const [hunterKey, geminiKey, chKey, apolloKey] = await Promise.all([
     resolveOrgApiKey(service, run.org_id, 'hunter'),
     resolveOrgApiKey(service, run.org_id, 'gemini'),
     resolveOrgApiKey(service, run.org_id, 'companies_house'),
+    resolveOrgApiKey(service, run.org_id, 'apollo'),
   ]);
   const spend = new Spend(service, run.id);
   const { data: contactData, error: contactErr } = await service.from('decision_maker_candidates').select('*').eq('lead_id', lead.id);
@@ -118,8 +124,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const created: Contact[] = [];
   const stats: LeadStats = {
     hunterPeople: 0, officersAdded: 0, officerEmails: 0, domainsShown: [], domainsToCheck: 0, namedByWeb: 0, namedOnSite: 0,
-    hunterCapHit: false, aiCapHit: false, noHunterKey: !hunterKey, noWebsite: false, failures: 0, unverifiedPeople: 0,
+    hunterCapHit: false, aiCapHit: false, noHunterKey: !hunterKey, noWebsite: false, unverifiedPeople: 0,
   };
+  /** Steps that gave no answer, turned into one plain line each at the end. */
+  const problems: ProblemInput[] = [];
   /** Contacts this run created or filled, the only ones whose LinkedIn link is captured. */
   const touched = new Set<string>();
   const suggestions: { name: string; field: string; value: string; label: string }[] = [];
@@ -139,7 +147,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }
   if (officerRows.length > 0) {
     const { data, error } = await service.from('decision_maker_candidates').insert(officerRows).select('*');
-    if (error) stats.failures++;
+    if (error) problems.push({ step: 'save', target: 'the Companies House officers', failure: 'network' });
     else { created.push(...((data ?? []) as Contact[])); stats.officersAdded = (data ?? []).length; }
   }
   if (registry.number) steps.push(`Companies House officers: ${officers.length} active, ${stats.officersAdded} added as contacts.`);
@@ -173,11 +181,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }, {
     registeredName: registry.name, registeredAddress: registry.address, people: knownPeople, websiteSuspect: suspicion.suspect,
     extraKnown: contactDomains.map((domain) => ({ domain, source: 'contact_email' as const })),
-    keys: { hunterKey, geminiKey }, allow: { hunter: true, site: pages.length > 0, web: true },
-    budgetMs: Math.min(25_000, Math.max(0, left() - 30_000)), pages,
-    guard: { hunter: () => spend.hunter(), ai: () => spend.ai() },
+    keys: { hunterKey, geminiKey, apolloKey }, allow: { hunter: true, site: pages.length > 0, web: true, apollo: true },
+    budgetMs: Math.min(30_000, Math.max(0, left() - 30_000)), pages, hunterCap: 12,
+    guard: { hunter: () => spend.hunter('company domains'), ai: () => spend.ai('web search') },
   });
-  stats.failures += discovery.failures.filter((f) => !f.endsWith('cap_reached')).length;
+  problems.push(...discovery.problems);
   const domains = discovery.domains.map((d) => d.domain);
   // People are only stored from corroborated domains (Review Focus 2); the rest give suggestions only.
   const verified = new Set(discovery.domains.filter((d) => !d.needs_check).map((d) => d.domain));
@@ -194,10 +202,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const lists = new Map<string, { emails: unknown[]; pattern: string | null }>();
   for (const d of domains) {
     if (!hunterKey || left() < 20_000) break;
-    if (!await spend.hunter()) break;
+    if (!await spend.hunter('company lists')) break;
     // limit 10: Hunter bills about 1 credit per 10 addresses, so one reserved credit covers this call.
     const res = await hunterDomainList(d, hunterKey, 6_000, 10);
-    if (res.ok) lists.set(d, { emails: res.emails, pattern: res.pattern }); else stats.failures++;
+    if (res.ok) lists.set(d, { emails: res.emails, pattern: res.pattern });
+    else problems.push({ step: 'hunter_list', target: d, failure: safeFailure(res.failure) });
   }
   const listed = [...lists.entries()].flatMap(([d, l]) => hunterPeople(l.emails, d, cleanEmail, cleanLinkedinProfile).map((p) => ({ ...p, domain: d })));
   const found = rankPeople(listed.filter((p) => verified.has(p.domain)), webPeople).slice(0, MAX_HUNTER_PEOPLE_PER_LEAD);
@@ -236,12 +245,13 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     service, run, lead: { id: lead.id, website: str(lead.website), business_name: str(lead.business_name) }, people,
     contacts: all, domains: verifiedDomains, website: usableSite ? str(lead.website) : null,
     websiteDirectory: !!siteDomain && isDirectoryDomain(siteDomain), lists, keys: { hunterKey, geminiKey },
-    spend: { hunter: () => spend.hunter(), ai: () => spend.ai() }, left,
+    spend: { hunter: () => spend.hunter('people'), ai: () => spend.ai('people') }, left,
   });
   created.push(...peopleOut.created);
   for (const c of peopleOut.touched) touched.add(c.id);
   stats.officerEmails += peopleOut.emailsFound;
   suggestions.push(...peopleOut.suggestions);
+  problems.push(...peopleOut.problems);
   if (people.length > 0) steps.push(`Looked up ${people.length} known ${people.length === 1 ? 'person' : 'people'}: ${peopleOut.emailsFound} email${peopleOut.emailsFound === 1 ? '' : 's'} found.`);
 
   // (4) team pages and (5) the web search: names only, never stored unless already a contact
@@ -256,6 +266,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   stats.namedByWeb = namedByWeb.length;
   stats.hunterCapHit = spend.hunterHit;
   stats.aiCapHit = spend.aiHit;
+  // One plain line per search that gave no answer (replaces the old "N searches did not work" count), then the credits.
+  steps.push(...problemLines(problems));
+  steps.push(creditLine(spend.used));
 
   // LinkedIn auto-capture, like findDecisionMakers, for contacts this run created or filled
   for (const c of all()) {
@@ -287,6 +300,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       })),
       people: peopleOut.results,
       steps,
+      credits: spend.used,
     },
   };
 }

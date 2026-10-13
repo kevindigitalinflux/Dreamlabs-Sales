@@ -84,7 +84,7 @@ describe('extractTeamMembers', () => {
 describe('deepFindSummary', () => {
   const base: LeadStats = {
     hunterPeople: 0, officersAdded: 0, officerEmails: 0, domainsShown: [], domainsToCheck: 0, namedByWeb: 0, namedOnSite: 0,
-    hunterCapHit: false, aiCapHit: false, noHunterKey: false, noWebsite: false, failures: 0, unverifiedPeople: 0,
+    hunterCapHit: false, aiCapHit: false, noHunterKey: false, noWebsite: false, unverifiedPeople: 0,
   };
   it('says what was found in plain English', () => {
     expect(deepFindSummary({ ...base, hunterPeople: 3, officersAdded: 1, domainsShown: ['loveliving.uk'], namedByWeb: 2, hunterCapHit: true }))

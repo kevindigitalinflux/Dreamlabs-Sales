@@ -184,7 +184,7 @@ describe('runDomainDiscovery', () => {
     expect(r.discovered.map((d) => d.domain)).toEqual(['loveliving.uk']);
     expect(r.domains[0]!.domain).toBe('lovelivingmanagement.com');
     expect(r.people).toEqual([{ name: 'David Cox', role: 'Director' }]);
-    expect(r).toMatchObject({ hunterCalls: 1, aiCalls: 1, failures: [] });
+    expect(r).toMatchObject({ hunterCalls: 1, aiCalls: 1, problems: [] });
   });
 
   it('refuses Hunter\'s answer for an unrelated company and keeps going after failures', async () => {
@@ -195,7 +195,7 @@ describe('runDomainDiscovery', () => {
     }), DOMAIN_CHECKS);
     // One weak signal only: searched, but not corroborated.
     expect(r.discovered).toEqual([{ domain: 'loveliving.uk', sources: ['website_email'], needs_check: true }]);
-    expect(r.failures).toEqual(['web:timeout']);
+    expect(r.problems).toEqual([{ step: 'web', target: 'company', failure: 'timeout' }]);
   });
 
   it('accepts a weak Hunter match only with a second signal', async () => {

@@ -211,7 +211,6 @@ export interface LeadStats {
   aiCapHit: boolean;
   noHunterKey: boolean;
   noWebsite: boolean;
-  failures: number;
   /** People Hunter lists on a domain that is not corroborated: shown to check, never stored. */
   unverifiedPeople: number;
 }
@@ -246,7 +245,6 @@ export function deepFindSummary(s: LeadStats): string {
   if (s.noWebsite) parts.push('This lead has no usable website.');
   if (s.hunterCapHit) parts.push('The Hunter credit cap was reached, so some searches were skipped.');
   if (s.aiCapHit) parts.push('The AI call cap was reached, so the web search was skipped.');
-  if (s.failures > 0) parts.push(`${plural(s.failures, 'search', 'searches')} did not work this time.`);
   parts.push('New people are not added to follow-up sequences until you switch them on.');
   return parts.join(' ').slice(0, 1000);
 }

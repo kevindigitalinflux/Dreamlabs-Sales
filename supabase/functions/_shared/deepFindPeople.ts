@@ -47,12 +47,21 @@ export interface PeopleOutcome {
   created: Contact[];
   emailsFound: number;
   suggestions: { name: string; field: string; value: string; label: string }[];
+  /** Lookup steps that failed (not credit-cap refusals), for the plain-English "why" lines. */
+  problems: { step: 'person'; target: string; failure: string }[];
 }
 
 /** Steps whose email is a Hunter result (finder, company list, pattern verified by Hunter): safe to store for a new person. */
 const HUNTER_EMAIL_STEPS: StepId[] = ['hunter_finder', 'hunter_domain', 'pattern'];
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
 const nowIso = () => new Date().toISOString();
+
+/** A wide-lookup failure reason as a safe problem code: provider_refused_403 gives "403", rate_limited gives "429". */
+function reasonCode(reason: string): string {
+  const m = /^provider_refused_(\d{3})$/.exec(reason);
+  if (m) return m[1]!;
+  return reason === 'rate_limited' ? '429' : reason;
+}
 
 /** Fills blank fields of an existing contact, never overwriting; an email turns its follow-ups off. */
 async function fillBlanks(service: SupabaseClient, row: Contact, patch: Record<string, string>): Promise<Contact | null> {
@@ -74,7 +83,7 @@ async function fillBlanks(service: SupabaseClient, row: Contact, patch: Record<s
  * suggestion. Credits are reserved before every Hunter and AI call.
  */
 export async function lookUpPeople(ctx: PeopleContext): Promise<PeopleOutcome> {
-  const out: PeopleOutcome = { results: [], touched: [], created: [], emailsFound: 0, suggestions: [] };
+  const out: PeopleOutcome = { results: [], touched: [], created: [], emailsFound: 0, suggestions: [], problems: [] };
   const { hunterKey, geminiKey } = ctx.keys;
   for (const person of ctx.people.slice(0, 5)) {
     const name = `${person.first} ${person.last}`.slice(0, 80);
@@ -85,6 +94,9 @@ export async function lookUpPeople(ctx: PeopleContext): Promise<PeopleOutcome> {
     let emailStep: StepId | null = null;
     const knownAddresses: KnownAddress[] = ctx.contacts().filter((r) => r.kind !== 'general' && str(r.email))
       .map((r) => ({ email: str(r.email)!, first: str(r.first_name), last: str(r.last_name) }));
+    // A credit-cap refusal is reported to the lookup as 429; it is not a provider failure, so it is not listed as one.
+    let capRefused = false;
+    const gate = async (ok: Promise<boolean>) => { const r = await ok; if (!r) capRefused = true; return r; };
     const wide = await runWideLookup({
       first: person.first, last: person.last, have: { email: null, linkedin_url: work.linkedin_url ?? null, phone: work.phone ?? null },
       hasApolloId: false, domains: ctx.domains.slice(0, 4), website: ctx.website, websiteDirectory: ctx.websiteDirectory,
@@ -93,15 +105,15 @@ export async function lookUpPeople(ctx: PeopleContext): Promise<PeopleOutcome> {
     }, {
       now: () => Date.now(),
       takeSlot: async () => true, // the lead's own Deep find slot already covers this
-      hunterFind: async (d, f, l, t) => (await ctx.spend.hunter() ? hunterFindEmail(d, f, l, hunterKey ?? '', t) : { ok: false, failure: 429 }),
+      hunterFind: async (d, f, l, t) => (await gate(ctx.spend.hunter()) ? hunterFindEmail(d, f, l, hunterKey ?? '', t) : { ok: false, failure: 429 }),
       hunterDomain: async (d, t) => {
         const cached = ctx.lists.get(d);
         if (cached) return { ok: true, ...cached };
-        return await ctx.spend.hunter() ? hunterDomainList(d, hunterKey ?? '', t, 10) : { ok: false, failure: 429 };
+        return await gate(ctx.spend.hunter()) ? hunterDomainList(d, hunterKey ?? '', t, 10) : { ok: false, failure: 429 };
       },
-      hunterVerify: async (e, t) => (await ctx.spend.hunter() ? hunterVerifyEmail(e, hunterKey ?? '', t) : { ok: false, failure: 429 }),
+      hunterVerify: async (e, t) => (await gate(ctx.spend.hunter()) ? hunterVerifyEmail(e, hunterKey ?? '', t) : { ok: false, failure: 429 }),
       scanWebsite: (w, d, f, l, t) => scanWebsiteForPerson(w, d, f, l, t),
-      webSearch: async (t) => (await ctx.spend.ai()
+      webSearch: async (t) => (await gate(ctx.spend.ai())
         ? webSearchForPerson({ first: person.first, last: person.last, title: person.title, company: ctx.lead.business_name, domains: ctx.domains }, geminiKey ?? '', t)
         : { ok: false, failure: 429 }),
       apolloMatch: async () => ({ ok: false, failure: 403 }),
@@ -114,6 +126,10 @@ export async function lookUpPeople(ctx: PeopleContext): Promise<PeopleOutcome> {
         return merged.applied;
       },
     });
+    for (const st of wide.steps) {
+      if (st.status !== 'error' || !st.reason || (capRefused && st.reason === 'rate_limited')) continue;
+      out.problems.push({ step: 'person', target: `${name}, ${st.label}`, failure: reasonCode(st.reason) });
+    }
     for (const s of wide.suggestions) out.suggestions.push({ name, field: s.field, value: s.value.slice(0, 200), label: s.label });
     let emailFound = false;
     if (contact && Object.keys(patch).length > 0) {
