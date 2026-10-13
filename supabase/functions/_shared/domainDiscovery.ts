@@ -539,6 +539,8 @@ export const MAX_DISCOVERY_HUNTER_CALLS = 12;
 const MAX_MX_CHECKS = 24;
 /** Domains with a mail server that get a Hunter list. */
 const MAX_PROBES = 4;
+/** The web search's own time budget (it runs in parallel with the other steps). */
+export const WEB_BUDGET_MS = 25_000;
 /** Apollo organisation searches per lead. */
 const MAX_APOLLO_CALLS = 2;
 /** Statuses a by-company Hunter search returns when it simply found no company of that name. */
@@ -557,7 +559,7 @@ const NO_MATCH_STATUSES = new Set([400, 404, 451]);
  * 4. Apollo organisation search for the top 2 variants (weak signal only). A 401/402/403 means Apollo is not on the
  *    plan: one quiet note and no more Apollo calls, never a failure.
  * 5. Other domains the company's own website points at (skipped when the website is suspect).
- * 6. A web search last, with whatever time is left.
+ * 6. A web search, started first and run in parallel with its own budget (WEB_BUDGET_MS), awaited last.
  * Hunter requests stop at `hunterCap` or as soon as a provider gate refuses (credit cap). Blocked domains are dropped.
  */
 export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryDeps, checks: DomainChecks): Promise<DiscoveryOutcome> {
@@ -567,6 +569,11 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
   const searchNames = [...names, ...(input.variants ?? [])].map((n) => n.trim().slice(0, 120))
     .filter((n, i, a) => n && a.findIndex((x) => x.toLowerCase() === n.toLowerCase()) === i).slice(0, 8);
   const blocked = new Set((input.blocked ?? []).map((b) => checks.clean(b)).filter((b): b is string => !!b));
+  // The web search starts NOW and runs alongside the Hunter, DNS and website steps with its own time budget, so a slow
+  // search is no longer starved by the steps before it.
+  const webTask = input.allow.web && input.budgetMs >= 4_000
+    ? deps.webSearch(Math.min(WEB_BUDGET_MS, Math.max(4_000, input.budgetMs))).catch((): Failed => ({ ok: false, failure: 'network' }))
+    : null;
   const seen: DomainCandidate[] = [...input.known];
   const problems: StepProblem[] = [];
   const sitePages: { domain: string; pages: string[] }[] = [];
@@ -574,7 +581,7 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
   const people = (input.people ?? []).slice(0, 6);
   const cap = Math.max(0, Math.min(input.hunterCap ?? MAX_DISCOVERY_HUNTER_CALLS, 40));
   let hunterCalls = 0;
-  let aiCalls = 0;
+  const aiCalls = webTask ? 1 : 0;
   let apolloCalls = 0;
   let webPeople: WebPerson[] = [];
   let hunterRefused = false;
@@ -701,18 +708,13 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
     const pages = await deps.readSite(input.website, Math.min(10_000, left())).catch(() => [] as string[]);
     for (const html of pages) seen.push(...domainHintsFromHtml(html, names, input.websiteDomain, checks));
   }
-  if (input.allow.web) {
-    if (left() >= 4_000) {
-      aiCalls++;
-      const res = await deps.webSearch(Math.min(15_000, left())).catch((): Failed => ({ ok: false, failure: 'network' }));
-      if (!res.ok) failed('web', 'company', res.failure);
-      else {
-        const parsed = parseDiscoveryAnswer(res.text, names, checks);
-        webPeople = parsed.people;
-        for (const d of parsed.domains) seen.push({ domain: d, source: 'web' });
-      }
-    } else {
-      problems.push({ step: 'web', target: 'company', failure: 'timeout' });
+  if (webTask) {
+    const res = await webTask;
+    if (!res.ok) failed('web', 'company', res.failure);
+    else {
+      const parsed = parseDiscoveryAnswer(res.text, names, checks);
+      webPeople = parsed.people;
+      for (const d of parsed.domains) seen.push({ domain: d, source: 'web' });
     }
   }
   const domains = rankDomains(seen.filter((s) => !blocked.has(checks.clean(s.domain) ?? '')), checks);

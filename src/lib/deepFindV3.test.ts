@@ -130,3 +130,19 @@ describe('Hunter refusals stop the run', () => {
     expect(d.hunterFindByCompany).not.toHaveBeenCalled();
   });
 });
+
+describe('web search runs in parallel', () => {
+  it('starts the web search before Hunter and gives it its own budget', async () => {
+    const order: string[] = [];
+    let clock = 0;
+    const d = deps({
+      now: () => clock,
+      webSearch: vi.fn(async (t: number) => { order.push(`web:${t}`); return { ok: true as const, text: '{"websites":[],"email_domains":[],"people":[]}' }; }),
+      hunterByName: vi.fn(async () => { order.push('hunter'); clock += 20_000; return { ok: false as const, failure: 404 }; }),
+    });
+    const r = await runDomainDiscovery(input({ allow: { hunter: true, site: false, web: true }, budgetMs: 30_000 }), d, DOMAIN_CHECKS);
+    expect(order[0]).toBe('web:25000');
+    expect(r.problems.filter((p) => p.step === 'web')).toEqual([]);
+    expect(r.aiCalls).toBe(1);
+  });
+});

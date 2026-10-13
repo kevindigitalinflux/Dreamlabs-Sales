@@ -81,6 +81,7 @@ export async function discoverLeadDomains(
     webSearch: async (t) => (opts.guard && !(await opts.guard.ai())) ? { ok: false as const, failure: 'cap_reached' } : webSearchCompanyDomains({
       names, town: lead.city ?? null, postcode: lead.postcode ?? null, website: lead.website,
       registeredAddress: opts.registeredAddress ?? null, websiteSuspect: !!opts.websiteSuspect, variants,
+      knownDomains: known.filter((k) => k.source !== 'website_suspect' && !blocked.includes(k.domain)).map((k) => k.domain),
     }, geminiKey ?? '', t),
     apolloOrg: (n, t) => apolloOrgSearch(n, apolloKey ?? '', t),
     // Free: the discovered domain's own pages, through the SSRF-guarded page reader (home + up to 5 team pages).

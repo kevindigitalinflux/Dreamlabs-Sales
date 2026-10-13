@@ -405,6 +405,8 @@ export interface CompanySearchInput {
   websiteSuspect?: boolean;
   /** Other spellings of the name to search with ("loveliving", "love-living"), from companyNameVariants. */
   variants?: string[];
+  /** Domains already known to be the company's (typed, website, saved, contacts): given to the search as hints. */
+  knownDomains?: string[];
 }
 
 /** The discovery web search prompt. The company block is user data and is labelled as data, not instructions. */
@@ -416,6 +418,7 @@ export function companyDomainsPrompt(c: CompanySearchInput): string {
     website: (c.website ?? '').slice(0, 200) || null,
     registered_office: (c.registeredAddress ?? '').slice(0, 200) || null,
     other_spellings: (c.variants ?? []).map((v) => v.slice(0, 80)).slice(0, 8),
+    known_domains: (c.knownDomains ?? []).map((d) => d.slice(0, 80)).slice(0, 6),
   };
   return [
     'You help a salesperson find PUBLIC facts about one UK business. UK English.',
