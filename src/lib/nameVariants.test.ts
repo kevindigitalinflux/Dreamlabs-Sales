@@ -29,9 +29,9 @@ describe('name variants', () => {
 });
 
 describe('registrySearchNames', () => {
-  it('searches the name as written, as one word and with management, at most 4', async () => {
+  it('searches the name as written, as one word and with management, at most 5', async () => {
     const { registrySearchNames } = await import('../../supabase/functions/_shared/nameVariants');
-    expect(registrySearchNames('Love Living')).toEqual(['love living', 'loveliving', 'love living management']);
-    expect(registrySearchNames('Smith & Sons').length).toBeLessThanOrEqual(4);
+    expect(registrySearchNames('Love Living')).toEqual(['love living', 'loveliving', 'love living london', 'love living management']);
+    expect(registrySearchNames('Smith & Sons').length).toBeLessThanOrEqual(5);
   });
 });

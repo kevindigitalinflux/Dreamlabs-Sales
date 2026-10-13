@@ -71,11 +71,23 @@ export function companyNameVariants(names: string[], max = 8): NameVariant[] {
 }
 
 /** At most this many Companies House name searches per lead (free API, but keep it polite). */
-export const MAX_REGISTRY_SEARCHES = 4;
+export const MAX_REGISTRY_SEARCHES = 5;
 
-/** The name variants searched on Companies House: as written, as one word, with "&"/"and" swapped, with "management". */
+/**
+ * The names searched on Companies House: as written, as one word ('LOVELIVING'), with 'london' and 'management'
+ * added ('LOVE LIVING LONDON'), then with '&'/'and' swapped. At most MAX_REGISTRY_SEARCHES, no repeats.
+ */
 export function registrySearchNames(name: string): string[] {
-  const order = ['original', 'compact', 'and_swap', 'suffix'];
-  const v = companyNameVariants([name]).filter((x) => order.includes(x.kind) && (x.kind !== 'suffix' || x.text.endsWith(' management')));
-  return v.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind)).map((x) => x.text).slice(0, MAX_REGISTRY_SEARCHES);
+  const out: string[] = [];
+  const add = (t: string | undefined) => {
+    const v = (t ?? '').replace(/[^a-z0-9& -]/gi, ' ').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 80);
+    if (v.length >= 3 && !out.includes(v) && out.length < MAX_REGISTRY_SEARCHES) out.push(v);
+  };
+  const variants = companyNameVariants([name]);
+  const plain = coreWords(name).filter((w) => w !== 'and');
+  add(variants.find((v) => v.kind === 'original')?.text);
+  add(variants.find((v) => v.kind === 'compact')?.text);
+  if (plain.length > 0) { add(`${plain.join(' ')} london`); add(`${plain.join(' ')} management`); }
+  for (const v of variants.filter((x) => x.kind === 'and_swap')) add(v.text);
+  return out;
 }

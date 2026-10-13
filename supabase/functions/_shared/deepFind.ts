@@ -157,7 +157,13 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }
 
   // (0) the registered company and its officers (officers become companies_house contacts, as before)
-  const registry = await resolveRegistry(service, lead, chKey);
+  // People we already know (owner names on the lead, contacts): used to find the company through Companies House officers.
+  const registryPeople = [
+    ...[lead.owner_name, ...(Array.isArray(lead.additional_owners) ? lead.additional_owners.slice(0, 10) : [])]
+      .flatMap((n) => { const p = parseLeadPersonName(n); return p ? [{ first: p.first, last: p.last }] : []; }),
+    ...rows.flatMap((c) => (str(c.first_name) && str(c.last_name) && !c.dismissed_at ? [{ first: str(c.first_name)!, last: str(c.last_name)! }] : [])),
+  ].slice(0, 6);
+  const registry = await resolveRegistry(service, lead, chKey, registryPeople);
   steps.push(registryStep(registry));
   const officers = registry.number && chKey ? await fetchActiveOfficers(registry.number, chKey) : [];
   const officerRows: Record<string, unknown>[] = [];
@@ -389,7 +395,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       website_reasons: suspicion.reasons,
       company_number: registry.number,
       company_candidates: registry.candidates.map((c) => ({
-        company_number: c.company_number, name: c.name, address: c.address, status: c.status, score: c.score,
+        company_number: c.company_number, name: c.name, address: c.address, status: c.status, score: c.score, why: c.why ?? null,
       })),
       people: peopleOut.results,
       steps,

@@ -4,8 +4,9 @@
 // (registrySearch.ts) and otherwise offers the top 3 candidates for the user to choose. Service client only; the
 // caller has already checked the org and the run creator's rights on the lead.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { fetchCompanyProfile, searchCompaniesByName } from './companiesHouse.ts';
-import { cleanCompanyNumber, pickCompany, scoreCompanyCandidates, type CompanyCandidate } from './registrySearch.ts';
+import { fetchCompanyProfile, fetchOfficerAppointments, searchCompaniesByName, searchOfficers } from './companiesHouse.ts';
+import { appointmentCompanies, officerAppointmentPaths, type OfficerQuery } from './registryOfficerSearch.ts';
+import { cleanCompanyNumber, locationAgrees, pickCompany, scoreCompanyCandidates, type CompanyCandidate } from './registrySearch.ts';
 import { registrySearchNames } from './nameVariants.ts';
 
 /** The registered company as far as it is known, and how it was settled. */
@@ -15,7 +16,7 @@ export interface RegistryResult {
   address: string | null;
   locality: string | null;
   how: 'saved' | 'raw_lead' | 'auto' | 'ambiguous' | 'not_found' | 'no_key' | 'error';
-  /** Candidates to choose from when the name search was not clear (top 3). */
+  /** Candidates to choose from when the search was not clear (top 5, each with why it is offered). */
   candidates: CompanyCandidate[];
 }
 
@@ -39,7 +40,9 @@ export function registryStep(r: RegistryResult): string {
  * Resolves the lead's registered company. A clear automatic match is saved on the lead (company_number) so later
  * runs reuse it; an unclear one is never guessed.
  */
-export async function resolveRegistry(service: SupabaseClient, lead: Record<string, unknown> & { id: string }, chKey: string | null): Promise<RegistryResult> {
+export async function resolveRegistry(
+  service: SupabaseClient, lead: Record<string, unknown> & { id: string }, chKey: string | null, people: OfficerQuery[] = [],
+): Promise<RegistryResult> {
   const empty = { address: null, locality: null, candidates: [] as CompanyCandidate[] };
   const saved = cleanCompanyNumber(lead.company_number);
   if (saved) {
@@ -72,17 +75,48 @@ export async function resolveRegistry(service: SupabaseClient, lead: Record<stri
       if (n && !seen.has(n)) { seen.add(n); items.push(it); }
     }
   }
-  if (!anyOk) return { ...empty, number: null, name: null, how: 'error' };
   const loc = { postcode: str(lead.postcode), city: str(lead.city), address: str(lead.address) };
-  const pick = pickCompany(scoreCompanyCandidates(items, name, loc), name, loc);
-  if (pick.chosen) {
-    const { error } = await service.from('leads').update({ company_number: pick.chosen.company_number })
-      .eq('id', lead.id).is('company_number', null);
-    if (error) console.error('deep find: could not save the company number');
-    return {
-      number: pick.chosen.company_number, name: pick.chosen.name, address: pick.chosen.address, locality: pick.chosen.locality,
-      how: 'auto', candidates: [],
-    };
+  const pick = anyOk ? pickCompany(scoreCompanyCandidates(items, name, loc), name, loc) : { chosen: null, candidates: [] as CompanyCandidate[] };
+  if (!pick.chosen) {
+    // No clear match by name: look the company up through the people we know (officer search, then their
+    // appointments). Never auto-picked: the user still chooses, with the reason shown.
+    const viaPeople = await companiesViaOfficers(chKey, people, [name, ...registrySearchNames(name)]);
+    const byName = pick.candidates.filter((c) => !viaPeople.some((p) => p.company_number === c.company_number))
+      .map((c) => ({ ...c, why: locationAgrees(c, loc) ? 'Name and place match' : 'Name matches' }));
+    const candidates = [...viaPeople, ...byName].slice(0, 5);
+    if (!anyOk && viaPeople.length === 0) return { ...empty, number: null, name: null, how: 'error' };
+    return { ...empty, number: null, name: null, how: candidates.length ? 'ambiguous' : 'not_found', candidates };
   }
-  return { ...empty, number: null, name: null, how: pick.candidates.length ? 'ambiguous' : 'not_found', candidates: pick.candidates };
+  const { error } = await service.from('leads').update({ company_number: pick.chosen.company_number })
+    .eq('id', lead.id).is('company_number', null);
+  if (error) console.error('deep find: could not save the company number');
+  return {
+    number: pick.chosen.company_number, name: pick.chosen.name, address: pick.chosen.address, locality: pick.chosen.locality,
+    how: 'auto', candidates: [],
+  };
+}
+
+/**
+ * Companies found through the people we know: Companies House officer search for each person (max 3), their
+ * appointments (max 2 matching officers each), kept when the company's name matches one of the lead's name variants.
+ * Each comes with its registered office (profile) and the fixed reason. At most 3. Free API; every call is guarded.
+ */
+async function companiesViaOfficers(chKey: string, people: OfficerQuery[], names: string[]): Promise<CompanyCandidate[]> {
+  const out: CompanyCandidate[] = [];
+  for (const person of people.slice(0, 3)) {
+    if (out.length >= 3) break;
+    const found = await searchOfficers(`${person.first} ${person.last}`, chKey);
+    for (const path of officerAppointmentPaths(found, person).slice(0, 2)) {
+      for (const c of appointmentCompanies(await fetchOfficerAppointments(path, chKey), names, person)) {
+        if (out.length >= 3 || out.some((x) => x.company_number === c.company_number)) continue;
+        const profile = await fetchCompanyProfile(c.company_number, chKey);
+        out.push({
+          company_number: c.company_number, name: profile?.name ?? c.name, address: profile?.address ?? null,
+          status: profile?.status ?? c.status, postcode: profile?.postcode ?? null, locality: profile?.locality ?? null,
+          created: null, score: 100, why: c.why,
+        });
+      }
+    }
+  }
+  return out;
 }

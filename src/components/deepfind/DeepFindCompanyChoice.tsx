@@ -33,6 +33,7 @@ export function DeepFindCompanyChoice({ leadId, candidates }: { leadId: string; 
             <span className="min-w-0 flex-1">
               <span className="font-semibold">{c.name}</span> ({c.company_number}{c.status ? `, ${c.status}` : ''})
               {c.address && <span className="block text-muted">{c.address}</span>}
+              {c.why && <span className="block text-muted">Why: {c.why}</span>}
             </span>
             <Button variant="secondary" onClick={() => void choose(c.company_number)} loading={busy === c.company_number} disabled={busy !== null}>
               Use this company

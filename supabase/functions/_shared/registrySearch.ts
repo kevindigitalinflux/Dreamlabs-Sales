@@ -16,6 +16,8 @@ export interface CompanyCandidate {
   locality: string | null;
   created: string | null;
   score: number;
+  /** Why it is offered, a fixed sentence ("Name matches", "Max Whatley is a director there"). */
+  why?: string;
 }
 
 /** What is known about where the lead is. Any field may be missing. */
@@ -126,7 +128,7 @@ export function scoreCompanyCandidates(items: unknown, leadName: string, loc: Le
  */
 export function pickCompany(scored: CompanyCandidate[], leadName: string, loc: LeadLocation): CompanyPick {
   const lead = companyNameTokens(leadName);
-  const candidates = scored.slice(0, 3);
+  const candidates = scored.slice(0, 5);
   if (lead.length === 0 || scored.length === 0) return { chosen: null, candidates, reason: 'none' };
   const tokensOf = (c: CompanyCandidate) => companyNameTokens(c.name);
   const isExact = (c: CompanyCandidate) => {

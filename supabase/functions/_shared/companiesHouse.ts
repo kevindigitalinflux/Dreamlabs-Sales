@@ -160,3 +160,33 @@ export async function fetchCompanyProfile(companyNumber: string, apiKey: string)
     return null;
   }
 }
+
+/** Companies House officer search by a person's name: the raw answer (read by officerAppointmentPaths), or null on error. */
+export async function searchOfficers(name: string, apiKey: string): Promise<unknown | null> {
+  try {
+    const res = await fetchWithTimeout(`https://api.company-information.service.gov.uk/search/officers?q=${encodeURIComponent(name.slice(0, 80))}&items_per_page=20`, {
+      headers: { Authorization: 'Basic ' + btoa(`${apiKey}:`) },
+    });
+    if (!res.ok) return null;
+    return await res.json() as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One officer's appointments. `path` must be exactly "/officers/<id>/appointments" (taken from a search answer and
+ * re-checked here), so only the Companies House API host is ever called. Raw answer or null.
+ */
+export async function fetchOfficerAppointments(path: string, apiKey: string): Promise<unknown | null> {
+  if (!/^\/officers\/[A-Za-z0-9_-]{1,80}\/appointments$/.test(path)) return null;
+  try {
+    const res = await fetchWithTimeout(`https://api.company-information.service.gov.uk${path}?items_per_page=50`, {
+      headers: { Authorization: 'Basic ' + btoa(`${apiKey}:`) },
+    });
+    if (!res.ok) return null;
+    return await res.json() as unknown;
+  } catch {
+    return null;
+  }
+}
