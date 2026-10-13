@@ -14,6 +14,7 @@ const STEP_LABELS: Record<string, { label: (t: string) => string; provider: stri
   hunter_company: { label: (t) => `Hunter company search (${t})`, provider: 'Hunter' },
   hunter_finder: { label: (t) => `Hunter email finder by company (${t})`, provider: 'Hunter' },
   hunter_list: { label: (t) => `Hunter list for ${t}`, provider: 'Hunter' },
+  hunter_verify: { label: (t) => `Hunter email check on ${t}`, provider: 'Hunter' },
   domain_check: { label: (t) => `Domain check ${t}`, provider: 'DNS' },
   site_check: { label: (t) => `Website check ${t}`, provider: 'The website' },
   web: { label: () => 'Web search', provider: 'Gemini' },

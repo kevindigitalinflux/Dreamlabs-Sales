@@ -58,6 +58,14 @@ export function DeepFindLeadResult({ row }: { row: DeepFindRowWithLead }) {
           People looked up: {details.people.map((p) => `${p.name}${p.role ? ` (${p.role})` : ''}${p.email_found ? ': email found' : ''}`).join(', ')}
         </p>
       )}
+      {details.suggestions.length > 0 && (
+        <div className="text-xs text-muted">
+          <p>Addresses to check (not saved, not used for follow-ups):</p>
+          <ul className="ml-4 list-disc">
+            {details.suggestions.map((s) => <li key={`${s.name}-${s.value}`}>{s.name}: {s.value} ({s.label})</li>)}
+          </ul>
+        </div>
+      )}
       {toCheck.length > 0 && (
         <p className="text-xs text-muted">To check: {toCheck.map((p) => (p.role ? `${p.name} (${p.role})` : p.name)).join(', ')}</p>
       )}

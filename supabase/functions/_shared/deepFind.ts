@@ -10,7 +10,8 @@ import { registryStep, resolveRegistry } from './deepFindRegistry.ts';
 import { lookUpPeople } from './deepFindPeople.ts';
 import { discoverLeadDomains } from './domainDiscoveryLookup.ts';
 import { DOMAIN_CHECKS, savedDomains } from './domainChecks.ts';
-import { hunterAccount, hunterDomainList, readCompanyPages } from './knownPersonLookup.ts';
+import { hunterAccount, hunterDomainList, hunterVerifyEmail, readCompanyPages } from './knownPersonLookup.ts';
+import { guessLabel, inferDomainPattern, patternGuess, patternLine, type PatternSample } from './domainPattern.ts';
 import { hunterAccountEmpty, hunterAccountLine, type HunterAccount } from './hunterLimits.ts';
 import { cleanEmail, cleanLinkedinProfile, emailDomain, extractWebsiteFindings, pickWebsiteFindings } from './knownPersonWide.ts';
 import { domainEmailsOnPages } from './domainSiteCheck.ts';
@@ -241,6 +242,49 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         suggestions.push({ name: `${person.first} ${person.last}`.slice(0, 80), field: 'email', value: email, label: `Found on ${s.domain}, check it` });
       }
       break;
+    }
+  }
+
+  // (1c) the email format on each confirmed domain, from addresses we already know there (contacts, the lead's own
+  // email, addresses written on the domain's site). Built addresses are verified with Hunter when credits allow;
+  // otherwise they are only offered as "Guess, unverified" suggestions: never filled in, never in sequences.
+  const knownNames = [
+    ...peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers).map((p) => ({ first: p.first, last: p.last })),
+    ...extraSitePeople.flatMap((p) => { const n = parseLeadPersonName(p.name); return n ? [{ first: n.first, last: n.last }] : []; }),
+  ].slice(0, 20);
+  const ownerName = parseLeadPersonName(lead.owner_name);
+  let verifications = 0;
+  for (const d of [...verified].slice(0, 4)) {
+    const samples: PatternSample[] = [
+      ...all().flatMap((c) => (str(c.email) && emailDomain(str(c.email)) === d ? [{ email: str(c.email)!, first: str(c.first_name), last: str(c.last_name) }] : [])),
+      ...(str(lead.email) && emailDomain(str(lead.email)) === d ? [{ email: str(lead.email)!, first: ownerName?.first ?? null, last: ownerName?.last ?? null }] : []),
+      ...(siteEmails.get(d) ?? []).map((email) => ({ email, first: null, last: null })),
+    ];
+    const pattern = inferDomainPattern(d, samples, knownNames);
+    if (!pattern) continue;
+    steps.push(patternLine(d, pattern));
+    for (const person of peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers).slice(0, 5)) {
+      const guess = patternGuess(pattern, person, d);
+      if (!guess || emailOnLead(all(), guess) || suggestions.some((s) => s.value === guess)) continue;
+      const name = `${person.first} ${person.last}`.slice(0, 80);
+      let verdict: string | null = null;
+      if (hunterKey && verifications < 3 && left() > 25_000 && await spend.hunter('verify email format')) {
+        verifications++;
+        const v = await hunterVerifyEmail(guess, hunterKey, 5_000);
+        if (v.ok) verdict = v.verdict;
+        else {
+          problems.push({ step: 'hunter_verify', target: d, failure: safeFailure(v.failure) });
+          if (v.failure === 'usage_exhausted' || v.failure === 'rate_limited') spend.stopHunter();
+        }
+      }
+      if (verdict === 'invalid') continue;
+      const contact = person.contactId ? all().find((c) => c.id === person.contactId) ?? null : null;
+      if (verdict === 'verified' && contact) {
+        const saved = await fillBlanks(service, contact, { email: guess });
+        if (saved) { Object.assign(contact, saved); touched.add(contact.id); stats.officerEmails++; }
+      } else {
+        suggestions.push({ name, field: 'email', value: guess, label: verdict === 'verified' ? 'Built from the email format and verified by Hunter, check it' : guessLabel(pattern, d) });
+      }
     }
   }
 

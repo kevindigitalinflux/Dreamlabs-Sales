@@ -13,10 +13,10 @@ describe('readDeepFindDetails', () => {
       namedByWeb: [{ name: 'David Cox', role: 'Owner' }],
       namedOnSite: [],
       unverified: [{ name: 'Tom Reed', role: 'Director' }],
-      companyCandidates: [], companyNumber: null, steps: [], people: [], websiteSuspect: false, websiteReasons: [],
+      companyCandidates: [], companyNumber: null, steps: [], people: [], websiteSuspect: false, websiteReasons: [], suggestions: [],
     });
     expect(readDeepFindDetails(null)).toEqual({
-      domains: [], namedByWeb: [], namedOnSite: [], unverified: [], companyCandidates: [], companyNumber: null, steps: [], people: [], websiteSuspect: false, websiteReasons: [],
+      domains: [], namedByWeb: [], namedOnSite: [], unverified: [], companyCandidates: [], companyNumber: null, steps: [], people: [], websiteSuspect: false, websiteReasons: [], suggestions: [],
     });
   });
 });

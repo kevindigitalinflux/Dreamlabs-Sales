@@ -33,7 +33,12 @@ export interface DeepFindDetails {
   /** True when the lead's website looked like another company's, with the plain reasons. */
   websiteSuspect: boolean;
   websiteReasons: string[];
+  /** Addresses found or built but not saved (site emails for non-contacts, email-format guesses): the user checks them. */
+  suggestions: DeepFindSuggestion[];
 }
+
+/** One address offered to check, with where it came from (a fixed label). */
+export interface DeepFindSuggestion { name: string; value: string; label: string }
 
 /** One Companies House company offered with "Use this company". */
 export interface DeepFindCompanyCandidate { company_number: string; name: string; address: string | null; status: string | null }
@@ -81,12 +86,20 @@ export function readDeepFindDetails(value: unknown): DeepFindDetails {
     return domain ? [{ domain, needs_check: x.needs_check === true }] : [];
   });
   const number = typeof o.company_number === 'string' && COMPANY_NUMBER_RE.test(o.company_number) ? o.company_number : null;
-  const steps = (Array.isArray(o.steps) ? o.steps : []).slice(0, 20).flatMap((s) => { const t = text(s, 300); return t ? [t] : []; });
+  const steps = (Array.isArray(o.steps) ? o.steps : []).slice(0, 40).flatMap((s) => { const t = text(s, 300); return t ? [t] : []; });
+  const suggestions = (Array.isArray(o.suggestions) ? o.suggestions : []).slice(0, 10).flatMap((s) => {
+    const x = (typeof s === 'object' && s !== null ? s : {}) as Record<string, unknown>;
+    const name = text(x.name, 80);
+    const value = text(x.value, 200);
+    const label = text(x.label, 120);
+    return name && value && label && x.field === 'email' ? [{ name, value, label }] : [];
+  });
   return {
     domains, namedByWeb: named(o.named_by_web), namedOnSite: named(o.named_on_site), unverified: named(o.unverified_people),
     companyCandidates: number ? [] : companyCandidates(o.company_candidates), companyNumber: number, steps, people: peopleList(o.people),
     websiteSuspect: o.website_suspect === true,
     websiteReasons: (Array.isArray(o.website_reasons) ? o.website_reasons : []).slice(0, 3).flatMap((r) => { const t = text(r, 200); return t ? [t] : []; }),
+    suggestions,
   };
 }
 
