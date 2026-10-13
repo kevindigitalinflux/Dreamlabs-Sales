@@ -51,3 +51,16 @@ We WILL collect named people's business contact details where findable (not just
 - Reacher licence: README says MIT; confirm the LICENSE file in the repo before use.
 - Whether to add the footer company-number auto-pick (Companies House) first: small and free, no new tools.
 - Firecrawl monthly credit cap per organisation.
+
+## Decisions from Kevin, 2026-10-14
+- **Strategy:** free tools first, Hunter and Apollo only to fill gaps (saves credits). A per-organisation "save credits / maximum coverage" setting is a possible later addition, not required now.
+- **Paid plans:** none for now. Free tiers only. Hunter free is 50 credits a month (renews around 2026-10-18); Apollo's free plan blocks the API enrichment calls (403), so Apollo is a quiet "not available" step until a paid plan is chosen. Each organisation keeps bringing its own Hunter/Apollo keys (existing behaviour), so heavy users can pay for their own.
+- **Regions, in order:** UK, Ireland, US (UAE/Dubai later). UK: Companies House (free, wired in). Ireland: CRO (key pending from Valentina; unverified response shape). US: no national register; plan to use state registers or OpenCorporates (to design later; the worker and the free tools are region-neutral). Regional data-protection rules (UK/IE GDPR+PECR sole-trader rules, US CAN-SPAM, UAE PDPL) should be enforced by a per-organisation/region setting, not hard-coded to the UK.
+- **UX Tree** (leads in Ireland, US, UK) is another organisation on the same platform: the worker is shared, usage is metered per organisation, and keys are per organisation.
+- **VPS:** Kevin approves the assistant setting up the worker stack itself ONCE a Hostinger snapshot exists (plugin `hostinger@claude-plugins-official` + a VPS API key kept in `~/.claude/settings.json` env, never in chat or the project `.env`). Rules: n8n and its data stay untouched; first do read-only checks (port 25, Docker, memory, disk, what is running); isolated Docker network; wrapper secret; localhost-only ports.
+
+## Next steps (in order)
+1. Kevin: add the Hostinger API key to global settings, reload plugins (`/reload-plugins` or restart), take a Hostinger snapshot of the n8n VPS.
+2. Assistant: read-only VPS checks; report port 25, Docker and resources.
+3. Assistant: design doc + plan for the worker, the Deep find integration and the per-organisation/region settings; review with Kevin before building.
+4. Build in small pieces: worker stack, wrapper + SSRF guard, Deep find integration (scraper, Firecrawl, pattern + Reacher), provenance fields, footer company-number match.
