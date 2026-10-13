@@ -104,8 +104,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const { data: canEdit, error: canEditErr } = await service.rpc('deep_find_creator_can_edit', { target_user: run.created_by, target_lead: lead.id });
   if (canEditErr) return { status: 'failed', reason: 'Could not check access to this lead.' };
   if (canEdit !== true) return { status: 'skipped', reason: 'The person who started this Deep find can no longer edit this lead.' };
-  if (!await checkRateLimit(service, `deep-find:${run.org_id}:${lead.id}`, 3, 24 * 60, true)) {
-    return { status: 'skipped', reason: 'Deep find already ran 3 times on this lead today. Try again tomorrow.' };
+  if (!await checkRateLimit(service, `deep-find:${run.org_id}:${lead.id}`, 5, 24 * 60, true)) {
+    return { status: 'skipped', reason: 'Deep find already ran 5 times on this lead today. Try again tomorrow.' };
   }
   if (!await checkRateLimit(service, `deep-find:${run.org_id}`, 200, 24 * 60, true)) {
     return { status: 'skipped', reason: 'This organisation reached its daily Deep find limit. Try again tomorrow.' };
