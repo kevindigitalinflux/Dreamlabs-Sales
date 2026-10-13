@@ -6,7 +6,7 @@
 
 /** Where a domain came from, strongest first (see SOURCE_RANK). */
 export type DomainSource =
-  | 'typed' | 'website' | 'saved' | 'lead_email' | 'contact_email'
+  | 'typed' | 'website' | 'website_suspect' | 'saved' | 'lead_email' | 'contact_email' | 'person_confirmed'
   | 'hunter_name' | 'hunter_name_weak' | 'website_email' | 'website_link' | 'web';
 
 /** One sighting of a domain. */
@@ -19,14 +19,15 @@ export interface DomainCandidate { domain: string; source: DomainSource }
 export interface DiscoveredDomain { domain: string; sources: DomainSource[]; needs_check: boolean }
 
 /** Sources that on their own make a domain the company's: known to the user or the lead, or a strong Hunter name match. */
-const STRONG_SOURCES: DomainSource[] = ['typed', 'website', 'saved', 'lead_email', 'contact_email', 'hunter_name'];
+const STRONG_SOURCES: DomainSource[] = ['typed', 'website', 'saved', 'lead_email', 'contact_email', 'person_confirmed', 'hunter_name'];
 /** Independent weak signals: two different ones together corroborate a domain. */
-const WEAK_SOURCES: DomainSource[] = ['hunter_name_weak', 'website_email', 'website_link', 'web'];
+const WEAK_SOURCES: DomainSource[] = ['website_suspect', 'hunter_name_weak', 'website_email', 'website_link', 'web'];
 
 /**
  * True when a domain's sightings make it the company's own: one strong source (a typed domain, the lead's website, a
- * saved domain, the lead's or a contact's email domain, a strong Hunter company-name match), or at least two DIFFERENT
- * weak signals (a weak Hunter match, an email or link on the website, the web search).
+ * saved domain, the lead's or a contact's email domain, a known person found on it, a Hunter name match against the
+ * registered name), or at least two DIFFERENT weak signals (a suspect website, a weak Hunter match, an email or link
+ * on the website, the web search).
  */
 export function isCorroborated(sources: DomainSource[]): boolean {
   if (sources.some((s) => STRONG_SOURCES.includes(s))) return true;
@@ -43,8 +44,8 @@ export interface DomainChecks { clean: (value: unknown) => string | null; usable
 export const MAX_DISCOVERED_DOMAINS = 4;
 
 const SOURCE_RANK: Record<DomainSource, number> = {
-  typed: 0, website: 1, saved: 2, lead_email: 3, contact_email: 4, hunter_name: 5, hunter_name_weak: 6, website_email: 7,
-  website_link: 8, web: 9,
+  typed: 0, website: 1, saved: 2, lead_email: 3, contact_email: 4, person_confirmed: 5, hunter_name: 6, website_suspect: 7,
+  hunter_name_weak: 8, website_email: 9, website_link: 10, web: 11,
 };
 
 /**
@@ -160,13 +161,17 @@ export type HunterNameMatch = 'strong' | 'weak' | 'none';
  * (trading or registered):
  * - none: the domain does not fit the name strictly, or Hunter's organisation name has a distinctive word the
  *   lead's name lacks, or shares none of its distinctive words ("Living Social", "Love Living Brands").
- * - strong: Hunter gave an organisation name, it carries every distinctive word, and there are at least two of them.
- * - weak: everything else that fits (no organisation name from Hunter, or a one-word brand such as "Bloom" where a
- *   namesake is likely). A weak match is only accepted with a second, independent signal (see isCorroborated).
+ * - strong: ONLY when the Companies House registered name is known and Hunter's organisation name has exactly the
+ *   same distinctive words (an independent registry fact agrees with Hunter). A match on the lead's own business
+ *   name alone is never strong: "Love Living" never accepts lovelivinguk.co.uk on the name alone.
+ * - weak: everything else that fits. A weak match is only accepted with a second, independent signal (see
+ *   isCorroborated), for example a known person on Hunter's list for that domain.
  */
-export function hunterNameMatches(leadNames: string[], organization: unknown, domain: string): HunterNameMatch {
+export function hunterNameMatches(leadNames: string[], organization: unknown, domain: string, registeredName?: string | null): HunterNameMatch {
   const org = distinctiveTokens(organization);
   const orgAll = brandTokens(organization);
+  const registered = distinctiveTokens(registeredName ?? '');
+  const sameSet = (a: string[], b: string[]) => a.length > 0 && a.length === b.length && a.every((t) => b.includes(t));
   let best: HunterNameMatch = 'none';
   for (const name of leadNames) {
     const brand = brandTokens(name);
@@ -175,11 +180,110 @@ export function hunterNameMatches(leadNames: string[], organization: unknown, do
     if (orgAll.length > 0) {
       if (orgAll.some((t) => !brand.includes(t))) continue;
       if (!org.some((t) => distinct.includes(t))) continue;
-      if (distinct.length >= 2 && distinct.every((t) => org.includes(t))) return 'strong';
+      if (sameSet(org, registered)) return 'strong';
     }
     best = 'weak';
   }
   return best;
+}
+
+/** A person known to work at the company (an officer, an owner name on the lead, a contact). */
+export interface KnownPersonName { first: string; last: string }
+
+function personKey(v: unknown): string {
+  return typeof v === 'string' ? v.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z]/g, '') : '';
+}
+
+/**
+ * True when Hunter's address list for a domain (`data.emails[]`) names one of the known people: the same surname and
+ * the same first initial. Every field is type-checked. This "confirmed by a person" signal is what lets a domain be
+ * saved and its staff stored.
+ */
+export function listNamesKnownPerson(emails: unknown, people: KnownPersonName[]): boolean {
+  if (!Array.isArray(emails) || people.length === 0) return false;
+  return emails.slice(0, 200).some((raw) => {
+    if (typeof raw !== 'object' || raw === null) return false;
+    const e = raw as Record<string, unknown>;
+    const last = personKey(e.last_name);
+    const first = personKey(e.first_name);
+    return !!last && !!first && people.some((p) => personKey(p.last) === last && personKey(p.first)[0] === first[0]);
+  });
+}
+
+/**
+ * Plausible company domains built from the company's names, for checking with DNS: the name's distinctive and brand
+ * words joined (loveliving), with and without uk / london / management / ltd, on .uk, .co.uk, .com, .london and
+ * .org.uk. At most 12, most likely first. Every value is a plain hostname.
+ */
+export function candidateDomainsFromNames(names: string[], max = 12): string[] {
+  const bases: string[] = [];
+  for (const name of names) {
+    const brand = brandTokens(name).filter((t) => /^[a-z0-9]+$/.test(t));
+    if (distinctiveTokens(name).length === 0 || brand.length === 0 || brand.length > 4) continue;
+    const base = brand.join('');
+    if (base.length >= 3 && base.length <= 40 && !bases.includes(base)) bases.push(base);
+  }
+  const out: string[] = [];
+  const add = (d: string) => { if (out.length < max && !out.includes(d)) out.push(d); };
+  for (const base of bases) for (const tld of ['.uk', '.co.uk', '.com']) add(`${base}${tld}`);
+  for (const base of bases) {
+    add(`${base}uk.co.uk`); add(`${base}.london`); add(`${base}.org.uk`); add(`${base}london.co.uk`);
+    add(`${base}management.co.uk`); add(`${base}ltd.co.uk`); add(`${base}uk.com`); add(`${base}-uk.co.uk`);
+  }
+  return out;
+}
+
+/**
+ * Reads a DNS-over-HTTPS JSON answer for an MX query: 'mx' when there is at least one real mail server, 'none' for
+ * NXDOMAIN, no answers or a null MX ("0 ."), and 'error' for anything malformed. Only type-15 answers count.
+ */
+export function parseDohMx(json: unknown): 'mx' | 'none' | 'error' {
+  if (typeof json !== 'object' || json === null || Array.isArray(json)) return 'error';
+  const o = json as Record<string, unknown>;
+  if (typeof o.Status !== 'number') return 'error';
+  if (o.Status === 3) return 'none';
+  if (o.Status !== 0) return 'error';
+  const answers = Array.isArray(o.Answer) ? o.Answer.slice(0, 20) : [];
+  const real = answers.some((a) => {
+    if (typeof a !== 'object' || a === null) return false;
+    const r = a as Record<string, unknown>;
+    if (r.type !== 15 || typeof r.data !== 'string') return false;
+    const host = r.data.trim().split(/\s+/)[1] ?? '';
+    return host !== '' && host !== '.';
+  });
+  return real ? 'mx' : 'none';
+}
+
+/** Why the lead's website may belong to a different company. */
+export interface WebsiteSuspicion { suspect: boolean; reasons: string[] }
+
+/**
+ * Conservative check that the lead's website is really this (UK) company's: suspect when the pages show phone numbers
+ * only from other countries (not +44 or +353, and no UK-style 0... number), or when neither the home page title nor
+ * its footer carries the company's distinctive name words. Each reason is a fixed sentence.
+ */
+export function websiteSuspicion(pages: string[], names: string[]): WebsiteSuspicion {
+  const reasons: string[] = [];
+  const all = pages.slice(0, 6).map((p) => (typeof p === 'string' ? p.slice(0, 600_000) : '')).join('\n');
+  if (!all) return { suspect: false, reasons };
+  const text = all.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ');
+  let uk = 0;
+  let foreign = 0;
+  for (const m of text.matchAll(/\+\s?(\d{1,3})[\s.(-]{0,2}\d/g)) {
+    if (m[1] === '44' || m[1] === '353') uk++; else foreign++;
+  }
+  for (const m of all.matchAll(/tel:\s*\+?(\d{1,3})/gi)) { if (m[1] === '44' || m[1] === '353') uk++; }
+  if (/(^|[^\d+])0\d{2,4}[\s-]?\d{3,4}[\s-]?\d{3,4}\b/.test(text)) uk++;
+  if (foreign > 0 && uk === 0) reasons.push('The phone numbers on the website are not UK numbers.');
+  const title = /<title[^>]*>([\s\S]{0,300}?)<\/title>/i.exec(pages[0] ?? '')?.[1] ?? '';
+  const footer = /(©|&copy;|copyright)[\s\S]{0,200}/i.exec(text)?.[0] ?? '';
+  const carries = (s: string) => names.some((n) => {
+    const d = distinctiveTokens(n);
+    const w = brandTokens(s);
+    return d.length > 0 && d.every((t) => w.includes(t) || w.join('').includes(t));
+  });
+  if (title.trim() && !carries(title) && !carries(footer)) reasons.push('The website title and footer name a different business.');
+  return { suspect: reasons.length > 0, reasons };
 }
 
 const EMAIL_IN_HTML = /(?:mailto:)?([a-z0-9._%+-]{1,64}@([a-z0-9-]+(?:\.[a-z0-9-]+)+))/gi;
@@ -302,8 +406,9 @@ export function discoveryDetail(found: DiscoveredDomain[]): string {
 
 /** Plain label for where a domain came from, for the results view. */
 export const DOMAIN_SOURCE_LABELS: Record<DomainSource, string> = {
-  typed: 'typed by you', website: 'the lead\'s website', saved: 'found earlier', lead_email: 'the lead\'s email',
-  contact_email: 'a contact\'s email', hunter_name: 'Hunter company search',
+  typed: 'typed by you', website: 'the lead\'s website', website_suspect: 'the lead\'s website (may be another company)',
+  saved: 'found earlier', lead_email: 'the lead\'s email', contact_email: 'a contact\'s email',
+  person_confirmed: 'a known person was found on it', hunter_name: 'Hunter company search, matches the registered name',
   hunter_name_weak: 'Hunter company search (needs a second sign)', website_email: 'an email on the website',
   website_link: 'a link on the website', web: 'web search, check it',
 };
@@ -317,16 +422,30 @@ export interface DiscoveryDeps {
   readSite: (website: string, budgetMs: number) => Promise<string[]>;
   /** Gemini grounded search; returns the raw answer text. */
   webSearch: (timeoutMs: number) => Promise<{ ok: true; text: string } | { ok: false; failure: unknown }>;
+  /** DNS-over-HTTPS MX check for a validated hostname. Optional: without it no name-built domains are probed. */
+  mx?: (domain: string, timeoutMs: number) => Promise<'mx' | 'none' | 'error'>;
+  /** Hunter company list for a domain (limit 10): organisation name and addresses. */
+  hunterList?: (domain: string, timeoutMs: number) => Promise<{ ok: true; organization: unknown; emails: unknown[] } | { ok: false; failure: unknown }>;
+  /** Hunter email-finder by COMPANY NAME for one person: the address found and Hunter's score. */
+  hunterFindByCompany?: (company: string, first: string, last: string, timeoutMs: number) => Promise<{ ok: true; email: unknown; score: unknown } | { ok: false; failure: unknown }>;
 }
 
 /** What is known before discovery starts. */
 export interface DiscoveryInput {
   /** The trading name first, then the registered name when known. */
   names: string[];
+  /** The Companies House registered name, when known (the only name that makes a Hunter name match strong). */
+  registeredName?: string | null;
+  /** People known to work there (officers, names on the lead, contacts), for "confirmed by a person". */
+  people?: KnownPersonName[];
   website: string | null;
   websiteDomain: string | null;
+  /** When true, the website is not read for other domains (it may belong to another company). */
+  websiteSuspect?: boolean;
   /** Domains already known (typed, website, saved, emails), in priority order. */
   known: DomainCandidate[];
+  /** Domains the user said are not the company's: never returned. */
+  blocked?: string[];
   allow: { hunter: boolean; site: boolean; web: boolean };
   budgetMs: number;
 }
@@ -342,35 +461,100 @@ export interface DiscoveryOutcome {
   aiCalls: number;
   /** Safe failure codes of providers that did not work, for the summary. */
   failures: string[];
+  /** Plain-English lines about how domains were found or checked. */
+  notes: string[];
 }
 
+const FINDER_MIN_SCORE = 50;
+
 /**
- * Discovers the company's other domains: Hunter company-name search for each name (strong or weak per
- * hunterNameMatches), domains the company's own website points at, and finally a web search (last, with whatever
- * time is left). Each source only runs when allowed and while budget remains; a failure never stops the next.
+ * Discovers the company's other domains, never trusting one source:
+ * 1. Hunter company-name search for each name (strong only with a registered-name match, else weak).
+ * 2. For up to 3 known people, Hunter email-finder by company name: a confident address (score >= 50) puts its domain
+ *    in as "confirmed by a person".
+ * 3. Domains built from the names (candidateDomainsFromNames) that have a mail server (MX); for up to 4 of them
+ *    Hunter's company list (limit 10): a known person on it confirms the domain; an organisation name equal to the
+ *    registered name makes it strong; anything else is only a weak signal. A parked domain with MX but no Hunter
+ *    match is never accepted.
+ * 4. Other domains the company's own website points at (skipped when the website is suspect).
+ * 5. A web search last, with whatever time is left.
+ * Hunter calls stop as soon as a provider gate refuses (credit cap). Blocked domains are dropped everywhere.
  */
 export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryDeps, checks: DomainChecks): Promise<DiscoveryOutcome> {
   const start = deps.now();
   const left = () => input.budgetMs - (deps.now() - start);
   const names = input.names.map((n) => n.trim()).filter((n, i, a) => n && a.findIndex((x) => x.toLowerCase() === n.toLowerCase()) === i).slice(0, 2);
+  const blocked = new Set((input.blocked ?? []).map((b) => checks.clean(b)).filter((b): b is string => !!b));
   const seen: DomainCandidate[] = [...input.known];
   const failures: string[] = [];
+  const notes: string[] = [];
+  const people = (input.people ?? []).slice(0, 6);
   let hunterCalls = 0;
   let aiCalls = 0;
-  let people: WebPerson[] = [];
+  let webPeople: WebPerson[] = [];
+  let hunterRefused = false;
+  const usable = (raw: unknown): string | null => {
+    const d = checks.clean(raw);
+    return d && checks.usable(d) && !blocked.has(d) ? d : null;
+  };
+  const failed = (who: string, failure: unknown) => {
+    const f = String(failure).slice(0, 20);
+    if (f === 'cap_reached') hunterRefused = true;
+    failures.push(`${who}:${f}`);
+  };
 
   if (input.allow.hunter) {
     for (const name of names) {
-      if (left() < 1_500 || brandTokens(name).length === 0) continue;
+      if (hunterRefused || left() < 1_500 || brandTokens(name).length === 0) continue;
       hunterCalls++;
       const res = await deps.hunterByName(name, Math.min(5_000, left())).catch(() => ({ ok: false as const, failure: 'network' }));
-      if (!res.ok) { failures.push(`hunter:${String(res.failure).slice(0, 20)}`); continue; }
-      const d = checks.clean(res.domain);
-      const match = d && checks.usable(d) ? hunterNameMatches(names, res.organization, d) : 'none';
+      if (!res.ok) { failed('hunter', res.failure); continue; }
+      const d = usable(res.domain);
+      const match = d ? hunterNameMatches(names, res.organization, d, input.registeredName) : 'none';
       if (d && match !== 'none') seen.push({ domain: d, source: match === 'strong' ? 'hunter_name' : 'hunter_name_weak' });
     }
+    const company = (input.registeredName ?? names[0] ?? '').trim();
+    if (deps.hunterFindByCompany && company) {
+      for (const p of people.slice(0, 3)) {
+        if (hunterRefused || left() < 2_000) break;
+        hunterCalls++;
+        const res = await deps.hunterFindByCompany(company, p.first, p.last, Math.min(5_000, left())).catch(() => ({ ok: false as const, failure: 'network' }));
+        if (!res.ok) { failed('hunter', res.failure); continue; }
+        const score = typeof res.score === 'number' ? res.score : 0;
+        const email = typeof res.email === 'string' ? res.email.trim().toLowerCase() : '';
+        const d = score >= FINDER_MIN_SCORE && email.includes('@') ? usable(email.slice(email.lastIndexOf('@') + 1)) : null;
+        if (d) {
+          seen.push({ domain: d, source: 'person_confirmed' });
+          notes.push(`Hunter found ${p.first} ${p.last} at ${d}.`.slice(0, 200));
+        }
+      }
+    }
+    if (deps.mx && deps.hunterList) {
+      const knownDomains = new Set(seen.map((s) => checks.clean(s.domain)));
+      let probed = 0;
+      for (const candidate of candidateDomainsFromNames([input.registeredName ?? '', ...names].filter(Boolean))) {
+        if (hunterRefused || probed >= 4 || left() < 3_000) break;
+        const d = usable(candidate);
+        if (!d || knownDomains.has(d)) continue;
+        const mx = await deps.mx(d, Math.min(3_000, left())).catch(() => 'error' as const);
+        if (mx !== 'mx') continue;
+        probed++;
+        hunterCalls++;
+        const res = await deps.hunterList(d, Math.min(5_000, left())).catch(() => ({ ok: false as const, failure: 'network' }));
+        if (!res.ok) { failed('hunter', res.failure); continue; }
+        if (listNamesKnownPerson(res.emails, people)) {
+          seen.push({ domain: d, source: 'person_confirmed' });
+          notes.push(`Domain ${d} has a mail server and Hunter lists a known person there.`);
+        } else {
+          const match = hunterNameMatches(names, res.organization, d, input.registeredName);
+          if (match === 'strong') seen.push({ domain: d, source: 'hunter_name' });
+          else if (match === 'weak') seen.push({ domain: d, source: 'hunter_name_weak' });
+          if (match !== 'none') notes.push(`Domain ${d} has a mail server and Hunter's name for it ${match === 'strong' ? 'matches the registered company' : 'is similar, but that alone is not enough'}.`);
+        }
+      }
+    }
   }
-  if (input.allow.site && input.website && left() >= 3_000) {
+  if (input.allow.site && input.website && !input.websiteSuspect && left() >= 3_000) {
     const pages = await deps.readSite(input.website, Math.min(10_000, left())).catch(() => [] as string[]);
     for (const html of pages) seen.push(...domainHintsFromHtml(html, names, input.websiteDomain, checks));
   }
@@ -380,11 +564,11 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
     if (!res.ok) failures.push(`web:${String(res.failure).slice(0, 20)}`);
     else {
       const parsed = parseDiscoveryAnswer(res.text, names, checks);
-      people = parsed.people;
+      webPeople = parsed.people;
       for (const d of parsed.domains) seen.push({ domain: d, source: 'web' });
     }
   }
-  const domains = rankDomains(seen, checks);
+  const domains = rankDomains(seen.filter((s) => !blocked.has(checks.clean(s.domain) ?? '')), checks);
   const knownSet = new Set(input.known.map((k) => checks.clean(k.domain)).filter(Boolean));
-  return { domains, discovered: domains.filter((d) => !knownSet.has(d.domain)), people, hunterCalls, aiCalls, failures };
+  return { domains, discovered: domains.filter((d) => !knownSet.has(d.domain)), people: webPeople, hunterCalls, aiCalls, failures, notes };
 }

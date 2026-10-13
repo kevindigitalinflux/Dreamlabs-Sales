@@ -14,10 +14,10 @@ import { hunterDomainList, readCompanyPages } from './knownPersonLookup.ts';
 import { cleanEmail, cleanLinkedinProfile, emailDomain } from './knownPersonWide.ts';
 import { domainFromWebsite, isDirectoryDomain } from './knownPerson.ts';
 import { rankPeople } from './peopleRanking.ts';
-import type { WebPerson } from './domainDiscovery.ts';
+import { DOMAIN_SOURCE_LABELS, websiteSuspicion, type KnownPersonName, type WebPerson } from './domainDiscovery.ts';
 import {
   MAX_HUNTER_PEOPLE_PER_LEAD, deepFindSummary, emailOnLead, extractTeamMembers, findSamePerson,
-  hunterPeople, namedPersonIsStored, peopleToLookUp, stuckAction, type ExistingContact, type LeadStats, type SitePerson,
+  hunterPeople, namedPersonIsStored, parseLeadPersonName, peopleToLookUp, stuckAction, type ExistingContact, type LeadStats, type SitePerson,
 } from './deepFindRules.ts';
 
 export const WALL_BUDGET_MS = 130_000;
@@ -146,17 +146,29 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
 
   // the website pages, read once
   const siteDomain = domainFromWebsite(str(lead.website));
-  const usableSite = !!siteDomain && DOMAIN_CHECKS.usable(siteDomain);
+  const siteReadable = !!siteDomain && DOMAIN_CHECKS.usable(siteDomain);
+  const sitePages = siteReadable && left() > 30_000 ? await readCompanyPages(str(lead.website)!, 12_000) : [];
+  // A website that shows clear signs of another company is only a weak signal: not read for people or other domains.
+  const suspicion = websiteSuspicion(sitePages, [str(lead.business_name) ?? '', registry.name ?? ''].filter(Boolean));
+  if (suspicion.suspect) steps.push(`This website may belong to a different company: ${suspicion.reasons.join(' ')}`);
+  const usableSite = siteReadable && !suspicion.suspect;
   stats.noWebsite = !usableSite;
-  const pages = usableSite && left() > 30_000 ? await readCompanyPages(str(lead.website)!, 12_000) : [];
+  const pages = usableSite ? sitePages : [];
+  // Everyone known to work there (contacts, officers, names on the lead): a domain where Hunter lists one of them is confirmed.
+  const knownPeople: KnownPersonName[] = [
+    ...all().flatMap((c) => (str(c.first_name) && str(c.last_name) ? [{ first: str(c.first_name)!, last: str(c.last_name)! }] : [])),
+    ...officers.flatMap((o) => (o.first_name && o.last_name ? [{ first: o.first_name, last: o.last_name }] : [])),
+    ...[lead.owner_name, ...(Array.isArray(lead.additional_owners) ? lead.additional_owners.slice(0, 10) : [])]
+      .flatMap((n) => { const p = parseLeadPersonName(n); return p ? [{ first: p.first, last: p.last }] : []; }),
+  ].slice(0, 20);
 
   // (1) the company's domains
   const contactDomains = rows.map((r) => emailDomain(str(r.email))).filter((d): d is string => !!d);
   const discovery = await discoverLeadDomains(service, {
     id: lead.id, org_id: lead.org_id, business_name: str(lead.business_name), website: str(lead.website), email: str(lead.email),
-    city: str(lead.city), postcode: str(lead.postcode), email_domains: lead.email_domains,
+    city: str(lead.city), postcode: str(lead.postcode), email_domains: lead.email_domains, blocked_domains: lead.blocked_domains,
   }, {
-    registeredName: registry.name,
+    registeredName: registry.name, registeredAddress: registry.address, people: knownPeople, websiteSuspect: suspicion.suspect,
     extraKnown: contactDomains.map((domain) => ({ domain, source: 'contact_email' as const })),
     keys: { hunterKey, geminiKey }, allow: { hunter: true, site: pages.length > 0, web: true },
     budgetMs: Math.min(25_000, Math.max(0, left() - 30_000)), pages,
@@ -169,6 +181,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   stats.domainsShown = discovery.domains.filter((d) => !d.needs_check && d.domain !== siteDomain).map((d) => d.domain);
   stats.domainsToCheck = discovery.domains.filter((d) => d.needs_check).length;
   const webPeople: WebPerson[] = discovery.people;
+  steps.push(...discovery.notes.slice(0, 6));
+  for (const d of discovery.domains.slice(0, 6)) {
+    const how = d.sources.map((x) => DOMAIN_SOURCE_LABELS[x]).join(', ');
+    steps.push(d.needs_check ? `Domain ${d.domain}: not confirmed (${how}), used for searching only.` : `Domain ${d.domain}: confirmed (${how}).`);
+  }
 
   // (2) Hunter's company list on every domain: every named person with a role
   const lists = new Map<string, { emails: unknown[]; pattern: string | null }>();
@@ -259,6 +276,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       suggestions: suggestions.slice(0, 10),
       unverified_people: unverifiedPeople,
       registered_name: registry.name,
+      website_suspect: suspicion.suspect,
+      website_reasons: suspicion.reasons,
       company_number: registry.number,
       company_candidates: registry.candidates.map((c) => ({
         company_number: c.company_number, name: c.name, address: c.address, status: c.status, score: c.score,

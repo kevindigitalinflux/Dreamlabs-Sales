@@ -42,8 +42,13 @@ describe('domainFitsBrand (strict)', () => {
 });
 
 describe('hunterNameMatches (Review Focus 1)', () => {
-  it('is strong for Love Living Management and loveliving.uk', () => {
-    expect(hunterNameMatches([LOVE], 'Love Living', 'loveliving.uk')).toBe('strong');
+  it('is strong only when Hunter agrees with the Companies House registered name', () => {
+    expect(hunterNameMatches([LOVE], 'Love Living', 'loveliving.uk', 'LOVE LIVING MANAGEMENT LIMITED')).toBe('strong');
+    expect(hunterNameMatches([LOVE], 'Love Living', 'loveliving.uk')).toBe('weak');
+  });
+  it('never accepts lovelivinguk.co.uk for Love Living on the name alone (live case)', () => {
+    expect(hunterNameMatches(['Love Living'], 'Love Living UK', 'lovelivinguk.co.uk')).toBe('weak');
+    expect(isCorroborated(['hunter_name_weak'])).toBe(false);
   });
   it('is only weak without an organisation name or for a one-word brand', () => {
     expect(hunterNameMatches([LOVE], null, 'loveliving.uk')).toBe('weak');
@@ -59,7 +64,7 @@ describe('hunterNameMatches (Review Focus 1)', () => {
     expect(hunterNameMatches(['London Cleaning Services'], 'London Cleaning', 'londoncleaning.com')).toBe('none');
   });
   it('can match on the registered name instead', () => {
-    expect(hunterNameMatches(['LLM Lettings', 'Love Living Management Limited'], 'Love Living', 'loveliving.uk')).toBe('strong');
+    expect(hunterNameMatches(['LLM Lettings', 'Love Living Management Limited'], 'Love Living', 'loveliving.uk', 'Love Living Management Limited')).toBe('strong');
   });
 });
 

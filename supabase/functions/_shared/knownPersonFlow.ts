@@ -64,7 +64,7 @@ export async function runKnownPerson(
   client: SupabaseClient, service: SupabaseClient,
   lead: {
     id: string; org_id: string; website: string | null; business_name?: string | null; email?: string | null;
-    city?: string | null; postcode?: string | null; email_domains?: unknown;
+    city?: string | null; postcode?: string | null; email_domains?: unknown; blocked_domains?: unknown;
   },
   typed: ContactEditValue, userId: string,
   keys: { hunterKey: string | null; apolloKey: string | null; geminiKey: string | null },
@@ -205,7 +205,8 @@ export async function runKnownPerson(
     discover: async (t) => {
       const extraKnown: DomainCandidate[] = domains.map((d, i) => ({ domain: d, source: i === 0 && companyDomain ? 'typed' : 'contact_email' }));
       const out = await discoverLeadDomains(service, lead, {
-        extraKnown, keys: { hunterKey, geminiKey }, allow: { hunter: true, site: !directory, web: true }, budgetMs: t,
+        extraKnown, people: first && last ? [{ first, last }] : [],
+        keys: { hunterKey, geminiKey }, allow: { hunter: true, site: !directory, web: true }, budgetMs: t,
       });
       return { domains: out.discovered.map((d) => d.domain), detail: discoveryDetail(out.discovered) };
     },
