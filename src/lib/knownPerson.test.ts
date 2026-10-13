@@ -84,7 +84,8 @@ describe('plainLookupError', () => {
     expect(plainLookupError('hunter', 401)).toBe('Hunter did not accept the saved API key (error 401), so nothing was looked up.');
     expect(plainLookupError('apollo', 403)).toBe('Apollo refused this lookup (error 403): the saved key may lack permission, or your Apollo plan may not include it. Nothing was looked up.');
     expect(plainLookupError('apollo', 402)).toBe('Apollo says this account is out of credits, so nothing was looked up.');
-    expect(plainLookupError('hunter', 429)).toBe('Hunter is limiting requests right now. Try again in a few minutes.');
+    expect(plainLookupError('hunter', 429)).toBe('Hunter asked us to slow down. Try again in a few minutes.');
+    expect(plainLookupError('hunter', 'usage_exhausted')).toBe('Hunter says this account\'s searches for the month are used up, so Hunter steps were skipped.');
     expect(plainLookupError('hunter', 'timeout')).toBe('Hunter took too long to answer. Try again in a moment.');
     expect(plainLookupError('apollo', 500)).toBe('Apollo could not be reached right now.');
     expect(plainLookupError('apollo', 'network')).toBe('Apollo could not be reached right now.');

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  hunterAccount,
   hunterDomainList,
   hunterVerifyEmail,
   scanWebsiteForPerson,
@@ -57,7 +58,7 @@ describe('hunterVerifyEmail', () => {
     stubFetch(() => json({ data: { status: 'accept_all', result: 'risky' } }, 202));
     expect(await hunterVerifyEmail('a@x.com', KEY)).toEqual({ ok: true, verdict: 'unverified' });
     stubFetch(() => json({}, 429));
-    expect(await hunterVerifyEmail('a@x.com', KEY)).toEqual({ ok: false, failure: 429 });
+    expect(await hunterVerifyEmail('a@x.com', KEY)).toEqual({ ok: false, failure: 'rate_limited' });
   });
 
   it('turns a network error into a fixed failure', async () => {
@@ -163,7 +164,7 @@ describe('hunterCompanySearch', () => {
     expect(urls(fn)[0]).not.toContain(KEY);
     expect((fn.mock.calls[0]![1]!.headers as Record<string, string>)['X-API-KEY']).toBe(KEY);
     stubFetch(() => json({}, 429));
-    expect(await hunterCompanySearch('x', KEY)).toEqual({ ok: false, failure: 429 });
+    expect(await hunterCompanySearch('x', KEY)).toEqual({ ok: false, failure: 'rate_limited' });
   });
 
   it('labels the company details as data in the discovery prompt', async () => {
@@ -179,5 +180,26 @@ describe('hunterDomainList limit', () => {
     const fn = stubFetch(() => json({}, 400));
     expect(await hunterDomainList('x.com', KEY, 5000, 10)).toEqual({ ok: false, failure: 400 });
     expect(urls(fn)).toEqual(['https://api.hunter.io/v2/domain-search?domain=x.com&limit=10']);
+  });
+});
+
+describe('Hunter 429 handling', () => {
+  it('does not retry used-up searches and reports them as such', async () => {
+    const fn = stubFetch(() => json({ errors: [{ id: 'usage_limit_reached', code: 429 }] }, 429));
+    expect(await hunterVerifyEmail('a@x.com', KEY)).toEqual({ ok: false, failure: 'usage_exhausted' });
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+  it('retries a slow-down once after a short Retry-After', async () => {
+    let n = 0;
+    const fn = stubFetch(() => (n++ === 0
+      ? new Response(JSON.stringify({ errors: [{ id: 'too_many_requests' }] }), { status: 429, headers: { 'retry-after': '0' } })
+      : json({ data: { status: 'valid' } })));
+    expect(await hunterVerifyEmail('a@x.com', KEY)).toEqual({ ok: true, verdict: 'verified' });
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+  it('reads the free account endpoint with the key only in the header', async () => {
+    const fn = stubFetch(() => json({ data: { requests: { searches: { used: 24, available: 25 } } } }));
+    expect(await hunterAccount(KEY)).toEqual({ ok: true, account: { searchesUsed: 24, searchesAvailable: 25, searchesLeft: 1, creditsLeft: null } });
+    expect(urls(fn)[0]).toBe('https://api.hunter.io/v2/account');
   });
 });
