@@ -14,6 +14,8 @@ interface ListTableProps {
   selected: Set<string>;
   onToggle: (id: string) => void;
   onToggleAll: () => void;
+  /** Leads Deep find is queued for or working on: shown with a small chip. */
+  deepFindRunning?: Set<string>;
 }
 
 const COLUMNS: { key: SortKey; label: string }[] = [
@@ -27,7 +29,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
 ];
 
 /** Sortable full-width lead table with sticky header; row click opens the panel. */
-export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen, selected, onToggle, onToggleAll }: ListTableProps) {
+export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen, selected, onToggle, onToggleAll, deepFindRunning }: ListTableProps) {
   function assignee(lead: Lead): string {
     const p = profiles.find((x) => x.id === lead.assigned_to);
     return p ? initials(p.full_name ?? p.email) : '—';
@@ -70,7 +72,12 @@ export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen, s
                   aria-label={`Select ${lead.business_name}`}
                 />
               </td>
-              <td className="px-3 py-3 font-semibold">{lead.business_name}</td>
+              <td className="px-3 py-3 font-semibold">
+                {lead.business_name}
+                {deepFindRunning?.has(lead.id) && (
+                  <span className="ml-2 rounded-full bg-cyan/15 px-2 py-0.5 text-[11px] font-semibold text-cyan">Deep find running</span>
+                )}
+              </td>
               <td className="px-3 py-3 text-muted">{lead.owner_name ?? '—'}</td>
               <td className="px-3 py-3"><StageBadge stage={lead.stage} /></td>
               <td className="px-3 py-3 text-muted">{packageLabel(lead.package_tier)}</td>

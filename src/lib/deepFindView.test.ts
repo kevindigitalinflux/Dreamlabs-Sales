@@ -65,3 +65,28 @@ describe('readDeepFindDetails company choice', () => {
     expect(readDeepFindDetails({ company_number: '01111111', company_candidates: [{ company_number: '02222222', name: 'Y' }] }).companyCandidates).toEqual([]);
   });
 });
+
+describe('Deep find activity helpers', () => {
+  const row = (over: Partial<import('./deepFindView').DeepFindActivityRow>) => ({
+    run_id: 'r1', lead_id: 'l1', status: 'done' as const, people_found: 0, domains: {}, updated_at: '2026-10-13', lead: null, ...over,
+  });
+  it('flags open company choices and people to check, not settled ones', async () => {
+    const { needsAttention } = await import('./deepFindView');
+    const choice = { company_candidates: [{ company_number: '01111111', name: 'X' }] };
+    expect(needsAttention(row({ domains: choice }))).toBe(true);
+    expect(needsAttention(row({ domains: choice, lead: { company_number: '01111111' } }))).toBe(false);
+    expect(needsAttention(row({ domains: { named_by_web: [{ name: 'Jonathan Love', role: 'Partner' }] } }))).toBe(true);
+    expect(needsAttention(row({ status: 'running', domains: choice }))).toBe(false);
+    expect(needsAttention(row({}))).toBe(false);
+  });
+  it('totals runs and finds active leads', async () => {
+    const { activeLeadIds, runTotals } = await import('./deepFindView');
+    const rows = [
+      row({ people_found: 2 }),
+      row({ lead_id: 'l2', status: 'running' }),
+      row({ run_id: 'r2', lead_id: 'l3', status: 'queued' }),
+    ];
+    expect(runTotals(rows)).toEqual({ r1: { done: 1, total: 2, people: 2, attention: 0 }, r2: { done: 0, total: 1, people: 0, attention: 0 } });
+    expect([...activeLeadIds(rows)].sort()).toEqual(['l2', 'l3']);
+  });
+});

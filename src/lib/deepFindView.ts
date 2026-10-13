@@ -113,3 +113,46 @@ export function parseCap(value: string, max: number): number | null {
   const n = Number(value.trim());
   return n <= max ? n : null;
 }
+
+/** A recent deep_find_leads row as the activity views read it. */
+export interface DeepFindActivityRow {
+  run_id: string;
+  lead_id: string;
+  status: DeepFindLeadRow['status'];
+  people_found: number;
+  domains: unknown;
+  updated_at: string;
+  lead: { company_number?: string | null } | null;
+}
+
+/**
+ * True when a finished lead needs the user: a Companies House choice that is still open (the lead has no company
+ * number yet), or people to check (named by the web, the website, or on an unconfirmed domain).
+ */
+export function needsAttention(row: Pick<DeepFindActivityRow, 'status' | 'domains' | 'lead'>): boolean {
+  if (row.status !== 'done') return false;
+  const d = readDeepFindDetails(row.domains);
+  const openChoice = d.companyCandidates.length > 0 && !row.lead?.company_number;
+  return openChoice || d.unverified.length + d.namedByWeb.length + d.namedOnSite.length > 0;
+}
+
+/** Per-run totals for the runs list: leads finished, leads in total, people added, leads needing the user. */
+export interface RunTotals { done: number; total: number; people: number; attention: number }
+
+/** Totals per run id from the activity rows (only rows the viewer can see are counted). */
+export function runTotals(rows: DeepFindActivityRow[]): Record<string, RunTotals> {
+  const out: Record<string, RunTotals> = {};
+  for (const r of rows) {
+    const t = out[r.run_id] ?? (out[r.run_id] = { done: 0, total: 0, people: 0, attention: 0 });
+    t.total++;
+    if (r.status === 'done' || r.status === 'failed' || r.status === 'skipped') t.done++;
+    t.people += Number.isFinite(r.people_found) ? r.people_found : 0;
+    if (needsAttention(r)) t.attention++;
+  }
+  return out;
+}
+
+/** Lead ids Deep find is queued for or working on right now. */
+export function activeLeadIds(rows: Pick<DeepFindActivityRow, 'lead_id' | 'status'>[]): Set<string> {
+  return new Set(rows.filter((r) => r.status === 'queued' || r.status === 'running').map((r) => r.lead_id));
+}

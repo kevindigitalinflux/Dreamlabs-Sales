@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { startDeepFind } from '../../lib/deepFind';
@@ -52,6 +53,9 @@ export function DeepFindModal({ open, leadIds, onClose, onStarted }: DeepFindMod
         <div className="flex flex-col gap-3">
           {notice && <p role="status" className="text-sm text-muted">{notice}</p>}
           <DeepFindProgress runId={runId} />
+          <Link to={`/pipeline/deep-find/${runId}`} className="text-xs text-muted underline hover:text-offwhite">
+            Open this run on its own page (it stays in Deep find runs after you close this window)
+          </Link>
         </div>
       ) : (
         <div className="flex flex-col gap-4">

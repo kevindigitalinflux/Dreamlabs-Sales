@@ -22,6 +22,8 @@ import { useIcps } from '../hooks/useIcps';
 import { EnrichmentReview } from '../components/pipeline/EnrichmentReview';
 import { DecisionMakerReview } from '../components/pipeline/DecisionMakerReview';
 import { DeepFindModal } from '../components/deepfind/DeepFindModal';
+import { DeepFindRunsLink } from '../components/deepfind/DeepFindRunsLink';
+import { useDeepFindActivity } from '../hooks/useDeepFindActivity';
 import { DEEP_FIND_MAX_LEADS } from '../lib/deepFindView';
 import { FilterBar } from '../components/pipeline/FilterBar';
 import { ListTable } from '../components/pipeline/ListTable';
@@ -61,6 +63,7 @@ export function PipelineList() {
   const [decisionMakerResults, setDecisionMakerResults] = useState<Record<string, DecisionMakerCandidate[]>>({});
   const [decisionMakerReviewOpen, setDecisionMakerReviewOpen] = useState(false);
   const [deepFindOpen, setDeepFindOpen] = useState(false);
+  const deepFind = useDeepFindActivity(currentPipeline?.org_id ?? null);
   const [moveTargetId, setMoveTargetId] = useState('');
   const [moving, setMoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -222,6 +225,7 @@ export function PipelineList() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <ViewToggle current="list" />
+          <DeepFindRunsLink attention={deepFind.attention} running={deepFind.running.size} />
           <Button variant="secondary" onClick={handleExportCsv} disabled={visible.length === 0}>
             <Download className="h-4 w-4" aria-hidden />
             Export CSV
@@ -312,6 +316,7 @@ export function PipelineList() {
           selected={selected}
           onToggle={toggleSelected}
           onToggleAll={toggleSelectAll}
+          deepFindRunning={deepFind.running}
         />
       )}
 
