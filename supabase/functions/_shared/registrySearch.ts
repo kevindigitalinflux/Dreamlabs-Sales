@@ -1,8 +1,10 @@
 // supabase/functions/_shared/registrySearch.ts
-// Pure rules for finding a lead's registered company on Companies House by NAME, with or without a location. No
-// imports on purpose: tested from src/lib. The search reply is untrusted data: every field is type-checked.
+// Pure rules for finding a lead's registered company on Companies House by NAME, with or without a location. Only
+// imports the import-free nameVariants.ts: tested from src/lib. The search reply is untrusted data: every field is type-checked.
 // Rule (Review Focus 1 and 2): a common name, a dissolved company or a name match in a different town never produces
 // an automatic pick. Then the top candidates are offered to the user ("Use this company").
+
+import { sameCompanyName } from './nameVariants.ts';
 
 /** One Companies House search result, cleaned, with its score. */
 export interface CompanyCandidate {
@@ -106,7 +108,8 @@ export function scoreCompanyCandidates(items: unknown, leadName: string, loc: Le
     const tokens = companyNameTokens(c.name);
     const shared = lead.filter((t) => tokens.includes(t)).length;
     const union = new Set([...lead, ...tokens]).size || 1;
-    const all = lead.length > 0 && shared === lead.length;
+    // Spacing and legal forms do not make a different name: LOVELIVING LIMITED is a full match for Love Living.
+    const all = (lead.length > 0 && shared === lead.length) || sameCompanyName(c.name, leadName);
     const score = Math.round((shared / union) * 50) + (all ? 20 : 0) + (c.status === 'active' ? 20 : 0) + (locationAgrees(c, loc) ? 30 : 0);
     return { ...c, score };
   }).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
@@ -126,8 +129,11 @@ export function pickCompany(scored: CompanyCandidate[], leadName: string, loc: L
   const candidates = scored.slice(0, 3);
   if (lead.length === 0 || scored.length === 0) return { chosen: null, candidates, reason: 'none' };
   const tokensOf = (c: CompanyCandidate) => companyNameTokens(c.name);
-  const isExact = (c: CompanyCandidate) => { const t = tokensOf(c); return t.length === lead.length && lead.every((w) => t.includes(w)); };
-  const matches = scored.filter((c) => c.status === 'active' && lead.every((w) => tokensOf(c).includes(w)));
+  const isExact = (c: CompanyCandidate) => {
+    const t = tokensOf(c);
+    return (t.length === lead.length && lead.every((w) => t.includes(w))) || sameCompanyName(c.name, leadName);
+  };
+  const matches = scored.filter((c) => c.status === 'active' && (lead.every((w) => tokensOf(c).includes(w)) || sameCompanyName(c.name, leadName)));
   if (matches.length === 0) return { chosen: null, candidates, reason: candidates.length ? 'ambiguous' : 'none' };
   if (hasLocation(loc)) {
     const located = matches.filter((c) => locationAgrees(c, loc));

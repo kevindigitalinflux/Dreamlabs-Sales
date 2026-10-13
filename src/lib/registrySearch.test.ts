@@ -90,3 +90,15 @@ describe('people to look up', () => {
     expect(people[0]!.contactId).toBe('c1');
   });
 });
+
+describe('pickCompany with name variants', () => {
+  it('treats LOVELIVING LIMITED as the same name as Love Living', () => {
+    const one = [{
+      company_number: '06666666', title: 'LOVELIVING LIMITED', company_status: 'active',
+      address_snippet: '1 Mare St, Hackney, London, E8 3PL', address: { postal_code: 'E8 3PL', locality: 'London' },
+    }];
+    const loc = { postcode: null, city: 'Hackney', address: null };
+    expect(pickCompany(scoreCompanyCandidates(one, 'Love Living', loc), 'Love Living', loc)).toMatchObject({ reason: 'auto_location', chosen: { company_number: '06666666' } });
+    expect(pickCompany(scoreCompanyCandidates(one, 'Love Living', NONE), 'Love Living', NONE).reason).toBe('auto_unique');
+  });
+});

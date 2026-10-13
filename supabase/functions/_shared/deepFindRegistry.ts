@@ -6,6 +6,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { fetchCompanyProfile, searchCompaniesByName } from './companiesHouse.ts';
 import { cleanCompanyNumber, pickCompany, scoreCompanyCandidates, type CompanyCandidate } from './registrySearch.ts';
+import { registrySearchNames } from './nameVariants.ts';
 
 /** The registered company as far as it is known, and how it was settled. */
 export interface RegistryResult {
@@ -58,8 +59,20 @@ export async function resolveRegistry(service: SupabaseClient, lead: Record<stri
   const name = str(lead.business_name);
   if (!name) return { ...empty, number: null, name: null, how: 'not_found' };
   if (!chKey) return { ...empty, number: null, name: null, how: 'no_key' };
-  const items = await searchCompaniesByName(name, chKey);
-  if (items === null) return { ...empty, number: null, name: null, how: 'error' };
+  // Search several name variants and merge the results by company number (LOVELIVING LIMITED is found by 'loveliving').
+  const items: unknown[] = [];
+  const seen = new Set<string>();
+  let anyOk = false;
+  for (const variant of registrySearchNames(name)) {
+    const found = await searchCompaniesByName(variant, chKey);
+    if (found === null) continue;
+    anyOk = true;
+    for (const it of found) {
+      const n = cleanCompanyNumber((it as { company_number?: unknown } | null)?.company_number);
+      if (n && !seen.has(n)) { seen.add(n); items.push(it); }
+    }
+  }
+  if (!anyOk) return { ...empty, number: null, name: null, how: 'error' };
   const loc = { postcode: str(lead.postcode), city: str(lead.city), address: str(lead.address) };
   const pick = pickCompany(scoreCompanyCandidates(items, name, loc), name, loc);
   if (pick.chosen) {
