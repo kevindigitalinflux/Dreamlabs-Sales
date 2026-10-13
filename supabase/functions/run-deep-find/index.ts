@@ -7,6 +7,7 @@
 //           processing in the background.
 //   cancel  signed-in user who created the run, or an org admin.
 //   choose_company  signed-in user who can edit the lead: "Use this company" (deepFindLeadActions.ts).
+//   block_domain    signed-in user who can edit the lead: "Not their domain" (deepFindLeadActions.ts).
 //   tick    cron only (x-cron-secret, compared in constant time; refused when CRON_SECRET is not set).
 // Deep find never emails anyone and never touches sequences. Keys never leave the providers' request headers.
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -15,7 +16,7 @@ import { checkRateLimit } from '../_shared/rateLimit.ts';
 import { cancelDeepFindRun, runDeepFindTick } from '../_shared/deepFind.ts';
 import { isUuid, parseCreateRequest } from '../_shared/deepFindRules.ts';
 import { cronSecretMatches } from '../_shared/timingSafe.ts';
-import { chooseCompany, queueRun } from '../_shared/deepFindLeadActions.ts';
+import { blockDomain, chooseCompany, queueRun } from '../_shared/deepFindLeadActions.ts';
 
 const MAX_ACTIVE_RUNS_PER_ORG = 5;
 
@@ -43,7 +44,7 @@ Deno.serve(async (req) => {
     return json({ ok: true }, 202, headers);
   }
 
-  if (!['create', 'cancel', 'choose_company'].includes(String(body.action))) return json({ error: 'Unknown action' }, 400, headers);
+  if (!['create', 'cancel', 'choose_company', 'block_domain'].includes(String(body.action))) return json({ error: 'Unknown action' }, 400, headers);
   const client = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
     global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
   });
@@ -65,6 +66,11 @@ Deno.serve(async (req) => {
   if (body.action === 'choose_company') {
     const result = await chooseCompany(client, service, caller.id, body);
     if (result.body.queued === true) await background(runDeepFindTick(service, startedAt).catch(() => console.error('deep find start failed')));
+    return json(result.body, result.status, headers);
+  }
+
+  if (body.action === 'block_domain') {
+    const result = await blockDomain(client, service, caller.id, body);
     return json(result.body, result.status, headers);
   }
 

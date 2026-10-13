@@ -145,8 +145,10 @@ export async function runKnownPerson(
   const work = { title: str(saved.title), email: str(saved.email), phone: str(saved.phone), linkedin_url: str(saved.linkedin_url) };
   const first = str(saved.first_name) ?? '';
   const last = str(saved.last_name) ?? '';
+  const blocked = savedDomains(lead.blocked_domains);
   const domain = domainFromWebsite(lead.website);
-  const publicDomain = domain && isPublicDomain(domain) ? domain : null;
+  // A domain the user marked "Not their domain" is never searched (that includes the website's own domain).
+  const publicDomain = domain && isPublicDomain(domain) && !blocked.includes(domain) ? domain : null;
   const directory = publicDomain !== null && isDirectoryDomain(publicDomain);
   // Every domain the company uses: a typed one first, the website's, those saved on the lead, then other addresses' domains.
   const others = allRows.filter((r) => r.id !== saved.id && !r.dismissed_at);
@@ -155,7 +157,7 @@ export async function runKnownPerson(
     website: publicDomain,
     saved: savedDomains(lead.email_domains),
     emails: [...others.map((r) => str(r.email)), str(lead.email), typed.email, work.email],
-  }, (d) => isPublicDomain(d) && !isDirectoryDomain(d));
+  }, (d) => isPublicDomain(d) && !isDirectoryDomain(d) && !blocked.includes(d));
   const searchedFirst = new Set(domains);
   const knownAddresses: KnownAddress[] = others
     .filter((r) => r.kind === 'person' && str(r.email))

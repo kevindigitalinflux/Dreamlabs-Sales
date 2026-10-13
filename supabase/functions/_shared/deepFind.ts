@@ -9,7 +9,7 @@ import { fetchActiveOfficers } from './companiesHouse.ts';
 import { registryStep, resolveRegistry } from './deepFindRegistry.ts';
 import { lookUpPeople } from './deepFindPeople.ts';
 import { discoverLeadDomains } from './domainDiscoveryLookup.ts';
-import { DOMAIN_CHECKS } from './domainChecks.ts';
+import { DOMAIN_CHECKS, savedDomains } from './domainChecks.ts';
 import { hunterDomainList, readCompanyPages } from './knownPersonLookup.ts';
 import { cleanEmail, cleanLinkedinProfile, emailDomain } from './knownPersonWide.ts';
 import { domainFromWebsite, isDirectoryDomain } from './knownPerson.ts';
@@ -146,7 +146,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
 
   // the website pages, read once
   const siteDomain = domainFromWebsite(str(lead.website));
-  const siteReadable = !!siteDomain && DOMAIN_CHECKS.usable(siteDomain);
+  // A website domain the user marked "Not their domain" is never read or searched.
+  const siteBlocked = !!siteDomain && savedDomains(lead.blocked_domains).includes(siteDomain);
+  if (siteBlocked) steps.push('The lead\'s website domain was marked as not theirs, so the website was not used.');
+  const siteReadable = !!siteDomain && !siteBlocked && DOMAIN_CHECKS.usable(siteDomain);
   const sitePages = siteReadable && left() > 30_000 ? await readCompanyPages(str(lead.website)!, 12_000) : [];
   // A website that shows clear signs of another company is only a weak signal: not read for people or other domains.
   const suspicion = websiteSuspicion(sitePages, [str(lead.business_name) ?? '', registry.name ?? ''].filter(Boolean));

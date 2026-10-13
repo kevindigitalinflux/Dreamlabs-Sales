@@ -13,10 +13,10 @@ describe('readDeepFindDetails', () => {
       namedByWeb: [{ name: 'David Cox', role: 'Owner' }],
       namedOnSite: [],
       unverified: [{ name: 'Tom Reed', role: 'Director' }],
-      companyCandidates: [], companyNumber: null, steps: [], people: [],
+      companyCandidates: [], companyNumber: null, steps: [], people: [], websiteSuspect: false, websiteReasons: [],
     });
     expect(readDeepFindDetails(null)).toEqual({
-      domains: [], namedByWeb: [], namedOnSite: [], unverified: [], companyCandidates: [], companyNumber: null, steps: [], people: [],
+      domains: [], namedByWeb: [], namedOnSite: [], unverified: [], companyCandidates: [], companyNumber: null, steps: [], people: [], websiteSuspect: false, websiteReasons: [],
     });
   });
 });
@@ -60,6 +60,8 @@ describe('readDeepFindDetails company choice', () => {
     expect(d.companyCandidates).toEqual([{ company_number: '01111111', name: 'LOVE LIVING MANAGEMENT LIMITED', address: 'Hackney', status: 'active' }]);
     expect(d.steps).toEqual(['Companies House: 2 possible companies, please choose.']);
     expect(d.people).toEqual([{ name: 'Max Whatley', role: 'Director', source: 'officer', email_found: true }]);
+    expect(readDeepFindDetails({ website_suspect: true, website_reasons: ['The phone numbers on the website are not UK numbers.', 7] }))
+      .toMatchObject({ websiteSuspect: true, websiteReasons: ['The phone numbers on the website are not UK numbers.'] });
     expect(readDeepFindDetails({ company_number: '01111111', company_candidates: [{ company_number: '02222222', name: 'Y' }] }).companyCandidates).toEqual([]);
   });
 });

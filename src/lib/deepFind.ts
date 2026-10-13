@@ -42,3 +42,11 @@ export async function chooseDeepFindCompany(leadId: string, companyNumber: strin
   if (typeof d.notice === 'string') return { notice: d.notice };
   return { notice: typeof d.company_name === 'string' ? `Saved ${d.company_name}. Deep find is adding its officers.` : null };
 }
+
+/** "Not their domain": removes the domain from the lead and stops Deep find and lookups from using it again. */
+export async function blockDeepFindDomain(leadId: string, domain: string): Promise<string | null> {
+  const { data, error } = await supabase.functions.invoke('run-deep-find', { body: { action: 'block_domain', lead_id: leadId, domain } });
+  if (error) return readableInvokeError(error);
+  const d = (data ?? {}) as { error?: unknown };
+  return typeof d.error === 'string' ? d.error : null;
+}

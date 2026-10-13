@@ -30,6 +30,9 @@ export interface DeepFindDetails {
   steps: string[];
   /** People the run looked up, with their role and whether an email was found. */
   people: DeepFindPerson[];
+  /** True when the lead's website looked like another company's, with the plain reasons. */
+  websiteSuspect: boolean;
+  websiteReasons: string[];
 }
 
 /** One Companies House company offered with "Use this company". */
@@ -82,6 +85,8 @@ export function readDeepFindDetails(value: unknown): DeepFindDetails {
   return {
     domains, namedByWeb: named(o.named_by_web), namedOnSite: named(o.named_on_site), unverified: named(o.unverified_people),
     companyCandidates: number ? [] : companyCandidates(o.company_candidates), companyNumber: number, steps, people: peopleList(o.people),
+    websiteSuspect: o.website_suspect === true,
+    websiteReasons: (Array.isArray(o.website_reasons) ? o.website_reasons : []).slice(0, 3).flatMap((r) => { const t = text(r, 200); return t ? [t] : []; }),
   };
 }
 

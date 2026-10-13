@@ -8,6 +8,7 @@ import { resolveOrgApiKey } from './orgApiKeys.ts';
 import { fetchCompanyProfile } from './companiesHouse.ts';
 import { cleanCompanyNumber } from './registrySearch.ts';
 import { isUuid } from './deepFindRules.ts';
+import { cleanCompanyDomain } from './knownPersonWide.ts';
 
 /** An action result: the JSON body and HTTP status to send. */
 export interface ActionResult { status: number; body: Record<string, unknown> }
@@ -91,4 +92,24 @@ export async function chooseCompany(
       ...(run.queued === 0 ? { notice: 'Saved. Deep find is already working on this lead: run it again when it finishes to add the officers.' } : {}),
     },
   };
+}
+
+/**
+ * "Not their domain": checks the caller can edit the lead, then (service-role RPC lead_block_domain, migration 058)
+ * removes the domain from leads.email_domains and adds it to leads.blocked_domains in one locked statement, so
+ * discovery and the lookups never save or search it again for this lead.
+ */
+export async function blockDomain(
+  client: SupabaseClient, service: SupabaseClient, callerId: string, body: Record<string, unknown>,
+): Promise<ActionResult> {
+  const domain = cleanCompanyDomain(body.domain);
+  if (!domain) return { status: 400, body: { error: 'That is not a domain' } };
+  const access = await editableLead(client, service, callerId, body.lead_id);
+  if (!access.ok) return access.result;
+  if (!await checkRateLimit(service, `deep-find-block:${callerId}`, 100, 24 * 60, true)) {
+    return { status: 429, body: { error: 'Too many changes today. Try again tomorrow.' } };
+  }
+  const { data, error } = await service.rpc('lead_block_domain', { target_lead: access.lead.id, bad_domain: domain });
+  if (error || data !== true) return { status: 500, body: { error: 'Could not remove that domain' } };
+  return { status: 200, body: { blocked: domain } };
 }
