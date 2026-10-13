@@ -22,6 +22,40 @@ export interface DeepFindDetails {
   namedOnSite: DeepFindNamed[];
   /** People Hunter lists on a domain that could not be confirmed as the company's (never stored). */
   unverified: DeepFindNamed[];
+  /** Companies House companies to choose from when the name search was not clear (at most 3). */
+  companyCandidates: DeepFindCompanyCandidate[];
+  /** The company number the run used, when one was settled. */
+  companyNumber: string | null;
+  /** Plain-English step lines. */
+  steps: string[];
+  /** People the run looked up, with their role and whether an email was found. */
+  people: DeepFindPerson[];
+}
+
+/** One Companies House company offered with "Use this company". */
+export interface DeepFindCompanyCandidate { company_number: string; name: string; address: string | null; status: string | null }
+/** A person the run looked up. */
+export interface DeepFindPerson { name: string; role: string | null; source: string; email_found: boolean }
+
+const COMPANY_NUMBER_RE = /^(?:[0-9]{8}|[A-Z]{2}[0-9]{6})$/;
+
+function companyCandidates(list: unknown): DeepFindCompanyCandidate[] {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 3).flatMap((c) => {
+    const o = (typeof c === 'object' && c !== null ? c : {}) as Record<string, unknown>;
+    const number = typeof o.company_number === 'string' && COMPANY_NUMBER_RE.test(o.company_number) ? o.company_number : null;
+    const name = text(o.name, 160);
+    return number && name ? [{ company_number: number, name, address: text(o.address, 200), status: text(o.status, 40) }] : [];
+  });
+}
+
+function peopleList(list: unknown): DeepFindPerson[] {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 12).flatMap((p) => {
+    const o = (typeof p === 'object' && p !== null ? p : {}) as Record<string, unknown>;
+    const name = text(o.name, 80);
+    return name ? [{ name, role: text(o.role, 60), source: text(o.source, 20) ?? 'contact', email_found: o.email_found === true }] : [];
+  });
 }
 
 const text = (v: unknown, max: number): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim().slice(0, max) : null);
@@ -43,7 +77,12 @@ export function readDeepFindDetails(value: unknown): DeepFindDetails {
     const domain = text(x.domain, 253);
     return domain ? [{ domain, needs_check: x.needs_check === true }] : [];
   });
-  return { domains, namedByWeb: named(o.named_by_web), namedOnSite: named(o.named_on_site), unverified: named(o.unverified_people) };
+  const number = typeof o.company_number === 'string' && COMPANY_NUMBER_RE.test(o.company_number) ? o.company_number : null;
+  const steps = (Array.isArray(o.steps) ? o.steps : []).slice(0, 20).flatMap((s) => { const t = text(s, 300); return t ? [t] : []; });
+  return {
+    domains, namedByWeb: named(o.named_by_web), namedOnSite: named(o.named_on_site), unverified: named(o.unverified_people),
+    companyCandidates: number ? [] : companyCandidates(o.company_candidates), companyNumber: number, steps, people: peopleList(o.people),
+  };
 }
 
 /** "Company domains: loveliving.uk (found automatically)" for the lead card, or null when there are none. */

@@ -257,3 +257,82 @@ export function stuckAction(row: { claimed_at: string | null; attempts: number }
   if (Number.isFinite(claimed) && now.getTime() - claimed < STUCK_AFTER_MS) return 'ignore';
   return row.attempts >= 2 ? 'fail' : 'requeue';
 }
+
+/** A person Deep find looks up: a contact without an email, a registry officer, or a name already on the lead. */
+export interface PersonToLookUp {
+  first: string;
+  last: string;
+  title: string | null;
+  source: 'contact' | 'officer' | 'owner';
+  /** The existing contact row, when the person is already a contact. */
+  contactId: string | null;
+}
+
+function titleWord(word: string): string {
+  return word ? word.toLowerCase().replace(/(^|[-'’])(\p{L})/gu, (_m, sep: string, ch: string) => sep + ch.toUpperCase()) : word;
+}
+
+/**
+ * Reads a name written on the lead, such as "David John SIPPLE", "SIPPLE, David John" or "Deborah Garner (HR)",
+ * into first name, surname and an optional role from the brackets. Null unless there are two plain name words.
+ */
+export function parseLeadPersonName(value: unknown): { first: string; last: string; title: string | null } | null {
+  if (typeof value !== 'string') return null;
+  let t = value.replace(/\s+/g, ' ').trim().slice(0, 120);
+  let title: string | null = null;
+  const role = /\(([^()]{1,60})\)\s*$/.exec(t);
+  if (role) { title = cleanTitle(role[1]); t = t.slice(0, role.index).trim(); }
+  t = t.replace(/^(mr|mrs|ms|miss|dr)\.?\s+/i, '');
+  let first: string;
+  let last: string;
+  const comma = t.indexOf(',');
+  if (comma > 0) {
+    last = t.slice(0, comma).trim();
+    first = t.slice(comma + 1).trim().split(' ')[0] ?? '';
+  } else {
+    const parts = t.split(' ');
+    if (parts.length < 2) return null;
+    first = parts[0]!;
+    last = parts[parts.length - 1]!;
+  }
+  const f = cleanNamePart(first);
+  const l = cleanNamePart(last);
+  if (!f || !l || f.includes(' ') || l.length < 2) return null;
+  if (title) title = title.charAt(0).toUpperCase() + title.slice(1);
+  return { first: titleWord(f), last: titleWord(l), title };
+}
+
+/**
+ * Everyone Deep find should look up, without repeats (same surname and an agreeing first name count as one person):
+ * contacts that are people without an email (not removed), registry officers, then the lead's own owner name and its
+ * additional owners. Existing contacts win, so a found email is filled into the existing row. People who already have
+ * an email on the lead are never looked up again. At most 12.
+ */
+export function peopleToLookUp(
+  lead: { owner_name?: unknown; additional_owners?: unknown },
+  contacts: ExistingContact[],
+  officers: { first_name: string | null; last_name: string | null; title: string | null }[],
+): PersonToLookUp[] {
+  const out: PersonToLookUp[] = [];
+  const known = (first: string, last: string) => out.some((p) => nameKey(p.last) === nameKey(last) && firstAgrees(nameKey(p.first), nameKey(first)));
+  const add = (p: PersonToLookUp) => { if (p.first && p.last && !known(p.first, p.last) && out.length < 12) out.push(p); };
+  const withEmail = contacts.filter((c) => typeof c.email === 'string' && c.email.trim() !== '');
+  const alreadyHasEmail = (first: string, last: string) => findSamePerson(withEmail, first, last) !== null;
+  for (const c of contacts) {
+    if (c.kind === 'general' || c.dismissed_at || (typeof c.email === 'string' && c.email.trim() !== '')) continue;
+    const first = cleanNamePart(c.first_name);
+    const last = cleanNamePart(c.last_name);
+    if (first && last) add({ first, last, title: cleanTitle((c as { title?: unknown }).title), source: 'contact', contactId: c.id });
+  }
+  for (const o of officers) {
+    if (o.first_name && o.last_name && !alreadyHasEmail(o.first_name, o.last_name)) {
+      add({ first: o.first_name, last: o.last_name, title: o.title, source: 'officer', contactId: null });
+    }
+  }
+  const owners = [lead.owner_name, ...(Array.isArray(lead.additional_owners) ? lead.additional_owners.slice(0, 10) : [])];
+  for (const raw of owners) {
+    const p = parseLeadPersonName(raw);
+    if (p && !alreadyHasEmail(p.first, p.last)) add({ ...p, source: 'owner', contactId: null });
+  }
+  return out;
+}

@@ -6,6 +6,7 @@
 //           run and its queued rows with the SERVICE client (clients have no INSERT on the 057 tables) and starts
 //           processing in the background.
 //   cancel  signed-in user who created the run, or an org admin.
+//   choose_company  signed-in user who can edit the lead: "Use this company" (deepFindLeadActions.ts).
 //   tick    cron only (x-cron-secret, compared in constant time; refused when CRON_SECRET is not set).
 // Deep find never emails anyone and never touches sequences. Keys never leave the providers' request headers.
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -14,6 +15,7 @@ import { checkRateLimit } from '../_shared/rateLimit.ts';
 import { cancelDeepFindRun, runDeepFindTick } from '../_shared/deepFind.ts';
 import { isUuid, parseCreateRequest } from '../_shared/deepFindRules.ts';
 import { cronSecretMatches } from '../_shared/timingSafe.ts';
+import { chooseCompany, queueRun } from '../_shared/deepFindLeadActions.ts';
 
 const MAX_ACTIVE_RUNS_PER_ORG = 5;
 
@@ -41,7 +43,7 @@ Deno.serve(async (req) => {
     return json({ ok: true }, 202, headers);
   }
 
-  if (body.action !== 'create' && body.action !== 'cancel') return json({ error: 'Unknown action' }, 400, headers);
+  if (!['create', 'cancel', 'choose_company'].includes(String(body.action))) return json({ error: 'Unknown action' }, 400, headers);
   const client = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
     global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
   });
@@ -58,6 +60,12 @@ Deno.serve(async (req) => {
     if (!member || (run.created_by !== caller.id && member.role !== 'admin')) return json({ error: 'Not allowed' }, 403, headers);
     if (run.status === 'active') await cancelDeepFindRun(service, run.id, 'Stopped by user');
     return json({ ok: true }, 200, headers);
+  }
+
+  if (body.action === 'choose_company') {
+    const result = await chooseCompany(client, service, caller.id, body);
+    if (result.body.queued === true) await background(runDeepFindTick(service, startedAt).catch(() => console.error('deep find start failed')));
+    return json(result.body, result.status, headers);
   }
 
   // create
@@ -92,30 +100,14 @@ Deno.serve(async (req) => {
   const leadIds = parsed.leadIds.filter((id) => !busyIds.has(id));
   if (leadIds.length === 0) return json({ error: 'Deep find is already working on these leads' }, 409, headers);
 
-  // Service-client inserts: every check above has passed. One row per lead, so a lead another run picked up in the
-  // meantime (partial unique index deep_find_leads_one_open_per_lead, 23505) is simply left out.
-  const { data: runRow, error: runErr } = await service.from('deep_find_runs').insert({
-    org_id: orgId, created_by: caller.id, lead_count: leadIds.length,
-    credit_cap_hunter: parsed.caps.hunter, credit_cap_ai: parsed.caps.ai,
-  }).select('id').single();
-  if (runErr || !runRow) return json({ error: 'Could not start Deep find' }, 500, headers);
-  const runId = (runRow as { id: string }).id;
-  let queued = 0;
-  let raced = 0;
-  for (const lead_id of leadIds) {
-    const { error } = await service.from('deep_find_leads').insert({ run_id: runId, org_id: orgId, lead_id });
-    if (!error) queued++;
-    else if (error.code === '23505') raced++;
-    else console.error('deep find: queue insert failed');
+  // Service-client inserts: every check above has passed (no client INSERT exists on the 057 tables).
+  const queued = await queueRun(service, orgId, caller.id, leadIds, parsed.caps);
+  if (!queued.runId) {
+    return 'failed' in queued && queued.failed
+      ? json({ error: 'Could not queue the selected leads' }, 500, headers)
+      : json({ error: 'Deep find is already working on these leads' }, 409, headers);
   }
-  if (queued === 0) {
-    await service.from('deep_find_runs').delete().eq('id', runId);
-    return raced > 0
-      ? json({ error: 'Deep find is already working on these leads' }, 409, headers)
-      : json({ error: 'Could not queue the selected leads' }, 500, headers);
-  }
-  if (queued !== leadIds.length) await service.from('deep_find_runs').update({ lead_count: queued }).eq('id', runId);
 
   await background(runDeepFindTick(service, startedAt).catch(() => console.error('deep find start failed')));
-  return json({ run_id: runId, queued, already_running: busyIds.size + raced }, 202, headers);
+  return json({ run_id: queued.runId, queued: queued.queued, already_running: busyIds.size + queued.raced }, 202, headers);
 });

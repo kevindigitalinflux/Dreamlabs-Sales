@@ -13,8 +13,11 @@ describe('readDeepFindDetails', () => {
       namedByWeb: [{ name: 'David Cox', role: 'Owner' }],
       namedOnSite: [],
       unverified: [{ name: 'Tom Reed', role: 'Director' }],
+      companyCandidates: [], companyNumber: null, steps: [], people: [],
     });
-    expect(readDeepFindDetails(null)).toEqual({ domains: [], namedByWeb: [], namedOnSite: [], unverified: [] });
+    expect(readDeepFindDetails(null)).toEqual({
+      domains: [], namedByWeb: [], namedOnSite: [], unverified: [], companyCandidates: [], companyNumber: null, steps: [], people: [],
+    });
   });
 });
 
@@ -41,5 +44,22 @@ describe('parseCap', () => {
     expect(parseCap('501', 500)).toBe(null);
     expect(parseCap('2.5', 500)).toBe(null);
     expect(parseCap('', 500)).toBe(null);
+  });
+});
+
+describe('readDeepFindDetails company choice', () => {
+  it('reads valid candidates only while no company is settled', () => {
+    const d = readDeepFindDetails({
+      company_candidates: [
+        { company_number: '01111111', name: 'LOVE LIVING MANAGEMENT LIMITED', address: 'Hackney', status: 'active', score: 90 },
+        { company_number: 'bad', name: 'X' },
+      ],
+      steps: ['Companies House: 2 possible companies, please choose.', 5],
+      people: [{ name: 'Max Whatley', role: 'Director', source: 'officer', email_found: true }],
+    });
+    expect(d.companyCandidates).toEqual([{ company_number: '01111111', name: 'LOVE LIVING MANAGEMENT LIMITED', address: 'Hackney', status: 'active' }]);
+    expect(d.steps).toEqual(['Companies House: 2 possible companies, please choose.']);
+    expect(d.people).toEqual([{ name: 'Max Whatley', role: 'Director', source: 'officer', email_found: true }]);
+    expect(readDeepFindDetails({ company_number: '01111111', company_candidates: [{ company_number: '02222222', name: 'Y' }] }).companyCandidates).toEqual([]);
   });
 });

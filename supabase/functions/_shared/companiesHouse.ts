@@ -127,3 +127,36 @@ export async function findRegisteredCompany(businessName: string, postcode: stri
     return null;
   }
 }
+
+/** Companies House search by name: the raw `items` array (cleaned later by parseCompanySearchItems), or null on error. */
+export async function searchCompaniesByName(name: string, apiKey: string): Promise<unknown[] | null> {
+  try {
+    const res = await fetchWithTimeout(`https://api.company-information.service.gov.uk/search/companies?q=${encodeURIComponent(name.slice(0, 120))}&items_per_page=20`, {
+      headers: { Authorization: 'Basic ' + btoa(`${apiKey}:`) },
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { items?: unknown };
+    return Array.isArray(data?.items) ? data.items : [];
+  } catch {
+    return null;
+  }
+}
+
+/** A company's profile (name, status, registered office): only type-checked fields, or null on error / not found. */
+export async function fetchCompanyProfile(companyNumber: string, apiKey: string): Promise<{ name: string; status: string | null; postcode: string | null; locality: string | null; address: string | null } | null> {
+  try {
+    const res = await fetchWithTimeout(`https://api.company-information.service.gov.uk/company/${encodeURIComponent(companyNumber)}`, {
+      headers: { Authorization: 'Basic ' + btoa(`${apiKey}:`) },
+    });
+    if (!res.ok) return null;
+    const d = await res.json() as Record<string, unknown> | null;
+    const name = typeof d?.company_name === 'string' ? d.company_name.slice(0, 160) : null;
+    if (!name) return null;
+    const a = (typeof d?.registered_office_address === 'object' && d.registered_office_address !== null ? d.registered_office_address : {}) as Record<string, unknown>;
+    const s = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+    const address = [a.address_line_1, a.address_line_2, a.locality, a.postal_code].map((v) => s(v, 80)).filter(Boolean).join(', ') || null;
+    return { name, status: s(d?.company_status, 40), postcode: s(a.postal_code, 12), locality: s(a.locality, 60), address };
+  } catch {
+    return null;
+  }
+}

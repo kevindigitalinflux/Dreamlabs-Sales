@@ -1,6 +1,7 @@
 import { Badge } from '../ui/Badge';
 import { DEEP_FIND_STATUS_LABELS, readDeepFindDetails } from '../../lib/deepFindView';
 import type { DeepFindRowWithLead } from '../../hooks/useDeepFindRun';
+import { DeepFindCompanyChoice } from './DeepFindCompanyChoice';
 
 const STATUS_CLASSES: Record<DeepFindRowWithLead['status'], string> = {
   queued: 'bg-surface text-muted',
@@ -26,6 +27,12 @@ export function DeepFindLeadResult({ row }: { row: DeepFindRowWithLead }) {
       )}
       {shown.length > 0 && <p className="text-xs text-muted">Company domains: {shown.map((d) => d.domain).join(', ')}</p>}
       {row.reason && <p className="text-xs">{row.reason}</p>}
+      {details.people.length > 0 && (
+        <p className="text-xs text-muted">
+          People looked up: {details.people.map((p) => `${p.name}${p.role ? ` (${p.role})` : ''}${p.email_found ? ': email found' : ''}`).join(', ')}
+        </p>
+      )}
+      <DeepFindCompanyChoice leadId={row.lead_id} candidates={details.companyCandidates} />
       {toCheck.length > 0 && (
         <p className="text-xs text-muted">To check: {toCheck.map((p) => (p.role ? `${p.name} (${p.role})` : p.name)).join(', ')}</p>
       )}

@@ -24,3 +24,21 @@ export async function cancelDeepFind(runId: string): Promise<string | null> {
   const d = (data ?? {}) as { error?: unknown };
   return typeof d.error === 'string' ? d.error : null;
 }
+
+/** Result of a lead action on Deep find results: an error, or an optional notice to show. */
+export type LeadActionResult = { error: string } | { notice: string | null };
+
+/**
+ * "Use this company": saves the Companies House number on the lead (checked server side) and starts a small Deep
+ * find for the lead so its officers are added and looked up.
+ */
+export async function chooseDeepFindCompany(leadId: string, companyNumber: string): Promise<LeadActionResult> {
+  const { data, error } = await supabase.functions.invoke('run-deep-find', {
+    body: { action: 'choose_company', lead_id: leadId, company_number: companyNumber },
+  });
+  if (error) return { error: await readableInvokeError(error) };
+  const d = (data ?? {}) as { error?: unknown; notice?: unknown; company_name?: unknown };
+  if (typeof d.error === 'string') return { error: d.error };
+  if (typeof d.notice === 'string') return { notice: d.notice };
+  return { notice: typeof d.company_name === 'string' ? `Saved ${d.company_name}. Deep find is adding its officers.` : null };
+}

@@ -5,20 +5,19 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { resolveOrgApiKey } from './orgApiKeys.ts';
 import { checkRateLimit } from './rateLimit.ts';
-import { fetchActiveOfficers, findRegisteredCompany } from './companiesHouse.ts';
+import { fetchActiveOfficers } from './companiesHouse.ts';
+import { registryStep, resolveRegistry } from './deepFindRegistry.ts';
+import { lookUpPeople } from './deepFindPeople.ts';
 import { discoverLeadDomains } from './domainDiscoveryLookup.ts';
 import { DOMAIN_CHECKS } from './domainChecks.ts';
-import {
-  hunterDomainList, hunterFindEmail, hunterVerifyEmail, readCompanyPages, scanWebsiteForPerson, webSearchForPerson,
-} from './knownPersonLookup.ts';
+import { hunterDomainList, readCompanyPages } from './knownPersonLookup.ts';
 import { cleanEmail, cleanLinkedinProfile, emailDomain } from './knownPersonWide.ts';
-import { domainFromWebsite, isDirectoryDomain, mergeFoundIntoPerson, type FoundFields } from './knownPerson.ts';
-import { runWideLookup, type KnownAddress } from './knownPersonWideRun.ts';
+import { domainFromWebsite, isDirectoryDomain } from './knownPerson.ts';
 import { rankPeople } from './peopleRanking.ts';
 import type { WebPerson } from './domainDiscovery.ts';
 import {
-  MAX_HUNTER_PEOPLE_PER_LEAD, MAX_OFFICER_LOOKUPS, deepFindSummary, emailOnLead, extractTeamMembers, findSamePerson,
-  hunterPeople, namedPersonIsStored, stuckAction, type ExistingContact, type LeadStats, type SitePerson,
+  MAX_HUNTER_PEOPLE_PER_LEAD, deepFindSummary, emailOnLead, extractTeamMembers, findSamePerson,
+  hunterPeople, namedPersonIsStored, peopleToLookUp, stuckAction, type ExistingContact, type LeadStats, type SitePerson,
 } from './deepFindRules.ts';
 
 export const WALL_BUDGET_MS = 130_000;
@@ -61,25 +60,6 @@ class Spend {
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
-
-/** The lead's registered company: from the raw lead it was scraped from, else a Companies House name + postcode match. */
-async function registeredCompany(service: SupabaseClient, lead: Record<string, unknown>, chKey: string | null): Promise<{ number: string | null; name: string | null }> {
-  const rawId = str(lead.raw_lead_id);
-  if (rawId) {
-    const { data } = await service.from('raw_leads').select('source, source_id, raw_data').eq('id', rawId).maybeSingle();
-    const raw = data as { source?: unknown; source_id?: unknown; raw_data?: unknown } | null;
-    if (raw?.source === 'companies_house' && typeof raw.source_id === 'string' && /^[A-Z0-9]{6,10}$/i.test(raw.source_id)) {
-      const company = (raw.raw_data as { company?: { title?: unknown } } | null)?.company;
-      return { number: raw.source_id, name: typeof company?.title === 'string' ? company.title.slice(0, 200) : null };
-    }
-  }
-  const name = str(lead.business_name);
-  if (chKey && name && str(lead.postcode)) {
-    const found = await findRegisteredCompany(name, str(lead.postcode), chKey);
-    if (found) return { number: found.company_number, name: found.title };
-  }
-  return { number: null, name: null };
-}
 
 /** Inserts provider rows with ON CONFLICT DO NOTHING on (lead_id, dedupe_key); returns the rows actually inserted. */
 async function insertContacts(service: SupabaseClient, rows: Record<string, unknown>[]): Promise<Contact[]> {
@@ -143,9 +123,28 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   /** Contacts this run created or filled, the only ones whose LinkedIn link is captured. */
   const touched = new Set<string>();
   const suggestions: { name: string; field: string; value: string; label: string }[] = [];
+  /** Plain-English step lines shown with the results. */
+  const steps: string[] = [];
+  const all = () => [...rows, ...created];
 
-  // (0) the registered company and the website pages, read once
-  const registry = await registeredCompany(service, lead, chKey);
+  // (0) the registered company and its officers (officers become companies_house contacts, as before)
+  const registry = await resolveRegistry(service, lead, chKey);
+  steps.push(registryStep(registry));
+  const officers = registry.number && chKey ? await fetchActiveOfficers(registry.number, chKey) : [];
+  const officerRows: Record<string, unknown>[] = [];
+  for (const o of officers) {
+    if (!o.first_name || !o.last_name || findSamePerson(all(), o.first_name, o.last_name)) continue;
+    if (officerRows.some((r) => r.first_name === o.first_name && r.last_name === o.last_name)) continue;
+    officerRows.push({ lead_id: lead.id, source: 'companies_house', first_name: o.first_name, last_name: o.last_name, title: o.title, created_by: run.created_by });
+  }
+  if (officerRows.length > 0) {
+    const { data, error } = await service.from('decision_maker_candidates').insert(officerRows).select('*');
+    if (error) stats.failures++;
+    else { created.push(...((data ?? []) as Contact[])); stats.officersAdded = (data ?? []).length; }
+  }
+  if (registry.number) steps.push(`Companies House officers: ${officers.length} active, ${stats.officersAdded} added as contacts.`);
+
+  // the website pages, read once
   const siteDomain = domainFromWebsite(str(lead.website));
   const usableSite = !!siteDomain && DOMAIN_CHECKS.usable(siteDomain);
   stats.noWebsite = !usableSite;
@@ -210,70 +209,20 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   for (const c of insertedHunter) touched.add(c.id);
   stats.hunterPeople = insertedHunter.length;
 
-  // (3) Companies House officers, then a wide lookup for each officer without an email
-  if (registry.number && chKey && left() > 15_000) {
-    const officers = await fetchActiveOfficers(registry.number, chKey);
-    const officerRows: Record<string, unknown>[] = [];
-    for (const o of officers) {
-      if (!o.first_name || !o.last_name || findSamePerson([...rows, ...created], o.first_name, o.last_name)) continue;
-      if (officerRows.some((r) => r.first_name === o.first_name && r.last_name === o.last_name)) continue;
-      officerRows.push({ lead_id: lead.id, source: 'companies_house', first_name: o.first_name, last_name: o.last_name, title: o.title, created_by: run.created_by });
-    }
-    if (officerRows.length > 0) {
-      const { data, error } = await service.from('decision_maker_candidates').insert(officerRows).select('*');
-      if (error) stats.failures++;
-      else { created.push(...((data ?? []) as Contact[])); stats.officersAdded = (data ?? []).length; }
-    }
-  }
-  const all = () => [...rows, ...created];
-  const officersToLook = rankPeople(all().filter((r) => (r.source === 'companies_house' || r.source === 'cro')
-    && !r.dismissed_at && !str(r.email) && str(r.first_name) && str(r.last_name)), webPeople).slice(0, MAX_OFFICER_LOOKUPS);
-  const knownAddresses: KnownAddress[] = all().filter((r) => r.kind !== 'general' && str(r.email))
-    .map((r) => ({ email: str(r.email)!, first: str(r.first_name), last: str(r.last_name) }));
+  // (3) everyone to look up (contacts without an email, officers, names on the lead) on CONFIRMED domains only
+  const people = peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers);
   const verifiedDomains = domains.filter((d) => verified.has(d)).slice(0, 4);
-  for (const officer of officersToLook) {
-    if (left() < 15_000 || verifiedDomains.length === 0) break;
-    const first = str(officer.first_name)!;
-    const last = str(officer.last_name)!;
-    const work: FoundFields = { email: null, phone: str(officer.phone), linkedin_url: str(officer.linkedin_url) };
-    const patch: Record<string, string> = {};
-    const wide = await runWideLookup({
-      first, last, have: { email: null, linkedin_url: work.linkedin_url ?? null, phone: work.phone ?? null }, hasApolloId: false,
-      domains: verifiedDomains, website: usableSite ? str(lead.website) : null,
-      websiteDirectory: !!siteDomain && isDirectoryDomain(siteDomain), knownAddresses, usePaid: true,
-      keys: { hunter: !!hunterKey, apollo: false, gemini: !!geminiKey },
-      budgetMs: Math.min(15_000, left() - 8_000), webExtraMs: 5_000,
-    }, {
-      now: () => Date.now(),
-      takeSlot: async () => true, // the lead's own Deep find slot already covers this
-      hunterFind: async (d, f, l, t) => (await spend.hunter() ? hunterFindEmail(d, f, l, hunterKey ?? '', t) : { ok: false, failure: 429 }),
-      hunterDomain: async (d, t) => {
-        const cached = lists.get(d);
-        if (cached) return { ok: true, ...cached };
-        return await spend.hunter() ? hunterDomainList(d, hunterKey ?? '', t, 10) : { ok: false, failure: 429 };
-      },
-      hunterVerify: async (e, t) => (await spend.hunter() ? hunterVerifyEmail(e, hunterKey ?? '', t) : { ok: false, failure: 429 }),
-      scanWebsite: (w, d, f, l, t) => scanWebsiteForPerson(w, d, f, l, t),
-      webSearch: async (t) => (await spend.ai()
-        ? webSearchForPerson({ first, last, title: str(officer.title), company: str(lead.business_name), domains: verifiedDomains }, geminiKey ?? '', t)
-        : { ok: false, failure: 429 }),
-      apolloMatch: async () => ({ ok: false, failure: 403 }),
-      absorb: (f) => {
-        const merged = mergeFoundIntoPerson(work, f);
-        if (merged.patch.email && emailOnLead(all(), merged.patch.email)) { delete merged.patch.email; delete merged.applied.email; }
-        Object.assign(work, merged.patch);
-        Object.assign(patch, merged.patch);
-        return merged.applied;
-      },
-    });
-    for (const s of wide.suggestions) {
-      suggestions.push({ name: `${first} ${last}`.slice(0, 80), field: s.field, value: s.value.slice(0, 200), label: s.label });
-    }
-    if (Object.keys(patch).length > 0) {
-      const saved = await fillBlanks(service, officer, patch);
-      if (saved) { Object.assign(officer, saved); touched.add(officer.id); if (patch.email) stats.officerEmails++; }
-    }
-  }
+  const peopleOut = await lookUpPeople({
+    service, run, lead: { id: lead.id, website: str(lead.website), business_name: str(lead.business_name) }, people,
+    contacts: all, domains: verifiedDomains, website: usableSite ? str(lead.website) : null,
+    websiteDirectory: !!siteDomain && isDirectoryDomain(siteDomain), lists, keys: { hunterKey, geminiKey },
+    spend: { hunter: () => spend.hunter(), ai: () => spend.ai() }, left,
+  });
+  created.push(...peopleOut.created);
+  for (const c of peopleOut.touched) touched.add(c.id);
+  stats.officerEmails += peopleOut.emailsFound;
+  suggestions.push(...peopleOut.suggestions);
+  if (people.length > 0) steps.push(`Looked up ${people.length} known ${people.length === 1 ? 'person' : 'people'}: ${peopleOut.emailsFound} email${peopleOut.emailsFound === 1 ? '' : 's'} found.`);
 
   // (4) team pages and (5) the web search: names only, never stored unless already a contact
   const sitePeople: SitePerson[] = [];
@@ -310,6 +259,12 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       suggestions: suggestions.slice(0, 10),
       unverified_people: unverifiedPeople,
       registered_name: registry.name,
+      company_number: registry.number,
+      company_candidates: registry.candidates.map((c) => ({
+        company_number: c.company_number, name: c.name, address: c.address, status: c.status, score: c.score,
+      })),
+      people: peopleOut.results,
+      steps,
     },
   };
 }
