@@ -1,13 +1,15 @@
 // supabase/functions/_shared/domainDiscovery.ts
 // Pure helpers for discovering the other domains a company uses (for example a lead whose website is
-// lovelivingmanagement.com while its people use loveliving.uk). No imports on purpose: tested from src/lib.
+// lovelivingmanagement.com while its people use loveliving.uk). Imports only import-free modules: tested from src/lib.
 // Provider, page and model text is untrusted data: every domain is cleaned and checked by caller-supplied
 // predicates (the existing hostname, SSRF and directory rules) and must also fit the company's brand words.
+
+import { siteConfirmLine, siteConfirmsCompany } from './domainSiteCheck.ts';
 
 /** Where a domain came from, strongest first (see SOURCE_RANK). */
 export type DomainSource =
   | 'typed' | 'website' | 'website_suspect' | 'saved' | 'lead_email' | 'contact_email' | 'person_confirmed'
-  | 'hunter_name' | 'hunter_name_weak' | 'website_email' | 'website_link' | 'web' | 'apollo_org';
+  | 'hunter_name' | 'hunter_name_weak' | 'website_email' | 'website_link' | 'web' | 'apollo_org' | 'site_confirms';
 
 /** One sighting of a domain. */
 export interface DomainCandidate { domain: string; source: DomainSource }
@@ -19,7 +21,7 @@ export interface DomainCandidate { domain: string; source: DomainSource }
 export interface DiscoveredDomain { domain: string; sources: DomainSource[]; needs_check: boolean }
 
 /** Sources that on their own make a domain the company's: known to the user or the lead, or a strong Hunter name match. */
-const STRONG_SOURCES: DomainSource[] = ['typed', 'website', 'saved', 'lead_email', 'contact_email', 'person_confirmed', 'hunter_name'];
+const STRONG_SOURCES: DomainSource[] = ['typed', 'website', 'saved', 'lead_email', 'contact_email', 'person_confirmed', 'site_confirms', 'hunter_name'];
 /** Independent weak signals: two different ones together corroborate a domain. */
 const WEAK_SOURCES: DomainSource[] = ['website_suspect', 'hunter_name_weak', 'website_email', 'website_link', 'web', 'apollo_org'];
 
@@ -45,7 +47,7 @@ export const MAX_DISCOVERED_DOMAINS = 4;
 
 const SOURCE_RANK: Record<DomainSource, number> = {
   typed: 0, website: 1, saved: 2, lead_email: 3, contact_email: 4, person_confirmed: 5, hunter_name: 6, website_suspect: 7,
-  hunter_name_weak: 8, website_email: 9, website_link: 10, web: 11, apollo_org: 12,
+  hunter_name_weak: 8, website_email: 9, website_link: 10, web: 11, apollo_org: 12, site_confirms: 5.5,
 };
 
 /**
@@ -411,6 +413,7 @@ export const DOMAIN_SOURCE_LABELS: Record<DomainSource, string> = {
   person_confirmed: 'a known person was found on it', hunter_name: 'Hunter company search, matches the registered name',
   hunter_name_weak: 'Hunter company search (needs a second sign)', website_email: 'an email on the website',
   website_link: 'a link on the website', web: 'web search, check it', apollo_org: 'Apollo company search, check it',
+  site_confirms: 'its own website names the company or a known person',
 };
 
 /**
@@ -419,7 +422,7 @@ export const DOMAIN_SOURCE_LABELS: Record<DomainSource, string> = {
  * 'network', 'bad_reply', 'no_mx' (the domain has no mail server) or 'dns_error'. Never provider text.
  */
 export interface StepProblem {
-  step: 'hunter_company' | 'hunter_finder' | 'hunter_list' | 'domain_check' | 'web' | 'apollo';
+  step: 'hunter_company' | 'hunter_finder' | 'hunter_list' | 'domain_check' | 'site_check' | 'web' | 'apollo';
   target: string;
   failure: string;
 }
@@ -428,7 +431,7 @@ export interface StepProblem {
 export function safeFailure(failure: unknown): string {
   if (typeof failure === 'number' && Number.isInteger(failure) && failure >= 100 && failure <= 599) return String(failure);
   const f = String(failure);
-  return ['timeout', 'network', 'bad_reply', 'no_mx', 'dns_error', 'cap_reached', 'usage_exhausted', 'rate_limited'].includes(f) ? f : 'network';
+  return ['timeout', 'network', 'bad_reply', 'no_mx', 'dns_error', 'unreadable', 'cap_reached', 'usage_exhausted', 'rate_limited'].includes(f) ? f : 'network';
 }
 
 /**
@@ -478,6 +481,8 @@ export interface DiscoveryDeps {
   hunterList?: (domain: string, timeoutMs: number) => Promise<{ ok: true; organization: unknown; emails: unknown[] } | Failed>;
   /** Hunter email-finder by COMPANY NAME for one person: the address found and Hunter's score. */
   hunterFindByCompany?: (company: string, first: string, last: string, timeoutMs: number) => Promise<{ ok: true; email: unknown; score: unknown } | Failed>;
+  /** Reads a discovered domain's own website (home + up to 5 team/about/contact pages); free, SSRF-guarded by the caller. */
+  readDomainSite?: (domain: string, budgetMs: number) => Promise<string[]>;
   /** Apollo organisation search by name: the raw JSON answer (read by apolloOrgDomains). */
   apolloOrg?: (name: string, timeoutMs: number) => Promise<{ ok: true; json: unknown } | Failed>;
 }
@@ -519,6 +524,8 @@ export interface DiscoveryOutcome {
   hunterCalls: number;
   aiCalls: number;
   apolloCalls: number;
+  /** Pages of discovered domains whose own website confirmed them (for the team scan and email format). */
+  sitePages: { domain: string; pages: string[] }[];
   /** Search steps that gave no answer (failures and domains with no mail server), for the "why" lines. */
   problems: StepProblem[];
   /** Plain-English lines about how domains were found or checked. */
@@ -562,6 +569,7 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
   const blocked = new Set((input.blocked ?? []).map((b) => checks.clean(b)).filter((b): b is string => !!b));
   const seen: DomainCandidate[] = [...input.known];
   const problems: StepProblem[] = [];
+  const sitePages: { domain: string; pages: string[] }[] = [];
   const notes: string[] = [];
   const people = (input.people ?? []).slice(0, 6);
   const cap = Math.max(0, Math.min(input.hunterCap ?? MAX_DISCOVERY_HUNTER_CALLS, 40));
@@ -638,6 +646,23 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
       });
     }
     if (withMx.length > 0) notes.push(`Domains with a mail server: ${withMx.slice(0, 6).join(', ')}.`.slice(0, 300));
+    // Free check first: does the domain's own website name the company or a known person? (no credits)
+    if (deps.readDomainSite) {
+      const toRead = withMx.slice(0, MAX_PROBES).filter(() => left() >= 4_000);
+      const read = await Promise.all(toRead.map((d) => deps.readDomainSite!(d, Math.min(10_000, Math.max(1, left() - 2_000))).catch(() => [] as string[])));
+      toRead.forEach((d, i) => {
+        const pages = read[i] ?? [];
+        const c = siteConfirmsCompany(pages, searchNames, people);
+        const line = siteConfirmLine(d, c);
+        if (c.confirms && line) {
+          seen.push({ domain: d, source: 'site_confirms' });
+          sitePages.push({ domain: d, pages });
+          notes.push(line);
+        } else if (pages.length === 0) {
+          problems.push({ step: 'site_check', target: d, failure: 'unreadable' });
+        }
+      });
+    }
     if (input.allow.hunter && deps.hunterList) {
       for (const d of withMx.slice(0, MAX_PROBES)) {
         if (!canHunter(3_000)) break;
@@ -692,5 +717,5 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
   }
   const domains = rankDomains(seen.filter((s) => !blocked.has(checks.clean(s.domain) ?? '')), checks);
   const knownSet = new Set(input.known.map((k) => checks.clean(k.domain)).filter(Boolean));
-  return { domains, discovered: domains.filter((d) => !knownSet.has(d.domain)), people: webPeople, hunterCalls, aiCalls, apolloCalls, problems, notes };
+  return { domains, discovered: domains.filter((d) => !knownSet.has(d.domain)), people: webPeople, hunterCalls, aiCalls, apolloCalls, problems, notes, sitePages };
 }

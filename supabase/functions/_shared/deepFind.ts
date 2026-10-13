@@ -12,7 +12,8 @@ import { discoverLeadDomains } from './domainDiscoveryLookup.ts';
 import { DOMAIN_CHECKS, savedDomains } from './domainChecks.ts';
 import { hunterAccount, hunterDomainList, readCompanyPages } from './knownPersonLookup.ts';
 import { hunterAccountEmpty, hunterAccountLine, type HunterAccount } from './hunterLimits.ts';
-import { cleanEmail, cleanLinkedinProfile, emailDomain } from './knownPersonWide.ts';
+import { cleanEmail, cleanLinkedinProfile, emailDomain, extractWebsiteFindings, pickWebsiteFindings } from './knownPersonWide.ts';
+import { domainEmailsOnPages } from './domainSiteCheck.ts';
 import { domainFromWebsite, isDirectoryDomain } from './knownPerson.ts';
 import { rankPeople } from './peopleRanking.ts';
 import { DOMAIN_SOURCE_LABELS, safeFailure, websiteSuspicion, type KnownPersonName, type WebPerson } from './domainDiscovery.ts';
@@ -218,6 +219,31 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     steps.push(d.needs_check ? `Domain ${d.domain}: not confirmed (${how}), used for searching only.` : `Domain ${d.domain}: confirmed (${how}).`);
   }
 
+  // (1b) free team scan on discovered domains whose OWN website confirmed them: emails written literally on the
+  // site for the people we know (filled for existing contacts, suggestions otherwise) and named staff to check.
+  const confirmedSites = discovery.sitePages.filter((s) => verified.has(s.domain));
+  const siteEmails = new Map<string, string[]>();
+  const extraSitePeople: SitePerson[] = [];
+  for (const s of confirmedSites) {
+    siteEmails.set(s.domain, domainEmailsOnPages(s.pages, s.domain));
+    for (const html of s.pages) extraSitePeople.push(...extractTeamMembers(html));
+  }
+  for (const person of confirmedSites.length > 0 ? peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers) : []) {
+    for (const s of confirmedSites) {
+      const picked = pickWebsiteFindings(s.pages.map((h) => extractWebsiteFindings(h, s.domain, person.first, person.last)), person.first, person.last);
+      const email = picked.email ? cleanEmail(picked.email) : null;
+      if (!email || emailOnLead(all(), email)) continue;
+      const contact = person.contactId ? all().find((c) => c.id === person.contactId) ?? null : null;
+      if (contact) {
+        const saved = await fillBlanks(service, contact, { email });
+        if (saved) { Object.assign(contact, saved); touched.add(contact.id); stats.officerEmails++; }
+      } else {
+        suggestions.push({ name: `${person.first} ${person.last}`.slice(0, 80), field: 'email', value: email, label: `Found on ${s.domain}, check it` });
+      }
+      break;
+    }
+  }
+
   // (2) Hunter's company list on every domain: every named person with a role
   const lists = new Map<string, { emails: unknown[]; pattern: string | null }>();
   for (const d of domains) {
@@ -279,7 +305,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
 
   // (4) team pages and (5) the web search: names only, never stored unless already a contact
   const sitePeople: SitePerson[] = [];
-  for (const html of pages) for (const p of extractTeamMembers(html)) {
+  for (const p of [...pages.flatMap((html) => extractTeamMembers(html)), ...extraSitePeople]) {
     if (!sitePeople.some((x) => x.name.toLowerCase() === p.name.toLowerCase())) sitePeople.push(p);
   }
   const namedOnSite = sitePeople.filter((p) => !namedPersonIsStored(p.name, all())).slice(0, 10);

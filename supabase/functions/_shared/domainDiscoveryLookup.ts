@@ -83,6 +83,8 @@ export async function discoverLeadDomains(
       registeredAddress: opts.registeredAddress ?? null, websiteSuspect: !!opts.websiteSuspect, variants,
     }, geminiKey ?? '', t),
     apolloOrg: (n, t) => apolloOrgSearch(n, apolloKey ?? '', t),
+    // Free: the discovered domain's own pages, through the SSRF-guarded page reader (home + up to 5 team pages).
+    readDomainSite: (d, t) => readCompanyPages(`https://${d}`, t, 5),
     mx: (d, t) => lookupMx(d, t),
     // Each Hunter call reserves a credit first (limit 10 = at most about one credit); a refusal stops the probing.
     hunterList: async (d, t) => {

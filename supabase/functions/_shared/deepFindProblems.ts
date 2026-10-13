@@ -15,6 +15,7 @@ const STEP_LABELS: Record<string, { label: (t: string) => string; provider: stri
   hunter_finder: { label: (t) => `Hunter email finder by company (${t})`, provider: 'Hunter' },
   hunter_list: { label: (t) => `Hunter list for ${t}`, provider: 'Hunter' },
   domain_check: { label: (t) => `Domain check ${t}`, provider: 'DNS' },
+  site_check: { label: (t) => `Website check ${t}`, provider: 'The website' },
   web: { label: () => 'Web search', provider: 'Gemini' },
   apollo: { label: (t) => `Apollo company search (${t})`, provider: 'Apollo' },
   person: { label: (t) => `Looking up ${t}`, provider: '' },
@@ -31,6 +32,7 @@ function cleanTarget(t: unknown): string {
 export function problemReason(provider: string, failure: string): string {
   if (failure === 'no_mx') return 'no email set up';
   if (failure === 'dns_error') return 'the DNS check did not answer';
+  if (failure === 'unreadable') return 'the website could not be read';
   if (failure === 'timeout') return 'ran out of time';
   if (failure === 'no_key') return `no ${provider} key is set`;
   if (failure === 'network') return `${provider} could not be reached`;
