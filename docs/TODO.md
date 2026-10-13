@@ -1,6 +1,6 @@
 # Dreamlabs Sales: to-do list
 
-Last updated 2026-10-12. Ask for any item by number or name.
+Last updated 2026-10-14. Ask for any item by number or name.
 
 ## A. Urgent items: BUILT and live 2026-10-12 (contacts, known person, post-send updates). Still need your real-world test.
 
@@ -47,6 +47,15 @@ Last updated 2026-10-12. Ask for any item by number or name.
 
 - F1. Test: send a formatted test email (bold, bullets, a heading, a link, plus the unsubscribe line) to your own address and check it in Gmail on desktop AND on a phone. Also send one with no formatting and confirm it still arrives as plain text.
 - F2. Optional later: italic and numbered lists (out of scope for the first version).
+
+## E. Lookup tools (agreed 2026-10-14, see docs/LOOKUP-TOOLS-PLAN.md; NOT built, build only when Kevin says)
+
+- E1. Check outbound port 25 on the Hostinger KVM 2 VPS (needed for Reacher email verification).
+- E2. Worker stack on the VPS: omkarcloud website-email-contact-scraper + reacherhq/check-if-email-exists behind a wrapper with an SSRF guard, secret header and rate limits.
+- E3. Deep find calls the worker (scraper, pattern guess + verify) and Firecrawl (team page) after our own scanner; provenance and confidence label on every found address.
+- E4. Footer company-number match against Companies House candidates (auto-pick), free and small.
+- E5. Per-org monthly Firecrawl credit cap; Hunter allowance shown in the confirm dialog (built).
+- E6. Personal-data safeguards: source+date on every contact, sole-trader flag, delete-on-request path.
 
 ## B. Testing you need to do (selected-leads autopilot + registry work went live 2026-10-08)
 
