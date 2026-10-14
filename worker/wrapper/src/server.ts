@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server'
 import { buildApp } from './app.js'
+import { verifyEmail } from './verifyEmail.js'
 
 const secret = process.env.WRAPPER_SECRET
 if (!secret || secret.length < 32) {
@@ -7,5 +8,9 @@ if (!secret || secret.length < 32) {
   process.exit(1)
 }
 
-serve({ fetch: buildApp(secret).fetch, port: Number(process.env.PORT ?? 8080) })
+const reacherUrl = process.env.REACHER_URL
+const reacherSecret = process.env.REACHER_SECRET
+const verify = reacherUrl ? (email: string) => verifyEmail(email, { reacherUrl, reacherSecret }) : undefined
+
+serve({ fetch: buildApp(secret, { verify }).fetch, port: Number(process.env.PORT ?? 8080) })
 console.log('lookup wrapper listening')

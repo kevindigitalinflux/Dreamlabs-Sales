@@ -36,6 +36,30 @@ describe('app', () => {
   })
 })
 
+describe('POST /verify-email', () => {
+  const auth = { 'x-worker-secret': SECRET, 'content-type': 'application/json' }
+  const post = (a: ReturnType<typeof buildApp>, body: unknown) =>
+    a.request('/verify-email', { method: 'POST', headers: auth, body: JSON.stringify(body) })
+  const fake = async (email: string) => ({ email, status: 'valid' as const, reason: 'deliverable' as const })
+
+  it('verifies a normalised address', async () => {
+    const r = await post(buildApp(SECRET, { verify: fake }), { email: ' Max@LoveLiving.uk ' })
+    expect(r.status).toBe(200)
+    expect(await r.json()).toEqual({ email: 'max@loveliving.uk', status: 'valid', reason: 'deliverable' })
+  })
+  it('400 for junk, 503 when no checker is configured', async () => {
+    expect((await post(buildApp(SECRET, { verify: fake }), { email: 'nope' })).status).toBe(400)
+    expect((await post(buildApp(SECRET), { email: 'a@b.com' })).status).toBe(503)
+  })
+  it('throttles repeated checks on one domain', async () => {
+    const a = buildApp(SECRET, { verify: fake, perDomainPerMinute: 2 })
+    const codes: number[] = []
+    for (let i = 0; i < 3; i++) codes.push((await post(a, { email: `p${i}@one.com` })).status)
+    codes.push((await post(a, { email: 'x@two.com' })).status)
+    expect(codes).toEqual([200, 200, 429, 200])
+  })
+})
+
 describe('POST /fetch-page', () => {
   const auth = { 'x-worker-secret': SECRET, 'content-type': 'application/json' }
   const post = (a: ReturnType<typeof buildApp>, body: unknown) =>

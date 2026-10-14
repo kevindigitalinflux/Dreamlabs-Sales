@@ -13,11 +13,34 @@ services:
     mem_limit: 128m
     cpus: 0.25
 
+  # SMTP mailbox checker (reacherhq/check-if-email-exists backend, MIT). Internal network only, no host port.
+  # HELO name matches the VPS reverse DNS; outbound port 25 was verified open on 2026-10-14.
+  reacher:
+    image: reacherhq/backend:v0.11.7
+    environment:
+      RCH__HTTP_HOST: "0.0.0.0"
+      RCH__HTTP_PORT: "8080"
+      RCH__HELLO_NAME: "srv1726663.hstgr.cloud"
+      RCH__FROM_EMAIL: "hello@srv1726663.hstgr.cloud"
+      RCH__SMTP_TIMEOUT: "30"
+      RCH__HEADER_SECRET: "${REACHER_SECRET}"
+    restart: unless-stopped
+    networks: [lookup-net]
+    mem_limit: 768m
+    cpus: 0.75
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
   wrapper:
     build: ./wrapper
-    env_file: .env            # WRAPPER_SECRET
+    env_file: .env            # WRAPPER_SECRET, REACHER_SECRET
     environment:
       PORT: "8080"
+      REACHER_URL: "http://reacher:8080"
+    depends_on: [reacher]
     restart: unless-stopped
     networks: [lookup-net]
     mem_limit: 256m
