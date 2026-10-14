@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Route, Routes, useNavigate } from 'react-router';
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router';
 import { AuthProvider } from './hooks/useAuth';
 import { FocusModeProvider } from './hooks/useFocusMode';
 import { OrgProvider } from './hooks/useOrg';
@@ -35,7 +35,7 @@ import { LinkedinOutreach } from './pages/LinkedinOutreach';
 import { AutopilotSetup } from './pages/AutopilotSetup';
 import { AutopilotStatus } from './pages/AutopilotStatus';
 import { PipelineManage } from './pages/PipelineManage';
-import { DeepFindRuns } from './pages/DeepFindRuns';
+import { Jobs } from './pages/Jobs';
 import { DeepFindRun } from './pages/DeepFindRun';
 
 /**
@@ -96,7 +96,8 @@ export function App() {
               <Route path="/pipeline/list" element={<PipelineList />} />
               <Route path="/pipeline/leads/:id" element={<LeadDetailPage />} />
               <Route path="/pipeline/manage" element={<PipelineManage />} />
-              <Route path="/pipeline/deep-find" element={<DeepFindRuns />} />
+              <Route path="/jobs" element={<Jobs />} />
+              <Route path="/pipeline/deep-find" element={<Navigate to="/jobs" replace />} />
               <Route path="/pipeline/deep-find/:runId" element={<DeepFindRun />} />
               <Route path="/scraper" element={<Scraper />} />
               <Route path="/scraper/jobs/:id" element={<ScraperJob />} />

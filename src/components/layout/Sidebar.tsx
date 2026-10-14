@@ -1,7 +1,8 @@
 import { NavLink } from 'react-router';
-import { BarChart3, Contact, KanbanSquare, LayoutDashboard, Mail, Phone, Radar, Rocket, Settings, Shield, Sparkles } from 'lucide-react';
+import { BarChart3, Contact, KanbanSquare, LayoutDashboard, ListChecks, Mail, Phone, Radar, Rocket, Settings, Shield, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useOrg } from '../../hooks/useOrg';
+import { useJobs } from '../../hooks/useJobs';
 import { useNeedsInputCount } from '../../hooks/useNeedsInputCount';
 import logoIcon from '../../assets/logo/logo-icon.png';
 
@@ -16,6 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/dream-agent', label: 'Dream Agent', icon: Sparkles },
   { to: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
+  { to: '/jobs', label: 'Jobs', icon: ListChecks },
   { to: '/scraper', label: 'Scraper', icon: Radar },
   { to: '/outreach/linkedin', label: 'LinkedIn', icon: Contact },
   { to: '/outreach/autopilot', label: 'Autopilot', icon: Rocket },
@@ -35,6 +37,7 @@ function navClass({ isActive }: { isActive: boolean }): string {
 export function Sidebar() {
   const { currentOrg } = useOrg();
   const { count: needsInput } = useNeedsInputCount();
+  const { counts } = useJobs();
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r border-nav-line bg-nav-bg p-4 md:flex">
       <img src={logoIcon} alt="" className="mb-2 h-9 w-auto self-start px-2" />
@@ -48,6 +51,9 @@ export function Sidebar() {
             {label}
             {to === '/outreach/autopilot' && needsInput ? (
               <span className="ml-auto rounded-full bg-cyan/20 px-2 py-0.5 text-[11px] font-bold text-cyan" aria-label={`${needsInput} autopilot leads need your input`}>{needsInput}</span>
+            ) : null}
+            {to === '/jobs' && counts.needsYou > 0 ? (
+              <span className="ml-auto rounded-full bg-violet px-2 py-0.5 text-[11px] font-bold text-on-accent" aria-label={`${counts.needsYou} jobs need you`}>{counts.needsYou}</span>
             ) : null}
           </NavLink>
         ))}
