@@ -36,3 +36,4 @@ or retired.** (Requested by Kevin, 2026-07-17.)
 | Contact-email discovery | 3 | Fetch business website, parse mailto/contact page (part of scraper) |
 | Overdue follow-up nudge | idea | Daily digest of overdue next-actions (email or in-app) — not yet designed |
 | CSV/Sheets lead import | idea | Bulk import from the old Google Sheets workflow — not yet designed |
+| Jobs tracker (view + delete) | B | In-app only: `/jobs`, bar, tab title. Reads deep_find_runs, autopilot_runs, scrape_jobs; deletes only finished jobs the user created or admins (migration 060). No emails, no cron. Owner: `src/lib/jobs/`. |
