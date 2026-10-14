@@ -14,6 +14,7 @@ or retired.** (Requested by Kevin, 2026-07-17.)
 
 | Automation | Type | Trigger | What it does |
 |---|---|---|---|
+| Worker usage limits (`usage_reserve` / `usage_refund`) | Postgres functions | Every call to the lookup worker (once sub-project C wires it in), via `reserveUsage` in `_shared/usage.ts` | Atomically counts site scrapes, email checks and page fetches per organisation and worker-wide per London day (defaults 100/400, 150/300, 300/1000); refuses when either cap is reached; fails closed. Owner: Kevin. Limits: Settings (organisation admins); shared caps in `usage_resources` via migration. Tables `usage_counters`, `usage_global_counters`, `usage_limits`. |
 | `admin-users` | Edge function | Admin UI action | Invites users (Supabase invite email), sets roles, service-role only |
 | `handle_new_user` | DB trigger | auth.users insert | Auto-creates `profiles` row (role contractor) on signup/invite |
 | Stage-change logging | App logic (`applyLeadUpdate`) | Lead stage edit | Auto-inserts "Stage changed: X → Y" note to `lead_notes` |
