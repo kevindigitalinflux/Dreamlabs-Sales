@@ -4,6 +4,20 @@ Status: PLAN, awaiting Kevin's review (2026-10-14). Nothing here has been built.
 Parent doc: `docs/LOOKUP-TOOLS-PLAN.md` (strategy, personal-data stance, per-org quotas).
 Scope: stand up the shared worker on the Hostinger VPS and make it reachable at `https://lookup.didreamlabs.com`. NO app or Deep find changes in this phase.
 
+## Progress (updated 2026-10-14, evening)
+- DONE Task 1 snapshot `400948` refreshed (created 12:39 UTC, expires 2026-10-15 12:39 UTC).
+- DONE Task 2 baseline (n8n 200, 1.1 GB used).
+- DONE Task 3 tunnel `lookup-worker` id `2bd40a93-56cc-4034-bb18-4bd40b909162`, proxied CNAME `lookup.didreamlabs.com`, token stored only in `/opt/lookup-worker/.env` (mode 600). Lesson: Windows PowerShell 5.1 strips inner double quotes when calling `ssh`, so pipe secrets to a script on the VPS (`/opt/lookup-worker/set-token.sh`) and never put quoted shell code in the one-liner.
+- DONE Task 4 skeleton stack live; auth checks pass (no header 401, wrong header 401, right header 200, no direct port).
+- DONE Task 5 TypeScript wrapper: secret check, global rate limit (120/min), SSRF guard (public http/https only, ports 80/443, no credentials, private/link-local/loopback/metadata/IPv6-mapped blocked, DNS pinned at connect time, redirects re-validated, size/time caps), `POST /fetch-page`. Live-tested through the tunnel including names that resolve to 127.0.0.1 (`bad_resolved_address`).
+- DONE Task 6 Reacher `reacherhq/backend:v0.11.7` (MIT, confirmed LICENSE.md), internal only, HELO `srv1726663.hstgr.cloud`, `POST /verify-email` with per-domain throttle (5/min) and labels valid / invalid / risky / unverifiable (catch-all is never "valid"). Live-tested: real mailbox valid, made-up mailbox invalid, made-up domain invalid.
+- 111 wrapper unit tests pass (`npm test` in `worker/wrapper`).
+- OPEN Task 7 scraper: see "Task 7 findings" below, waiting for Kevin's choice.
+- TODO Tasks 8 to 10 (limits soak, rollback note already in CLAUDE.md, docs).
+
+## Task 7 findings (omkarcloud/website-email-contact-scraper)
+Read on GitHub 2026-10-14: created 2026-08-11, 15 stars, built on the `botasaurus` / `patchright` stealth-browser stack (anti-bot evasion), `requirements.txt` has every dependency UNPINNED, Docker base image is `chetan1111/botasaurus:latest` (an individual's Docker Hub account, unpinned tag), ships its own API server and React frontend. Concerns: supply chain (unpinned latest on a server that also holds n8n credentials), maintenance risk (very young project), and stealth evasion of bot protection is a ToS/legal grey area. Alternative that fits the DI stack: add a `/render-page` route to our own TypeScript wrapper using Playwright from Microsoft's official, version-pinned `mcr.microsoft.com/playwright` image, behind the same SSRF guard, returning rendered HTML to our existing scanner. No stealth, no third-party base image.
+
 ## Facts verified 2026-10-14 (read-only)
 - VPS: Hostinger KVM 2, id `1726663`, host `srv1726663`, IPv4 `2.24.131.162`, Ubuntu 24.04, 2 vCPU, 8 GB (1.1 GB used), 96 GB disk (5.2 GB used), load ~0, up 133 days.
 - Running: Docker 29.5.2 with `n8n-traefik-1` (public 80/443) and `n8n-n8n-1` (127.0.0.1:5678). n8n host `n8n.srv1726663.hstgr.cloud`. `ufw` inactive. Outbound port 25: OPEN.
