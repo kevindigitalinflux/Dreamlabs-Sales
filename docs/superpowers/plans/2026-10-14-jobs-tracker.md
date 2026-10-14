@@ -739,7 +739,7 @@ Create `src/lib/jobs/view.ts`:
 ```ts
 // src/lib/jobs/view.ts
 // Pure view helpers over JobItem lists: grouping for the Jobs page, the notification bar's lines, the tab title count.
-import { isFinishedState, type JobItem } from './model';
+import type { JobItem } from './model';
 
 export const OLDER_DAYS = 14;
 export const RECENT_FINISH_HOURS = 24;
@@ -1546,6 +1546,7 @@ export function JobRow({ job, now, stopping, error, onStop, onDelete }: JobRowPr
 
 ```tsx
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { ListChecks } from 'lucide-react';
 import { useJobs } from '../hooks/useJobs';
 import { JobRow } from '../components/jobs/JobRow';
@@ -1557,7 +1558,7 @@ import { isFinishedState, type JobItem, type JobKind } from '../lib/jobs/model';
 
 const KIND_NAME: Record<JobKind, string> = { deep_find: 'Deep find', selected_outreach: 'Outreach to selected leads', scrape: 'Lead searches', campaign: 'Autopilot campaigns' };
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-2">
       <h2 className="text-[18px] font-bold">{title}</h2>
