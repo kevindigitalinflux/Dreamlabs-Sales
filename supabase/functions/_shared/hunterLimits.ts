@@ -60,6 +60,8 @@ export interface HunterAccount {
   searchesAvailable: number | null;
   searchesLeft: number | null;
   creditsLeft: number | null;
+  /** Hunter's `data.reset_date` (YYYY-MM-DD) when it is a plain date, else null. Shape UNVERIFIED. */
+  resetDate: string | null;
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v < 1e9 ? Math.floor(v) : null);
@@ -81,7 +83,9 @@ export function parseHunterAccount(json: unknown): HunterAccount | null {
   const c = pair('credits');
   const left = (p: { used: number | null; available: number | null }) =>
     p.used !== null && p.available !== null ? Math.max(0, p.available - p.used) : null;
-  const out = { searchesUsed: s.used, searchesAvailable: s.available, searchesLeft: left(s), creditsLeft: left(c) };
+  const rawReset = (data as { reset_date?: unknown }).reset_date;
+  const resetDate = typeof rawReset === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawReset) ? rawReset : null;
+  const out = { searchesUsed: s.used, searchesAvailable: s.available, searchesLeft: left(s), creditsLeft: left(c), resetDate };
   return out.searchesLeft === null && out.creditsLeft === null && out.searchesUsed === null ? null : out;
 }
 

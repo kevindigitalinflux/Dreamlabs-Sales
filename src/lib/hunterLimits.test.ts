@@ -26,8 +26,11 @@ describe('retryWaitMs', () => {
 
 describe('Hunter account', () => {
   it('reads searches and credits defensively', () => {
-    const a = parseHunterAccount({ data: { requests: { searches: { used: 20, available: 25 }, credits: { used: 3, available: 50 } } } });
-    expect(a).toEqual({ searchesUsed: 20, searchesAvailable: 25, searchesLeft: 5, creditsLeft: 47 });
+    const a = parseHunterAccount({ data: { reset_date: '2026-10-18', requests: { searches: { used: 20, available: 25 }, credits: { used: 3, available: 50 } } } });
+    expect(a).toEqual({ searchesUsed: 20, searchesAvailable: 25, searchesLeft: 5, creditsLeft: 47, resetDate: '2026-10-18' });
+    expect(parseHunterAccount({ data: { requests: { searches: { used: 1, available: 25 } } } })?.resetDate).toBeNull();
+    expect(parseHunterAccount({ data: { reset_date: 'soon', requests: { searches: { used: 1, available: 25 } } } })?.resetDate).toBeNull();
+    expect(parseHunterAccount({ data: { reset_date: '2026-10-18<script>', requests: { searches: { used: 1, available: 25 } } } })?.resetDate).toBeNull();
     expect(hunterAccountLine(a)).toBe('Hunter: 5 searches left this month.');
     expect(hunterAccountEmpty(a)).toBe(false);
     const empty = parseHunterAccount({ data: { requests: { searches: { used: 25, available: 25 } } } });
@@ -56,9 +59,9 @@ describe('limit lines', () => {
   });
   it('words the allowance for the confirm dialog', async () => {
     const { hunterAllowanceText } = await import('./deepFind');
-    expect(hunterAllowanceText({ configured: true, available: true, usedUp: false, searchesLeft: 7, creditsLeft: null })).toBe('Hunter: 7 searches left this month.');
-    expect(hunterAllowanceText({ configured: true, available: true, usedUp: true, searchesLeft: 0, creditsLeft: null })).toMatch(/used up/);
-    expect(hunterAllowanceText({ configured: false, available: false, usedUp: false, searchesLeft: null, creditsLeft: null })).toMatch(/No Hunter key/);
+    expect(hunterAllowanceText({ configured: true, available: true, usedUp: false, searchesLeft: 7, creditsLeft: null, resetDate: null })).toBe('Hunter: 7 searches left this month.');
+    expect(hunterAllowanceText({ configured: true, available: true, usedUp: true, searchesLeft: 0, creditsLeft: null, resetDate: null })).toMatch(/used up/);
+    expect(hunterAllowanceText({ configured: false, available: false, usedUp: false, searchesLeft: null, creditsLeft: null, resetDate: null })).toMatch(/No Hunter key/);
     expect(hunterAllowanceText(null)).toBeNull();
   });
 });

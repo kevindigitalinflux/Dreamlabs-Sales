@@ -199,7 +199,7 @@ describe('Hunter 429 handling', () => {
   });
   it('reads the free account endpoint with the key only in the header', async () => {
     const fn = stubFetch(() => json({ data: { requests: { searches: { used: 24, available: 25 } } } }));
-    expect(await hunterAccount(KEY)).toEqual({ ok: true, account: { searchesUsed: 24, searchesAvailable: 25, searchesLeft: 1, creditsLeft: null } });
+    expect(await hunterAccount(KEY)).toEqual({ ok: true, account: { searchesUsed: 24, searchesAvailable: 25, searchesLeft: 1, creditsLeft: null, resetDate: null } });
     expect(urls(fn)[0]).toBe('https://api.hunter.io/v2/account');
   });
 });

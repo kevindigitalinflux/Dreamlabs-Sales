@@ -92,6 +92,7 @@ Deno.serve(async (req) => {
     return json({
       configured: true, available: !!a, used_up: hunterAccountEmpty(a),
       searches_left: a?.searchesLeft ?? null, searches_available: a?.searchesAvailable ?? null, credits_left: a?.creditsLeft ?? null,
+      reset_date: a?.resetDate ?? null,
     }, 200, headers);
   }
 

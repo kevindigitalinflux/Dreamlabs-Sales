@@ -58,6 +58,8 @@ export interface HunterAllowance {
   usedUp: boolean;
   searchesLeft: number | null;
   creditsLeft: number | null;
+  /** When Hunter says the monthly allowance renews (YYYY-MM-DD), if it reported a plain date. */
+  resetDate: string | null;
 }
 
 const numOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : null);
@@ -71,6 +73,7 @@ export async function fetchHunterAllowance(orgId: string): Promise<HunterAllowan
   return {
     configured: d.configured, available: d.available === true, usedUp: d.used_up === true,
     searchesLeft: numOrNull(d.searches_left), creditsLeft: numOrNull(d.credits_left),
+    resetDate: typeof d.reset_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.reset_date) ? d.reset_date : null,
   };
 }
 
