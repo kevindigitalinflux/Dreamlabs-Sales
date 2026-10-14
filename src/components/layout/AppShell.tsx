@@ -5,6 +5,7 @@ import { MobileNav } from './MobileNav';
 import { useFocusMode } from '../../hooks/useFocusMode';
 import { ThemeProvider } from '../../hooks/useTheme';
 import { JobsProvider } from '../../hooks/useJobs';
+import { JobsBar } from '../jobs/JobsBar';
 
 /** Main authenticated layout; focus mode hides all navigation chrome. */
 export function AppShell() {
@@ -16,6 +17,7 @@ export function AppShell() {
           {!focusMode && <Sidebar />}
           <div className="flex min-w-0 flex-1 flex-col">
             <TopBar />
+            {!focusMode && <JobsBar />}
             <main className="flex-1 p-4 pb-20 md:p-6 md:pb-6">
               <Outlet />
             </main>
