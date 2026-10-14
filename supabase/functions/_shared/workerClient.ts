@@ -51,7 +51,8 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
     let failure: WorkerFailure | null = null;
     let json: unknown = null;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), WORKER_TIMEOUT_MS[kind]);
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, WORKER_TIMEOUT_MS[kind]);
     try {
       const res = await fetchImpl(`${config.url}${path}`, {
         method: 'POST', signal: controller.signal,
@@ -70,7 +71,8 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
       clearTimeout(timer);
     }
     if (failure === null) return { ok: true, json };
-    if (shouldRefund(failure)) await refundUsage(usage, orgId, resource, units, reserve.day);
+    // Our own timeout is not "the worker did no work": it may still be running, so the units stay reserved.
+    if (shouldRefund(failure) && !timedOut) await refundUsage(usage, orgId, resource, units, reserve.day);
     const line = workerFailureLine(failure);
     if (failure === 'bad_response') { addLine(line); return { ok: false, failure, line }; }
     return stop(kind, failure, line);
@@ -78,6 +80,8 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
 
   return {
     async verifyEmail(email) {
+      const already = stopped.verify;
+      if (already) return { ok: false, ...already };
       if (verifyCalls >= MAX_VERIFY_PER_LEAD) {
         return stop('verify', 'limit_reached', `Only ${MAX_VERIFY_PER_LEAD} email checks are used for one lead in one Deep find.`);
       }

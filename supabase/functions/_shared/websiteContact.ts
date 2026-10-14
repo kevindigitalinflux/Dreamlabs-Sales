@@ -11,7 +11,7 @@ function extractEmail(html: string): string | null {
   return NON_EMAIL_TLDS.has(tld) ? null : plain[0];
 }
 
-function extractPhone(html: string): string | null {
+export function extractPhone(html: string): string | null {
   const tel = html.match(/tel:([+\d][\d\s()-]{6,18}\d)/);
   if (tel) return tel[1].trim();
   // Plain-text fallback runs on tag-stripped text, not raw HTML — otherwise

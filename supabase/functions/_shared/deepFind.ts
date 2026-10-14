@@ -15,6 +15,7 @@ import { guessLabel, inferDomainPattern, patternGuess, patternLine, type Pattern
 import { hunterAccountEmpty, hunterAccountLine, type HunterAccount } from './hunterLimits.ts';
 import { cleanEmail, cleanLinkedinProfile, emailDomain, extractWebsiteFindings, pickWebsiteFindings } from './knownPersonWide.ts';
 import { domainEmailsOnPages } from './domainSiteCheck.ts';
+import { extractPhone } from './websiteContact.ts';
 import { domainFromWebsite, isDirectoryDomain } from './knownPerson.ts';
 import { rankPeople } from './peopleRanking.ts';
 import { DOMAIN_SOURCE_LABELS, safeFailure, websiteSuspicion, type KnownPersonName, type WebPerson } from './domainDiscovery.ts';
@@ -246,11 +247,18 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // one browser scrape per lead. Only addresses on that domain are kept; they are suggestions with their source page
   // and also feed the email-format step below. Skipped when the worker is off, over its limit, or time is short.
   // Phones are not pushed as suggestions: the suggestion UI only applies email and LinkedIn.
-  const scrapeDomain = [...verified].find((d) => (siteEmails.get(d) ?? []).length === 0 && !isDirectoryDomain(d));
+  // The lead's own website pages were read above (not part of discovery.sitePages): count what they already show,
+  // so a site that gave an address or a phone number is not scraped again.
+  if (siteDomain && verified.has(siteDomain) && pages.length > 0) {
+    siteEmails.set(siteDomain, [...new Set([...(siteEmails.get(siteDomain) ?? []), ...domainEmailsOnPages(pages, siteDomain)])]);
+  }
+  const hasContactDetails = (d: string) =>
+    (siteEmails.get(d) ?? []).length > 0 || (d === siteDomain && pages.some((html) => !!extractPhone(html)));
+  const scrapeDomain = [...verified].find((d) => !hasContactDetails(d) && !isDirectoryDomain(d));
   if (scrapeDomain && left() > 50_000) {
     const scraped = await worker.scrapeSite(scrapeDomain, 'key_pages');
     if (scraped.ok) {
-      const pageOf = (source: string | null) => { try { return source ? ` (${new URL(source).pathname})` : ''; } catch { return ''; } };
+      const pageOf = (source: string | null) => { try { return source ? ` (${new URL(source).pathname.slice(0, 80)})` : ''; } catch { return ''; } };
       for (const e of scraped.value.emails) {
         if (emailOnLead(all(), e.value) || suggestions.some((s) => s.value === e.value)) continue;
         suggestions.push({ name: 'Company contact', field: 'email', value: e.value, label: `Found by the browser scraper on ${scrapeDomain}${pageOf(e.source)}, check it` });
@@ -319,7 +327,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       if (verdict === 'invalid') continue;
       if (verdict !== 'verified' && checked && checked.ok) label = unconfirmedLabel(checked.value.reason);
       const contact = person.contactId ? all().find((c) => c.id === person.contactId) ?? null : null;
-      if (verdict === 'verified' && contact) {
+      // When our checker answered (risky/unverifiable) Hunter's "verified" only makes this a labelled suggestion, never a fill.
+      const checkerDecided = !!(checked && checked.ok);
+      const checkerSaidValid = action === 'accept';
+      if (verdict === 'verified' && contact && (checkerSaidValid || !checkerDecided)) {
         const saved = await fillBlanks(service, contact, { email: guess });
         if (saved) { Object.assign(contact, saved); touched.add(contact.id); stats.officerEmails++; }
       } else {

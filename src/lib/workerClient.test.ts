@@ -256,7 +256,37 @@ describe('makeWorkerClient', () => {
     expect(aborted).toBe(true);
     const r = await pending;
     expect(r).toEqual({ ok: false, failure: 'unreachable', line: workerFailureLine('unreachable') });
+    // our own timeout: the worker may still be running, so the units stay reserved
+    expect(refundCalls(u).length).toBe(0);
+    expect(reserveCalls(u).length).toBe(1);
+    const again = await c.verifyEmail('max@loveliving.uk');
+    expect(again).toMatchObject({ ok: false, failure: 'unreachable' });
+    expect(reserveCalls(u).length).toBe(1);
+  });
+
+  it('refunds once when the network fails fast, before any timeout', async () => {
+    vi.useFakeTimers();
+    const u = usage();
+    const f = vi.fn<typeof fetch>(() => Promise.reject(new TypeError('connection reset')));
+    const r = await make(u, f).verifyEmail('max@loveliving.uk');
+    expect(r).toMatchObject({ ok: false, failure: 'unreachable' });
     expect(refundCalls(u).length).toBe(1);
+  });
+
+  it('with no config, 8 checks give exactly one line: not set up', async () => {
+    const c = make(usage(), worker(200, VERIFY_OK), null);
+    for (let i = 0; i < 8; i++) await c.verifyEmail('max@loveliving.uk');
+    expect(c.lines()).toEqual([workerFailureLine('not_configured')]);
+  });
+
+  it('after an unreachable result, later checks stay unreachable with no cap line', async () => {
+    const f = vi.fn<typeof fetch>(() => Promise.reject(new TypeError('connect failed')));
+    const c = make(usage(), f);
+    for (let i = 0; i < 8; i++) {
+      expect(await c.verifyEmail('max@loveliving.uk')).toMatchObject({ ok: false, failure: 'unreachable' });
+    }
+    expect(c.lines()).toEqual([workerFailureLine('unreachable')]);
+    expect(f).toHaveBeenCalledTimes(1);
   });
 
   it('never puts the secret or the worker address into any line', async () => {
