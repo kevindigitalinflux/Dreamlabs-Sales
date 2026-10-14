@@ -35,3 +35,40 @@ describe('app', () => {
     expect((await app.request('/nope', { headers: { 'x-worker-secret': SECRET } })).status).toBe(404)
   })
 })
+
+describe('POST /fetch-page', () => {
+  const auth = { 'x-worker-secret': SECRET, 'content-type': 'application/json' }
+  const post = (a: ReturnType<typeof buildApp>, body: unknown) =>
+    a.request('/fetch-page', { method: 'POST', headers: auth, body: typeof body === 'string' ? body : JSON.stringify(body) })
+
+  it('returns page text through the guard', async () => {
+    const a = buildApp(SECRET, {
+      fetchOptions: { fetchImpl: async () => new Response('<h1>Team</h1>', { headers: { 'content-type': 'text/html' } }) },
+    })
+    const r = await post(a, { url: 'https://example.com/team' })
+    expect(r.status).toBe(200)
+    expect(await r.json()).toMatchObject({ final_url: 'https://example.com/team', status: 200, body: '<h1>Team</h1>', truncated: false })
+  })
+  it('refuses private targets with a plain code and no provider text', async () => {
+    const r = await post(buildApp(SECRET), { url: 'http://169.254.169.254/latest/meta-data' })
+    expect(r.status).toBe(422)
+    expect(await r.json()).toEqual({ error: 'bad_host' })
+  })
+  it('400 on a missing url, bad json, or an oversized url', async () => {
+    const a = buildApp(SECRET)
+    expect((await post(a, {})).status).toBe(400)
+    expect((await post(a, 'not json')).status).toBe(400)
+    expect((await post(a, { url: 'https://e.com/' + 'a'.repeat(2100) })).status).toBe(400)
+  })
+  it('requires the secret', async () => {
+    const r = await buildApp(SECRET).request('/fetch-page', { method: 'POST', body: '{}' })
+    expect(r.status).toBe(401)
+  })
+  it('429 once the shared budget is spent', async () => {
+    const a = buildApp(SECRET, { perMinute: 2 })
+    const h = { 'x-worker-secret': SECRET }
+    const statuses = [] as number[]
+    for (let i = 0; i < 3; i++) statuses.push((await a.request('/health', { headers: h })).status)
+    expect(statuses).toEqual([200, 200, 429])
+  })
+})
