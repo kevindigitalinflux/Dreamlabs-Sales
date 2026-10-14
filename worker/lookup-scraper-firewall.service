@@ -1,0 +1,13 @@
+[Unit]
+Description=Egress firewall for the lookup worker scraper network
+After=docker.service network-online.target
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/lookup-worker/scraper-firewall.sh
+
+[Install]
+WantedBy=multi-user.target

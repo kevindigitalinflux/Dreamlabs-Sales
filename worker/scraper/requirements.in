@@ -1,0 +1,13 @@
+# Top-level dependencies of the vendored contact scraper (botasaurus and botasaurus-server removed on purpose).
+# requirements.lock is generated from this file with hashes: see worker/scraper/README.md.
+patchright
+curl_cffi
+psutil
+beautifulsoup4
+lxml
+phonenumbers
+tldextract
+wappalyzer-python3
+browserforge
+pyvirtualdisplay
+pytest

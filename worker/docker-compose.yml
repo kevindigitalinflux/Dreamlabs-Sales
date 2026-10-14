@@ -1,12 +1,14 @@
 # Lookup worker stack (Dreamlabs Sales). Lives on the Hostinger VPS in /opt/lookup-worker.
-# Only cloudflared reaches the internet (outbound tunnel); nothing here publishes a host port.
+# Only cloudflared accepts traffic (outbound tunnel); nothing here publishes a host port.
+# Secrets come from /opt/lookup-worker/.env (mode 600, never committed) and each container gets ONLY its own.
 name: lookup-worker
 
 services:
   cloudflared:
     image: cloudflare/cloudflared:2025.9.1
     command: tunnel --no-autoupdate run
-    env_file: .env            # TUNNEL_TOKEN (mode 600, never committed)
+    environment:
+      TUNNEL_TOKEN: "${TUNNEL_TOKEN}"
     restart: unless-stopped
     networks: [lookup-net]
     depends_on: [wrapper]
@@ -34,15 +36,44 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
+  # Vendored contact scraper (see scraper/NOTICE.md). Real Chrome that visits arbitrary websites, so it is the
+  # riskiest container: it has NO route to the other containers or the VPS (see scraper-firewall.sh), runs as a
+  # non-root user, drops all capabilities and has hard memory/CPU/process caps. The wrapper reaches it over the
+  # internal-only `scrape-link` network.
+  scraper:
+    build: ./scraper
+    environment:
+      SCRAPER_SECRET: "${SCRAPER_SECRET}"
+      PORT: "8000"
+      SCRAPER_MAX_CONCURRENT: "2"
+    restart: unless-stopped
+    networks:
+      scrape-link: {}
+      scrape-egress:
+        ipv4_address: 172.30.50.10
+    shm_size: 1g
+    mem_limit: 2g
+    memswap_limit: 2g
+    cpus: 1.25
+    pids_limit: 512
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
   wrapper:
     build: ./wrapper
-    env_file: .env            # WRAPPER_SECRET, REACHER_SECRET
     environment:
       PORT: "8080"
+      WRAPPER_SECRET: "${WRAPPER_SECRET}"
       REACHER_URL: "http://reacher:8080"
-    depends_on: [reacher]
+      REACHER_SECRET: "${REACHER_SECRET}"
+      SCRAPER_URL: "http://scraper:8000"
+      SCRAPER_SECRET: "${SCRAPER_SECRET}"
+    depends_on: [reacher, scraper]
     restart: unless-stopped
-    networks: [lookup-net]
+    networks: [lookup-net, scrape-link]
     mem_limit: 256m
     cpus: 0.5
     read_only: true
@@ -55,3 +86,15 @@ services:
 networks:
   lookup-net:
     driver: bridge
+  # wrapper <-> scraper only; `internal` means no route to the internet or the host.
+  scrape-link:
+    driver: bridge
+    internal: true
+  # the scraper's only way out; firewalled by scraper-firewall.sh (public internet only).
+  scrape-egress:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-scrape
+    ipam:
+      config:
+        - subnet: 172.30.50.0/24

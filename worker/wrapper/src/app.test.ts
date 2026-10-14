@@ -36,6 +36,37 @@ describe('app', () => {
   })
 })
 
+describe('POST /scrape-site', () => {
+  const auth = { 'x-worker-secret': SECRET, 'content-type': 'application/json' }
+  const post = (a: ReturnType<typeof buildApp>, body: unknown) =>
+    a.request('/scrape-site', { method: 'POST', headers: auth, body: JSON.stringify(body) })
+  const fake = async (url: string, mode: string) => ({ domain: new URL(url).hostname, mode, emails: [] })
+
+  it('guards the target, defaults the mode and returns the scrape', async () => {
+    const r = await post(buildApp(SECRET, { scrape: fake as never }), { url: 'loveliving.uk' })
+    expect(r.status).toBe(200)
+    expect(await r.json()).toEqual({ domain: 'loveliving.uk', mode: 'key_pages', emails: [] })
+  })
+  it('422 for private targets, 400 for a bad mode, 503 when not configured', async () => {
+    const a = buildApp(SECRET, { scrape: fake as never })
+    const priv = await post(a, { url: 'http://169.254.169.254/' })
+    expect(priv.status).toBe(422)
+    expect(await priv.json()).toEqual({ error: 'bad_host' })
+    expect((await post(a, { url: 'example.com', mode: 'everything' })).status).toBe(400)
+    expect((await post(buildApp(SECRET), { url: 'example.com' })).status).toBe(503)
+  })
+  it('maps scraper failures to fixed codes without leaking text', async () => {
+    const mk = (code: string) => buildApp(SECRET, { scrape: (async () => { throw Object.assign(new Error('internal /app/secret'), { code }) }) as never })
+    const r = await post(mk('x'), { url: 'example.com' })
+    expect(r.status).toBe(502)
+    expect(await r.json()).toEqual({ error: 'scrape_failed' })
+  })
+  it('has its own tight rate limit', async () => {
+    const a = buildApp(SECRET, { scrape: fake as never, scrapePerMinute: 1 })
+    expect([(await post(a, { url: 'a.com' })).status, (await post(a, { url: 'b.com' })).status]).toEqual([200, 429])
+  })
+})
+
 describe('POST /verify-email', () => {
   const auth = { 'x-worker-secret': SECRET, 'content-type': 'application/json' }
   const post = (a: ReturnType<typeof buildApp>, body: unknown) =>

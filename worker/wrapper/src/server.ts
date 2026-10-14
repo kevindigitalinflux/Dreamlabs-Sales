@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server'
 import { buildApp } from './app.js'
+import { scrapeSite } from './scrapeSite.js'
 import { verifyEmail } from './verifyEmail.js'
 
 const secret = process.env.WRAPPER_SECRET
@@ -12,5 +13,12 @@ const reacherUrl = process.env.REACHER_URL
 const reacherSecret = process.env.REACHER_SECRET
 const verify = reacherUrl ? (email: string) => verifyEmail(email, { reacherUrl, reacherSecret }) : undefined
 
-serve({ fetch: buildApp(secret, { verify }).fetch, port: Number(process.env.PORT ?? 8080) })
+const scraperUrl = process.env.SCRAPER_URL
+const scraperSecret = process.env.SCRAPER_SECRET
+const scrape =
+  scraperUrl && scraperSecret
+    ? (url: string, mode: Parameters<typeof scrapeSite>[1]) => scrapeSite(url, mode, { scraperUrl, scraperSecret })
+    : undefined
+
+serve({ fetch: buildApp(secret, { verify, scrape }).fetch, port: Number(process.env.PORT ?? 8080) })
 console.log('lookup wrapper listening')
