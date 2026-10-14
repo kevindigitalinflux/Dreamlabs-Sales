@@ -23,6 +23,8 @@ import {
   MAX_HUNTER_PEOPLE_PER_LEAD, deepFindSummary, emailOnLead, extractTeamMembers, findSamePerson,
   hunterPeople, namedPersonIsStored, parseLeadPersonName, peopleToLookUp, stuckAction, type ExistingContact, type LeadStats, type SitePerson,
 } from './deepFindRules.ts';
+import { makeWorkerClient } from './workerClient.ts';
+import { readWorkerConfig, unconfirmedLabel, verifyAction } from './workerRules.ts';
 
 export const WALL_BUDGET_MS = 130_000;
 /** A lead is only started when at least this much of the invocation is left. */
@@ -124,6 +126,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     resolveOrgApiKey(service, run.org_id, 'apollo'),
   ]);
   const spend = new Spend(service, run.id);
+  // The shared lookup worker (free email checker, site scraper). Off when WORKER_URL / WORKER_SECRET are not set.
+  const worker = makeWorkerClient({
+    usage: service, orgId: run.org_id,
+    config: readWorkerConfig(Deno.env.get('WORKER_URL'), Deno.env.get('WORKER_SECRET')),
+  });
   const { data: contactData, error: contactErr } = await service.from('decision_maker_candidates').select('*').eq('lead_id', lead.id);
   if (contactErr) return { status: 'failed', reason: 'Could not read this lead\'s contacts.' };
   const rows = (contactData ?? []) as Contact[];
@@ -252,7 +259,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }
 
   // (1c) the email format on each confirmed domain, from addresses we already know there (contacts, the lead's own
-  // email, addresses written on the domain's site). Built addresses are verified with Hunter when credits allow;
+  // email, addresses written on the domain's site). Built addresses are checked with our own checker first, then Hunter when it cannot decide and credits allow;
   // otherwise they are only offered as "Guess, unverified" suggestions: never filled in, never in sequences.
   const knownNames = [
     ...peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers).map((p) => ({ first: p.first, last: p.last })),
@@ -274,22 +281,33 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       if (!guess || emailOnLead(all(), guess) || suggestions.some((s) => s.value === guess)) continue;
       const name = `${person.first} ${person.last}`.slice(0, 80);
       let verdict: string | null = null;
-      if (hunterKey && verifications < 3 && left() > 25_000 && await spend.hunter('verify email format')) {
+      let label = guessLabel(pattern, d);
+      // Free checker first; Hunter is asked only when it cannot decide and credits remain.
+      const checked = left() > 25_000 ? await worker.verifyEmail(guess) : null;
+      const action = verifyAction(checked && checked.ok ? checked.value.status : null, !!hunterKey && verifications < 3 && left() > 25_000);
+      if (action === 'drop') continue;
+      if (action === 'accept') {
+        verdict = 'verified';
+        label = 'Built from the email format and confirmed by our email checker, check it';
+      } else if (action === 'ask_hunter' && await spend.hunter('verify email format')) {
         verifications++;
-        const v = await hunterVerifyEmail(guess, hunterKey, 5_000);
-        if (v.ok) verdict = v.verdict;
-        else {
+        const v = await hunterVerifyEmail(guess, hunterKey!, 5_000);
+        if (v.ok) {
+          verdict = v.verdict;
+          if (verdict === 'verified') label = 'Built from the email format and verified by Hunter, check it';
+        } else {
           problems.push({ step: 'hunter_verify', target: d, failure: safeFailure(v.failure) });
           if (v.failure === 'usage_exhausted' || v.failure === 'rate_limited') spend.stopHunter();
         }
       }
       if (verdict === 'invalid') continue;
+      if (verdict !== 'verified' && checked && checked.ok) label = unconfirmedLabel(checked.value.reason);
       const contact = person.contactId ? all().find((c) => c.id === person.contactId) ?? null : null;
       if (verdict === 'verified' && contact) {
         const saved = await fillBlanks(service, contact, { email: guess });
         if (saved) { Object.assign(contact, saved); touched.add(contact.id); stats.officerEmails++; }
       } else {
-        suggestions.push({ name, field: 'email', value: guess, label: verdict === 'verified' ? 'Built from the email format and verified by Hunter, check it' : guessLabel(pattern, d) });
+        suggestions.push({ name, field: 'email', value: guess, label });
       }
     }
   }
@@ -366,6 +384,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   stats.hunterCapHit = spend.hunterHit;
   stats.aiCapHit = spend.aiHit;
   // One plain line per search that gave no answer (replaces the old "N searches did not work" count), then the credits.
+  steps.push(...worker.lines());
   steps.push(...problemLines(problems));
   steps.push(creditLine(spend.used));
 
