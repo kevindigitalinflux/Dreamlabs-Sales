@@ -4,6 +4,7 @@ import { useFocusMode } from '../../hooks/useFocusMode';
 import { initials } from '../../lib/utils';
 import { OrgSwitcher } from './OrgSwitcher';
 import { ThemeToggle } from './ThemeToggle';
+import { UsageMeter } from './UsageMeter';
 
 /** Top bar: focus-mode toggle + user identity + sign out. */
 export function TopBar() {
@@ -21,6 +22,7 @@ export function TopBar() {
         {focusMode ? 'Exit focus' : 'Focus'}
       </button>
       <ThemeToggle />
+      <UsageMeter />
       <OrgSwitcher />
       {profile?.avatar_url ? (
         <img src={profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover" />
