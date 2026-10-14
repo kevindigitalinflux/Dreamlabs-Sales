@@ -242,6 +242,22 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     siteEmails.set(s.domain, domainEmailsOnPages(s.pages, s.domain));
     for (const html of s.pages) extraSitePeople.push(...extractTeamMembers(html));
   }
+  // (1b-scrape) A confirmed domain whose pages gave no address (a site that needs a browser, or one we could not read):
+  // one browser scrape per lead. Only addresses on that domain are kept; they are suggestions with their source page
+  // and also feed the email-format step below. Skipped when the worker is off, over its limit, or time is short.
+  // Phones are not pushed as suggestions: the suggestion UI only applies email and LinkedIn.
+  const scrapeDomain = [...verified].find((d) => (siteEmails.get(d) ?? []).length === 0 && !isDirectoryDomain(d));
+  if (scrapeDomain && left() > 50_000) {
+    const scraped = await worker.scrapeSite(scrapeDomain, 'key_pages');
+    if (scraped.ok) {
+      const pageOf = (source: string | null) => { try { return source ? ` (${new URL(source).pathname})` : ''; } catch { return ''; } };
+      for (const e of scraped.value.emails) {
+        if (emailOnLead(all(), e.value) || suggestions.some((s) => s.value === e.value)) continue;
+        suggestions.push({ name: 'Company contact', field: 'email', value: e.value, label: `Found by the browser scraper on ${scrapeDomain}${pageOf(e.source)}, check it` });
+      }
+      siteEmails.set(scrapeDomain, [...(siteEmails.get(scrapeDomain) ?? []), ...scraped.value.emails.map((e) => e.value)]);
+    }
+  }
   for (const person of confirmedSites.length > 0 ? peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers) : []) {
     for (const s of confirmedSites) {
       const picked = pickWebsiteFindings(s.pages.map((h) => extractWebsiteFindings(h, s.domain, person.first, person.last)), person.first, person.last);
