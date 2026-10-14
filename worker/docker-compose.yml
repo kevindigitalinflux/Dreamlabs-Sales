@@ -1,0 +1,34 @@
+# Lookup worker stack (Dreamlabs Sales). Lives on the Hostinger VPS in /opt/lookup-worker.
+# Only cloudflared reaches the internet (outbound tunnel); nothing here publishes a host port.
+name: lookup-worker
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2025.9.1
+    command: tunnel --no-autoupdate run
+    env_file: .env            # TUNNEL_TOKEN (mode 600, never committed)
+    restart: unless-stopped
+    networks: [lookup-net]
+    depends_on: [wrapper]
+    mem_limit: 128m
+    cpus: 0.25
+
+  wrapper:
+    build: ./wrapper
+    env_file: .env            # WRAPPER_SECRET
+    environment:
+      PORT: "8080"
+    restart: unless-stopped
+    networks: [lookup-net]
+    mem_limit: 256m
+    cpus: 0.5
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+networks:
+  lookup-net:
+    driver: bridge
