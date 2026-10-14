@@ -11,7 +11,9 @@ export function TopBar() {
   const { profile, signOut } = useAuth();
   const { focusMode, toggle } = useFocusMode();
   return (
-    <header className="flex min-h-14 items-center justify-end gap-3 border-b border-line px-4">
+    // flex-wrap: on a phone the usage chip no longer fits beside Focus, the theme toggle, avatar and Sign out in one row
+    // (it pushed Focus off the left edge), so the bar wraps onto a second row instead of clipping.
+    <header className="flex min-h-14 flex-wrap items-center justify-end gap-x-3 gap-y-2 border-b border-line px-4 py-2 sm:py-0">
       <button
         type="button"
         onClick={toggle}
