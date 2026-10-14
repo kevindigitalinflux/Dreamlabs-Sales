@@ -4,7 +4,7 @@ import { useOrg } from '../../hooks/useOrg';
 import { useUsage } from '../../hooks/useUsage';
 import { fetchHunterAllowance, hunterAllowanceText, type HunterAllowance } from '../../lib/deepFind';
 import {
-  chipText, formatRenewalDate, formatResetLine, stateLine, tightestAllowance, usageState, USAGE_TEXT, type UsageState,
+  chipText, formatRenewalDate, formatResetLine, shortChipText, stateLine, tightestAllowance, usageState, USAGE_TEXT, type UsageState,
 } from '../../../supabase/functions/_shared/usageRules';
 
 const CHIP_CLASS: Record<UsageState | 'quiet', string> = {
@@ -36,7 +36,10 @@ export function UsageMeter() {
   const [hunter, setHunter] = useState<HunterState>({ status: 'idle' });
   const open = hovered || focused || pinned;
 
-  useEffect(() => { setHunter({ status: 'idle' }); }, [orgId]);
+  // Which organisation Hunter was already asked about. A ref (not state) so starting the request does not re-run the
+  // effect below and throw the answer away; changing organisation resets it.
+  const hunterAskedFor = useRef<string | null>(null);
+  useEffect(() => { hunterAskedFor.current = null; setHunter({ status: 'idle' }); }, [orgId]);
 
   useEffect(() => {
     if (!open) return;
@@ -46,17 +49,19 @@ export function UsageMeter() {
   }, [open]);
 
   useEffect(() => {
-    if (!open || !orgId || hunter.status !== 'idle') return;
+    if (!open || !orgId || hunterAskedFor.current === orgId) return;
+    hunterAskedFor.current = orgId;
     setHunter({ status: 'loading' });
-    let live = true;
-    void fetchHunterAllowance(orgId).then((value) => { if (live) setHunter({ status: 'done', value }); });
-    return () => { live = false; };
-  }, [open, orgId, hunter.status]);
+    void fetchHunterAllowance(orgId).then((value) => {
+      if (hunterAskedFor.current === orgId) setHunter({ status: 'done', value });
+    });
+  }, [open, orgId]);
 
   const tight = tightestAllowance(rows);
   const state: UsageState | 'quiet' = tight ? usageState(tight) : 'quiet';
   const label = loading ? 'Usage…' : error || !tight ? 'Usage unavailable' : chipText(tight);
-  const announce = tight && state !== 'ok' && state !== 'quiet' ? chipText(tight) : '';
+  const shortLabel = loading ? '…' : error || !tight ? 'Unavailable' : shortChipText(tight);
+  const announce =tight && state !== 'ok' && state !== 'quiet' ? chipText(tight) : '';
   const resetsAt = rows[0] ? new Date(rows[0].resetsAt) : null;
 
   function closeAll() { setHovered(false); setFocused(false); setPinned(false); }
@@ -81,6 +86,7 @@ export function UsageMeter() {
       >
         <Zap className="h-4 w-4 shrink-0" aria-hidden />
         <span className="hidden whitespace-nowrap sm:inline">{label}</span>
+        <span className="whitespace-nowrap sm:hidden">{shortLabel}</span>
       </button>
       <span role="status" className="sr-only">{announce}</span>
 

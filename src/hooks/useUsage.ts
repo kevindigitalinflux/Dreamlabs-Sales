@@ -8,7 +8,8 @@ const POLL_MS = 60_000;
  * The organisation's worker allowances for today, kept fresh by a 60 s refetch and by realtime changes to its
  * counters. The channel name includes useId() so two mounted users of this hook (the top-bar meter and the Settings
  * card) never share a channel. A failed refetch keeps the last good numbers; "Usage unavailable" is only reported
- * when nothing has ever loaded.
+ * when nothing has ever loaded. `reload()` refetches in place: it never blanks what is already on screen (the
+ * Settings card relies on that so inputs keep focus after a save); only a change of organisation resets the data.
  */
 export function useUsage(orgId: string | null) {
   const instance = useId();
@@ -18,12 +19,16 @@ export function useUsage(orgId: string | null) {
   const [tick, setTick] = useState(0);
   const hasRows = useRef(false);
 
+  // Switching organisation starts from nothing.
   useEffect(() => {
     hasRows.current = false;
     setRows([]);
     setError(null);
-    if (!orgId) { setLoading(false); return; }
-    setLoading(true);
+    setLoading(orgId !== null);
+  }, [orgId]);
+
+  useEffect(() => {
+    if (!orgId) return;
     let active = true;
     const load = async () => {
       const { data, error: err } = await supabase.rpc('usage_snapshot', { p_org: orgId });

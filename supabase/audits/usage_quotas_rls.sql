@@ -49,6 +49,12 @@ BEGIN
   EXECUTE 'SET LOCAL ROLE authenticated';
   BEGIN INSERT INTO public.usage_limits (org_id, resource, daily_limit) VALUES (v_a, 'worker_scrape', 60); r := r || 'PASS 11 admin can set their own limit';
   EXCEPTION WHEN OTHERS THEN r := r || 'FAIL 11 admin could not set a limit (' || SQLERRM || ')'; END;
+  -- The Settings card saves with UPDATE ... SET daily_limit (never an upsert, which would also SET org_id/resource).
+  BEGIN UPDATE public.usage_limits SET daily_limit = 61 WHERE org_id = v_a AND resource = 'worker_scrape'; GET DIAGNOSTICS n = ROW_COUNT;
+    r := r || (CASE WHEN n = 1 THEN 'PASS' ELSE 'FAIL' END) || ' 11b admin can update daily_limit on their own row (rows=' || n || ')';
+  EXCEPTION WHEN OTHERS THEN r := r || 'FAIL 11b admin could not update daily_limit (' || SQLERRM || ')'; END;
+  BEGIN UPDATE public.usage_limits SET org_id = v_b WHERE org_id = v_a AND resource = 'worker_scrape'; r := r || 'FAIL 11c admin could rewrite org_id';
+  EXCEPTION WHEN OTHERS THEN r := r || 'PASS 11c admin cannot rewrite the key columns (' || SQLSTATE || ')'; END;
   EXECUTE 'RESET ROLE';
   SELECT updated_by INTO v_by FROM public.usage_limits WHERE org_id = v_a AND resource = 'worker_scrape';
   r := r || (CASE WHEN v_by = v_admin_a THEN 'PASS' ELSE 'FAIL' END) || ' 12 updated_by is stamped by the trigger';

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   chipText, formatRenewalDate, formatResetLine, formatResetsIn, londonDay, nextLondonMidnight, parseLimitInput,
-  parseReserve, parseSnapshot, refusalLine, remaining, stateLine, tightestAllowance, usageState, USAGE_DEFAULTS,
+  parseReserve, parseSnapshot, refusalLine, remaining, shortChipText, stateLine, tightestAllowance, usageState, USAGE_DEFAULTS,
   USAGE_RESOURCES, type UsageRow,
 } from '../../supabase/functions/_shared/usageRules';
 
@@ -109,6 +109,12 @@ describe('tightestAllowance and wording', () => {
     expect(stateLine(row({ used: 110 }))).toBe('110 of 150 used today');
     expect(stateLine(row({ used: 150 }))).toBe('Limit reached (150 a day)');
     expect(stateLine(row({ used: 10, globalUsed: 300 }))).toBe('Shared worker allowance used up today');
+  });
+  it('writes a short chip text for narrow screens, still in words', () => {
+    expect(shortChipText(row({ used: 110 }))).toBe('40 left');
+    expect(shortChipText(row({ used: 150 }))).toBe('Limit reached');
+    expect(shortChipText(row({ used: 10, globalUsed: 300 }))).toBe('Shared pool used up');
+    expect(shortChipText(row({ limit: 0 }))).toBe('Limit reached');
   });
   it('writes the refusal line a feature shows when it skips the worker', () => {
     expect(refusalLine('org_limit', 'worker_verify', 150)).toBe('Extra lookup skipped: your organisation has used its 150 email checks for today (resets at 00:00 UK time).');

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useUsage } from '../../hooks/useUsage';
+import { saveUsageLimit, type LimitsClient } from '../../lib/usageLimits';
 import { Card } from '../ui/Card';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
@@ -42,10 +43,9 @@ export function UsageLimitsCard({ orgId, isOrgAdmin }: { orgId: string; isOrgAdm
       return;
     }
     setSaving({ resource, kind: 'save' });
-    const { error: err } = await supabase.from('usage_limits').upsert({ org_id: orgId, resource, daily_limit: value }, { onConflict: 'org_id,resource' });
+    const saved = await saveUsageLimit(supabase as unknown as LimitsClient, orgId, resource, value);
     setSaving(null);
-    if (err) {
-      console.error('usage limit save failed:', err.message);
+    if (!saved.ok) {
       setMessage({ ok: false, text: 'Could not save that limit. Only an organisation admin can change limits.' });
       return;
     }

@@ -124,6 +124,14 @@ export function chipText(row: UsageRow): string {
   return `${label}: ${remaining(row)} left`;
 }
 
+/** The chip text for narrow screens: still in words, no resource name ("40 left", "Limit reached"). */
+export function shortChipText(row: UsageRow): string {
+  const state = usageState(row);
+  if (state === 'full') return 'Limit reached';
+  if (state === 'shared_full') return 'Shared pool used up';
+  return `${remaining(row)} left`;
+}
+
 export function stateLine(row: UsageRow): string {
   const state = usageState(row);
   if (state === 'full') return `Limit reached (${row.limit} a day)`;
