@@ -8,11 +8,13 @@ import {
 } from '../../../supabase/functions/_shared/usageRules';
 
 const CHIP_CLASS: Record<UsageState | 'quiet', string> = {
-  ok: 'border-line text-muted hover:text-offwhite',
-  warning: 'border-warning text-warning',
-  full: 'border-danger text-danger',
-  shared_full: 'border-danger text-danger',
-  quiet: 'border-line text-muted',
+  // Every state sits on the card colour: amber and red text pass 4.5:1 on it in both themes (on the page background
+  // the light theme only reaches 4.1 to 4.2). The calm and loading states use the normal text colour for the same reason.
+  ok: 'border-line bg-card text-offwhite',
+  warning: 'border-warning bg-card text-warning',
+  full: 'border-danger bg-card text-danger',
+  shared_full: 'border-danger bg-card text-danger',
+  quiet: 'border-line bg-card text-offwhite',
 };
 const ROW_CLASS: Record<UsageState, string> = { ok: 'text-muted', warning: 'text-warning', full: 'text-danger', shared_full: 'text-danger' };
 
@@ -108,7 +110,7 @@ export function UsageMeter() {
                   <li key={row.resource} className="flex flex-col gap-0.5 border-t border-line py-2 first:border-t-0 first:pt-0">
                     <div className="flex items-baseline justify-between gap-3">
                       <span className="text-sm font-semibold">{USAGE_TEXT[row.resource].label}</span>
-                      <span className={`text-sm font-semibold ${ROW_CLASS[s]}`}>{row.used} / {row.limit}</span>
+                      <span className={`text-sm font-semibold ${s === 'ok' ? 'text-offwhite' : ROW_CLASS[s]}`}>{row.used} / {row.limit}</span>
                     </div>
                     <p className={`text-xs ${ROW_CLASS[s]}`}>{stateLine(row)}</p>
                   </li>
