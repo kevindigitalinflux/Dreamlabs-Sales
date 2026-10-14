@@ -10,7 +10,13 @@ import {
 
 export interface JobSource {
   kind: JobKind;
-  /** Tables to listen to for live updates (byOrg: the table has an org_id column the realtime filter can use). */
+  /**
+   * Tables to listen to for live updates (byOrg: the table has an org_id column the realtime filter can use).
+   * Only tables in the `supabase_realtime` publication may be watched: one unpublished table makes Supabase
+   * reject the whole channel. Currently published: deep_find_runs, deep_find_leads, autopilot_run_leads,
+   * scrape_jobs, raw_leads. autopilot_runs is not, so selected runs update through autopilot_run_leads and
+   * campaigns through the 30 s refetch.
+   */
   watch: Array<{ table: string; byOrg: boolean }>;
   load(orgId: string): Promise<JobItem[]>;
 }
@@ -73,7 +79,7 @@ interface SelectedLeadRow { run_id: string; status: string; email_log_id: string
 
 const selectedOutreach: JobSource = {
   kind: 'selected_outreach',
-  watch: [{ table: 'autopilot_runs', byOrg: true }, { table: 'autopilot_run_leads', byOrg: true }],
+  watch: [{ table: 'autopilot_run_leads', byOrg: true }],
   async load(orgId) {
     const { data: runData, error } = await supabase.from('autopilot_runs')
       .select('id, status, started_at')
@@ -143,7 +149,7 @@ const scrape: JobSource = {
 // ---------- Scheduled Autopilot campaign (read-only) ----------
 const campaign: JobSource = {
   kind: 'campaign',
-  watch: [{ table: 'autopilot_runs', byOrg: true }],
+  watch: [],
   async load(orgId) {
     const { data, error } = await supabase.from('autopilot_runs')
       .select('id, status, started_at, ends_at, duration_days')
