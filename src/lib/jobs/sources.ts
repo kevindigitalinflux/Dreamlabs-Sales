@@ -24,6 +24,7 @@ export const JOB_TABLE: Partial<Record<JobKind, string>> = {
 
 const WINDOW_DAYS = 60;
 const MAX_JOBS = 100;
+const LEAD_PAGE = 1000;
 const sinceIso = () => new Date(Date.now() - WINDOW_DAYS * 86_400_000).toISOString();
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -80,16 +81,23 @@ const selectedOutreach: JobSource = {
     if (error) fail('selected runs', error.message);
     const runs = (runData as SelectedRunInput[] | null) ?? [];
     const byRun = new Map<string, SelectedLeadInput[]>();
-    for (const ids of chunk(runs.map((r) => r.id), 10)) {
-      const { data, error: leadErr } = await supabase.from('autopilot_run_leads')
-        .select('run_id, status, email_log_id, updated_at, lead:leads(business_name)')
-        .in('run_id', ids).limit(1000);
-      if (leadErr) fail('selected run leads', leadErr.message);
-      for (const row of (data as unknown as SelectedLeadRow[] | null) ?? []) {
-        const list = byRun.get(row.run_id) ?? [];
-        list.push({ status: row.status, email_log_id: row.email_log_id, business_name: row.lead?.business_name ?? null, updated_at: row.updated_at });
-        byRun.set(row.run_id, list);
-      }
+    // A selected run has no cap on its leads, so read ONE run at a time and page through it (never truncated).
+    // Runs are read five at a time so many runs do not fire many requests at once.
+    for (const slice of chunk(runs.map((r) => r.id), 5)) {
+      await Promise.all(slice.map(async (runId) => {
+        const list: SelectedLeadInput[] = [];
+        for (let from = 0; ; from += LEAD_PAGE) {
+          const { data, error: leadErr } = await supabase.from('autopilot_run_leads')
+            .select('run_id, status, email_log_id, updated_at, lead:leads(business_name)')
+            .eq('run_id', runId).order('updated_at', { ascending: true }).order('lead_id', { ascending: true })
+            .range(from, from + LEAD_PAGE - 1);
+          if (leadErr) fail('selected run leads', leadErr.message);
+          const rows = (data as unknown as SelectedLeadRow[] | null) ?? [];
+          for (const row of rows) list.push({ status: row.status, email_log_id: row.email_log_id, business_name: row.lead?.business_name ?? null, updated_at: row.updated_at });
+          if (rows.length < LEAD_PAGE) break;
+        }
+        byRun.set(runId, list);
+      }));
     }
     // Same rule as the sidebar's Autopilot badge: a needs-input lead only needs the user while its parked draft is unsent.
     const logIds = [...byRun.values()].flat().filter((l) => l.status === 'needs_input' && l.email_log_id !== null).map((l) => l.email_log_id as string);
