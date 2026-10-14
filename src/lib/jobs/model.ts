@@ -27,6 +27,8 @@ export interface JobItem {
   canDelete: boolean;
   /** An extra sentence for the delete confirmation, or null. */
   deleteWarning: string | null;
+  /** A plain sentence saying why Delete is not offered, or null. */
+  deleteBlockedReason: string | null;
 }
 
 export const FINISHED_STATES: readonly JobState[] = ['done', 'failed', 'stopped'];
@@ -82,6 +84,7 @@ export function mapDeepFind(run: DeepFindRunInput, leads: DeepFindLeadInput[]): 
     startedAt: run.started_at, finishedAt: run.finished_at,
     href: `/pipeline/deep-find/${run.id}`,
     canStop: run.status === 'active', canDelete: run.status !== 'active',
+    deleteBlockedReason: null,
     deleteWarning: state === 'needs_you'
       ? 'This job still needs you: deleting it discards those choices. People already added to leads stay.'
       : 'People already added to leads stay.',
@@ -110,6 +113,7 @@ export function mapSelectedOutreach(run: SelectedRunInput, leads: SelectedLeadIn
     startedAt: run.started_at, finishedAt: run.status === 'active' ? null : (newest ?? run.started_at),
     href: '/outreach/autopilot',
     canStop: run.status === 'active', canDelete: run.status !== 'active',
+    deleteBlockedReason: null,
     deleteWarning: 'Emails already sent and drafts in Emails stay.',
   };
 }
@@ -121,29 +125,44 @@ export interface ScrapeJobInput {
   icp_raw_input: string | null;
   results_count: number;
   approved_count: number;
+  /** Null when the search was started by Autopilot's scheduler rather than by a person. */
+  created_by: string | null;
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
 }
 
-export function mapScrape(job: ScrapeJobInput, pendingCount: number): JobItem {
+/**
+ * `approvedCount` is how many results were approved into leads; undefined means unknown (job beyond the counted window).
+ * The stored approved_count column is never written, so it is not used for display.
+ */
+export function mapScrape(job: ScrapeJobInput, pendingCount: number, approvedCount?: number): JobItem {
   const startedAt = job.started_at ?? job.created_at;
+  const byAutopilot = job.created_by === null;
+  const pending = byAutopilot ? 0 : pendingCount;
+  const finished = job.status === 'completed' || job.status === 'failed';
+  const hasApproved = approvedCount !== undefined && approvedCount > 0;
+  const canDelete = finished && !hasApproved;
   const state: JobState = job.status === 'failed' ? 'failed'
-    : job.status === 'completed' ? (pendingCount > 0 ? 'needs_you' : 'done') : 'running';
+    : job.status === 'completed' ? (pending > 0 ? 'needs_you' : 'done') : 'running';
+  const results = `${job.results_count} ${plural(job.results_count, 'result', 'results')}`;
   const detail = state === 'running' ? 'Searching for leads…'
-    : state === 'needs_you' ? `${pendingCount} ${plural(pendingCount, 'result', 'results')} to review`
-    : state === 'done' ? `${job.results_count} ${plural(job.results_count, 'result', 'results')}, ${job.approved_count} approved`
+    : state === 'needs_you' ? `${pending} ${plural(pending, 'result', 'results')} to review`
+    : state === 'done' ? (byAutopilot ? `Autopilot search: ${results}`
+      : approvedCount === undefined ? results : `${results}, ${approvedCount} approved`)
     : 'The search did not finish';
+  const deleteWarning = !canDelete ? null
+    : byAutopilot ? 'Leads Autopilot approved from it stay in your pipeline.'
+    : pending > 0 ? 'Results you have not reviewed go with it. Leads you approved stay in your pipeline.'
+    : 'Leads you approved stay in your pipeline.';
   return {
     id: `scrape:${job.id}`, kind: 'scrape', sourceId: job.id,
     title: shorten(job.icp_raw_input ?? '', 60) || 'Lead search',
-    detail, state, progress: null, needsYou: state === 'needs_you' ? pendingCount : 0,
-    startedAt, finishedAt: job.status === 'completed' || job.status === 'failed' ? (job.completed_at ?? startedAt) : null,
+    detail, state, progress: null, needsYou: state === 'needs_you' ? pending : 0,
+    startedAt, finishedAt: finished ? (job.completed_at ?? startedAt) : null,
     href: `/scraper/jobs/${job.id}`,
-    canStop: false, canDelete: job.status === 'completed' || job.status === 'failed',
-    deleteWarning: pendingCount > 0
-      ? 'Results you have not reviewed go with it. Leads you approved stay in your pipeline.'
-      : 'Leads you approved stay in your pipeline.',
+    canStop: false, canDelete, deleteWarning,
+    deleteBlockedReason: finished && hasApproved ? 'Leads approved from this search are in your pipeline, so it cannot be deleted.' : null,
   };
 }
 
@@ -160,6 +179,6 @@ export function mapCampaign(run: CampaignRunInput, now: Date): JobItem {
     detail: run.duration_days ? `Day ${day} of ${run.duration_days}` : `Day ${day}`,
     state, progress: run.duration_days ? { done: day, total: run.duration_days } : null, needsYou: 0,
     startedAt: run.started_at, finishedAt: run.status === 'active' ? null : (run.ends_at ?? run.started_at),
-    href: '/outreach/autopilot', canStop: false, canDelete: false, deleteWarning: null,
+    href: '/outreach/autopilot', canStop: false, canDelete: false, deleteWarning: null, deleteBlockedReason: null,
   };
 }

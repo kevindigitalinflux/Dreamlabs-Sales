@@ -6,7 +6,7 @@ const NOW = new Date('2026-10-14T12:00:00Z');
 const job = (over: Partial<JobItem> = {}): JobItem => ({
   id: 'deep_find:r1', kind: 'deep_find', sourceId: 'r1', title: 'Love Living, FMJ +3', detail: '2 of 5 leads done', state: 'running',
   progress: { done: 2, total: 5 }, needsYou: 0, startedAt: '2026-10-14T10:00:00Z', finishedAt: null, href: '/pipeline/deep-find/r1',
-  canStop: true, canDelete: false, deleteWarning: null, ...over,
+  canStop: true, canDelete: false, deleteWarning: null, deleteBlockedReason: null, ...over,
 });
 const finished = (id: string, finishedAt: string | null, over: Partial<JobItem> = {}) =>
   job({ id, sourceId: id, state: 'done', detail: 'done', finishedAt, canStop: false, canDelete: true, ...over });

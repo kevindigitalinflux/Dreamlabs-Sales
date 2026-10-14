@@ -51,7 +51,7 @@ export function Jobs() {
   async function doClear() {
     const { deleted, failed } = await clearFinished();
     setConfirmClear(false);
-    setNotice(failed > 0 ? `Deleted ${deleted}. ${failed} could not be deleted (only a job's creator or an organisation admin can).` : `Deleted ${deleted} finished ${deleted === 1 ? 'job' : 'jobs'}.`);
+    setNotice(failed > 0 ? `Deleted ${deleted}. ${failed} could not be deleted. Open them to see why.` : `Deleted ${deleted} finished ${deleted === 1 ? 'job' : 'jobs'}.`);
   }
 
   const row = (job: JobItem) => (

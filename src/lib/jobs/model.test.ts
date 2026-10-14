@@ -128,7 +128,7 @@ describe('mapSelectedOutreach', () => {
 });
 
 const scrapeJob = (over: Partial<ScrapeJobInput> = {}): ScrapeJobInput => ({
-  id: 'job-1', status: 'completed', icp_raw_input: 'cleaning firms in Hackney', results_count: 24, approved_count: 10,
+  id: 'job-1', status: 'completed', icp_raw_input: 'cleaning firms in Hackney', results_count: 24, approved_count: 0, created_by: 'user-1',
   started_at: '2026-10-14T08:00:00Z', completed_at: '2026-10-14T08:05:00Z', created_at: '2026-10-14T07:59:00Z', ...over,
 });
 
@@ -145,9 +145,37 @@ describe('mapScrape', () => {
     expect(mapScrape(scrapeJob(), 1).detail).toBe('1 result to review');
   });
   it('completed with nothing left to review is done', () => {
-    const job = mapScrape(scrapeJob(), 0);
-    expect(job).toMatchObject({ state: 'done', detail: '24 results, 10 approved', needsYou: 0, finishedAt: '2026-10-14T08:05:00Z' });
+    const job = mapScrape(scrapeJob(), 0, 0);
+    expect(job).toMatchObject({ state: 'done', detail: '24 results, 0 approved', needsYou: 0, finishedAt: '2026-10-14T08:05:00Z', canDelete: true, deleteBlockedReason: null });
     expect(job.deleteWarning).toBe('Leads you approved stay in your pipeline.');
+  });
+  it('shows the real approved count and blocks delete when approved leads exist', () => {
+    const job = mapScrape(scrapeJob(), 0, 7);
+    expect(job).toMatchObject({ state: 'done', detail: '24 results, 7 approved', canDelete: false, deleteWarning: null });
+    expect(job.deleteBlockedReason).toBe('Leads approved from this search are in your pipeline, so it cannot be deleted.');
+  });
+  it('an unknown approved count (job beyond the counted window) stays deletable and shows only the results', () => {
+    const job = mapScrape(scrapeJob(), 0, undefined);
+    expect(job).toMatchObject({ detail: '24 results', canDelete: true, deleteBlockedReason: null });
+    expect(job.deleteWarning).toBe('Leads you approved stay in your pipeline.');
+    expect(mapScrape(scrapeJob({ results_count: 1 }), 0).detail).toBe('1 result');
+  });
+  it('an Autopilot search (no creator) with results left over is done, never needs-you', () => {
+    const job = mapScrape(scrapeJob({ created_by: null }), 9, 3);
+    expect(job).toMatchObject({ state: 'done', needsYou: 0, detail: 'Autopilot search: 24 results', canDelete: false });
+    const open = mapScrape(scrapeJob({ created_by: null }), 9, 0);
+    expect(open).toMatchObject({ state: 'done', needsYou: 0, canDelete: true, deleteBlockedReason: null });
+    expect(open.deleteWarning).toBe('Leads Autopilot approved from it stay in your pipeline.');
+    expect(mapScrape(scrapeJob({ created_by: null, results_count: 1 }), 0).detail).toBe('Autopilot search: 1 result');
+  });
+  it('a running job has no delete warning', () => {
+    const job = mapScrape(scrapeJob({ status: 'running', completed_at: null }), 0);
+    expect(job).toMatchObject({ canDelete: false, deleteWarning: null, deleteBlockedReason: null });
+  });
+  it('the other mappers never set a delete-blocked reason', () => {
+    expect(mapDeepFind(dfRun(), []).deleteBlockedReason).toBeNull();
+    expect(mapSelectedOutreach(selRun(), [], new Map()).deleteBlockedReason).toBeNull();
+    expect(mapCampaign(campaign(), new Date()).deleteBlockedReason).toBeNull();
   });
   it('failed jobs never show raw error text and can be deleted', () => {
     const job = mapScrape(scrapeJob({ status: 'failed', completed_at: null }), 0);

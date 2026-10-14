@@ -113,20 +113,30 @@ const scrape: JobSource = {
   watch: [{ table: 'scrape_jobs', byOrg: true }, { table: 'raw_leads', byOrg: false }],
   async load(orgId) {
     const { data, error } = await supabase.from('scrape_jobs')
-      .select('id, status, icp_raw_input, results_count, approved_count, started_at, completed_at, created_at')
+      .select('id, status, icp_raw_input, results_count, approved_count, created_by, started_at, completed_at, created_at')
       .eq('org_id', orgId).gte('created_at', sinceIso()).order('created_at', { ascending: false }).limit(MAX_JOBS);
     if (error) fail('scraper jobs', error.message);
     const jobs = (data as ScrapeJobInput[] | null) ?? [];
-    // Only completed jobs that produced more results than were approved can still have results waiting.
-    const candidates = jobs.filter((j) => j.status === 'completed' && j.results_count > j.approved_count).slice(0, 40);
+    // Count real results per job for the 40 most recent finished searches with results: approved for all, pending only for
+    // searches a person started (Autopilot's daily searches never need the user). Older jobs get an unknown approved count.
+    const candidates = jobs.filter((j) => j.status === 'completed' && j.results_count > 0).slice(0, 40);
     const pending = new Map<string, number>();
-    await Promise.all(candidates.map(async (job) => {
+    const approved = new Map<string, number>();
+    const countRows = async (jobId: string, status: 'pending' | 'approved'): Promise<number> => {
       const { count, error: countErr } = await supabase.from('raw_leads')
-        .select('id', { count: 'exact', head: true }).eq('scrape_job_id', job.id).eq('status', 'pending');
+        .select('id', { count: 'exact', head: true }).eq('scrape_job_id', jobId).eq('status', status);
       if (countErr) fail('scraper results', countErr.message);
-      pending.set(job.id, count ?? 0);
+      return count ?? 0;
+    };
+    await Promise.all(candidates.map(async (job) => {
+      const [p, a] = await Promise.all([
+        job.created_by !== null ? countRows(job.id, 'pending') : Promise.resolve(0),
+        countRows(job.id, 'approved'),
+      ]);
+      pending.set(job.id, p);
+      approved.set(job.id, a);
     }));
-    return jobs.map((job) => mapScrape(job, pending.get(job.id) ?? 0));
+    return jobs.map((job) => mapScrape(job, pending.get(job.id) ?? 0, approved.get(job.id)));
   },
 };
 

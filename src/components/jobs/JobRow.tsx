@@ -44,6 +44,7 @@ export function JobRow({ job, now, stopping, error, onStop, onDelete }: JobRowPr
       </div>
       <Link to={job.href} className="text-[15px] font-bold hover:underline">{job.title}</Link>
       <p className="text-sm text-muted">{job.detail}</p>
+      {job.deleteBlockedReason && <p className="text-sm text-muted">{job.deleteBlockedReason}</p>}
       {pct !== null && (
         <div className="h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-surface" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${job.title} progress`}>
           <div className="h-full bg-violet" style={{ width: `${pct}%` }} />

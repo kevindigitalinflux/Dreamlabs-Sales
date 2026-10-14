@@ -164,6 +164,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.from(table).delete().eq('id', job.sourceId).select('id');
     if (error) {
       console.error('jobs: delete failed:', error.message);
+      if (error.code === '23503') return 'Leads approved from this job are in your pipeline, so it cannot be deleted.';
       return 'Could not delete this job. Try again.';
     }
     if (!data || data.length === 0) {
