@@ -3,7 +3,7 @@
 // NOT in sequences, and writes a plain-English summary per lead. Never emails anyone and never touches sequences.
 // Runs with the service client, so every org boundary is re-checked here. Keys only go to providers in headers.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { resolveOrgApiKey } from './orgApiKeys.ts';
+import { resolveOrgApiKey, resolveOrgWorkerConfig } from './orgApiKeys.ts';
 import { checkRateLimit } from './rateLimit.ts';
 import { fetchActiveOfficers } from './companiesHouse.ts';
 import { registryStep, resolveRegistry } from './deepFindRegistry.ts';
@@ -25,7 +25,7 @@ import {
   hunterPeople, namedPersonIsStored, parseLeadPersonName, peopleToLookUp, stuckAction, type ExistingContact, type LeadStats, type SitePerson,
 } from './deepFindRules.ts';
 import { makeWorkerClient } from './workerClient.ts';
-import { readWorkerConfig, scrapeTimeoutFor, unconfirmedLabel, verifyAction } from './workerRules.ts';
+import { scrapeTimeoutFor, unconfirmedLabel, verifyAction } from './workerRules.ts';
 
 export const WALL_BUDGET_MS = 130_000;
 /** A lead is only started when at least this much of the invocation is left. */
@@ -127,10 +127,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     resolveOrgApiKey(service, run.org_id, 'apollo'),
   ]);
   const spend = new Spend(service, run.id);
-  // The shared lookup worker (free email checker, site scraper). Off when WORKER_URL / WORKER_SECRET are not set.
+  // Organisation's worker, or the shared worker only with explicit fallback permission.
   const worker = makeWorkerClient({
     usage: service, orgId: run.org_id,
-    config: readWorkerConfig(Deno.env.get('WORKER_URL'), Deno.env.get('WORKER_SECRET')),
+    config: await resolveOrgWorkerConfig(service, run.org_id),
   });
   const { data: contactData, error: contactErr } = await service.from('decision_maker_candidates').select('*').eq('lead_id', lead.id);
   if (contactErr) return { status: 'failed', reason: 'Could not read this lead\'s contacts.' };

@@ -1,8 +1,10 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
+import { resolveWorkerConfig } from './workerConfig.ts';
+import { readWorkerConfig, type WorkerConfig } from './workerRules.ts';
 
-export type ApiProvider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates' | 'cro';
+export type ApiProvider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates' | 'cro' | 'lookup_worker';
 
-const GLOBAL_ENV_VARS: Record<ApiProvider, string> = {
+const GLOBAL_ENV_VARS: Partial<Record<ApiProvider, string>> = {
   gemini: 'GEMINI_API_KEY',
   google_places: 'GOOGLE_PLACES_API_KEY',
   companies_house: 'COMPANIES_HOUSE_API_KEY',
@@ -49,6 +51,32 @@ export async function resolveOrgApiKey(
     if (key) return key as string;
   }
   const { data: org } = await service.from('organizations').select('use_global_api_fallback').eq('id', orgId).single();
-  if (org?.use_global_api_fallback) return Deno.env.get(GLOBAL_ENV_VARS[provider]) ?? null;
+  const variable = GLOBAL_ENV_VARS[provider];
+  if (org?.use_global_api_fallback && variable) return Deno.env.get(variable) ?? null;
   return null;
+}
+
+export async function resolveOrgWorkerConfig(service: SupabaseClient, orgId: string): Promise<WorkerConfig | null> {
+  try {
+    return await resolveWorkerConfig({
+      own: async () => {
+        const { data, error } = await service.from('org_api_settings').select('is_configured')
+          .eq('org_id', orgId).eq('provider', 'lookup_worker').maybeSingle();
+        if (error) throw error;
+        if (!data?.is_configured) return { configured: false, value: null };
+        const { data: value, error: vaultError } = await service.rpc('app_get_org_api_key', { target_org: orgId, target_provider: 'lookup_worker' });
+        if (vaultError) throw vaultError;
+        return { configured: true, value: typeof value === 'string' ? value : null };
+      },
+      fallbackAllowed: async () => {
+        const { data, error } = await service.from('organizations').select('use_global_api_fallback').eq('id', orgId).single();
+        if (error) throw error;
+        return data?.use_global_api_fallback === true;
+      },
+      global: () => readWorkerConfig(Deno.env.get('WORKER_URL'), Deno.env.get('WORKER_SECRET')),
+    });
+  } catch {
+    console.error('lookup worker: configuration could not be resolved');
+    return null;
+  }
 }

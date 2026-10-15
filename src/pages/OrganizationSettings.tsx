@@ -8,6 +8,7 @@ import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { ProviderGuide } from '../components/settings/ProviderGuide';
 import { useOrg } from '../hooks/useOrg';
+import { LookupWorkerCard } from '../components/settings/LookupWorkerCard';
 
 const PROVIDERS: {
   key: OrgApiSetting['provider'];
@@ -173,7 +174,7 @@ function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configur
 /** Org-level BYO API keys (Gemini/Places/Companies House) — org-admin only. */
 export function OrganizationSettings() {
   const { currentOrg } = useOrg();
-  const { settings, loading, save } = useOrgApiSettings();
+  const { settings, loading, save, workerHost, sharedWorker, removeWorker, loadError } = useOrgApiSettings();
 
   if (loading) return <Skeleton className="h-80 w-full max-w-2xl" />;
 
@@ -187,6 +188,10 @@ export function OrganizationSettings() {
         These keys power AI drafting and the lead scraper for this organization. Usage bills to
         whichever key is configured here — never to Kevin's account.
       </p>
+      {loadError && <p role="alert" className="text-sm text-danger">{loadError}</p>}
+      {currentOrg?.role === 'admin' && !loadError && <LookupWorkerCard key={currentOrg.id}
+        configured={settings.some((s) => s.provider === 'lookup_worker' && s.is_configured)}
+        shared={sharedWorker} host={workerHost} onSave={(value) => save('lookup_worker', value)} onRemove={removeWorker} />}
       <Card>
         <div className="flex flex-col gap-3">
           {PROVIDERS.map((p) => (

@@ -1,11 +1,11 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { enrichOneLead, type EnrichLeadRow } from './enrichLead.ts';
 import { findAndStoreDecisionMakers } from './findDecisionMakers.ts';
-import { resolveOrgApiKey } from './orgApiKeys.ts';
+import { resolveOrgApiKey, resolveOrgWorkerConfig } from './orgApiKeys.ts';
 import { checkRateLimit } from './rateLimit.ts';
 import { parseSafeWebsiteUrl } from './hostGuard.ts';
 import { makeWorkerClient } from './workerClient.ts';
-import { readWorkerConfig, scrapeTimeoutFor } from './workerRules.ts';
+import { scrapeTimeoutFor } from './workerRules.ts';
 import { LOOKUP_LIMITS, canStartLookupLead, lookupErrorKind, lookupReview, lookupSkipReason, type LookupKind } from './lookupJobRules.ts';
 
 interface Claimed { id: string; job_id: string; org_id: string; lead_id: string; attempts: number }
@@ -71,7 +71,7 @@ async function processLead(service: SupabaseClient, row: Claimed, job: Job, star
     resolveOrgApiKey(service, job.org_id, 'google_places'),
   ]);
   const worker = makeWorkerClient({ usage: service, orgId: job.org_id,
-    config: readWorkerConfig(Deno.env.get('WORKER_URL'), Deno.env.get('WORKER_SECRET')) });
+    config: await resolveOrgWorkerConfig(service, job.org_id) });
   const found = await enrichOneLead(lead, { hunter, apollo, companiesHouse, openCorporates, googlePlaces }, {
     checkpoint,
     siteFallback: async (website) => {

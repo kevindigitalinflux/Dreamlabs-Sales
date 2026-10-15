@@ -2,11 +2,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../supabase/functions/_shared/enrichLead', () => ({ enrichOneLead: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/findDecisionMakers', () => ({ findAndStoreDecisionMakers: vi.fn() }));
-vi.mock('../../supabase/functions/_shared/orgApiKeys', () => ({ resolveOrgApiKey: vi.fn() }));
+vi.mock('../../supabase/functions/_shared/orgApiKeys', () => ({ resolveOrgApiKey: vi.fn(), resolveOrgWorkerConfig: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/rateLimit', () => ({ checkRateLimit: vi.fn() }));
 import { enrichOneLead } from '../../supabase/functions/_shared/enrichLead';
 import { findAndStoreDecisionMakers } from '../../supabase/functions/_shared/findDecisionMakers';
-import { resolveOrgApiKey } from '../../supabase/functions/_shared/orgApiKeys';
+import { resolveOrgApiKey, resolveOrgWorkerConfig } from '../../supabase/functions/_shared/orgApiKeys';
 import { checkRateLimit } from '../../supabase/functions/_shared/rateLimit';
 import { runLookupTick } from '../../supabase/functions/_shared/lookupJobs';
 
@@ -40,6 +40,7 @@ beforeEach(() => {
   vi.stubGlobal('Deno', { env: { get: () => undefined } });
   vi.mocked(checkRateLimit).mockResolvedValue(true);
   vi.mocked(resolveOrgApiKey).mockResolvedValue(null);
+  vi.mocked(resolveOrgWorkerConfig).mockResolvedValue(null);
   vi.mocked(enrichOneLead).mockResolvedValue({ lead_id: 'lead', proposed: { email: 'hello@example.com' }, source: { email: 'website' } });
   vi.mocked(findAndStoreDecisionMakers).mockResolvedValue([{ id: 'candidate' }]);
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -55,6 +56,7 @@ describe('lookup tick', () => {
     }));
     expect(checkRateLimit).toHaveBeenCalledWith(f.service, 'lookup-org:org', 300, 1440, true);
     expect(checkRateLimit).toHaveBeenCalledWith(f.service, 'lookup-lead:lead', 5, 1440, true);
+    expect(resolveOrgWorkerConfig).toHaveBeenCalledWith(f.service, 'org');
   });
   it.each([{ edit: false }, { member: false }, { deleted: true }, { stopped: true }])('skips without provider calls: %j', async (options) => {
     const f = fixture(options);

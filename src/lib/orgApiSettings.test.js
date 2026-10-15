@@ -1,0 +1,61 @@
+// Exercise the real endpoint with fake clients only; no credentials or network.
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+vi.mock('npm:@supabase/supabase-js@2', () => ({ createClient: vi.fn() }));
+vi.mock('../../supabase/functions/_shared/workerConfig', async (original) => ({
+  ...await original(), validateWorkerConnection: vi.fn(async () => null),
+}));
+import { createClient } from 'npm:@supabase/supabase-js@2';
+import { validateWorkerConnection } from '../../supabase/functions/_shared/workerConfig';
+
+let handler, rpc, updates, member, platformRole, validationError;
+beforeEach(async () => {
+  vi.resetModules(); vi.clearAllMocks();
+  member = 'admin'; platformRole = null; validationError = null;
+  rpc = vi.fn(async (name) => ({ data: name === 'app_get_org_api_key' ? 'https://own.example.com|fake-test-only' : null, error: null }));
+  updates = vi.fn(async () => ({ error: null }));
+  vi.stubGlobal('Deno', { env: { get: () => undefined }, serve: (fn) => { handler = fn; } });
+  vi.mocked(createClient).mockReturnValue({ auth: { getUser: async () => ({ data: { user: { id: 'user' } } }) }, rpc,
+    from(table) {
+      const query = { select: () => query, eq: () => query,
+        maybeSingle: async () => ({ data: member ? { role: member } : null }),
+        single: async () => ({ data: table === 'profiles' ? { platform_role: platformRole } : { use_global_api_fallback: true } }),
+        update: (value) => { updates(value); return query; }, upsert: updates,
+        then: (resolve) => resolve({ data: [{ provider: 'lookup_worker', is_configured: true }], error: null }),
+      };
+      return query;
+    },
+  });
+  vi.mocked(validateWorkerConnection).mockImplementation(async () => validationError);
+  await import('../../supabase/functions/org-api-settings/index');
+});
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+const request = (body) => handler(new Request('https://local.test', { method: 'POST', body: JSON.stringify({ org_id: 'org', ...body }) }));
+
+it('returns only host and status, never the saved worker credential', async () => {
+  const response = await request({ action: 'get' });
+  const data = await response.json();
+  expect(data).toMatchObject({ worker_host: 'own.example.com', use_global_api_fallback: true });
+  expect(JSON.stringify(data)).not.toContain('fake-test-only');
+});
+it.each([null, 'contractor'])('prevents worker save and remove for role %s before validation or Vault', async (role) => {
+  member = role;
+  expect((await request({ action: 'save', provider: 'lookup_worker', api_key: 'https://own.example.com|fake' })).status).toBe(403);
+  expect((await request({ action: 'remove', provider: 'lookup_worker' })).status).toBe(403);
+  expect(validateWorkerConnection).not.toHaveBeenCalled(); expect(rpc).not.toHaveBeenCalled();
+});
+it('does not save a connection when health validation fails', async () => {
+  validationError = 'The worker rejected the connection.';
+  expect((await request({ action: 'save', provider: 'lookup_worker', api_key: 'https://own.example.com|fake' })).status).toBe(400);
+  expect(rpc).not.toHaveBeenCalled(); expect(updates).not.toHaveBeenCalled();
+});
+it('validates before storing in Vault, and returns no credential', async () => {
+  const response = await request({ action: 'save', provider: 'lookup_worker', api_key: 'https://own.example.com|fake' });
+  expect(await response.json()).toEqual({ ok: true });
+  expect(rpc).toHaveBeenCalledWith('app_set_org_api_key', { target_org: 'org', target_provider: 'lookup_worker', secret: 'https://own.example.com|fake' });
+  expect(validateWorkerConnection.mock.invocationCallOrder[0]).toBeLessThan(rpc.mock.invocationCallOrder[0]);
+});
+it('removes by clearing Vault and disabling the configured flag', async () => {
+  expect((await request({ action: 'remove', provider: 'lookup_worker' })).status).toBe(200);
+  expect(rpc).toHaveBeenCalledWith('app_set_org_api_key', { target_org: 'org', target_provider: 'lookup_worker', secret: '' });
+  expect(updates).toHaveBeenCalledWith(expect.objectContaining({ is_configured: false }));
+});

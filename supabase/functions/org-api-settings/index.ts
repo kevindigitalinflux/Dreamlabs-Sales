@@ -1,10 +1,12 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { croRejectionMessage, searchCroCompanies, splitCroSecret } from '../_shared/cro.ts';
+import { parseOrgWorkerSecret, validateWorkerConnection } from '../_shared/workerConfig.ts';
 
-type Provider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates' | 'cro';
+type Provider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates' | 'cro' | 'lookup_worker';
 
 async function validateKey(provider: Provider, key: string): Promise<string | null> {
+  if (provider === 'lookup_worker') return validateWorkerConnection(key);
   try {
     if (provider === 'gemini') {
       // Keep in sync with AI_MODEL in _shared/ai.ts — gemini-2.5-flash was
@@ -118,26 +120,47 @@ Deno.serve(async (req) => {
   if (body.action === 'get') {
     const { data, error } = await service.from('org_api_settings').select('provider, is_configured').eq('org_id', orgId);
     if (error) return json({ error: error.message }, 400, headers);
-    return json({ settings: data }, 200, headers);
+    const { data: org, error: orgError } = await service.from('organizations').select('use_global_api_fallback').eq('id', orgId).single();
+    if (orgError) return json({ error: 'Could not load worker settings.' }, 500, headers);
+    let workerHost: string | null = null;
+    if (canManage && data?.some((s) => s.provider === 'lookup_worker' && s.is_configured)) {
+      const { data: value, error: vaultError } = await service.rpc('app_get_org_api_key', { target_org: orgId, target_provider: 'lookup_worker' });
+      if (vaultError) return json({ error: 'Could not load worker settings.' }, 500, headers);
+      const config = parseOrgWorkerSecret(typeof value === 'string' ? value : null);
+      workerHost = config ? new URL(config.url).host : null;
+    }
+    return json({ settings: data, worker_host: workerHost, use_global_api_fallback: org?.use_global_api_fallback === true }, 200, headers);
+  }
+
+  if (body.action === 'remove') {
+    if (!canManage) return json({ error: 'Org admin only' }, 403, headers);
+    if (body.provider !== 'lookup_worker') return json({ error: 'Invalid provider' }, 400, headers);
+    // Clear Vault first; a partial failure fails closed instead of reusing an old credential.
+    const { error: vaultError } = await service.rpc('app_set_org_api_key', { target_org: orgId, target_provider: 'lookup_worker', secret: '' });
+    if (vaultError) return json({ error: 'Could not remove the worker connection.' }, 500, headers);
+    const { error } = await service.from('org_api_settings').update({ is_configured: false, updated_at: new Date().toISOString() })
+      .eq('org_id', orgId).eq('provider', 'lookup_worker');
+    if (error) return json({ error: 'Could not remove the worker connection.' }, 500, headers);
+    return json({ ok: true }, 200, headers);
   }
 
   if (body.action === 'save') {
     if (!canManage) return json({ error: 'Org admin only' }, 403, headers);
     const provider = String(body.provider ?? '') as Provider;
     const apiKey = String(body.api_key ?? '').trim();
-    if (!['gemini', 'google_places', 'google_places_pro', 'companies_house', 'apollo', 'hunter', 'anthropic', 'opencorporates', 'cro'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
+    if (!['gemini', 'google_places', 'google_places_pro', 'companies_house', 'apollo', 'hunter', 'anthropic', 'opencorporates', 'cro', 'lookup_worker'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
     if (!apiKey) return json({ error: 'api_key is required' }, 400, headers);
 
     const validationError = await validateKey(provider, apiKey);
     if (validationError) return json({ error: validationError }, 400, headers);
 
     const { error: vaultErr } = await service.rpc('app_set_org_api_key', { target_org: orgId, target_provider: provider, secret: apiKey });
-    if (vaultErr) return json({ error: 'Could not store the key: ' + vaultErr.message }, 500, headers);
+    if (vaultErr) return json({ error: 'Could not store the key.' }, 500, headers);
     const { error: upsertErr } = await service.from('org_api_settings').upsert(
       { org_id: orgId, provider, is_configured: true, updated_at: new Date().toISOString() },
       { onConflict: 'org_id,provider' },
     );
-    if (upsertErr) return json({ error: upsertErr.message }, 400, headers);
+    if (upsertErr) return json({ error: 'Could not save provider settings.' }, 400, headers);
     return json({ ok: true }, 200, headers);
   }
 
