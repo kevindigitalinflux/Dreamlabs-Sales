@@ -47,4 +47,4 @@ Process: Kevin approved the Stage 2 spec/build and supplied Claude's rulings on 
 ## 2026-10-16 approved three-part build (local stacked branches)
 - [x] Part 1: desktop popups built on codex/popups; 83 files / 1,362 tests; tsc/build pass. Claude review and browser checks pending.
 - [x] Part 2: per-organisation worker address/secret built on codex/worker-keys; migration 062/audit unexecuted; 85 files / 1,386 tests; tsc/build pass. Claude review pending (platform-only management withheld).
-- [ ] Part 3: Firecrawl BYO provider.
+- [x] Part 3: Firecrawl BYO provider built on codex/firecrawl; migration 063/audit unexecuted; 89 files / 1,425 tests; tsc/build pass. Review questions: platform-only access and existing non-atomic daily limiter. No publication authorized.
