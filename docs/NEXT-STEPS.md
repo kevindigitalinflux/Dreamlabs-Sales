@@ -6,7 +6,7 @@ Updated 2026-10-15 (checkpoint). Exact resume point: `docs/HANDOFF.md`. Order ma
 - [x] Kevin reran Deep find on Love Living after `4eae38d`; Claude's 2026-10-15 handoff records 3 addresses / 3 phones, checker results, and no duplicate suggestion. Codex did not repeat this live check.
 - [ ] Hostinger snapshot of the VPS expires 2026-10-15 12:39 UTC: refresh before any VPS change.
 
-## 1. Stage 2: "Fill in missing details" and "Find decision maker" as background jobs (Builder, after the Architect's short spec)
+## 1. (DONE 2026-10-16, live) Stage 2: "Fill in missing details" and "Find decision maker" as background jobs (Builder, after the Architect's short spec)
 
 Build checkpoint (Codex, 2026-10-15): branch `codex/stage2-background-lookups`, local only. Claude's security/data rulings and Kevin-supplied review fixes are implemented. Independent rereview and Kevin's application/deployment authorization remain pending.
 - [x] Separate scrape-budget fix: 30 s downstream reserve plus 2 s overhead, minimum scrape 10 s, per-call client timeout and no-refund tests.
