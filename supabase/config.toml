@@ -22,3 +22,7 @@ verify_jwt = false
 # Same as run-selected-autopilot: the cron tick carries only x-cron-secret; create/cancel check the user's JWT themselves.
 [functions.run-deep-find]
 verify_jwt = false
+
+# Cron uses x-cron-secret; create/cancel validate the user's JWT inside the function.
+[functions.run-lookup-jobs]
+verify_jwt = false

@@ -27,6 +27,7 @@ export interface EnrichKeys { companiesHouse: string | null; openCorporates: str
 export async function enrichOneLead(
   lead: EnrichLeadRow,
   keys: EnrichKeys,
+  options?: { siteFallback?: (website: string) => Promise<{ email?: string; phone?: string } | null>; checkpoint?: () => Promise<void> },
 ): Promise<EnrichResult | null> {
   const proposed: Partial<Record<EnrichField, string>> = {};
   const source: Partial<Record<EnrichField, string>> = {};
@@ -35,6 +36,7 @@ export async function enrichOneLead(
   // name, e.g. one created from a walk-in. Every later step keys off the website,
   // so without this a name-only lead got nothing beyond the Companies House owner.
   let website = lead.website;
+  await options?.checkpoint?.();
   if ((!website || !lead.phone) && keys.googlePlaces) {
     const place = await lookupPlaceContact(lead.business_name, lead.city, keys.googlePlaces);
     if (place?.website && !website) { proposed.website = place.website; source.website = 'google_places'; website = place.website; }
@@ -42,18 +44,28 @@ export async function enrichOneLead(
   }
 
   // 1. Website scrape — free, no key required.
+  await options?.checkpoint?.();
   const { email: siteEmail, phone: sitePhone } = await scrapeWebsiteContact(website);
   if (siteEmail && siteEmail !== lead.email) { proposed.email = siteEmail; source.email = 'website'; }
   if (sitePhone && sitePhone !== lead.phone && !proposed.phone) { proposed.phone = sitePhone; source.phone = 'website'; }
 
+  if (!siteEmail && !sitePhone && website && options?.siteFallback) {
+    await options.checkpoint?.();
+    const found = await options.siteFallback(website);
+    if (found?.email && found.email !== lead.email) { proposed.email = found.email; source.email = 'browser scraper'; }
+    if (found?.phone && found.phone !== lead.phone && !proposed.phone) { proposed.phone = found.phone; source.phone = 'browser scraper'; }
+  }
+
   // 2. Companies House (UK) — free registration. Skip if the lead already has an owner_name.
   if (!lead.owner_name && keys.companiesHouse) {
+    await options?.checkpoint?.();
     const officer = await lookupCompaniesHouseOfficer(lead.business_name, keys.companiesHouse);
     if (officer && officer !== lead.owner_name) { proposed.owner_name = officer; source.owner_name = 'companies_house'; }
   }
 
   // 3. OpenCorporates (non-UK best-effort) — only if Companies House found nothing AND the lead has no owner_name.
   if (!proposed.owner_name && !lead.owner_name && keys.openCorporates) {
+    await options?.checkpoint?.();
     const officer = await lookupOpenCorporatesOfficer(lead.business_name, keys.openCorporates);
     if (officer && officer !== lead.owner_name) { proposed.owner_name = officer; source.owner_name = 'opencorporates'; }
   }
@@ -62,12 +74,14 @@ export async function enrichOneLead(
   // The owner's own address first when we know their name (from the lead or step 2),
   // then whatever Hunter has best for the domain.
   if (!proposed.email && !lead.email && keys.hunter && website) {
+    await options?.checkpoint?.();
     const ownerName = proposed.owner_name ?? lead.owner_name;
     const ownerEmail = ownerName ? await lookupHunterOwnerEmail(website, ownerName, keys.hunter) : null;
     const email = ownerEmail ?? await lookupHunterEmail(website, keys.hunter);
     if (email && email !== lead.email) { proposed.email = email; source.email = 'hunter'; }
   }
   if (!proposed.phone && !lead.phone && keys.apollo && website) {
+    await options?.checkpoint?.();
     const phone = await lookupApolloPhone(website, keys.apollo);
     if (phone && phone !== lead.phone) { proposed.phone = phone; source.phone = 'apollo'; }
   }

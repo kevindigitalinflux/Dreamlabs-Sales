@@ -20,6 +20,7 @@ export async function findAndStoreDecisionMakers(
   lead: DecisionMakerLead,
   keys: { hunterKey: string | null; apolloKey: string | null },
   userId: string,
+  checkpoint?: () => Promise<void>,
 ): Promise<Record<string, unknown>[]> {
   const { hunterKey, apolloKey } = keys;
   const orgId = lead.org_id;
@@ -29,6 +30,7 @@ export async function findAndStoreDecisionMakers(
   const rows: Record<string, unknown>[] = [];
 
   if (hunterKey) {
+    await checkpoint?.();
     for (const hunter of await findHunterDecisionMakers(lead.website, hunterKey, MAX_PER_SOURCE)) {
       rows.push({
         lead_id: lead.id, source: 'hunter',
@@ -40,6 +42,7 @@ export async function findAndStoreDecisionMakers(
     }
   }
   if (apolloKey) {
+    await checkpoint?.();
     for (const apollo of await searchApolloDecisionMakers(domain, apolloKey, MAX_PER_SOURCE)) {
       rows.push({
         lead_id: lead.id, source: 'apollo', apollo_person_id: apollo.apolloPersonId,
@@ -52,6 +55,8 @@ export async function findAndStoreDecisionMakers(
   }
 
   if (rows.length === 0) return [];
+
+  await checkpoint?.();
 
   // One row per person (Hunter by email, Apollo by person id) via the
   // generated dedupe_key (migration 039), so re-running never duplicates.
@@ -74,6 +79,7 @@ export async function findAndStoreDecisionMakers(
   // unique index on decision_maker_candidate_id (Task 1; made non-partial
   // in migration 035 so PostgREST's onConflict inference can target it).
   for (const candidate of (upserted ?? []) as { id: string; first_name: string | null; last_name: string | null; linkedin_url: string | null }[]) {
+    await checkpoint?.();
     if (!candidate.linkedin_url) continue;
     const fullName = `${candidate.first_name ?? ''} ${candidate.last_name ?? ''}`.trim() || 'Unknown';
     // Best-effort: auto-capture is additive, never load-bearing for the
