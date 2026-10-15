@@ -8,14 +8,14 @@ Updated 2026-10-15 (checkpoint). Exact resume point: `docs/HANDOFF.md`. Order ma
 
 ## 1. Stage 2: "Fill in missing details" and "Find decision maker" as background jobs (Builder, after the Architect's short spec)
 
-Build checkpoint (Codex, 2026-10-15): branch `codex/stage2-background-lookups`, local only. **Not ready to apply/deploy** until the security/data questions in `docs/HANDOFF.md` are resolved.
+Build checkpoint (Codex, 2026-10-15): branch `codex/stage2-background-lookups`, local only. Claude's security/data rulings are implemented. Independent review and Kevin's application/deployment authorization remain pending.
 - [x] Separate scrape-budget fix: 30 s downstream reserve plus 2 s overhead, minimum scrape 10 s, per-call client timeout and no-refund tests.
 - [x] Pure lookup rules, guarded queue runner, cron/create/cancel endpoint and worker fallback.
 - [x] Jobs source, mapper, results route, existing enrichment review UI, and both buttons switched to queue creation.
-- [x] Draft migration 061 and rolled-back audit written (neither executed; migration explicitly refuses to apply while blocked).
-- [ ] Resolve result SELECT/review permissions: Stage 2's org-wide access versus existing `can_view_lead` restriction. SELECT policy withheld; review RPC fails closed.
-- [ ] Resolve deleted-lead results: schema says cascade, edge-case text says retain a skipped row. No new retention semantics invented.
-- [ ] Claude reviews implementation, database draft and audit; complete the blocked policy/RPC and extend the audit for the ruling.
+- [x] Complete migration 061 and expand the rollback audit (neither executed; refusal guard removed after the rulings were implemented).
+- [x] Result SELECT requires org membership plus `can_view_lead`; authenticated review requires membership plus `can_edit_lead` and changes only pending review to applied/dismissed.
+- [x] Deleted leads cascade their result rows; `lead_count` stays a snapshot. Runner handles a vanished claim without crashing; no placeholder rows.
+- [ ] Claude reviews implementation, completed migration and audit at the final branch revision.
 - [ ] Kevin authorizes/applies the reviewed migration, then authorizes deployments and live UI/usage checks. No merge/push/deploy authorization exists for this branch.
 Why: both buttons run in one browser request today; adding worker calls (scraper up to 25 s, email checks up to 20 s each) would time out. Make them queued background jobs that show in the Jobs tracker (`/jobs`).
 
@@ -31,7 +31,7 @@ Requirements (decided with Kevin):
 - Per-lead and per-day limits like Deep find (`checkRateLimit`), org keys via `resolveOrgApiKey`.
 - New tables/policies need a migration + a rolled-back audit script in `supabase/audits/` (pattern: `jobs_delete_rls.sql`, `usage_quotas_*.sql`); the Architect reviews and Kevin applies migrations in the Supabase SQL editor.
 - Docs: `CLAUDE.md` entry, `docs/AUTOMATIONS.md` row.
-Process: Kevin approved the Stage 2 spec/build on 2026-10-15; Codex remains builder and Claude architect/reviewer. Finish the explicit blockers before approval to apply/deploy.
+Process: Kevin approved the Stage 2 spec/build and supplied Claude's rulings on 2026-10-15; Codex remains builder and Claude architect/reviewer. Independent review precedes approval to apply/deploy.
 
 ## 2. After Stage 2 (each needs its own short spec first; Architect)
 - Firecrawl as a BYO-key provider per organisation (no global fallback), used for team/about pages when roles are missing.

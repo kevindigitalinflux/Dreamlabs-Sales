@@ -2,6 +2,8 @@
 
 Authoritative task record. The vault copy (`Dreamlabs Sales/Handoff.md`) is a snapshot of this file, labelled with the revision below. Workflow rules: vault `_Team/Shared agent workflow.md`.
 
+**Latest resume point:** the final section, **Update 2026-10-15 (Codex database completion under Claude's rulings)**. Earlier sections are historical checkpoints; their unresolved database questions are superseded below. The vault snapshot has not been updated by this branch.
+
 ## Identity and authority
 - Task ID: `worker-programme` (lookup worker -> Deep find; Stage 1 done, Stage 2 next). Project: Dreamlabs Sales. Author: Claude. Time: 2026-10-15 ~15:15 (local clock shows GMT; Kevin's timezone not confirmed).
 - Outcome: Deep find and the two "lookup" buttons use the shared lookup worker (email checker, site scraper, page fetch) with per-organisation usage limits, visible in the Jobs tracker.
@@ -121,3 +123,40 @@ Open `C:\Users\kevin\Projects\dreamlabs-sales`. Read the vault `_Team/Shared age
 - UI: `src/components/jobs/JobRow.tsx`, `src/components/pipeline/EnrichmentReview.tsx`, `FindDecisionMakerPanel.tsx`, `KnownPersonArea.tsx`, `DecisionMakersCard.tsx` (the latter three share `pipeline/`).
 - Browser logic: `src/lib/lookupJobs.ts`, `src/lib/applyLookupProposal.ts`, `src/lib/jobs/lookup.ts`, `src/lib/jobs/model.ts`, `src/lib/jobs/sources.ts`.
 - Tests: `src/lib/workerRules.test.ts`, `workerClient.test.ts`, `lookupJobRules.test.ts`, `lookupJobs.test.js`, `enrichWorkerFallback.test.ts`, `applyLookupProposal.test.ts` (all under `src/lib/`), `src/lib/jobs/lookup.test.ts`; `vite.config.ts` adds runtime JS test discovery.
+
+## Update 2026-10-15 (Codex database completion under Claude's rulings)
+
+### Authority and revision
+- Kevin explicitly resumed Codex as BUILDER, with Claude architect/reviewer. No role change and no unresolved kickoff question: Kevin supplied the outcome, rulings, gates and restrictions in the continuation prompt.
+- Same checkout `C:\Users\kevin\Projects\dreamlabs-sales`, same branch **`codex/stage2-background-lookups`**. Verified clean starting HEAD **`86b951ffd1632069b9e70eb1ff4488bf7601d1b1`**.
+- Implementation/spec/audit/test commit: **`5c836145115e9ee3b9f7a68226bd01b7ade134e5`** (`fix: complete lookup job policies under architect rulings`). A following docs-only commit contains this checkpoint, CLAUDE.md, NEXT-STEPS and AUTOMATIONS updates; use `git rev-parse HEAD` for the final revision.
+- Local work only. No push, merge, deploy, live database/VPS action, secret read or SQL execution. No other writer or agent invoked. No paid fallback. No running tasks remain at handoff.
+- Continued the project-only write boundary: commit hooks disabled per commit (`git -c core.hooksPath=NUL commit`), no vault writes/sync. The existing sync script would overwrite accepted `Repo/` references with branch docs; reconcile the vault separately when authorized. Workflow and vault status/decisions were read for context.
+
+### Rulings 2026-10-15 — Claude, supplied by Kevin
+1. Keep lead-level restrictions: `lookup_jobs` SELECT requires `is_org_member(org_id)`; `lookup_job_leads` SELECT also requires **`can_view_lead(lead_id)`**, the real function in migrations 018/019 and Deep find policy 057. Review requires **`can_edit_lead(lead_id)`** AND membership of the row's organisation, a non-anon signed-in caller, SECURITY DEFINER with fixed search_path, and only `review: pending -> applied/dismissed`. No other column may change.
+2. Deleted leads use the specified **ON DELETE CASCADE**, removing their result rows without placeholders. `lead_count` stays the enqueue-time snapshot. An in-flight runner handles a missing lead with a plain skip reason; its finish RPC can safely return false because the row vanished.
+These rulings are also recorded in the spec's **Rulings 2026-10-15** section and replace the two blocking questions above.
+
+### Completed
+- Migration 061: result SELECT policy added and review refusal replaced with the authorised transition. Explicit `auth.uid()` and `auth.role()` check rejects unsigned/anon calls; unauthorised, missing or already-reviewed rows return false. The RPC updates **only review**, including leaving `updated_at` unchanged. Fixed empty search_path and qualified public/auth references retained.
+- Checked the existing completed parts: authenticated SELECT on both tables and DELETE on job headers only; no client INSERT/UPDATE or child DELETE; anon no access; job DELETE mirrors 060 (membership, creator/admin, never active), cascading to result rows. Create/cancel/finish/claim RPCs remain service-only. Claim retains atomic row locking, lease recovery and attempt fencing.
+- Both tables are added to `supabase_realtime`. Cron `run-lookup-jobs-tick` remains every minute (`* * * * *`), POSTing `{"action":"tick"}` through `net.http_post`, with `x-cron-secret` read from existing Vault `cron_secret` at execution time, matching Deep find's mechanism and the AUTOMATIONS row. No secret value is in SQL. The migration refusal guard is removed.
+- Rollback audit expanded using the 060 audit's borrowed lead/throwaway users pattern plus a private temporary pipeline. Checks cover own-org headers, hidden results and pending counts, view-only member read/no-review, edit rights without membership, both allowed transitions, rejected invalid/repeated/non-pending transitions, every non-review column unchanged, other-org/anon denial, direct write/claim denial, creator/admin/non-active delete rules, job/lead cascades, immutable count snapshot and harmless finishing of a vanished claim. Existing lease/cancellation/realtime checks retained. **Audit not run.**
+- Confirmed `src/lib/jobs/sources.ts` queries result rows through the browser's signed-in Supabase client; `mapLookupJob` counts only those returned rows for `needsYou`. No service aggregation bypass or header-count substitution; no adapter change needed.
+- Added a runner regression: deleted lead returns the fixed missing-lead skip reason; a false finish result is harmless; no providers or rate-limit reservations occur. Existing runner implementation already handles this case, so no production TypeScript change was needed.
+
+### Decisions made by Codex
+1. Implemented Claude's rulings exactly; no new visibility or retention rule. Kept the review RPC's boolean contract: false for unavailable/unauthorised/non-pending rows, error for invalid review choices or missing authenticated identity.
+2. Left `updated_at` unchanged on review because the ruling permits changing only `review`. Audit compares complete row JSON excluding `review`, not merely the proposal payload.
+3. Used a throwaway private pipeline to make audit visibility deterministic regardless of the borrowed lead's original sharing. The final exception rolls back the pipeline move, membership changes, deletion and all fixtures. No audit execution was attempted.
+4. Kept existing grants/claim/cron/realtime code after checking it against 057, 060 and AUTOMATIONS; only the withheld policy/RPC, guard and explanatory comments needed migration changes.
+
+### Gates, remaining work and resume
+- `npx tsc --noEmit`: **PASS, zero diagnostics**.
+- `npx vitest run`: **PASS, 81 files / 1,335 tests, zero failures** (one added test). Focused runner check also passed: 1 file / 11 tests.
+- `npm run build`: **PASS, 2,746 modules transformed**. Existing Vite >500 kB chunk warning remains.
+- `git diff --check`: clean apart from normal LF/CRLF conversion notices. Explicit files staged; both new commits include the Codex trailer.
+- **NOT applied/deployed/run:** migration 061, rollback audit, any production SQL, any edge/worker/frontend deployment, browser/live/phone checks or independent review. Build gates do not validate SQL syntax, RLS behaviour, concurrency or actual EdgeRuntime execution. No Deno check this continuation; previous local TypeScript shim check remains historical evidence only.
+- Independent review is pending for the full branch, including this database completion. No implementation question remains for Kevin. Next: Claude reviews the branch at final HEAD (code at `5c83614`), especially 061/audit and the previous application changes. Kevin then separately authorizes/applies reviewed SQL and deployment; do not ship the frontend before the new tables exist in realtime.
+- Resume: read this section and the spec's rulings, verify branch/HEAD/status, then perform the independent review. All work remains local; application, publication and live checks are not authorised by this continuation.
