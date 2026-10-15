@@ -25,6 +25,14 @@ describe('desktop job popups', () => {
     expect(decide([job('needs_you')], [job('needs_you')])).toEqual([]);
     expect(decide([job('running')], [job('running')])).toEqual([]);
   });
+  it('notifies each needs-you episode once on the same job', () => {
+    const first = job('needs_you');
+    const later = { ...first, needsYou: 2 };
+    const seen = new Set([popupKey(first)]);
+    expect(decide([first], [later], { seen })).toHaveLength(1);
+    expect(decide([job('running')], [first], { seen })).toEqual([]);
+    expect(decide([later], [later], { seen: new Set([popupKey(later)]) })).toEqual([]);
+  });
   it('suppresses seen finished jobs and previously delivered needs-you events', () => {
     expect(decide([], [job('done')], { seen: new Set([seenKey(job('done'))]) })).toEqual([]);
     expect(decide([], [job('needs_you')], { seen: new Set([popupKey(job('needs_you'))]) })).toEqual([]);
