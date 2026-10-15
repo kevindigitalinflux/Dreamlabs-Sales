@@ -8,14 +8,15 @@ Updated 2026-10-15 (checkpoint). Exact resume point: `docs/HANDOFF.md`. Order ma
 
 ## 1. Stage 2: "Fill in missing details" and "Find decision maker" as background jobs (Builder, after the Architect's short spec)
 
-Build checkpoint (Codex, 2026-10-15): branch `codex/stage2-background-lookups`, local only. Claude's security/data rulings are implemented. Independent review and Kevin's application/deployment authorization remain pending.
+Build checkpoint (Codex, 2026-10-15): branch `codex/stage2-background-lookups`, local only. Claude's security/data rulings and Kevin-supplied review fixes are implemented. Independent rereview and Kevin's application/deployment authorization remain pending.
 - [x] Separate scrape-budget fix: 30 s downstream reserve plus 2 s overhead, minimum scrape 10 s, per-call client timeout and no-refund tests.
 - [x] Pure lookup rules, guarded queue runner, cron/create/cancel endpoint and worker fallback.
 - [x] Jobs source, mapper, results route, existing enrichment review UI, and both buttons switched to queue creation.
 - [x] Complete migration 061 and expand the rollback audit (neither executed; refusal guard removed after the rulings were implemented).
 - [x] Result SELECT requires org membership plus `can_view_lead`; authenticated review requires membership plus `can_edit_lead` and changes only pending review to applied/dismissed.
 - [x] Deleted leads cascade their result rows; `lead_count` stays a snapshot. Runner handles a vanished claim without crashing; no placeholder rows.
-- [ ] Claude reviews implementation, completed migration and audit at the final branch revision.
+- [x] Apply supplied review fixes A and minors 1, 3–10, 12, 14; gates pass (82 files / 1,349 tests). See HANDOFF "Review fixes applied". Deferred items remain untouched.
+- [ ] Claude rereviews the review-fix commit, including migration lock order and new rollback audit checks.
 - [ ] Kevin authorizes/applies the reviewed migration, then authorizes deployments and live UI/usage checks. No merge/push/deploy authorization exists for this branch.
 Why: both buttons run in one browser request today; adding worker calls (scraper up to 25 s, email checks up to 20 s each) would time out. Make them queued background jobs that show in the Jobs tracker (`/jobs`).
 

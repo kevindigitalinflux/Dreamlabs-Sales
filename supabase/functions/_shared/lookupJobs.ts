@@ -5,16 +5,17 @@ import { resolveOrgApiKey } from './orgApiKeys.ts';
 import { checkRateLimit } from './rateLimit.ts';
 import { parseSafeWebsiteUrl } from './hostGuard.ts';
 import { makeWorkerClient } from './workerClient.ts';
-import { readWorkerConfig } from './workerRules.ts';
-import { LOOKUP_LIMITS, lookupReview, lookupSkipReason, type LookupKind } from './lookupJobRules.ts';
+import { readWorkerConfig, scrapeTimeoutFor } from './workerRules.ts';
+import { LOOKUP_LIMITS, canStartLookupLead, lookupErrorKind, lookupReview, lookupSkipReason, type LookupKind } from './lookupJobRules.ts';
 
 interface Claimed { id: string; job_id: string; org_id: string; lead_id: string; attempts: number }
 interface Job { id: string; org_id: string; created_by: string; kind: LookupKind; status: string }
 interface Outcome { status: 'done' | 'failed' | 'skipped'; reason: string; result: Record<string, unknown>; review: 'none' | 'pending' }
 const skipped = (reason: string): Outcome => ({ status: 'skipped', reason, result: {}, review: 'none' });
+class LookupSkipped extends Error {}
 
 /** Recheck authorisation before providers and candidate writes, not just at enqueue time. */
-async function authorised(service: SupabaseClient, row: Claimed, job: Job): Promise<boolean> {
+async function checkAuthorisation(service: SupabaseClient, row: Claimed, job: Job): Promise<void> {
   const [current, membership, edit, lead] = await Promise.all([
     service.from('lookup_job_leads').select('status, attempts, lookup_jobs!inner(status)').eq('id', row.id).maybeSingle(),
     service.from('org_members').select('user_id').eq('org_id', job.org_id).eq('user_id', job.created_by).maybeSingle(),
@@ -22,25 +23,31 @@ async function authorised(service: SupabaseClient, row: Claimed, job: Job): Prom
     service.from('leads').select('id').eq('id', row.lead_id).eq('org_id', job.org_id).maybeSingle(),
   ]);
   const currentJob = current.data?.lookup_jobs as unknown as { status: string } | null;
-  return !current.error && !membership.error && !edit.error && !lead.error && !!lead.data && !!membership.data
-    && edit.data === true && current.data?.status === 'running' && current.data.attempts === row.attempts && currentJob?.status === 'active';
+  const error = current.error ?? membership.error ?? edit.error ?? lead.error;
+  if (error) throw error;
+  const reason = lookupSkipReason(!!lead.data, !!membership.data, edit.data === true);
+  if (reason) throw new LookupSkipped(reason);
+  if (current.data?.status !== 'running' || current.data.attempts !== row.attempts || currentJob?.status !== 'active')
+    throw new LookupSkipped('This job was stopped or this lookup is no longer current.');
 }
 
-async function processLead(service: SupabaseClient, row: Claimed, job: Job): Promise<Outcome> {
-  const deadline = Date.now() + LOOKUP_LIMITS.leadBudgetMs;
+async function processLead(service: SupabaseClient, row: Claimed, job: Job, startedAt: number): Promise<Outcome> {
+  const deadline = Math.min(Date.now() + LOOKUP_LIMITS.leadBudgetMs,
+    startedAt + LOOKUP_LIMITS.wallBudgetMs - LOOKUP_LIMITS.checkpointMarginMs);
   const { data, error } = await service.from('leads').select('id, org_id, business_name, website, email, phone, owner_name, city')
     .eq('id', row.lead_id).eq('org_id', job.org_id).maybeSingle();
-  if (error) throw new Error('Lead read failed');
+  if (error) throw error;
   const lead = data as EnrichLeadRow | null;
   const { data: member, error: memberError } = await service.from('org_members').select('user_id')
     .eq('org_id', job.org_id).eq('user_id', job.created_by).maybeSingle();
   const { data: canEdit, error: editError } = await service.rpc('deep_find_creator_can_edit', { target_user: job.created_by, target_lead: row.lead_id });
-  if (memberError || editError) throw new Error('Permission check failed');
+  if (memberError || editError) throw memberError ?? editError;
   const reason = lookupSkipReason(!!lead, !!member, canEdit === true);
   if (reason || !lead) return skipped(reason ?? 'This lead is no longer available.');
   const checkpoint = async () => {
-    if (Date.now() > deadline - 10_000) throw new Error('Lookup time budget reached');
-    if (!await authorised(service, row, job)) throw new Error('Lookup no longer authorised');
+    if (Date.now() >= deadline - LOOKUP_LIMITS.checkpointMarginMs) throw new Error('Lookup time budget reached');
+    await checkAuthorisation(service, row, job);
+    if (Date.now() >= deadline - LOOKUP_LIMITS.checkpointMarginMs) throw new Error('Lookup time budget reached');
   };
   await checkpoint();
   if (!await checkRateLimit(service, `lookup-org:${job.org_id}`, LOOKUP_LIMITS.orgPerDay, 1440, true))
@@ -70,8 +77,8 @@ async function processLead(service: SupabaseClient, row: Claimed, job: Job): Pro
     siteFallback: async (website) => {
       const safe = parseSafeWebsiteUrl(website);
       if (!safe) return null;
-      const timeoutMs = Math.min(25_000, deadline - Date.now() - 32_000);
-      if (timeoutMs < 10_000) return null;
+      const timeoutMs = scrapeTimeoutFor(deadline - Date.now());
+      if (timeoutMs === null) return null;
       const reply = await worker.scrapeSite(safe.hostname.replace(/^www\./, ''), 'key_pages', { timeoutMs });
       return reply.ok ? { email: reply.value.emails[0]?.value, phone: reply.value.phones[0]?.value } : null;
     },
@@ -85,25 +92,28 @@ async function processLead(service: SupabaseClient, row: Claimed, job: Job): Pro
 /** Cron and create share this runner. SQL handles stale leases, cancellation and atomic completion. */
 export async function runLookupTick(service: SupabaseClient, startedAt = Date.now()): Promise<number> {
   let processed = 0;
-  while (Date.now() - startedAt < LOOKUP_LIMITS.wallBudgetMs - LOOKUP_LIMITS.leadBudgetMs) {
+  while (canStartLookupLead(startedAt, Date.now())) {
     const { data, error } = await service.rpc('lookup_job_claim', { max_leads: 1 });
-    if (error) { console.error('lookup jobs: claim failed'); break; }
+    if (error) { console.error('lookup jobs: claim failed', lookupErrorKind(error)); break; }
     const row = (data as Claimed[] | null)?.[0];
     if (!row) break;
     let outcome: Outcome;
     try {
       const { data: job, error: jobError } = await service.from('lookup_jobs').select('id, org_id, created_by, kind, status').eq('id', row.job_id).maybeSingle();
-      if (jobError) throw new Error('Job read failed');
-      outcome = !job || job.status !== 'active' ? skipped('This job was stopped.') : await processLead(service, row, job as Job);
-    } catch {
-      console.error('lookup jobs: lead processing failed');
-      outcome = { status: 'failed', reason: 'This lookup could not finish. Please try again.', result: {}, review: 'none' };
+      if (jobError) throw jobError;
+      outcome = !job || job.status !== 'active' ? skipped('This job was stopped.')
+        : !canStartLookupLead(startedAt, Date.now()) ? skipped('There was not enough time to start this lookup. Please try again.')
+        : await processLead(service, row, job as Job, startedAt);
+    } catch (err) {
+      console.error('lookup jobs: lead processing failed', lookupErrorKind(err));
+      outcome = err instanceof LookupSkipped ? skipped(err.message)
+        : { status: 'failed', reason: 'This lookup could not finish. Please try again.', result: {}, review: 'none' };
     }
     const { error: finishError } = await service.rpc('lookup_job_finish', {
       lead_row: row.id, claim_attempt: row.attempts, new_status: outcome.status, new_reason: outcome.reason,
       new_result: outcome.result, new_review: outcome.review,
     });
-    if (finishError) { console.error('lookup jobs: saving result failed'); break; }
+    if (finishError) { console.error('lookup jobs: saving result failed', lookupErrorKind(finishError)); break; }
     processed++;
   }
   return processed;

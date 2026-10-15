@@ -49,9 +49,9 @@ export async function enrichOneLead(
   if (siteEmail && siteEmail !== lead.email) { proposed.email = siteEmail; source.email = 'website'; }
   if (sitePhone && sitePhone !== lead.phone && !proposed.phone) { proposed.phone = sitePhone; source.phone = 'website'; }
 
-  if (!siteEmail && !sitePhone && website && options?.siteFallback) {
+  if (!siteEmail && !sitePhone && lead.website && options?.siteFallback) {
     await options.checkpoint?.();
-    const found = await options.siteFallback(website);
+    const found = await options.siteFallback(lead.website);
     if (found?.email && found.email !== lead.email) { proposed.email = found.email; source.email = 'browser scraper'; }
     if (found?.phone && found.phone !== lead.phone && !proposed.phone) { proposed.phone = found.phone; source.phone = 'browser scraper'; }
   }

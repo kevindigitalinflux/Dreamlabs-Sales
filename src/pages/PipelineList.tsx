@@ -117,13 +117,13 @@ export function PipelineList() {
   async function handleFillMissingDetails() {
     setLookupNotice(null);
     const job = await runEnrichment([...selected]);
-    if (job) setLookupNotice(`Started: ${job.queued} leads. Follow it in Jobs.`);
+    if (job) setLookupNotice(`Started: ${job.queued} ${job.queued === 1 ? 'lead' : 'leads'}. Follow it in Jobs.`);
   }
 
   async function handleFindDecisionMaker() {
     setLookupNotice(null);
     const job = await runSearch([...selected]);
-    if (job) setLookupNotice(`Started: ${job.queued} leads. Follow it in Jobs.`);
+    if (job) setLookupNotice(`Started: ${job.queued} ${job.queued === 1 ? 'lead' : 'leads'}. Follow it in Jobs.`);
   }
 
   function handleExportCsv() {

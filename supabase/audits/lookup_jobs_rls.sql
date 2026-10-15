@@ -10,6 +10,7 @@ DECLARE
   done_job uuid; cancelled_job uuid; active_job uuid; other_job uuid; review_job uuid;
   result_row uuid; n int; ok boolean; claimed public.lookup_job_leads;
   before_review jsonb; after_review jsonb; invalid_choice text;
+  cron_command text; cron_schedule text;
 BEGIN
   SELECT id, org_id INTO lead, org FROM public.leads LIMIT 1;
   IF lead IS NULL THEN RAISE EXCEPTION 'LOOKUP_JOBS_AUDIT requires one lead to borrow'; END IF;
@@ -42,6 +43,18 @@ BEGIN
     VALUES (review_job, org, lead, 'done', 'pending', '{"proposed":{"email":"audit@example.invalid"},"source":{"email":"website"},"steps":[]}')
     RETURNING id INTO result_row;
   SELECT to_jsonb(l) INTO before_review FROM public.lookup_job_leads l WHERE id = result_row;
+
+  PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);
+  EXECUTE 'SET LOCAL ROLE anon';
+  BEGIN
+    SELECT count(*) INTO n FROM public.lookup_jobs;
+    report := report || chr(10) || CASE WHEN n = 0 THEN 'PASS' ELSE 'FAIL' END || ' anon SELECT jobs returns no rows';
+  EXCEPTION WHEN insufficient_privilege THEN report := report || chr(10) || 'PASS anon SELECT jobs refused'; END;
+  BEGIN
+    SELECT count(*) INTO n FROM public.lookup_job_leads;
+    report := report || chr(10) || CASE WHEN n = 0 THEN 'PASS' ELSE 'FAIL' END || ' anon SELECT results returns no rows';
+  EXCEPTION WHEN insufficient_privilege THEN report := report || chr(10) || 'PASS anon SELECT results refused'; END;
+  EXECUTE 'RESET ROLE';
 
   PERFORM set_config('request.jwt.claims', json_build_object('sub', member, 'role', 'authenticated')::text, true);
   EXECUTE 'SET LOCAL ROLE authenticated';
@@ -259,6 +272,20 @@ BEGIN
   SELECT count(*) INTO n FROM pg_publication_tables WHERE pubname = 'supabase_realtime'
     AND schemaname = 'public' AND tablename IN ('lookup_jobs', 'lookup_job_leads');
   report := report || chr(10) || CASE WHEN n = 2 THEN 'PASS' ELSE 'FAIL' END || ' both tables published for realtime';
+  SELECT count(*), min(schedule), min(command) INTO n, cron_schedule, cron_command
+    FROM cron.job WHERE jobname = 'run-lookup-jobs-tick' AND active;
+  report := report || chr(10) || CASE WHEN n = 1 AND cron_schedule = '* * * * *' THEN 'PASS' ELSE 'FAIL' END
+    || ' lookup tick registered once and scheduled every minute';
+  -- Compare the entire command after removing whitespace, rather than only searching for Vault text:
+  -- an extra literal header/secret cannot pass. Never print command or decrypted_secret in the report.
+  report := report || chr(10) || CASE WHEN regexp_replace(cron_command, '\s+', '', 'g') = regexp_replace($expected$
+    SELECT net.http_post(
+      url := 'https://wgomksxelyfkzepbnkdd.supabase.co/functions/v1/run-lookup-jobs',
+      headers := jsonb_build_object('Content-Type', 'application/json',
+        'x-cron-secret', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'cron_secret')),
+      body := '{"action":"tick"}'::jsonb
+    );
+  $expected$, '\s+', '', 'g') THEN 'PASS' ELSE 'FAIL' END || ' lookup tick uses only the Vault subquery for its secret';
   RAISE EXCEPTION E'LOOKUP_JOBS_AUDIT (all writes rolled back)\n%', report;
 END;
 $$;

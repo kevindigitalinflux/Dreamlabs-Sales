@@ -88,24 +88,34 @@ $$;
 -- A 5-minute lease exceeds the invocation budget. Retry once; attempts fence stale result writes.
 CREATE FUNCTION public.lookup_job_claim(max_leads int)
 RETURNS SETOF public.lookup_job_leads LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE locked_jobs uuid[];
 BEGIN
   PERFORM pg_advisory_xact_lock(610015);
+  -- Lock parents BEFORE any result row, including lease recovery and cancellation cleanup.
+  -- Skip parents held by cancel/finish; every mutation below is fenced to this locked set.
+  SELECT array_agg(locked.id) INTO locked_jobs FROM (
+    SELECT j.id FROM public.lookup_jobs j
+    WHERE j.status = 'active' OR EXISTS (
+      SELECT 1 FROM public.lookup_job_leads l WHERE l.job_id = j.id AND l.status IN ('queued', 'running')
+    )
+    ORDER BY j.id FOR UPDATE OF j SKIP LOCKED
+  ) locked;
   UPDATE public.lookup_job_leads l SET
     status = CASE WHEN j.status <> 'active' THEN 'skipped' WHEN l.attempts < 2 THEN 'queued' ELSE 'failed' END,
     reason = CASE WHEN j.status <> 'active' THEN 'This job was stopped.' WHEN l.attempts >= 2 THEN 'This lead was interrupted twice, so the lookup stopped trying.' ELSE NULL END,
     claimed_at = NULL, updated_at = now()
-    FROM public.lookup_jobs j WHERE j.id = l.job_id AND l.status = 'running'
+    FROM public.lookup_jobs j WHERE j.id = l.job_id AND j.id = ANY(locked_jobs) AND l.status = 'running'
       AND l.claimed_at < now() - interval '5 minutes';
   UPDATE public.lookup_job_leads l SET status = 'skipped', reason = 'This job was stopped.', updated_at = now()
-    FROM public.lookup_jobs j WHERE j.id = l.job_id AND j.status <> 'active' AND l.status = 'queued';
+    FROM public.lookup_jobs j WHERE j.id = l.job_id AND j.id = ANY(locked_jobs) AND j.status <> 'active' AND l.status = 'queued';
   UPDATE public.lookup_jobs j SET status = 'completed', finished_at = now()
-    WHERE j.status = 'active' AND NOT EXISTS
+    WHERE j.id = ANY(locked_jobs) AND j.status = 'active' AND NOT EXISTS
       (SELECT 1 FROM public.lookup_job_leads l WHERE l.job_id = j.id AND l.status IN ('queued', 'running'));
   RETURN QUERY
     UPDATE public.lookup_job_leads l SET status = 'running', claimed_at = now(), updated_at = now(), attempts = l.attempts + 1
     WHERE l.id IN (
       SELECT q.id FROM public.lookup_job_leads q JOIN public.lookup_jobs j ON j.id = q.job_id
-      WHERE q.status = 'queued' AND j.status = 'active'
+      WHERE j.id = ANY(locked_jobs) AND q.status = 'queued' AND j.status = 'active'
         AND NOT EXISTS (SELECT 1 FROM public.lookup_job_leads busy WHERE busy.org_id = q.org_id AND busy.status = 'running')
       ORDER BY q.updated_at, q.id LIMIT LEAST(GREATEST(COALESCE(max_leads, 0), 0), 1)
       FOR UPDATE OF q SKIP LOCKED

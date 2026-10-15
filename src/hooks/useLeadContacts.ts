@@ -37,12 +37,13 @@ export function useLeadContacts(leadId: string) {
   useEffect(() => {
     const mine = ++epoch.current;
     setContacts([]); setLoading(true); setLoadError(null);
-    void supabase.from(TABLE).select('*').eq('lead_id', leadId).is('dismissed_at', null).order('created_at').then(({ data, error }) => {
+    const loadContacts = () => supabase.from(TABLE).select('*').eq('lead_id', leadId).is('dismissed_at', null).order('created_at').then(({ data, error }) => {
       if (mine !== epoch.current) return;
       if (error) setLoadError('Could not load contacts. Please refresh and try again.');
       else setContacts((data as DecisionMakerCandidate[]) ?? []);
       setLoading(false);
     });
+    void loadContacts();
     const channel = supabase
       .channel(`lead-contacts-${leadId}-${instance}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: TABLE, filter: `lead_id=eq.${leadId}` }, (payload) => {
@@ -54,6 +55,10 @@ export function useLeadContacts(leadId: string) {
         const row = payload.new as DecisionMakerCandidate;
         if (row.dismissed_at) { setContacts((prev) => prev.filter((c) => c.id !== row.id)); return; }
         setContacts((prev) => (prev.some((c) => c.id === row.id) ? prev.map((c) => (c.id === row.id ? row : c)) : [...prev, row]));
+      })
+      // 061 publishes lookup_job_leads. Reload this lead's candidates after a background lookup.
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'lookup_job_leads', filter: `lead_id=eq.${leadId}` }, (payload) => {
+        if (mine === epoch.current && payload.new.status === 'done') void loadContacts();
       })
       .subscribe();
     return () => { epoch.current++; void supabase.removeChannel(channel); };

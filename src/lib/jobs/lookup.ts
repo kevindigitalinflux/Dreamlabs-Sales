@@ -10,7 +10,7 @@ export function mapLookupJob(job: LookupJobInput, rows: LookupRowInput[], names:
   const needsYou = job.kind === 'enrich' ? rows.filter((r) => r.review === 'pending').length : 0;
   const done = rows.filter((r) => r.status !== 'queued' && r.status !== 'running').length;
   const failed = rows.filter((r) => r.status === 'failed').length;
-  const total = Math.max(job.lead_count, rows.length);
+  const total = job.status === 'active' ? Math.max(job.lead_count, rows.length) : rows.length;
   const allowed = viewer.userId !== null && (job.created_by === viewer.userId || viewer.isAdmin);
   const state = needsYou ? 'needs_you' : job.status === 'active' ? 'running' : job.status === 'cancelled' ? 'stopped' : failed > 0 ? 'failed' : 'done';
   return {

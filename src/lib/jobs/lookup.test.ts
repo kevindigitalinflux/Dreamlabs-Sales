@@ -13,7 +13,14 @@ it.each(['active', 'completed', 'cancelled'] as const)('pending proposals win ov
 });
 it('ignores review flags for decision-maker jobs and names the action', () => {
   expect(mapLookupJob({ ...job, kind: 'decision_makers', status: 'completed' }, [{ status: 'done', review: 'pending' }], ['Love Living'], viewer))
-    .toMatchObject({ state: 'done', needsYou: 0, title: 'Find decision makers: Love Living +2' });
+    .toMatchObject({ state: 'done', needsYou: 0, title: 'Find decision makers: Love Living' });
+});
+it.each(['completed', 'cancelled'] as const)('uses visible rows for ended %s progress after cascade or RLS filtering', (status) => {
+  const rows = [{ status: 'done' as const, review: 'none' as const }, { status: 'skipped' as const, review: 'none' as const }];
+  const item = mapLookupJob({ ...job, status }, rows, [], viewer);
+  expect(item.progress).toEqual({ done: 2, total: 2 });
+  expect(item.detail).toContain('2 of 2');
+  expect(mapLookupJob({ ...job, status }, [], [], viewer).progress).toEqual({ done: 0, total: 0 });
 });
 it('distinguishes failed, done and stopped outcomes', () => {
   expect(mapLookupJob({ ...job, status: 'completed' }, [{ status: 'failed', review: 'none' }], [], viewer).state).toBe('failed');

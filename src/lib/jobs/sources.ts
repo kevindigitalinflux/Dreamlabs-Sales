@@ -14,7 +14,7 @@ export interface JobSource {
   /**
    * Tables to listen to for live updates (byOrg: the table has an org_id column the realtime filter can use).
    * Only tables in the `supabase_realtime` publication may be watched: one unpublished table makes Supabase
-   * reject the whole channel. Currently published: deep_find_runs, deep_find_leads, autopilot_run_leads,
+   * reject the whole channel. Currently published: lookup_jobs, lookup_job_leads, deep_find_runs, deep_find_leads, autopilot_run_leads,
    * scrape_jobs, raw_leads. autopilot_runs is not, so selected runs update through autopilot_run_leads and
    * campaigns through the 30 s refetch.
    */

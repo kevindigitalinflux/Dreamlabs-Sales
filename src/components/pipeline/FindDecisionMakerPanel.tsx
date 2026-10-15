@@ -51,7 +51,7 @@ export function FindDecisionMakerPanel({ leadId, lookingUp, onLookup, onClose }:
     if (!known) {
       const found = await runSearch([leadId]);
       if (mine !== epoch.current || !found) return;
-      setNote(`Started: ${found.queued} leads. Follow it in Jobs.`);
+      setNote(`Started: ${found.queued} ${found.queued === 1 ? 'lead' : 'leads'}. Follow it in Jobs.`);
       return;
     }
     const built = buildFromFullName(fullName, { title, email, linkedin_url: linkedin, company_domain: companyDomain }, usePaid, override);

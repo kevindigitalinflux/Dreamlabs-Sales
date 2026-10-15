@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
+import { lookupErrorKind } from '../../supabase/functions/_shared/lookupJobRules';
 import { supabase } from '../lib/supabase';
 import { useOrg } from '../hooks/useOrg';
 import { useAuth } from '../hooks/useAuth';
@@ -47,19 +48,24 @@ export function LookupJob() {
           .eq('job_id', jobId).eq('org_id', orgId).order('id').limit(50),
       ]);
       if (token !== request.current || currentScope.current !== scope) return;
-      if (jobReply.error || rowsReply.error) throw new Error('Lookup read failed');
+      if (jobReply.error || rowsReply.error) throw jobReply.error ?? rowsReply.error;
       setSnapshot({ scope, job: jobReply.data as LookupJobInput | null, rows: (rowsReply.data ?? []) as unknown as ResultRow[], error: null });
-    } catch {
-      console.error('lookup results: load failed');
+    } catch (err) {
+      console.error('lookup results: load failed', lookupErrorKind(err));
       if (token === request.current && currentScope.current === scope)
         setSnapshot({ scope, job: null, rows: [], error: 'Could not load this job. Try refreshing.' });
     }
   }, [orgId, jobId, scope]);
   useEffect(() => {
     void load();
-    const timer = setInterval(() => void load(), 5_000);
-    return () => { clearInterval(timer); request.current++; };
+    return () => { request.current++; };
   }, [load]);
+  const ended = visible?.job?.status === 'completed' || visible?.job?.status === 'cancelled';
+  useEffect(() => {
+    if (ended) return;
+    const timer = setInterval(() => void load(), 5_000);
+    return () => clearInterval(timer);
+  }, [load, ended]);
 
   const item = visible?.job ? mapLookupJob(visible.job, visible.rows, visible.rows.map((r) => r.lead?.business_name ?? null), {
     userId: session?.user.id ?? null, isAdmin: currentOrg?.role === 'admin',
@@ -72,7 +78,8 @@ export function LookupJob() {
   async function mark(rowId: string, newReview: 'applied' | 'dismissed'): Promise<boolean> {
     if (currentScope.current !== scope) return false;
     const { data, error } = await supabase.rpc('lookup_job_review', { lead_row: rowId, new_review: newReview });
-    return !error && data === true;
+    if (error) throw error;
+    return data === true;
   }
   async function dismiss(row: ResultRow) {
     setAction({ scope, busy: true, error: null });
@@ -80,8 +87,8 @@ export function LookupJob() {
       if (!await mark(row.id, 'dismissed')) throw new Error('Review rejected');
       await load(); await refreshJobs();
       setAction({ scope, busy: false, error: null });
-    } catch {
-      console.error('lookup results: dismiss failed');
+    } catch (err) {
+      console.error('lookup results: dismiss failed', lookupErrorKind(err));
       setAction({ scope, busy: false, error: 'Could not dismiss these proposals. Refresh and try again.' });
     }
   }
@@ -94,7 +101,8 @@ export function LookupJob() {
     try {
       error = await saveLookupProposal(async () => {
         const { data: latest, error: readError } = await supabase.from('leads').select('*').eq('id', leadId).eq('org_id', orgId!).single();
-        if (readError || !latest || currentScope.current !== scope) return 'This lead is no longer available.';
+        if (readError) throw readError;
+        if (!latest || currentScope.current !== scope) return 'This lead is no longer available.';
         const fields = patches[leadId] ?? {};
         for (const field of Object.keys(fields) as EnrichableField[]) {
           if ((latest[field] ?? '') !== (row.lead?.[field] ?? '') && latest[field] !== fields[field])
@@ -102,8 +110,8 @@ export function LookupJob() {
         }
         return applyLeadUpdate(leadId, { ...fields, ...mergeAdditions(latest as Lead, additions[leadId] ?? []) }, latest as Lead, session?.user.id);
       }, () => mark(row.id, 'applied'));
-    } catch {
-      console.error('lookup results: apply failed');
+    } catch (err) {
+      console.error('lookup results: apply failed', lookupErrorKind(err));
       error = 'Could not save these details. Refresh and try again.';
     }
     setAction({ scope, busy: false, error });
@@ -115,7 +123,7 @@ export function LookupJob() {
     if (!item) return;
     setAction({ scope, busy: true, error: null });
     try { setAction({ scope, busy: false, error: await stop(item.id) }); await load(); }
-    catch { console.error('lookup results: stop failed'); setAction({ scope, busy: false, error: 'Could not stop this job. Try again.' }); }
+    catch (err) { console.error('lookup results: stop failed', lookupErrorKind(err)); setAction({ scope, busy: false, error: 'Could not stop this job. Try again.' }); }
   }
 
   return <div className="flex min-w-0 flex-col gap-4">

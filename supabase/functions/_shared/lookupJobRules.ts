@@ -2,7 +2,20 @@
 export type LookupKind = 'enrich' | 'decision_makers';
 export type LookupReview = 'none' | 'pending' | 'applied' | 'dismissed';
 export type LookupLeadStatus = 'queued' | 'running' | 'done' | 'failed' | 'skipped';
-export const LOOKUP_LIMITS = { maxLeads: 50, orgPerDay: 300, leadPerDay: 5, wallBudgetMs: 140_000, leadBudgetMs: 100_000 } as const;
+export const LOOKUP_LIMITS = {
+  maxLeads: 50, orgPerDay: 300, leadPerDay: 5,
+  wallBudgetMs: 130_000, // Mirrors WALL_BUDGET_MS in deepFind.ts without its runtime imports.
+  leadBudgetMs: 100_000, checkpointMarginMs: 10_000,
+  leadReserveMs: 110_000, // Like Deep find's LEAD_RESERVE_MS: a whole lead plus final persistence time.
+} as const;
+export function canStartLookupLead(startedAt: number, now: number): boolean {
+  return now - startedAt < LOOKUP_LIMITS.wallBudgetMs - LOOKUP_LIMITS.leadReserveMs;
+}
+/** Log classification only, never provider messages, details or response bodies. */
+export function lookupErrorKind(err: unknown): string {
+  if (err && typeof err === 'object' && 'code' in err && typeof err.code === 'string') return err.code;
+  return err instanceof Error ? err.name : 'unknown';
+}
 export function parseLookupRequest(body: unknown): { kind: LookupKind; leadIds: string[] } | null {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
   const b = body as Record<string, unknown>;

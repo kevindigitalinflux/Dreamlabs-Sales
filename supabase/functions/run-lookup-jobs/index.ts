@@ -4,29 +4,30 @@ import { corsHeaders, json } from '../_shared/cors.ts';
 import { cronSecretMatches } from '../_shared/timingSafe.ts';
 import { checkRateLimit } from '../_shared/rateLimit.ts';
 import { isUuid } from '../_shared/deepFindRules.ts';
-import { parseLookupRequest } from '../_shared/lookupJobRules.ts';
+import { lookupErrorKind, parseLookupRequest } from '../_shared/lookupJobRules.ts';
 import { runLookupTick } from '../_shared/lookupJobs.ts';
 
 function background(task: Promise<unknown>): void {
-  const guarded = task.catch(() => console.error('lookup jobs: background tick failed'));
+  const guarded = task.catch((err) => console.error('lookup jobs: background tick failed', lookupErrorKind(err)));
   const runtime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime;
   if (runtime) runtime.waitUntil(guarded);
   // Outside EdgeRuntime cron will pick up the queued row; never wait on providers in the create response.
 }
 
 Deno.serve(async (req) => {
+  const startedAt = Date.now();
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
   let body: Record<string, unknown>;
-  try { body = await req.json(); } catch { return json({ error: 'Invalid request' }, 400, headers); }
+  try { body = await req.json(); } catch (err) { console.error('lookup jobs: invalid request', lookupErrorKind(err)); return json({ error: 'Invalid request' }, 400, headers); }
   if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: 'Invalid request' }, 400, headers);
   try {
     const service = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
     if (body.action === 'tick') {
       if (!await cronSecretMatches(req.headers.get('x-cron-secret'), Deno.env.get('CRON_SECRET')))
         return json({ error: 'Forbidden' }, 403, headers);
-      background(runLookupTick(service));
+      background(runLookupTick(service, startedAt));
       return json({ ok: true }, 202, headers);
     }
     if (body.action !== undefined && body.action !== 'create' && body.action !== 'cancel')
@@ -52,8 +53,6 @@ Deno.serve(async (req) => {
     }
     const parsed = parseLookupRequest(body);
     if (!parsed) return json({ error: 'Choose a lookup type and between 1 and 50 leads' }, 400, headers);
-    if (!await checkRateLimit(service, `lookup-create:${caller.id}`, 30, 1440, true))
-      return json({ error: 'You have started a lot of lookups today. Try again tomorrow.' }, 429, headers);
     const { data: leads, error } = await client.from('leads').select('id, org_id').in('id', parsed.leadIds);
     if (error) return json({ error: 'Could not read the selected leads' }, 500, headers);
     if (!leads || leads.length !== parsed.leadIds.length) return json({ error: 'Some selected leads are unavailable' }, 404, headers);
@@ -66,14 +65,16 @@ Deno.serve(async (req) => {
       const { data: canEdit, error: editError } = await client.rpc('can_edit_lead', { target_lead: lead.id });
       if (editError || canEdit !== true) return json({ error: 'You can only look up leads you can edit' }, 403, headers);
     }
+    if (!await checkRateLimit(service, `lookup-create:${caller.id}`, 30, 1440, true))
+      return json({ error: 'You have started a lot of lookups today. Try again tomorrow.' }, 429, headers);
     const { data: jobId, error: createError } = await service.rpc('lookup_job_create', {
       target_org: orgId, creator: caller.id, job_kind: parsed.kind, lead_ids: parsed.leadIds,
     });
     if (createError || !jobId) return json({ error: 'Could not queue these leads' }, 500, headers);
-    background(runLookupTick(service));
+    background(runLookupTick(service, startedAt));
     return json({ job_id: jobId, queued: parsed.leadIds.length }, 202, headers);
-  } catch {
-    console.error('lookup jobs: request failed');
+  } catch (err) {
+    console.error('lookup jobs: request failed', lookupErrorKind(err));
     return json({ error: 'This lookup request could not be completed. Try again.' }, 500, headers);
   }
 });

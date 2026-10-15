@@ -6,6 +6,7 @@ vi.mock('../../supabase/functions/_shared/apolloHunterLookup', () => ({ lookupAp
 vi.mock('../../supabase/functions/_shared/googlePlacesLookup', () => ({ lookupPlaceContact: vi.fn() }));
 import { scrapeWebsiteContact } from '../../supabase/functions/_shared/websiteContact';
 import { lookupHunterEmail } from '../../supabase/functions/_shared/apolloHunterLookup';
+import { lookupPlaceContact } from '../../supabase/functions/_shared/googlePlacesLookup';
 import { enrichOneLead } from '../../supabase/functions/_shared/enrichLead';
 const lead = { id: 'lead', org_id: 'org', business_name: 'Example', website: 'https://example.com', email: null, phone: null, owner_name: null, city: null };
 const keys = { companiesHouse: null, openCorporates: null, apollo: null, hunter: null, googlePlaces: null };
@@ -31,4 +32,11 @@ it('continues to existing lookups when the worker is unavailable', async () => {
 });
 it('keeps the original path when no fallback is provided', async () => {
   expect(await enrichOneLead(lead, keys)).toBeNull();
+});
+it('never sends a Google Places website proposal to the worker', async () => {
+  vi.mocked(lookupPlaceContact).mockResolvedValue({ website: 'https://suggested.example.com', phone: null });
+  const fallback = vi.fn().mockResolvedValue(null);
+  const result = await enrichOneLead({ ...lead, website: null }, { ...keys, googlePlaces: 'test' }, { siteFallback: fallback });
+  expect(result?.proposed.website).toBe('https://suggested.example.com');
+  expect(fallback).not.toHaveBeenCalled();
 });

@@ -2,7 +2,7 @@
 
 Authoritative task record. The vault copy (`Dreamlabs Sales/Handoff.md`) is a snapshot of this file, labelled with the revision below. Workflow rules: vault `_Team/Shared agent workflow.md`.
 
-**Latest resume point:** the final section, **Update 2026-10-15 (Codex database completion under Claude's rulings)**. Earlier sections are historical checkpoints; their unresolved database questions are superseded below. The vault snapshot has not been updated by this branch.
+**Latest resume point:** the final section, **Review fixes applied (2026-10-15, Codex)**. Earlier sections are historical checkpoints; their unresolved database questions are superseded below. The vault snapshot has not been updated by this branch.
 
 ## Identity and authority
 - Task ID: `worker-programme` (lookup worker -> Deep find; Stage 1 done, Stage 2 next). Project: Dreamlabs Sales. Author: Claude. Time: 2026-10-15 ~15:15 (local clock shows GMT; Kevin's timezone not confirmed).
@@ -160,3 +160,30 @@ These rulings are also recorded in the spec's **Rulings 2026-10-15** section and
 - **NOT applied/deployed/run:** migration 061, rollback audit, any production SQL, any edge/worker/frontend deployment, browser/live/phone checks or independent review. Build gates do not validate SQL syntax, RLS behaviour, concurrency or actual EdgeRuntime execution. No Deno check this continuation; previous local TypeScript shim check remains historical evidence only.
 - Independent review is pending for the full branch, including this database completion. No implementation question remains for Kevin. Next: Claude reviews the branch at final HEAD (code at `5c83614`), especially 061/audit and the previous application changes. Kevin then separately authorizes/applies reviewed SQL and deployment; do not ship the frontend before the new tables exist in realtime.
 - Resume: read this section and the spec's rulings, verify branch/HEAD/status, then perform the independent review. All work remains local; application, publication and live checks are not authorised by this continuation.
+
+## Review fixes applied (2026-10-15, Codex)
+
+### Authority and revision
+- Kevin continued Codex as BUILDER on `codex/stage2-background-lookups`, starting from clean HEAD `0a8f386`. Same checkout; no role change or unanswered kickoff item. Kevin supplied the independent review findings and reported no Critical issues. This continuation implements A and minors 1, 3–10, 12 and 14 only.
+- One local fix commit includes code, regression tests, migration/audit edits and this checkpoint. Use `git log 0a8f386..HEAD` and `git rev-parse HEAD` for its exact revision; this document cannot contain its own commit hash. Explicit files staged with the required Codex trailer.
+- No push, merge, deployment, live Supabase/VPS action, SQL execution, credential read or paid fallback. No other agent invoked. Commit hook disabled for this commit (`git -c core.hooksPath=NUL commit`) to preserve the continuation's project-only write boundary and avoid overwriting accepted vault `Repo/` references with branch work. Vault remains stale; no sync run.
+
+### Implemented
+- Wall budget is **130,000 ms**, explicitly mirroring Deep find. `startedAt` is captured as the first handler statement and passed to both create and cron ticks, including all validation time. A **110,000 ms lead reserve** covers the existing 100,000 ms lead budget plus 10,000 ms for final persistence; the existing 10,000 ms checkpoint margin remains. The runner rechecks after claim/job read, bounds the lead deadline by request end, and checks time again after permission RPCs. If a slow claim exhausts the reserve, that row is skipped with a plain retry reason, without providers or daily lead reservations.
+- Claim locks a deterministic set of parent job rows first (`FOR UPDATE ... SKIP LOCKED`), before result rows. Lease recovery, cancellation cleanup, header completion and claims all operate only on that locked set. Function bodies only changed; service-only RPC grants and security settings are unchanged.
+- Worker fallback calls `scrapeTimeoutFor` and accepts only the lead's saved `lead.website`, never a Google Places website proposal. Free-reader and ordinary provider behavior otherwise stay intact.
+- Creator membership/edit loss at later checkpoints becomes `skipped` with the existing plain reason; database errors remain failures. Catches in runner, endpoint and result page log a fixed context plus error name/unknown, or database error code only, never message/details. Database read errors retain their code for classification.
+- The 30-create/day allowance is reserved only after valid body, visible leads in one org, membership and every edit-right check.
+- Ended/cancelled job progress and names use visible result rows, including zero rows after cascade/RLS filtering. Active jobs retain the enqueue snapshot total. The results page clears its 5-second interval on completed/cancelled status; manual review/stop refreshes still work.
+- Both start notices use `1 lead`. The existing lead-contact realtime channel also listens to published `lookup_job_leads` updates scoped to that lead and reloads contacts when its lookup completes. No known decision-maker-refresh gap remains for that completion path. The published-table comment includes both lookup tables.
+- Rollback audit adds actual anon-role SELECT attempts on both tables (zero rows or permission denial expected) plus active cron name/schedule and whole-command comparison against the Vault-subquery form, without logging the command or reading its secret value. Its final `RAISE EXCEPTION` remains. **Not executed.**
+
+### Verification and remaining work
+- Test-first run reproduced **11 failures** covering the requested timing, quota, permissions, fallback, logging and progress changes; then focused tests passed **5 files / 48 tests**. Fixtures use fake clients/providers only.
+- `npx tsc --noEmit`: **PASS, zero diagnostics**.
+- `npx vitest run`: **PASS, 82 files / 1,349 tests, zero failures** (14 added tests).
+- `npm run build`: **PASS, 2,747 modules transformed**; existing >500 kB bundle warning remains.
+- Additional `npx tsc --noEmit -p .superpowers/lookup-check/tsconfig.json`: **PASS** using the existing ignored local Deno shim, not `deno check`. `git diff --check`: clean.
+- **Still NOT applied/deployed/audited live:** migration 061, rollback audit, edge function, frontend or worker. No SQL concurrency/RLS runtime verification or browser/phone/live UI checks. These gates do not prove live database or EdgeRuntime behavior. The initial independent review is Kevin-supplied; this exact fix revision has not had an independent rereview.
+- Deferred exactly as requested: `(org_id,status)` index, `getUser()` per refresh, removing unused `DecisionMakerReview.tsx`, and the spec-edit process note. No outstanding implementation question for Kevin.
+- Resume: inspect this commit against the supplied findings, especially SQL lock ordering and audit assertions. After independent rereview, Kevin must separately authorize applying SQL and deploying. Publish neither frontend nor its new subscriptions before migration 061 is applied. No background work remains running at handoff.
