@@ -7,6 +7,7 @@ vi.mock('../../supabase/functions/_shared/googlePlacesLookup', () => ({ lookupPl
 import { scrapeWebsiteContact } from '../../supabase/functions/_shared/websiteContact';
 import { lookupHunterEmail } from '../../supabase/functions/_shared/apolloHunterLookup';
 import { lookupPlaceContact } from '../../supabase/functions/_shared/googlePlacesLookup';
+import { lookupCompaniesHouseOfficer } from '../../supabase/functions/_shared/companiesHouse';
 import { enrichOneLead } from '../../supabase/functions/_shared/enrichLead';
 const lead = { id: 'lead', org_id: 'org', business_name: 'Example', website: 'https://example.com', email: null, phone: null, owner_name: null, city: null };
 const keys = { companiesHouse: null, openCorporates: null, apollo: null, hunter: null, googlePlaces: null };
@@ -39,4 +40,50 @@ it('never sends a Google Places website proposal to the worker', async () => {
   const result = await enrichOneLead({ ...lead, website: null }, { ...keys, googlePlaces: 'test' }, { siteFallback: fallback });
   expect(result?.proposed.website).toBe('https://suggested.example.com');
   expect(fallback).not.toHaveBeenCalled();
+});
+it('uses a team fallback after the worker and before paid sources, proposing only for review', async () => {
+  const order: string[] = [];
+  const result = await enrichOneLead(lead, { ...keys, hunter: 'test' }, {
+    siteFallback: async () => { order.push('worker'); return null; },
+    teamFallback: async () => { order.push('firecrawl'); return { people: [{ name: 'Jane Smith', role: 'Director' }], emails: ['jane@example.com'] }; },
+  });
+  expect(order).toEqual(['worker', 'firecrawl']);
+  expect(result).toMatchObject({ proposed: { owner_name: 'Jane Smith', email: 'jane@example.com' }, source: { owner_name: 'firecrawl', email: 'firecrawl' } });
+  expect(lookupHunterEmail).not.toHaveBeenCalled();
+});
+it('skips the team fallback when owner is present, or a website is only proposed', async () => {
+  const teamFallback = vi.fn();
+  await enrichOneLead({ ...lead, owner_name: 'Jane Smith' }, keys, { teamFallback });
+  vi.mocked(lookupPlaceContact).mockResolvedValue({ website: 'https://proposed.example.com', phone: null });
+  await enrichOneLead({ ...lead, website: null }, { ...keys, googlePlaces: 'test' }, { teamFallback });
+  expect(teamFallback).not.toHaveBeenCalled();
+});
+it('continues existing sources when Firecrawl finds nothing', async () => {
+  vi.mocked(lookupHunterEmail).mockResolvedValue('hunter@example.com');
+  const result = await enrichOneLead(lead, { ...keys, hunter: 'test' }, { teamFallback: vi.fn().mockResolvedValue(null) });
+  expect(result?.source.email).toBe('hunter');
+});
+it('uses a free registry owner before spending Firecrawl credits', async () => {
+  vi.mocked(lookupCompaniesHouseOfficer).mockResolvedValue('Jane Smith');
+  const teamFallback = vi.fn();
+  const result = await enrichOneLead(lead, { ...keys, companiesHouse: 'fake' }, { teamFallback });
+  expect(result?.source.owner_name).toBe('companies_house');
+  expect(teamFallback).not.toHaveBeenCalled();
+});
+it('passes already read same-domain links without an extra page fetch, and rejects off-domain redirects', async () => {
+  const html = '<a href="/team">Team</a>';
+  vi.mocked(scrapeWebsiteContact).mockImplementation(async (_url, _max, onPage) => {
+    onPage?.(html, 'https://example.com/');
+    return { email: null, phone: null };
+  });
+  const teamFallback = vi.fn().mockResolvedValue(null);
+  await enrichOneLead(lead, keys, { teamFallback });
+  expect(teamFallback).toHaveBeenCalledWith('https://example.com', [html]);
+  vi.mocked(scrapeWebsiteContact).mockImplementation(async (_url, _max, onPage) => {
+    onPage?.(html, 'https://other.com/');
+    return { email: null, phone: null };
+  });
+  teamFallback.mockClear();
+  await enrichOneLead(lead, keys, { teamFallback });
+  expect(teamFallback).not.toHaveBeenCalled();
 });

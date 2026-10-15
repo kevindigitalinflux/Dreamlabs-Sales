@@ -2,11 +2,13 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { croRejectionMessage, searchCroCompanies, splitCroSecret } from '../_shared/cro.ts';
 import { parseOrgWorkerSecret, validateWorkerConnection } from '../_shared/workerConfig.ts';
+import { validateFirecrawlKey } from '../_shared/firecrawlClient.ts';
 
-type Provider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates' | 'cro' | 'lookup_worker';
+type Provider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates' | 'cro' | 'lookup_worker' | 'firecrawl';
 
 async function validateKey(provider: Provider, key: string): Promise<string | null> {
   if (provider === 'lookup_worker') return validateWorkerConnection(key);
+  if (provider === 'firecrawl') return validateFirecrawlKey(key);
   try {
     if (provider === 'gemini') {
       // Keep in sync with AI_MODEL in _shared/ai.ts — gemini-2.5-flash was
@@ -150,9 +152,9 @@ Deno.serve(async (req) => {
     const provider = String(body.provider ?? '') as Provider;
     const apiKey = String(body.api_key ?? '').trim();
     // Platform-only worker management is withheld pending the architect's ruling on the existing override.
-    if (provider === 'lookup_worker' && membership?.role !== 'admin')
-      return json({ error: 'An admin of this organisation must manage its worker.' }, 403, headers);
-    if (!['gemini', 'google_places', 'google_places_pro', 'companies_house', 'apollo', 'hunter', 'anthropic', 'opencorporates', 'cro', 'lookup_worker'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
+    if ((provider === 'lookup_worker' || provider === 'firecrawl') && membership?.role !== 'admin')
+      return json({ error: 'An admin of this organisation must manage this provider.' }, 403, headers);
+    if (!['gemini', 'google_places', 'google_places_pro', 'companies_house', 'apollo', 'hunter', 'anthropic', 'opencorporates', 'cro', 'lookup_worker', 'firecrawl'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
     if (!apiKey) return json({ error: 'api_key is required' }, 400, headers);
 
     const validationError = await validateKey(provider, apiKey);

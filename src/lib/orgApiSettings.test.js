@@ -4,8 +4,10 @@ vi.mock('npm:@supabase/supabase-js@2', () => ({ createClient: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/workerConfig', async (original) => ({
   ...await original(), validateWorkerConnection: vi.fn(async () => null),
 }));
+vi.mock('../../supabase/functions/_shared/firecrawlClient', () => ({ validateFirecrawlKey: vi.fn(async () => null) }));
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { validateWorkerConnection } from '../../supabase/functions/_shared/workerConfig';
+import { validateFirecrawlKey } from '../../supabase/functions/_shared/firecrawlClient';
 
 let handler, rpc, updates, member, platformRole, validationError;
 beforeEach(async () => {
@@ -26,6 +28,7 @@ beforeEach(async () => {
     },
   });
   vi.mocked(validateWorkerConnection).mockImplementation(async () => validationError);
+  vi.mocked(validateFirecrawlKey).mockImplementation(async () => validationError);
   await import('../../supabase/functions/org-api-settings/index');
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -65,4 +68,20 @@ it('withholds platform-only worker management and host disclosure pending archit
   expect((await request({ action: 'remove', provider: 'lookup_worker' })).status).toBe(403);
   expect((await (await request({ action: 'get' })).json()).worker_host).toBeNull();
   expect(rpc).not.toHaveBeenCalled();
+});
+it('validates a Firecrawl key before storing, without returning the key', async () => {
+  const result = await request({ action: 'save', provider: 'firecrawl', api_key: 'fake-firecrawl' });
+  expect(await result.json()).toEqual({ ok: true });
+  expect(validateFirecrawlKey).toHaveBeenCalledExactlyOnceWith('fake-firecrawl');
+  expect(rpc).toHaveBeenCalledWith('app_set_org_api_key', { target_org: 'org', target_provider: 'firecrawl', secret: 'fake-firecrawl' });
+});
+it('rejects invalid Firecrawl keys without saving or returning raw provider text', async () => {
+  validationError = 'Firecrawl rejected the key. Check it and try again.';
+  const result = await request({ action: 'save', provider: 'firecrawl', api_key: 'fake-firecrawl' });
+  expect(result.status).toBe(400); expect(rpc).not.toHaveBeenCalled();
+});
+it.each(['contractor', null])('rejects Firecrawl management by role %s, including platform-only override', async (role) => {
+  member = role; platformRole = 'platform_admin';
+  expect((await request({ action: 'save', provider: 'firecrawl', api_key: 'fake-firecrawl' })).status).toBe(403);
+  expect(validateFirecrawlKey).not.toHaveBeenCalled(); expect(rpc).not.toHaveBeenCalled();
 });

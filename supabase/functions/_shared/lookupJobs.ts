@@ -7,6 +7,11 @@ import { parseSafeWebsiteUrl } from './hostGuard.ts';
 import { makeWorkerClient } from './workerClient.ts';
 import { scrapeTimeoutFor } from './workerRules.ts';
 import { LOOKUP_LIMITS, canStartLookupLead, lookupErrorKind, lookupReview, lookupSkipReason, type LookupKind } from './lookupJobRules.ts';
+import { makeFirecrawlClient } from './firecrawlClient.ts';
+import { FIRECRAWL_DAILY_PAGES } from './firecrawlRules.ts';
+import { DOMAIN_CHECKS, savedDomains } from './domainChecks.ts';
+import { domainFromWebsite } from './knownPerson.ts';
+import { websiteSuspicion } from './domainDiscovery.ts';
 
 interface Claimed { id: string; job_id: string; org_id: string; lead_id: string; attempts: number }
 interface Job { id: string; org_id: string; created_by: string; kind: LookupKind; status: string }
@@ -34,7 +39,7 @@ async function checkAuthorisation(service: SupabaseClient, row: Claimed, job: Jo
 async function processLead(service: SupabaseClient, row: Claimed, job: Job, startedAt: number): Promise<Outcome> {
   const deadline = Math.min(Date.now() + LOOKUP_LIMITS.leadBudgetMs,
     startedAt + LOOKUP_LIMITS.wallBudgetMs - LOOKUP_LIMITS.checkpointMarginMs);
-  const { data, error } = await service.from('leads').select('id, org_id, business_name, website, email, phone, owner_name, city')
+  const { data, error } = await service.from('leads').select('id, org_id, business_name, website, email, phone, owner_name, city, blocked_domains')
     .eq('id', row.lead_id).eq('org_id', job.org_id).maybeSingle();
   if (error) throw error;
   const lead = data as EnrichLeadRow | null;
@@ -66,14 +71,23 @@ async function processLead(service: SupabaseClient, row: Claimed, job: Job, star
         : `Found ${candidates.length} people. Review their details on the lead before using them.`],
     } };
   }
-  const [companiesHouse, openCorporates, googlePlaces] = await Promise.all([
+  const [companiesHouse, openCorporates, googlePlaces, firecrawlKey] = await Promise.all([
     resolveOrgApiKey(service, job.org_id, 'companies_house'), resolveOrgApiKey(service, job.org_id, 'opencorporates'),
     resolveOrgApiKey(service, job.org_id, 'google_places'),
+    resolveOrgApiKey(service, job.org_id, 'firecrawl'),
   ]);
   const worker = makeWorkerClient({ usage: service, orgId: job.org_id,
     config: await resolveOrgWorkerConfig(service, job.org_id) });
+  const firecrawl = makeFirecrawlClient({ key: firecrawlKey, checkpoint,
+    reserve: () => checkRateLimit(service, `firecrawl-pages:${job.org_id}`, FIRECRAWL_DAILY_PAGES, 1440, true) });
   const found = await enrichOneLead(lead, { hunter, apollo, companiesHouse, openCorporates, googlePlaces }, {
     checkpoint,
+    teamFallback: async (website, pages) => {
+      const domain = domainFromWebsite(website);
+      if (!domain || !parseSafeWebsiteUrl(website) || !DOMAIN_CHECKS.usable(domain) || savedDomains(lead.blocked_domains).includes(domain)
+        || websiteSuspicion(pages, [lead.business_name]).suspect) return null;
+      return firecrawl.readTeam(domain, pages, deadline - Date.now());
+    },
     siteFallback: async (website) => {
       const safe = parseSafeWebsiteUrl(website);
       if (!safe) return null;
@@ -86,7 +100,7 @@ async function processLead(service: SupabaseClient, row: Claimed, job: Job, star
   const proposed = found?.proposed ?? {};
   return { status: 'done', reason: Object.keys(proposed).length ? 'Found details to review.' : 'No additional details were found.',
     review: lookupReview('enrich', proposed) as 'none' | 'pending',
-    result: { proposed, source: found?.source ?? {}, steps: ['Checked available sources for contact details.', ...worker.lines()] } };
+    result: { proposed, source: found?.source ?? {}, steps: ['Checked available sources for contact details.', ...worker.lines(), ...firecrawl.lines()] } };
 }
 
 /** Cron and create share this runner. SQL handles stale leases, cancellation and atomic completion. */

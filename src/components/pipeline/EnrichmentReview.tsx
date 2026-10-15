@@ -10,6 +10,7 @@ const FIELD_LABELS: Record<EnrichableField, string> = {
   email: 'Email', phone: 'Phone', owner_name: 'Owner', website: 'Website',
 };
 const SOURCE_LABELS: Record<string, string> = {
+  firecrawl: 'Firecrawl',
   website: 'website', companies_house: 'Companies House', opencorporates: 'OpenCorporates',
   hunter: 'Hunter', apollo: 'Apollo', google_places: 'Google Places',
 };

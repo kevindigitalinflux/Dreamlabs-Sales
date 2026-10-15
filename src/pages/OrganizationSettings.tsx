@@ -19,6 +19,11 @@ const PROVIDERS: {
   steps?: string[];
 }[] = [
   {
+    key: 'firecrawl', label: 'Firecrawl (optional team-page lookup)', url: 'https://www.firecrawl.dev/app/api-keys',
+    ctaLabel: 'Get your Firecrawl API key',
+    freeText: 'Optional: reads one company team or about page when Deep find or Fill in missing details cannot find people. Uses your organisation’s own Firecrawl credits, up to 100 page requests a day. Found details are shown for review.',
+  },
+  {
     key: 'gemini',
     label: 'Gemini (AI drafting)',
     url: 'https://aistudio.google.com/apikey',
@@ -142,11 +147,15 @@ function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configur
   async function handleSave() {
     if (!key.trim()) return setMsg({ kind: 'err', text: 'Enter a key first.' });
     setBusy(true); setMsg(null);
-    const err = await onSave(provider, key.trim());
-    setBusy(false);
-    if (err) return setMsg({ kind: 'err', text: err });
-    setKey('');
-    setMsg({ kind: 'ok', text: 'Key verified and saved.' });
+    try {
+      const err = await onSave(provider, key.trim());
+      if (err) return setMsg({ kind: 'err', text: err });
+      setKey('');
+      setMsg({ kind: 'ok', text: 'Key verified and saved.' });
+    } catch {
+      console.error('settings: provider key could not be saved');
+      setMsg({ kind: 'err', text: 'Could not save the key. Try again.' });
+    } finally { setBusy(false); }
   }
 
   return (
@@ -162,7 +171,7 @@ function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configur
       <ProviderGuide url={url} ctaLabel={ctaLabel} freeText={freeText} steps={steps} />
       <div className="flex items-end gap-2">
         <div className="flex-1">
-          <Input label="API key" type="text" autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={configured ? 'Replace the saved key' : ''} />
+          <Input label="API key" type={provider === 'firecrawl' ? 'password' : 'text'} autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={configured ? 'Replace the saved key' : ''} />
         </div>
         <Button variant="secondary" onClick={() => void handleSave()} disabled={busy} loading={busy}>{busy ? 'Verifying…' : 'Save'}</Button>
       </div>
@@ -194,9 +203,9 @@ export function OrganizationSettings() {
         shared={sharedWorker} host={workerHost} onSave={(value) => save('lookup_worker', value)} onRemove={removeWorker} />}
       <Card>
         <div className="flex flex-col gap-3">
-          {PROVIDERS.map((p) => (
+          {PROVIDERS.filter((p) => p.key !== 'firecrawl' || currentOrg?.role === 'admin').map((p) => (
             <ProviderRow
-              key={p.key}
+              key={`${currentOrg?.id}:${p.key}`}
               provider={p.key}
               label={p.label}
               url={p.url}

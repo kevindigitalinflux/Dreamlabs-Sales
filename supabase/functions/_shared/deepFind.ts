@@ -26,6 +26,8 @@ import {
 } from './deepFindRules.ts';
 import { makeWorkerClient } from './workerClient.ts';
 import { scrapeTimeoutFor, unconfirmedLabel, verifyAction } from './workerRules.ts';
+import { makeFirecrawlClient } from './firecrawlClient.ts';
+import { FIRECRAWL_DAILY_PAGES, firecrawlDomainFor } from './firecrawlRules.ts';
 
 export const WALL_BUDGET_MS = 130_000;
 /** A lead is only started when at least this much of the invocation is left. */
@@ -120,13 +122,22 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     return { status: 'skipped', reason: 'This organisation reached its daily Deep find limit. Try again tomorrow.' };
   }
 
-  const [hunterKey, geminiKey, chKey, apolloKey] = await Promise.all([
+  const [hunterKey, geminiKey, chKey, apolloKey, firecrawlKey] = await Promise.all([
     resolveOrgApiKey(service, run.org_id, 'hunter'),
     resolveOrgApiKey(service, run.org_id, 'gemini'),
     resolveOrgApiKey(service, run.org_id, 'companies_house'),
     resolveOrgApiKey(service, run.org_id, 'apollo'),
+    resolveOrgApiKey(service, run.org_id, 'firecrawl'),
   ]);
   const spend = new Spend(service, run.id);
+  const firecrawl = makeFirecrawlClient({ key: firecrawlKey,
+    reserve: () => checkRateLimit(service, `firecrawl-pages:${run.org_id}`, FIRECRAWL_DAILY_PAGES, 1440, true),
+    checkpoint: async () => {
+      const { data: active, error } = await service.from('deep_find_runs').select('status').eq('id', run.id).eq('org_id', run.org_id).maybeSingle();
+      const { data: allowed, error: accessError } = await service.rpc('deep_find_creator_can_edit', { target_user: run.created_by, target_lead: lead.id });
+      if (error || accessError || active?.status !== 'active' || allowed !== true) throw new Error('Deep find is no longer authorised.');
+    },
+  });
   // Organisation's worker, or the shared worker only with explicit fallback permission.
   const worker = makeWorkerClient({
     usage: service, orgId: run.org_id,
@@ -266,6 +277,17 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       }
       siteEmails.set(scrapeDomain, [...(siteEmails.get(scrapeDomain) ?? []), ...scraped.value.emails.map((e) => e.value)]);
     }
+  }
+  // Names/roles only: Firecrawl people go to named_on_site for review, never contact inserts.
+  const hasNamedRoles = all().some((c) => !!str(c.first_name) && !!str(c.last_name) && !!str(c.title))
+    || extraSitePeople.length > 0 || pages.some((html) => extractTeamMembers(html).length > 0)
+    || webPeople.some((p) => !!p.name && !!p.role);
+  const firecrawlDomain = firecrawlDomainFor([...verified], hasNamedRoles);
+  if (firecrawlDomain) {
+    const seenPages = [...(firecrawlDomain === siteDomain ? pages : []),
+      ...confirmedSites.filter((s) => s.domain === firecrawlDomain).flatMap((s) => s.pages)];
+    const team = await firecrawl.readTeam(firecrawlDomain, seenPages, left());
+    if (team) extraSitePeople.push(...team.people);
   }
   for (const person of confirmedSites.length > 0 ? peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers) : []) {
     for (const s of confirmedSites) {
@@ -416,8 +438,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   stats.aiCapHit = spend.aiHit;
   // One plain line per search that gave no answer (replaces the old "N searches did not work" count), then the credits.
   steps.push(...worker.lines());
+  steps.push(...firecrawl.lines());
   steps.push(...problemLines(problems));
-  steps.push(creditLine(spend.used));
+  steps.push(creditLine({ ...spend.used, firecrawl: firecrawl.pagesUsed() }));
 
   // LinkedIn auto-capture, like findDecisionMakers, for contacts this run created or filled
   for (const c of all()) {

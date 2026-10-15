@@ -5,10 +5,13 @@ import { lookupCompaniesHouseOfficer } from './companiesHouse.ts';
 import { lookupOpenCorporatesOfficer } from './openCorporates.ts';
 import { lookupApolloPhone, lookupHunterEmail, lookupHunterOwnerEmail } from './apolloHunterLookup.ts';
 import { lookupPlaceContact } from './googlePlacesLookup.ts';
+import { domainFromWebsite } from './knownPerson.ts';
+import type { FirecrawlTeam } from './firecrawlRules.ts';
 
 export interface EnrichLeadRow {
   id: string; org_id: string; business_name: string;
   website: string | null; email: string | null; phone: string | null; owner_name: string | null; city: string | null;
+  blocked_domains?: string[] | null;
 }
 
 // Deno copy of src/types/index.ts's EnrichableField/EnrichmentResult — keep
@@ -27,7 +30,11 @@ export interface EnrichKeys { companiesHouse: string | null; openCorporates: str
 export async function enrichOneLead(
   lead: EnrichLeadRow,
   keys: EnrichKeys,
-  options?: { siteFallback?: (website: string) => Promise<{ email?: string; phone?: string } | null>; checkpoint?: () => Promise<void> },
+  options?: {
+    siteFallback?: (website: string) => Promise<{ email?: string; phone?: string } | null>;
+    teamFallback?: (website: string, pages: string[]) => Promise<FirecrawlTeam | null>;
+    checkpoint?: () => Promise<void>;
+  },
 ): Promise<EnrichResult | null> {
   const proposed: Partial<Record<EnrichField, string>> = {};
   const source: Partial<Record<EnrichField, string>> = {};
@@ -45,7 +52,12 @@ export async function enrichOneLead(
 
   // 1. Website scrape — free, no key required.
   await options?.checkpoint?.();
-  const { email: siteEmail, phone: sitePhone } = await scrapeWebsiteContact(website);
+  const pages: string[] = [];
+  let siteRedirected = false;
+  const { email: siteEmail, phone: sitePhone } = await scrapeWebsiteContact(website, undefined, options?.teamFallback ? (html, finalUrl) => {
+    if (domainFromWebsite(finalUrl) === domainFromWebsite(lead.website)) pages.push(html);
+    else siteRedirected = true;
+  } : undefined);
   if (siteEmail && siteEmail !== lead.email) { proposed.email = siteEmail; source.email = 'website'; }
   if (sitePhone && sitePhone !== lead.phone && !proposed.phone) { proposed.phone = sitePhone; source.phone = 'website'; }
 
@@ -57,7 +69,7 @@ export async function enrichOneLead(
   }
 
   // 2. Companies House (UK) — free registration. Skip if the lead already has an owner_name.
-  if (!lead.owner_name && keys.companiesHouse) {
+  if (!proposed.owner_name && !lead.owner_name && keys.companiesHouse) {
     await options?.checkpoint?.();
     const officer = await lookupCompaniesHouseOfficer(lead.business_name, keys.companiesHouse);
     if (officer && officer !== lead.owner_name) { proposed.owner_name = officer; source.owner_name = 'companies_house'; }
@@ -68,6 +80,14 @@ export async function enrichOneLead(
     await options?.checkpoint?.();
     const officer = await lookupOpenCorporatesOfficer(lead.business_name, keys.openCorporates);
     if (officer && officer !== lead.owner_name) { proposed.owner_name = officer; source.owner_name = 'opencorporates'; }
+  }
+
+  // Free registry lookups get the first chance. Only the saved company site qualifies for Firecrawl.
+  if (!proposed.owner_name && !lead.owner_name && lead.website && !siteRedirected && options?.teamFallback) {
+    await options.checkpoint?.();
+    const team = await options.teamFallback(lead.website, pages);
+    if (team?.people[0]) { proposed.owner_name = team.people[0].name; source.owner_name = 'firecrawl'; }
+    if (!proposed.email && !lead.email && team?.emails[0]) { proposed.email = team.emails[0]; source.email = 'firecrawl'; }
   }
 
   // 4. Apollo/Hunter — paid, opt-in, only for fields still blank after 1–3 AND not already on the lead.

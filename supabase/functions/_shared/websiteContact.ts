@@ -50,6 +50,7 @@ export async function scrapeWebsiteContact(
   website: string | null | undefined,
   /** Most bytes of the page to read. Contact details often sit in a footer, so this is larger than the research fetch cap. */
   maxBytes: number = CONTACT_MAX_BYTES,
+  onPage?: (html: string, finalUrl: string) => void,
 ): Promise<{ email: string | null; phone: string | null }> {
   if (!website) return { email: null, phone: null };
   let url = parseSafeWebsiteUrl(website);
@@ -70,6 +71,7 @@ export async function scrapeWebsiteContact(
       }
       if (!res.ok) { await cancelBody(res); return { email: null, phone: null }; }
       const html = await readCapped(res, controller.signal, maxBytes);
+      onPage?.(html, url.toString());
       return { email: extractEmail(html), phone: extractPhone(html) };
     }
     return { email: null, phone: null };

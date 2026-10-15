@@ -2,7 +2,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { resolveWorkerConfig } from './workerConfig.ts';
 import { readWorkerConfig, type WorkerConfig } from './workerRules.ts';
 
-export type ApiProvider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates' | 'cro' | 'lookup_worker';
+export type ApiProvider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates' | 'cro' | 'lookup_worker' | 'firecrawl';
 
 const GLOBAL_ENV_VARS: Partial<Record<ApiProvider, string>> = {
   gemini: 'GEMINI_API_KEY',
@@ -50,6 +50,8 @@ export async function resolveOrgApiKey(
     const { data: key } = await service.rpc('app_get_org_api_key', { target_org: orgId, target_provider: provider });
     if (key) return key as string;
   }
+  // BYO-only regardless of any current or future environment variable or organisation fallback flag.
+  if (provider === 'firecrawl' || provider === 'lookup_worker') return null;
   const { data: org } = await service.from('organizations').select('use_global_api_fallback').eq('id', orgId).single();
   const variable = GLOBAL_ENV_VARS[provider];
   if (org?.use_global_api_fallback && variable) return Deno.env.get(variable) ?? null;

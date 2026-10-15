@@ -22,6 +22,7 @@ const STEP_LABELS: Record<string, { label: (t: string) => string; provider: stri
   person: { label: (t) => `Looking up ${t}`, provider: '' },
   officers: { label: () => 'Companies House officers', provider: 'Companies House' },
   save: { label: (t) => `Saving ${t}`, provider: 'The database' },
+  firecrawl: { label: (t) => `Firecrawl page read (${t})`, provider: 'Firecrawl' },
 };
 
 /** A name or domain safe for a fixed sentence: letters, digits, spaces, "&", dots and hyphens, at most 60 characters. */
@@ -35,6 +36,7 @@ export function problemReason(provider: string, failure: string): string {
   if (failure === 'dns_error') return 'the DNS check did not answer';
   if (failure === 'unreadable') return 'the website could not be read';
   if (failure === 'timeout') return 'ran out of time';
+  if (failure === 'limit_check') return 'the daily allowance could not be checked';
   if (failure === 'no_key') return `no ${provider} key is set`;
   if (failure === 'network') return `${provider} could not be reached`;
   if (failure === 'bad_reply') return `${provider} sent an answer that could not be read`;
@@ -79,7 +81,7 @@ export function problemLines(problems: ProblemInput[]): string[] {
 }
 
 /** Credits reserved per step ({ hunter: { 'company domains': 5 }, ai: { 'web search': 1 } }). */
-export interface CreditUse { hunter: Record<string, number>; ai: Record<string, number> }
+export interface CreditUse { hunter: Record<string, number>; ai: Record<string, number>; firecrawl?: number }
 
 /**
  * One plain line with the credits this lead used, per step: "Credits used: Hunter 9 (company domains 5, company lists
@@ -92,5 +94,7 @@ export function creditLine(used: CreditUse): string {
     if (total === 0) return `${name} 0`;
     return `${name} ${total} (${entries.map(([k, n]) => `${k.replace(/[^a-z ]/gi, '').slice(0, 30)} ${n}`).join(', ')})`;
   };
-  return `Credits used: ${part('Hunter', used.hunter)}, ${part('AI', used.ai)}.`;
+  const pages = Number.isInteger(used.firecrawl) && used.firecrawl! > 0 ? used.firecrawl! : 0;
+  const firecrawl = used.firecrawl === undefined ? '' : `, Firecrawl ${pages} ${pages === 1 ? 'page' : 'pages'}`;
+  return `Credits used: ${part('Hunter', used.hunter)}, ${part('AI', used.ai)}${firecrawl}.`;
 }

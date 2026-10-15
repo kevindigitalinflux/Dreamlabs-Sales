@@ -89,7 +89,23 @@ describe('lookup tick', () => {
     await runLookupTick(f.service);
     expect(enrichOneLead).not.toHaveBeenCalled();
     expect(findAndStoreDecisionMakers).toHaveBeenCalledOnce();
+    expect(resolveOrgApiKey).not.toHaveBeenCalledWith(f.service, 'org', 'firecrawl');
     expect(f.rpc).toHaveBeenCalledWith('lookup_job_finish', expect.objectContaining({ new_status: 'done', new_review: 'none', new_result: expect.objectContaining({ stored: 1 }) }));
+  });
+  it('uses the same organisation Firecrawl day cap and proposes results without a lead write', async () => {
+    const f = fixture();
+    vi.mocked(resolveOrgApiKey).mockImplementation(async (_service, _org, provider) => provider === 'firecrawl' ? 'fake-firecrawl' : null);
+    const request = vi.fn(async () => Response.json({ success: true, data: { rawHtml: '<p>Jane Smith, Director</p><p>jane@example.com</p>' } }));
+    vi.stubGlobal('fetch', request);
+    vi.mocked(enrichOneLead).mockImplementation(async (_lead, _keys, { teamFallback }) => {
+      const found = await teamFallback('https://example.com', ['<a href="/team">Team</a>']);
+      return { proposed: { owner_name: found.people[0].name, email: found.emails[0] }, source: { owner_name: 'firecrawl', email: 'firecrawl' } };
+    });
+    await runLookupTick(f.service);
+    expect(checkRateLimit).toHaveBeenCalledWith(f.service, 'firecrawl-pages:org', 100, 1440, true);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(f.rpc).toHaveBeenCalledWith('lookup_job_finish', expect.objectContaining({ new_status: 'done', new_review: 'pending',
+      new_result: expect.objectContaining({ proposed: { owner_name: 'Jane Smith', email: 'jane@example.com' } }) }));
   });
   it('uses fixed failure sentences instead of provider errors', async () => {
     vi.mocked(enrichOneLead).mockRejectedValue(new Error('private provider payload'));
