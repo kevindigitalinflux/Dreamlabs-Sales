@@ -7,18 +7,19 @@ vi.mock('../../supabase/functions/_shared/workerConfig', async (original) => ({
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { validateWorkerConnection } from '../../supabase/functions/_shared/workerConfig';
 
-let handler, rpc, updates, member, platformRole, validationError;
+let handler, rpc, updates, member, platformRole, validationError, fallback, sharedIds;
 beforeEach(async () => {
   vi.resetModules(); vi.clearAllMocks();
+  fallback = true; sharedIds = '';
   member = 'admin'; platformRole = null; validationError = null;
   rpc = vi.fn(async (name) => ({ data: name === 'app_get_org_api_key' ? 'https://own.example.com|fake-test-only' : null, error: null }));
   updates = vi.fn(async () => ({ error: null }));
-  vi.stubGlobal('Deno', { env: { get: () => undefined }, serve: (fn) => { handler = fn; } });
+  vi.stubGlobal('Deno', { env: { get: (name) => name === 'WORKER_SHARED_ORG_IDS' ? sharedIds : undefined }, serve: (fn) => { handler = fn; } });
   vi.mocked(createClient).mockReturnValue({ auth: { getUser: async () => ({ data: { user: { id: 'user' } } }) }, rpc,
     from(table) {
       const query = { select: () => query, eq: () => query,
         maybeSingle: async () => ({ data: member ? { role: member } : null }),
-        single: async () => ({ data: table === 'profiles' ? { platform_role: platformRole } : { use_global_api_fallback: true } }),
+        single: async () => ({ data: table === 'profiles' ? { platform_role: platformRole } : { use_global_api_fallback: fallback } }),
         update: (value) => { updates(value); return query; }, upsert: updates,
         then: (resolve) => resolve({ data: [{ provider: 'lookup_worker', is_configured: true }], error: null }),
       };
@@ -59,10 +60,18 @@ it('removes by clearing Vault and disabling the configured flag', async () => {
   expect(rpc).toHaveBeenCalledWith('app_set_org_api_key', { target_org: 'org', target_provider: 'lookup_worker', secret: '' });
   expect(updates).toHaveBeenCalledWith(expect.objectContaining({ is_configured: false }));
 });
-it('withholds platform-only worker management and host disclosure pending architect ruling', async () => {
+it('excludes platform admins without org admin membership from worker management and host disclosure', async () => {
   member = null; platformRole = 'platform_admin';
   expect((await request({ action: 'save', provider: 'lookup_worker', api_key: 'https://own.example.com|fake' })).status).toBe(403);
   expect((await request({ action: 'remove', provider: 'lookup_worker' })).status).toBe(403);
   expect((await (await request({ action: 'get' })).json()).worker_host).toBeNull();
   expect(rpc).not.toHaveBeenCalled();
+});
+
+it.each([[' 87da102c-0e27-45e6-8bea-e2609fe80c12 ', true], ['junk', false]])('reports worker-only shared access without changing the paid fallback flag: %s', async (list, allowed) => {
+  fallback = false; sharedIds = list;
+  const response = await handler(new Request('https://local.test', { method: 'POST', body: JSON.stringify({ action: 'get', org_id: '87da102c-0e27-45e6-8bea-e2609fe80c12' }) }));
+  const data = await response.json();
+  expect(data.use_global_api_fallback).toBe(false);
+  expect(data.shared_worker_allowed).toBe(allowed);
 });

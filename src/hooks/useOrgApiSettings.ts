@@ -48,7 +48,7 @@ export function useOrgApiSettings() {
     if (!error && data && !data.error) {
       setSettings((data as { settings: OrgApiSetting[] }).settings);
       setWorkerHost(data.worker_host ?? null);
-      setSharedWorker(data.use_global_api_fallback === true);
+      setSharedWorker(data.shared_worker_allowed === true);
       setLoadError(null);
     } else setLoadError('Could not load provider settings. Try again.');
     setLoading(false);

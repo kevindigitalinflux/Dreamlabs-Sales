@@ -91,6 +91,26 @@ describe('makeWorkerClient', () => {
     expect(refundCalls(u).length).toBe(0);
   });
 
+  it('refuses redirects and refunds a rejected fetch only once', async () => {
+    const u = usage();
+    const f = vi.fn<typeof fetch>(async (_url, init) => {
+      if (init?.redirect === 'error') throw new TypeError('fetch failed: redirect');
+      return new Response(JSON.stringify(VERIFY_OK), { status: 200 });
+    });
+    const c = make(u, f);
+    expect(await c.verifyEmail('max@loveliving.uk')).toMatchObject({ ok: false, failure: 'unreachable' });
+    await c.verifyEmail('max@loveliving.uk');
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(reserveCalls(u)).toHaveLength(1);
+    expect(refundCalls(u)).toHaveLength(1);
+  });
+  it('treats a returned 302 as unreachable with one refund and stops the kind', async () => {
+    const u = usage(); const f = worker(302, {}); const c = make(u, f);
+    expect(await c.scrapeSite('loveliving.uk')).toMatchObject({ ok: false, failure: 'unreachable' });
+    await c.scrapeSite('loveliving.uk');
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(refundCalls(u)).toHaveLength(1);
+  });
   it('maps a valid reply to ok and counts it in the tally line', async () => {
     const c = make(usage(), worker(200, VERIFY_OK));
     const r = await c.verifyEmail('max@loveliving.uk');

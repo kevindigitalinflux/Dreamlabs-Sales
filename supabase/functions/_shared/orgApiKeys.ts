@@ -56,9 +56,10 @@ export async function resolveOrgApiKey(
   return null;
 }
 
-export async function resolveOrgWorkerConfig(service: SupabaseClient, orgId: string): Promise<WorkerConfig | null> {
+export async function resolveOrgWorkerConfig(service: SupabaseClient, orgId: string, sharedOrgIds: string | undefined): Promise<WorkerConfig | null> {
   try {
     return await resolveWorkerConfig({
+      orgId, sharedOrgIds,
       own: async () => {
         const { data, error } = await service.from('org_api_settings').select('is_configured')
           .eq('org_id', orgId).eq('provider', 'lookup_worker').maybeSingle();

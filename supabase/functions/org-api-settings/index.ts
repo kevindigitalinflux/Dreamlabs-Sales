@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { croRejectionMessage, searchCroCompanies, splitCroSecret } from '../_shared/cro.ts';
-import { parseOrgWorkerSecret, validateWorkerConnection } from '../_shared/workerConfig.ts';
+import { parseOrgWorkerSecret, sharedWorkerAllowed, validateWorkerConnection } from '../_shared/workerConfig.ts';
 
 type Provider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates' | 'cro' | 'lookup_worker';
 
@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
       const config = parseOrgWorkerSecret(typeof value === 'string' ? value : null);
       workerHost = config ? new URL(config.url).host : null;
     }
-    return json({ settings: data, worker_host: workerHost, use_global_api_fallback: org?.use_global_api_fallback === true }, 200, headers);
+    return json({ settings: data, worker_host: workerHost, shared_worker_allowed: sharedWorkerAllowed(orgId, org?.use_global_api_fallback === true, Deno.env.get('WORKER_SHARED_ORG_IDS')), use_global_api_fallback: org?.use_global_api_fallback === true }, 200, headers);
   }
 
   if (body.action === 'remove') {
@@ -149,7 +149,7 @@ Deno.serve(async (req) => {
     if (!canManage) return json({ error: 'Org admin only' }, 403, headers);
     const provider = String(body.provider ?? '') as Provider;
     const apiKey = String(body.api_key ?? '').trim();
-    // Platform-only worker management is withheld pending the architect's ruling on the existing override.
+    // Architect ruling: worker management requires admin membership of this organisation.
     if (provider === 'lookup_worker' && membership?.role !== 'admin')
       return json({ error: 'An admin of this organisation must manage its worker.' }, 403, headers);
     if (!['gemini', 'google_places', 'google_places_pro', 'companies_house', 'apollo', 'hunter', 'anthropic', 'opencorporates', 'cro', 'lookup_worker'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);

@@ -71,7 +71,7 @@ async function processLead(service: SupabaseClient, row: Claimed, job: Job, star
     resolveOrgApiKey(service, job.org_id, 'google_places'),
   ]);
   const worker = makeWorkerClient({ usage: service, orgId: job.org_id,
-    config: await resolveOrgWorkerConfig(service, job.org_id) });
+    config: await resolveOrgWorkerConfig(service, job.org_id, Deno.env.get('WORKER_SHARED_ORG_IDS')) });
   const found = await enrichOneLead(lead, { hunter, apollo, companiesHouse, openCorporates, googlePlaces }, {
     checkpoint,
     siteFallback: async (website) => {
