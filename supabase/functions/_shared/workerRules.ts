@@ -9,6 +9,12 @@ export interface WorkerConfig { url: string; secret: string }
 
 export const SCRAPE_UNITS: Record<ScrapeMode, number> = { homepage: 1, key_pages: 1, deep: 3 };
 export const WORKER_TIMEOUT_MS = { scrape: 25_000, verify: 20_000, fetch: 12_000 } as const;
+
+/** Keep 30 seconds for downstream checks plus 2 seconds of overhead. */
+export function scrapeTimeoutFor(leftMs: number): number | null {
+  const timeout = Math.min(25_000, leftMs - 32_000);
+  return timeout >= 10_000 ? timeout : null;
+}
 export const WORKER_RESOURCE: Record<'scrape' | 'verify' | 'fetch', UsageResource> = {
   scrape: 'worker_scrape', verify: 'worker_verify', fetch: 'worker_fetch',
 };

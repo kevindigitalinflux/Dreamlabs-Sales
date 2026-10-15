@@ -46,6 +46,22 @@ const make = (u: UsageClient, fetchImpl: typeof fetch, config: WorkerConfig | nu
 afterEach(() => { vi.useRealTimers(); });
 
 describe('makeWorkerClient', () => {
+  it('honours the per-call scrape timeout without refunding work still running', async () => {
+    vi.useFakeTimers();
+    const u = usage();
+    let aborted = false;
+    const f = vi.fn<typeof fetch>((_input, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => { aborted = true; reject(new DOMException('aborted', 'AbortError')); });
+    }));
+    const pending = make(u, f).scrapeSite('loveliving.uk', 'key_pages', { timeoutMs: 10_000 });
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(aborted).toBe(true);
+    expect(await pending).toMatchObject({ ok: false, failure: 'unreachable' });
+    expect(reserveCalls(u)).toHaveLength(1);
+    expect(refundCalls(u)).toHaveLength(0);
+  });
   it('returns not_configured without reserving or calling when there is no config', async () => {
     const u = usage();
     const f = worker(200, VERIFY_OK);

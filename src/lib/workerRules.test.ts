@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   MAX_VERIFY_PER_LEAD, SCRAPE_UNITS, WORKER_RESOURCE, failureForStatus, parseScrapeReply, parseVerifyReply, readWorkerConfig,
-  scrapeLine, shouldRefund, unconfirmedLabel, verifyAction, verifyTallyLine, workerFailureLine,
+  scrapeLine, scrapeTimeoutFor, shouldRefund, unconfirmedLabel, verifyAction, verifyTallyLine, workerFailureLine,
 } from '../../supabase/functions/_shared/workerRules';
+
+it.each([[39_000, null], [41_000, null], [42_000, 10_000], [60_000, 25_000], [100_000, 25_000]])('scrape budget at %i ms preserves downstream time', (left, expected) => {
+  expect(scrapeTimeoutFor(left!)).toBe(expected);
+});
 
 describe('readWorkerConfig', () => {
   it('needs both values and an https address', () => {

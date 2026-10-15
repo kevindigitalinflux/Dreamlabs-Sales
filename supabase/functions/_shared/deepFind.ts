@@ -25,7 +25,7 @@ import {
   hunterPeople, namedPersonIsStored, parseLeadPersonName, peopleToLookUp, stuckAction, type ExistingContact, type LeadStats, type SitePerson,
 } from './deepFindRules.ts';
 import { makeWorkerClient } from './workerClient.ts';
-import { readWorkerConfig, unconfirmedLabel, verifyAction } from './workerRules.ts';
+import { readWorkerConfig, scrapeTimeoutFor, unconfirmedLabel, verifyAction } from './workerRules.ts';
 
 export const WALL_BUDGET_MS = 130_000;
 /** A lead is only started when at least this much of the invocation is left. */
@@ -255,8 +255,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const hasContactDetails = (d: string) =>
     (siteEmails.get(d) ?? []).length > 0 || (d === siteDomain && pages.some((html) => !!extractPhone(html)));
   const scrapeDomain = [...verified].find((d) => !hasContactDetails(d) && !isDirectoryDomain(d));
-  if (scrapeDomain && left() > 40_000) {
-    const scraped = await worker.scrapeSite(scrapeDomain, 'key_pages');
+  const scrapeTimeout = scrapeTimeoutFor(left());
+  if (scrapeDomain && scrapeTimeout !== null) {
+    const scraped = await worker.scrapeSite(scrapeDomain, 'key_pages', { timeoutMs: scrapeTimeout });
     if (scraped.ok) {
       const pageOf = (source: string | null) => { try { return source ? ` (${new URL(source).pathname.slice(0, 80)})` : ''; } catch { return ''; } };
       for (const e of scraped.value.emails) {

@@ -13,7 +13,7 @@ export type WorkerResult<T> = { ok: true; value: T } | { ok: false; failure: Wor
 
 export interface WorkerClient {
   verifyEmail(email: string): Promise<WorkerResult<VerifyReply>>;
-  scrapeSite(domain: string, mode?: ScrapeMode): Promise<WorkerResult<ScrapeFound>>;
+  scrapeSite(domain: string, mode?: ScrapeMode, opts?: { timeoutMs?: number }): Promise<WorkerResult<ScrapeFound>>;
   /** Plain step lines for the Deep find result: the check tally, the scrape result, then each distinct skip reason. */
   lines(): string[];
 }
@@ -40,7 +40,7 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
     return { ok: false, failure, line };
   };
 
-  async function call(kind: Kind, units: number, path: string, body: unknown): Promise<RawResult> {
+  async function call(kind: Kind, units: number, path: string, body: unknown, timeoutMs: number = WORKER_TIMEOUT_MS[kind]): Promise<RawResult> {
     const already = stopped[kind];
     if (already) return { ok: false, ...already };
     if (!config) return stop(kind, 'not_configured', workerFailureLine('not_configured'));
@@ -52,7 +52,7 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
     let json: unknown = null;
     const controller = new AbortController();
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, WORKER_TIMEOUT_MS[kind]);
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
     try {
       const res = await fetchImpl(`${config.url}${path}`, {
         method: 'POST', signal: controller.signal,
@@ -96,8 +96,8 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
       else tally.undecided++;
       return { ok: true, value: reply };
     },
-    async scrapeSite(domain, mode = 'key_pages') {
-      const raw = await call('scrape', SCRAPE_UNITS[mode], '/scrape-site', { url: `https://${domain}`, mode });
+    async scrapeSite(domain, mode = 'key_pages', options) {
+      const raw = await call('scrape', SCRAPE_UNITS[mode], '/scrape-site', { url: `https://${domain}`, mode }, options?.timeoutMs);
       if (!raw.ok) return { ok: false, failure: raw.failure, line: raw.line };
       const found = parseScrapeReply(raw.json, domain);
       if (!found) { const line = workerFailureLine('bad_response'); addLine(line); return { ok: false, failure: 'bad_response', line }; }
