@@ -136,8 +136,9 @@ const PROVIDERS: {
   },
 ];
 
-function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configured, onSave }: {
+function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configured, onSave, onRemove }: {
   provider: OrgApiSetting['provider']; label: string; url: string; ctaLabel: string; freeText: string; steps?: string[];
+  onRemove?: () => Promise<string | null>;
   configured: boolean; onSave: (provider: OrgApiSetting['provider'], key: string) => Promise<string | null>;
 }) {
   const [key, setKey] = useState('');
@@ -158,6 +159,20 @@ function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configur
     } finally { setBusy(false); }
   }
 
+  async function handleRemove() {
+    if (!onRemove) return;
+    setBusy(true); setMsg(null);
+    try {
+      const err = await onRemove();
+      if (err) return setMsg({ kind: 'err', text: err });
+      setKey('');
+      setMsg({ kind: 'ok', text: 'Firecrawl key removed.' });
+    } catch {
+      console.error('settings: Firecrawl key could not be removed');
+      setMsg({ kind: 'err', text: 'Could not remove the Firecrawl key. Try again.' });
+    } finally { setBusy(false); }
+  }
+
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-line p-4">
       <div className="flex items-center gap-2">
@@ -169,11 +184,12 @@ function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configur
         )}
       </div>
       <ProviderGuide url={url} ctaLabel={ctaLabel} freeText={freeText} steps={steps} />
-      <div className="flex items-end gap-2">
-        <div className="flex-1">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="min-w-0 flex-1 basis-48">
           <Input label="API key" type={provider === 'firecrawl' ? 'password' : 'text'} autoComplete="off" value={key} onChange={(e) => setKey(e.target.value)} placeholder={configured ? 'Replace the saved key' : ''} />
         </div>
-        <Button variant="secondary" onClick={() => void handleSave()} disabled={busy} loading={busy}>{busy ? 'Verifying…' : 'Save'}</Button>
+        <Button variant="secondary" onClick={() => void handleSave()} disabled={busy} loading={busy}>{busy ? 'Working…' : 'Save'}</Button>
+        {configured && onRemove && <Button variant="secondary" aria-label="Remove Firecrawl key" disabled={busy} onClick={() => void handleRemove()}>Remove</Button>}
       </div>
       {msg && <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : 'text-success'}`}>{msg.text}</p>}
     </div>
@@ -183,7 +199,7 @@ function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configur
 /** Org-level BYO API keys (Gemini/Places/Companies House) — org-admin only. */
 export function OrganizationSettings() {
   const { currentOrg } = useOrg();
-  const { settings, loading, save, workerHost, sharedWorker, removeWorker, loadError } = useOrgApiSettings();
+  const { settings, loading, save, workerHost, sharedWorker, removeWorker, removeFirecrawl, loadError } = useOrgApiSettings();
 
   if (loading) return <Skeleton className="h-80 w-full max-w-2xl" />;
 
@@ -214,6 +230,7 @@ export function OrganizationSettings() {
               steps={p.steps}
               configured={settings.find((s) => s.provider === p.key)?.is_configured ?? false}
               onSave={save}
+              onRemove={p.key === 'firecrawl' && !loadError ? removeFirecrawl : undefined}
             />
           ))}
         </div>

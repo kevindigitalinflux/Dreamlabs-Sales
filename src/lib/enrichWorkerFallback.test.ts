@@ -5,7 +5,7 @@ vi.mock('../../supabase/functions/_shared/openCorporates', () => ({ lookupOpenCo
 vi.mock('../../supabase/functions/_shared/apolloHunterLookup', () => ({ lookupApolloPhone: vi.fn(), lookupHunterEmail: vi.fn(), lookupHunterOwnerEmail: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/googlePlacesLookup', () => ({ lookupPlaceContact: vi.fn() }));
 import { scrapeWebsiteContact } from '../../supabase/functions/_shared/websiteContact';
-import { lookupHunterEmail } from '../../supabase/functions/_shared/apolloHunterLookup';
+import { lookupHunterEmail, lookupHunterOwnerEmail } from '../../supabase/functions/_shared/apolloHunterLookup';
 import { lookupPlaceContact } from '../../supabase/functions/_shared/googlePlacesLookup';
 import { lookupCompaniesHouseOfficer } from '../../supabase/functions/_shared/companiesHouse';
 import { enrichOneLead } from '../../supabase/functions/_shared/enrichLead';
@@ -86,4 +86,41 @@ it('passes already read same-domain links without an extra page fetch, and rejec
   teamFallback.mockClear();
   await enrichOneLead(lead, keys, { teamFallback });
   expect(teamFallback).not.toHaveBeenCalled();
+});
+
+it('prefers a decision maker over the first team member', async () => {
+  const result = await enrichOneLead(lead, keys, { teamFallback: async () => ({ people: [
+    { name: 'Alice Smith', role: 'Designer' }, { name: 'Jane Jones', role: 'Founder' },
+  ], emails: [] }) });
+  expect(result?.proposed.owner_name).toBe('Jane Jones');
+});
+it.each(['Owner', 'Director', 'Founder', 'Managing Director', 'CEO', 'Proprietor', 'Principal', 'Partner'])('offers a %s for review without using the new name in Hunter', async (role) => {
+  vi.mocked(lookupHunterEmail).mockResolvedValue('info@example.com');
+  const result = await enrichOneLead(lead, { ...keys, hunter: 'fake' }, { teamFallback: async () => ({ people: [{ name: 'Jane Smith', role }], emails: [] }) });
+  expect(result?.proposed.owner_name).toBe('Jane Smith');
+  expect(lookupHunterOwnerEmail).not.toHaveBeenCalled();
+  expect(lookupHunterEmail).toHaveBeenCalledWith(lead.website, 'fake');
+});
+it('does not propose an owner from people whose roles do not match', async () => {
+  expect(await enrichOneLead(lead, keys, { teamFallback: async () => ({ people: [{ name: 'Jane Smith', role: 'Designer' }], emails: [] }) })).toBeNull();
+});
+it('still uses a saved owner name for Hunter', async () => {
+  vi.mocked(lookupHunterOwnerEmail).mockResolvedValue('jane@example.com');
+  await enrichOneLead({ ...lead, owner_name: 'Jane Smith' }, { ...keys, hunter: 'fake' });
+  expect(lookupHunterOwnerEmail).toHaveBeenCalledWith(lead.website, 'Jane Smith', 'fake');
+});
+it('returns earlier proposals when the Firecrawl checkpoint fails', async () => {
+  vi.mocked(scrapeWebsiteContact).mockResolvedValue({ email: null, phone: '1234567890' });
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  let checks = 0;
+  const fallback = vi.fn();
+  try {
+    const result = await enrichOneLead(lead, { ...keys, hunter: 'fake' }, { teamFallback: fallback, checkpoint: async () => {
+      if (++checks === 3) throw new Error('private-checkpoint');
+    } });
+    expect(result?.proposed).toEqual({ phone: '1234567890' });
+    expect(fallback).not.toHaveBeenCalled();
+    expect(lookupHunterEmail).not.toHaveBeenCalled();
+    expect(log.mock.calls).toEqual([['lookup: Firecrawl checkpoint failed']]);
+  } finally { log.mockRestore(); }
 });

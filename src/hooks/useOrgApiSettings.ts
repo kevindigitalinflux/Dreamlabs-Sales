@@ -76,10 +76,10 @@ export function useOrgApiSettings() {
     return null;
   }, [currentOrg, refresh]);
 
-  const removeWorker = useCallback(async (): Promise<string | null> => {
+  const removeKey = useCallback(async (provider: 'lookup_worker' | 'firecrawl'): Promise<string | null> => {
     if (!currentOrg) throw new Error('No organization selected');
     const { data, error } = await supabase.functions.invoke('org-api-settings', {
-      body: { action: 'remove', org_id: currentOrg.id, provider: 'lookup_worker' },
+      body: { action: 'remove', org_id: currentOrg.id, provider },
     });
     if (error) return await extractErrorMessage(error);
     if (data?.error) return data.error as string;
@@ -89,5 +89,6 @@ export function useOrgApiSettings() {
 
   const ready = loadedOrg === currentOrg?.id;
   return { settings: ready ? settings : [], loading: loading || !ready, save, refresh,
-    workerHost: ready ? workerHost : null, sharedWorker: ready && sharedWorker, removeWorker, loadError: ready ? loadError : null };
+    workerHost: ready ? workerHost : null, sharedWorker: ready && sharedWorker, removeWorker: () => removeKey('lookup_worker'),
+    removeFirecrawl: () => removeKey('firecrawl'), loadError: ready ? loadError : null };
 }

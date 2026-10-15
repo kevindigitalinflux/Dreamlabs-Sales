@@ -24,6 +24,7 @@ describe('Firecrawl client', () => {
   });
   it('does not call the network without a key, safe domain or time reserve', async () => {
     const absent = setup(null);
+    expect(absent.client.lines()).toEqual([]);
     expect(await absent.client.readTeam('example.com', [], 70_000)).toBeNull();
     expect(absent.client.lines()).toEqual(['Firecrawl is not set up for this organisation.']);
     expect(absent.reserve).not.toHaveBeenCalled(); expect(absent.request).not.toHaveBeenCalled();
@@ -85,4 +86,27 @@ describe('Firecrawl client', () => {
     await expect(client.readTeam('example.com', [], 70_000)).rejects.toThrow('stopped');
     expect(request).not.toHaveBeenCalled(); expect(reserve).not.toHaveBeenCalled();
   });
+});
+
+it.each(['validation', 'reserve', 'request', 'json'])('logs only fixed context for a Firecrawl %s exception', async (stage) => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    const fail = async () => { throw new Error('private-URL-key'); };
+    if (stage === 'validation') await validateFirecrawlKey('fake', fail);
+    else {
+      const c = makeFirecrawlClient({ key: 'fake', reserve: stage === 'reserve' ? fail : async () => true,
+        request: stage === 'request' ? fail : async () => new Response('{invalid JSON') });
+      await c.readTeam('example.com', [], 70_000);
+    }
+    expect(log.mock.calls).toHaveLength(1);
+    expect(log.mock.calls[0]).toHaveLength(1);
+    expect(log.mock.calls[0][0]).toMatch(/^firecrawl: /);
+    expect(JSON.stringify(log.mock.calls)).not.toContain('private');
+  } finally { log.mockRestore(); }
+});
+it('keeps non-owner people visible in plain step text', async () => {
+  const request = async () => Response.json({ success: true, data: { rawHtml: '<script type="application/ld+json">{"@type":"Person","name":"Alice Smith","jobTitle":"Marketing Manager"}</script>' } });
+  const client = makeFirecrawlClient({ key: 'fake', reserve: async () => true, request });
+  await client.readTeam('example.com', [], 70_000);
+  expect(client.lines().join(' ')).toContain('Alice Smith (Marketing Manager)');
 });

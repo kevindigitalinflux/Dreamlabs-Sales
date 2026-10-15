@@ -1,6 +1,6 @@
 # Next steps (the to-do list for Codex and Claude)
 
-Updated 2026-10-15 (checkpoint). Exact resume point: `docs/HANDOFF.md`. Order matters. Roles are the defaults of the shared workflow (vault `_Team/Shared agent workflow.md`): either agent may plan or build when Kevin confirms and records the assignment. Kevin merges unless he authorizes otherwise.
+Updated 2026-10-16 (stacked review fixes). [x] means built AND independently reviewed; local review fixes remain [ ] until rereview. Exact resume point: `docs/HANDOFF.md`. Order matters. Roles are the defaults of the shared workflow (vault `_Team/Shared agent workflow.md`): either agent may plan or build when Kevin confirms and records the assignment. Kevin merges unless he authorizes otherwise.
 
 ## 0. Right now (Kevin + Architect)
 - [x] Kevin reran Deep find on Love Living after `4eae38d`; Claude's 2026-10-15 handoff records 3 addresses / 3 phones, checker results, and no duplicate suggestion. Codex did not repeat this live check.
@@ -8,17 +8,17 @@ Updated 2026-10-15 (checkpoint). Exact resume point: `docs/HANDOFF.md`. Order ma
 
 ## 1. (DONE 2026-10-16, live) Stage 2: "Fill in missing details" and "Find decision maker" as background jobs (Builder, after the Architect's short spec)
 
-Build checkpoint (Codex, 2026-10-15): branch `codex/stage2-background-lookups`, local only. Claude's security/data rulings and Kevin-supplied review fixes are implemented. Independent rereview and Kevin's application/deployment authorization remain pending.
+Stage 2 is reviewed and LIVE at c929423 per Claude’s 2026-10-16 handoff. Kevin applied migration 061 and ran the rollback audit (63 PASS / 0 FAIL); functions and frontend deployed, live checks complete. The earlier build-only checkpoint is superseded.
 - [x] Separate scrape-budget fix: 30 s downstream reserve plus 2 s overhead, minimum scrape 10 s, per-call client timeout and no-refund tests.
 - [x] Pure lookup rules, guarded queue runner, cron/create/cancel endpoint and worker fallback.
 - [x] Jobs source, mapper, results route, existing enrichment review UI, and both buttons switched to queue creation.
-- [x] Complete migration 061 and expand the rollback audit (neither executed; refusal guard removed after the rulings were implemented).
+- [x] Complete reviewed migration 061 and rollback audit (applied/run by Kevin; 63 PASS, rolled back).
 - [x] Result SELECT requires org membership plus `can_view_lead`; authenticated review requires membership plus `can_edit_lead` and changes only pending review to applied/dismissed.
 - [x] Deleted leads cascade their result rows; `lead_count` stays a snapshot. Runner handles a vanished claim without crashing; no placeholder rows.
 - [x] Apply supplied review fixes A and minors 1, 3–10, 12, 14; gates pass (82 files / 1,349 tests). See HANDOFF "Review fixes applied". Deferred items remain untouched.
-- [ ] Claude rereviews the review-fix commit, including migration lock order and new rollback audit checks.
-- [ ] Kevin authorizes/applies the reviewed migration, then authorizes deployments and live UI/usage checks. No merge/push/deploy authorization exists for this branch.
-Why: both buttons run in one browser request today; adding worker calls (scraper up to 25 s, email checks up to 20 s each) would time out. Make them queued background jobs that show in the Jobs tracker (`/jobs`).
+- [x] Independent Stage 2 review completed; Important findings fixed in c929423 (Claude handoff).
+- [x] Stage 2 migration applied, functions/frontend deployed and live UI/usage checks complete (Claude handoff). New stacked-branch publication remains unauthorized.
+Original rationale: both buttons ran in one browser request; adding worker calls (scraper up to 25 s, email checks up to 20 s each) would time out. Make them queued background jobs that show in the Jobs tracker (`/jobs`).
 
 What exists to reuse:
 - Worker connection: `supabase/functions/_shared/workerClient.ts` + `workerRules.ts` (reserve usage first, refund at most once and only when the worker did no work, fail closed, stops a kind after the first limit/busy/unreachable). Tests in `src/lib/workerClient.test.ts`, `src/lib/workerRules.test.ts`.
@@ -34,7 +34,7 @@ Requirements (decided with Kevin):
 - Docs: `CLAUDE.md` entry, `docs/AUTOMATIONS.md` row.
 Process: Kevin approved the Stage 2 spec/build and supplied Claude's rulings on 2026-10-15; Codex remains builder and Claude architect/reviewer. Independent review precedes approval to apply/deploy.
 
-## 2. After Stage 2 (each needs its own short spec first; Architect)
+## 2. Approved follow-ups (built locally under the approved three-part spec; rereview pending)
 - Firecrawl as a BYO-key provider per organisation (no global fallback), used for team/about pages when roles are missing.
 - Per-organisation worker address/secret (`lookup_worker` provider) so another organisation can bring its own worker; four organisations retain shared worker access: two via the existing fallback flag; UX Tree/Academy require WORKER_SHARED_ORG_IDS. The paid-key flag stays false for those two.
 - Desktop pop-up notifications for the Jobs bar.
@@ -45,8 +45,9 @@ Process: Kevin approved the Stage 2 spec/build and supplied Claude's rulings on 
 - Firewall reboot test for the VPS scraper container (`worker/scraper-firewall.sh`) at a maintenance window.
 
 ## 2026-10-16 approved three-part build (local stacked branches)
-- [ ] Part 1: desktop popups built on codex/popups; 83 files / 1,362 tests; tsc/build pass. Claude review and browser checks pending.
-- [ ] Part 2: per-organisation worker address/secret built on codex/worker-keys; migration 062/audit unexecuted; 85 files / 1,386 tests; tsc/build pass. Review fixes built; independent rereview pending. Org admin membership ruling confirmed. Worker-only allow-list must be configured before deployment.
-- [ ] Part 3: Firecrawl BYO provider built on codex/firecrawl; migration 063/audit unexecuted; 89 files / 1,425 tests; tsc/build pass. Review questions: platform-only access and existing non-atomic daily limiter. No publication authorized.
+- [ ] Part 1: desktop popups built on codex/popups; 84 files / 1,366 tests; tsc/build pass. M7/M8 fixed; independent rereview/browser checks pending; not deployed.
+- [ ] Part 2: per-organisation worker address/secret built on codex/worker-keys; migration 062/audit unexecuted; 87 files / 1,398 tests; tsc/build pass. Review fixes built; independent rereview pending. Org admin membership ruling confirmed. Worker-only allow-list must be configured before deployment.
+- [ ] Part 3: Firecrawl BYO provider built on codex/firecrawl; migration 063/audit unexecuted; 92 files / 1,463 tests; tsc/build pass. Both architect rulings answered: org admin membership required; existing non-atomic daily limiter accepted. Review fixes built, independent rereview pending. No publication authorized.
 
-- [ ] Popup M7/M8 review fixes built and gated on codex/popups (84 files / 1,366 tests); independent rereview and browser verification pending, not deployed.
+- [ ] Kevin configures WORKER_SHARED_ORG_IDS for UX Tree/Academy (paid-key fallback remains false).
+- [ ] After independent rereview and separate authorization, Kevin applies 062 then 063, runs rollback audits, and authorizes functions/frontend deployment and browser/provider checks. Nothing from these three branches is deployed.

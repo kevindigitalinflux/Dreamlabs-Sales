@@ -286,8 +286,12 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   if (firecrawlDomain) {
     const seenPages = [...(firecrawlDomain === siteDomain ? pages : []),
       ...confirmedSites.filter((s) => s.domain === firecrawlDomain).flatMap((s) => s.pages)];
-    const team = await firecrawl.readTeam(firecrawlDomain, seenPages, left());
-    if (team) extraSitePeople.push(...team.people);
+    try {
+      const team = await firecrawl.readTeam(firecrawlDomain, seenPages, left());
+      if (team) extraSitePeople.push(...team.people);
+    } catch {
+      console.error('deep find: Firecrawl checkpoint failed');
+    }
   }
   for (const person of confirmedSites.length > 0 ? peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers) : []) {
     for (const s of confirmedSites) {

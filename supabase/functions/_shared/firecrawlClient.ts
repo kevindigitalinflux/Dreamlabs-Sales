@@ -15,7 +15,10 @@ export async function validateFirecrawlKey(key: string, request: typeof fetch = 
     const value = JSON.parse(await readCapped(response, signal, 20_000)) as { success?: boolean; data?: { remainingCredits?: number } };
     return value.success === true && typeof value.data?.remainingCredits === 'number' && Number.isFinite(value.data.remainingCredits)
       ? null : 'The Firecrawl key could not be verified. Try again.';
-  } catch { return 'The Firecrawl key could not be verified. Try again.'; }
+  } catch {
+    console.error('firecrawl: key check failed');
+    return 'The Firecrawl key could not be verified. Try again.';
+  }
 }
 
 /** One instance per lead/run. A submitted page is counted even on timeout; no retries or silent credit refunds. */
@@ -23,25 +26,25 @@ export function makeFirecrawlClient(deps: { key: string | null; reserve(): Promi
   const request = deps.request ?? fetch;
   let attempted = false;
   let used = 0;
-  const lines: string[] = validKey(deps.key) ? [] : [FIRECRAWL_NOT_CONFIGURED];
+  const lines: string[] = [];
   const add = (line: string) => { if (!lines.includes(line)) lines.push(line); };
   const problem = (domain: string, failure: string) => problemLines([{ step: 'firecrawl', target: domain, failure }]).forEach(add);
   return {
     pagesUsed: () => used,
     lines: () => [...lines],
     async readTeam(domain: string, pages: string[], leftMs: number): Promise<FirecrawlTeam | null> {
-      if (!validKey(deps.key)) { add(FIRECRAWL_NOT_CONFIGURED); return null; }
       if (attempted) return null;
       const url = chooseFirecrawlPage(domain, pages);
       const timeoutMs = firecrawlTimeoutFor(leftMs);
       if (!url) { add('Firecrawl was skipped because no confirmed public company domain was available.'); return null; }
       if (timeoutMs === null) { add('Firecrawl was skipped to leave time for the remaining checks.'); return null; }
+      if (!validKey(deps.key)) { add(FIRECRAWL_NOT_CONFIGURED); return null; }
       attempted = true;
       const deadline = Date.now() + leftMs;
-      // Checkpoints throw cancellation/permission errors to the runner rather than hiding them as provider errors.
+      // The calling engine catches checkpoint failures to keep its earlier summary/proposals.
       await deps.checkpoint?.();
       let allowed: boolean;
-      try { allowed = await deps.reserve(); } catch { problem(domain, 'limit_check'); return null; }
+      try { allowed = await deps.reserve(); } catch { console.error('firecrawl: limit check failed'); problem(domain, 'limit_check'); return null; }
       if (!allowed) { add('Firecrawl was skipped: the daily limit for this organisation was reached.'); return null; }
       await deps.checkpoint?.();
       const currentTimeout = firecrawlTimeoutFor(deadline - Date.now());
@@ -60,12 +63,13 @@ export function makeFirecrawlClient(deps: { key: string | null; reserve(): Promi
         const text = await readCapped(response, signal, FIRECRAWL_MAX_BYTES);
         if (signal.aborted) { problem(domain, 'timeout'); return null; }
         let payload: unknown;
-        try { payload = JSON.parse(text); } catch { problem(domain, 'bad_reply'); return null; }
+        try { payload = JSON.parse(text); } catch { console.error('firecrawl: reply could not be parsed'); problem(domain, 'bad_reply'); return null; }
         const result = parseFirecrawlReply(payload, domain);
         if (!result) { problem(domain, 'bad_reply'); return null; }
         add(`Read one company page with Firecrawl: found ${result.people.length} people with roles.`);
+        if (result.people.length) add(`People found on the company page: ${result.people.map((p) => `${p.name} (${p.role})`).join('; ')}.`);
         return result;
-      } catch { problem(domain, signal.aborted ? 'timeout' : 'network'); return null; }
+      } catch { console.error('firecrawl: page request failed'); problem(domain, signal.aborted ? 'timeout' : 'network'); return null; }
     },
   };
 }

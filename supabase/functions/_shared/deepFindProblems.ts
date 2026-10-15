@@ -95,6 +95,6 @@ export function creditLine(used: CreditUse): string {
     return `${name} ${total} (${entries.map(([k, n]) => `${k.replace(/[^a-z ]/gi, '').slice(0, 30)} ${n}`).join(', ')})`;
   };
   const pages = Number.isInteger(used.firecrawl) && used.firecrawl! > 0 ? used.firecrawl! : 0;
-  const firecrawl = used.firecrawl === undefined ? '' : `, Firecrawl ${pages} ${pages === 1 ? 'page' : 'pages'}`;
+  const firecrawl = pages === 0 ? '' : `, Firecrawl ${pages} ${pages === 1 ? 'page' : 'pages'}`;
   return `Credits used: ${part('Hunter', used.hunter)}, ${part('AI', used.ai)}${firecrawl}.`;
 }

@@ -43,6 +43,7 @@ describe('Firecrawl rules', () => {
   it('adds a fixed Firecrawl problem label and optional credits without breaking old wording', () => {
     expect(problemLines([{ step: 'firecrawl', target: 'example.com', failure: '402' }])[0]).toContain('Firecrawl');
     expect(creditLine({ hunter: {}, ai: {} })).toBe('Credits used: Hunter 0, AI 0.');
+    expect(creditLine({ hunter: {}, ai: {}, firecrawl: 0 })).toBe('Credits used: Hunter 0, AI 0.');
     expect(creditLine({ hunter: {}, ai: {}, firecrawl: 1 })).toBe('Credits used: Hunter 0, AI 0, Firecrawl 1 page.');
   });
 });

@@ -16,9 +16,10 @@ import { discoverLeadDomains } from '../../supabase/functions/_shared/domainDisc
 import { readCompanyPages } from '../../supabase/functions/_shared/knownPersonLookup';
 import { lookUpPeople } from '../../supabase/functions/_shared/deepFindPeople';
 import { processDeepFindLead } from '../../supabase/functions/_shared/deepFind';
-let request, service, write, contacts;
+let request, service, write, contacts, checkpointError, checkpointReads;
 beforeEach(() => {
-  vi.clearAllMocks(); contacts = []; write = vi.fn();
+  vi.clearAllMocks(); contacts = []; checkpointError = false; checkpointReads = 0;
+  vi.stubGlobal('Deno', { env: { get: () => undefined } }); write = vi.fn();
   vi.mocked(resolveOrgApiKey).mockImplementation(async (_s, _o, provider) => provider === 'firecrawl' ? 'fake-key' : null);
   vi.mocked(resolveOrgWorkerConfig).mockResolvedValue(null);
   vi.mocked(checkRateLimit).mockResolvedValue(true);
@@ -31,7 +32,7 @@ beforeEach(() => {
   service = { rpc: vi.fn(async () => ({ data: true, error: null })), from(table) {
     const data = table === 'leads' ? { id: 'lead', org_id: 'org', website: 'https://example.com', business_name: 'Example', owner_name: null }
       : table === 'deep_find_runs' ? { status: 'active' } : contacts;
-    const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data, error: null }),
+    const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data, error: table === 'deep_find_runs' && ++checkpointReads === checkpointError ? { message: 'private-checkpoint' } : null }),
       insert: write, upsert: write, update: write, then: (resolve) => resolve({ data, error: null }) };
     return query;
   } };
@@ -51,4 +52,26 @@ it('does not scrape if a named person already has a role, or the domain is uncon
   contacts = [];
   vi.mocked(discoverLeadDomains).mockResolvedValue({ domains: [{ domain: 'example.com', needs_check: true, sources: ['web'] }], people: [], notes: [], problems: [], sitePages: [] });
   await process(); expect(request).not.toHaveBeenCalled();
+});
+
+it('mentions a missing Firecrawl key only for eligible leads and never shows a zero counter', async () => {
+  vi.mocked(resolveOrgApiKey).mockResolvedValue(null);
+  contacts = [{ first_name: 'Jane', last_name: 'Smith', title: 'Director', email: 'jane@example.com' }];
+  const ineligible = await process();
+  expect(JSON.stringify(ineligible)).not.toContain('Firecrawl');
+  contacts = [];
+  const eligible = await process();
+  expect(JSON.stringify(eligible)).toContain('Firecrawl is not set up for this organisation.');
+  expect(JSON.stringify(eligible)).not.toContain('Firecrawl 0');
+  expect(request).not.toHaveBeenCalled();
+});
+it.each([1, 2])('preserves the summary if Firecrawl access checkpoint %s fails mid-lead', async (at) => {
+  checkpointError = at;
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const result = await process();
+  expect(result.status).toBe('done');
+  expect(result.domains).toBeDefined();
+  expect(request).not.toHaveBeenCalled();
+  expect(log).toHaveBeenCalledWith('deep find: Firecrawl checkpoint failed');
+  expect(JSON.stringify(log.mock.calls)).not.toContain('private-checkpoint');
 });

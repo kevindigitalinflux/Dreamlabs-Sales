@@ -136,14 +136,16 @@ Deno.serve(async (req) => {
 
   if (body.action === 'remove') {
     if (!canManage) return json({ error: 'Org admin only' }, 403, headers);
-    if (membership?.role !== 'admin') return json({ error: 'An admin of this organisation must manage its worker.' }, 403, headers);
-    if (body.provider !== 'lookup_worker') return json({ error: 'Invalid provider' }, 400, headers);
+    if (membership?.role !== 'admin') return json({ error: 'An admin of this organisation must manage this provider.' }, 403, headers);
+    const provider = String(body.provider ?? '');
+    if (provider !== 'lookup_worker' && provider !== 'firecrawl') return json({ error: 'Invalid provider' }, 400, headers);
+    const removalError = provider === 'firecrawl' ? 'Could not remove the Firecrawl key.' : 'Could not remove the worker connection.';
     // Clear Vault first; a partial failure fails closed instead of reusing an old credential.
-    const { error: vaultError } = await service.rpc('app_set_org_api_key', { target_org: orgId, target_provider: 'lookup_worker', secret: '' });
-    if (vaultError) return json({ error: 'Could not remove the worker connection.' }, 500, headers);
+    const { error: vaultError } = await service.rpc('app_set_org_api_key', { target_org: orgId, target_provider: provider, secret: '' });
+    if (vaultError) return json({ error: removalError }, 500, headers);
     const { error } = await service.from('org_api_settings').update({ is_configured: false, updated_at: new Date().toISOString() })
-      .eq('org_id', orgId).eq('provider', 'lookup_worker');
-    if (error) return json({ error: 'Could not remove the worker connection.' }, 500, headers);
+      .eq('org_id', orgId).eq('provider', provider);
+    if (error) return json({ error: removalError }, 500, headers);
     return json({ ok: true }, 200, headers);
   }
 

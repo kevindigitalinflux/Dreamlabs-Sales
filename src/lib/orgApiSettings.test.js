@@ -84,6 +84,7 @@ it('rejects invalid Firecrawl keys without saving or returning raw provider text
 it.each(['contractor', null])('rejects Firecrawl management by role %s, including platform-only override', async (role) => {
   member = role; platformRole = 'platform_admin';
   expect((await request({ action: 'save', provider: 'firecrawl', api_key: 'fake-firecrawl' })).status).toBe(403);
+  expect((await request({ action: 'remove', provider: 'firecrawl' })).status).toBe(403);
   expect(validateFirecrawlKey).not.toHaveBeenCalled(); expect(rpc).not.toHaveBeenCalled();
 });
 
@@ -93,4 +94,21 @@ it.each([[' 87da102c-0e27-45e6-8bea-e2609fe80c12 ', true], ['junk', false]])('re
   const data = await response.json();
   expect(data.use_global_api_fallback).toBe(false);
   expect(data.shared_worker_allowed).toBe(allowed);
+});
+
+it('lets an org admin remove Firecrawl by clearing Vault before disabling metadata', async () => {
+  const result = await request({ action: 'remove', provider: 'firecrawl' });
+  expect(result.status).toBe(200);
+  expect(await result.json()).toEqual({ ok: true });
+  expect(rpc).toHaveBeenCalledWith('app_set_org_api_key', { target_org: 'org', target_provider: 'firecrawl', secret: '' });
+  expect(updates).toHaveBeenCalledWith(expect.objectContaining({ is_configured: false }));
+  expect(rpc.mock.invocationCallOrder[0]).toBeLessThan(updates.mock.invocationCallOrder[0]);
+  expect(validateFirecrawlKey).not.toHaveBeenCalled();
+});
+it('does not disable Firecrawl metadata if clearing Vault fails', async () => {
+  rpc.mockResolvedValue({ error: { message: 'private-key' }, data: null });
+  const result = await request({ action: 'remove', provider: 'firecrawl' });
+  expect(result.status).toBe(500);
+  expect(JSON.stringify(await result.json())).not.toContain('private-key');
+  expect(updates).not.toHaveBeenCalled();
 });

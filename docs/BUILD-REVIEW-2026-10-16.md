@@ -1,10 +1,10 @@
 # Build review — 2026-10-16
 
-Local stacked branches only. Codex builder; Claude architect/reviewer. Main remains d7294d9cf8c567cd140c5a095b5a140bca0ae530. No push, merge, deployment, SQL execution or remote write. Commit hooks disabled to avoid the forbidden outside-project vault sync. All builds retain the existing bundle-size warning. Browser/live/Deno-runtime checks are pending; shim typechecks are not deno check.
+Local stacked branches only. Codex builder; Claude architect/reviewer. Main remains d7294d9cf8c567cd140c5a095b5a140bca0ae530. No push/main merge, deployment, SQL execution or remote write. Kevin authorized only the two local merges between these stacked branches during review fixes. Commit hooks disabled to avoid the forbidden outside-project vault sync. All builds retain the existing bundle-size warning. Browser/live/Deno-runtime checks are pending; shim typechecks are not deno check.
 
 ## Part 1: popups
 
-Review range: main..codex/popups. TypeScript PASS, 0 diagnostics; Vitest PASS 83 files / 1,362 tests; build PASS 2,750 modules.
+Review range: main..codex/popups. TypeScript PASS, 0 diagnostics; Vitest PASS 84 files / 1,366 tests; build PASS 2,751 modules.
 
 Commits (oldest first):
 
@@ -20,6 +20,8 @@ Files changed relative to the preceding branch:
 - src/components/settings/DesktopNotificationsCard.tsx
 - src/hooks/useDesktopNotifications.ts
 - src/hooks/useJobs.tsx
+- src/lib/jobs/desktopNotifications.test.ts
+- src/lib/jobs/desktopNotifications.ts
 - src/lib/jobs/popups.test.ts
 - src/lib/jobs/popups.ts
 - src/pages/Settings.tsx
@@ -28,7 +30,7 @@ Pending: Claude review and actual browser permission/background/click/phone/them
 
 ## Part 2: worker keys
 
-Review range: codex/popups..codex/worker-keys. TypeScript PASS, 0 diagnostics; Vitest PASS 85 files / 1,386 tests; build PASS 2,751 modules. Expanded edge-code shim typecheck PASS.
+Review range: codex/popups..codex/worker-keys. TypeScript PASS, 0 diagnostics; Vitest PASS 87 files / 1,398 tests; build PASS 2,753 modules. Expanded edge-code shim typecheck PASS.
 
 Commits (oldest first):
 
@@ -38,27 +40,32 @@ Commits (oldest first):
 Files changed relative to the preceding branch:
 
 - CLAUDE.md
+- docs/AUTOMATIONS.md
 - docs/HANDOFF.md
 - docs/NEXT-STEPS.md
 - src/components/settings/LookupWorkerCard.tsx
 - src/hooks/useOrgApiSettings.ts
 - src/lib/lookupJobs.test.js
 - src/lib/orgApiSettings.test.js
+- src/lib/workerClient.test.ts
 - src/lib/workerConfig.test.ts
+- src/lib/workerStatus.test.ts
+- src/lib/workerStatus.ts
 - src/pages/OrganizationSettings.tsx
 - supabase/audits/lookup_worker_provider.sql
 - supabase/functions/_shared/deepFind.ts
 - supabase/functions/_shared/lookupJobs.ts
 - supabase/functions/_shared/orgApiKeys.ts
+- supabase/functions/_shared/workerClient.ts
 - supabase/functions/_shared/workerConfig.ts
 - supabase/functions/org-api-settings/index.ts
 - supabase/migrations/062_lookup_worker_provider.sql
 
-Pending: Claude review, migration 062 and rollback audit (not executed), actual Settings/worker validation. Platform-only management is withheld pending org-admin scope ruling. Inherited static DNS-rebinding limitation remains; own workers still consume the shared pool by design. Confirm intended org fallback flags at rollout; none were changed.
+Pending: Claude review, migration 062 and rollback audit (not executed), actual Settings/worker validation. Answered ruling: worker/Firecrawl management requires ADMIN membership of that org; platform admins without it stay excluded. Inherited static DNS-rebinding limitation remains; own workers still consume the shared pool by design. Keep the paid-key fallback flags unchanged. Before rollout, set WORKER_SHARED_ORG_IDS to include UX Tree and Digital Influx Academy; required UUIDs are in HANDOFF. Both engines and Settings use this worker-only allow-list.
 
 ## Part 3: Firecrawl
 
-Review range: codex/worker-keys..codex/firecrawl. TypeScript PASS, 0 diagnostics; Vitest PASS 89 files / 1,425 tests; build PASS 2,751 modules. Expanded edge-code shim typecheck PASS.
+Review range: codex/worker-keys..codex/firecrawl. TypeScript PASS, 0 diagnostics; Vitest PASS 92 files / 1,463 tests; build PASS 2,753 modules. Expanded edge-code shim typecheck PASS.
 
 Commits (oldest first):
 
@@ -81,6 +88,7 @@ Files changed relative to the preceding branch:
 - src/lib/lookupJobs.test.js
 - src/lib/orgApiKeys.test.js
 - src/lib/orgApiSettings.test.js
+- src/lib/organizationSettings.test.ts
 - src/pages/OrganizationSettings.tsx
 - supabase/audits/firecrawl_provider.sql
 - supabase/functions/_shared/deepFind.ts
@@ -94,6 +102,20 @@ Files changed relative to the preceding branch:
 - supabase/functions/org-api-settings/index.ts
 - supabase/migrations/063_firecrawl_provider.sql
 
-Pending: Claude review, migration 063 and rollback audit (not executed), actual provider/Settings/EdgeRuntime checks. Platform-only management is withheld. Existing requested checkRateLimit implementation is not atomic under concurrency; strict daily spend enforcement awaits an architect decision. Page count is submitted requests, not exact provider credits. Full decisions/security notes are in HANDOFF Part 3.
+Pending: Claude review, migration 063 and rollback audit (not executed), actual provider/Settings/EdgeRuntime checks. Both rulings ANSWERED: organisation-admin membership is mandatory; platform-only admins excluded. Kevin accepts the existing non-atomic checkRateLimit daily cap; it is not a strict billing bound under concurrency. Page count is submitted requests, not exact provider credits. Full decisions/security notes are in HANDOFF Part 3.
 
-Next: Claude reviews the three ranges in order and rules on the two withheld questions. Kevin then separately authorizes SQL application (062 then 063), audits, and deployment. Nothing has been published.
+Next: Claude rereviews the three updated ranges in order against the supplied findings; no architect question remains. Kevin then separately authorizes SQL application (062 then 063), audits, and deployment. Nothing has been published.
+
+## Review-fix round (2026-10-16)
+
+Kevin supplied the independent findings and confirmed Codex BUILDER. The fixes themselves await independent rereview. All findings in the requested scope are implemented; no outstanding architect question.
+
+| Branch | New commits this round | Gates |
+|---|---|---|
+| codex/popups | 94b72cc (M7/M8 fix) | tsc 0 diagnostics; 84 files / 1,366 tests; build 2,751 modules |
+| codex/worker-keys | 27db2e3 (merge popups), 58d683f (I1/I2/M6/M9/M11) | tsc 0 diagnostics; 87 files / 1,398 tests; build 2,753 modules |
+| codex/firecrawl | 0520ce5 (required merge of worker-keys FIRST), final fix commit containing this record (M1/M2/M3/M5/M9/M11/M12; use git rev-parse codex/firecrawl) | tsc 0 diagnostics; 92 files / 1,463 tests; build 2,753 modules |
+
+Firecrawl client errors log fixed text only. Owner proposals require the requested roles and never feed the Hunter owner-email step; other people remain visible in step text. Optional checkpoint failures preserve earlier results. Org admins can remove Firecrawl keys. Missing-key notices are eligibility-based; zero-page counters omitted. Additional expanded local edge shim check passed for the final branch; browser/provider/Deno runtime checks pending.
+
+WORKER_SHARED_ORG_IDS is NOT configured by this work. Kevin must include UX Tree and Digital Influx Academy before deploying (UUIDs in HANDOFF); their paid-key fallback flags remain false. Migrations 062/063 and rollback audits were not run. No push/main merge/deploy/live action. Both requested local stack merges are committed.

@@ -1,9 +1,11 @@
 // Runtime integration tests keep Deno-only types outside the browser TypeScript graph.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+vi.mock('../../supabase/functions/_shared/websiteContact', () => ({ scrapeWebsiteContact: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/enrichLead', () => ({ enrichOneLead: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/findDecisionMakers', () => ({ findAndStoreDecisionMakers: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/orgApiKeys', () => ({ resolveOrgApiKey: vi.fn(), resolveOrgWorkerConfig: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/rateLimit', () => ({ checkRateLimit: vi.fn() }));
+import { scrapeWebsiteContact } from '../../supabase/functions/_shared/websiteContact';
 import { enrichOneLead } from '../../supabase/functions/_shared/enrichLead';
 import { findAndStoreDecisionMakers } from '../../supabase/functions/_shared/findDecisionMakers';
 import { resolveOrgApiKey, resolveOrgWorkerConfig } from '../../supabase/functions/_shared/orgApiKeys';
@@ -163,4 +165,22 @@ describe('lookup tick', () => {
     expect(console.error).toHaveBeenCalledWith('lookup jobs: claim failed', '42501');
     expect(JSON.stringify(console.error.mock.calls)).not.toContain('private error');
   });
+});
+
+it('persists earlier enrichment proposals when the Firecrawl checkpoint fails after reservation', async () => {
+  const options = {}; const f = fixture(options);
+  const real = await vi.importActual('../../supabase/functions/_shared/enrichLead');
+  vi.mocked(enrichOneLead).mockImplementation(real.enrichOneLead);
+  vi.mocked(scrapeWebsiteContact).mockResolvedValue({ email: null, phone: '1234567890' });
+  vi.mocked(resolveOrgApiKey).mockImplementation(async (_s, _o, provider) => provider === 'firecrawl' ? 'fake-key' : null);
+  vi.mocked(checkRateLimit).mockImplementation(async (_s, key) => {
+    if (key === 'firecrawl-pages:org') options.edit = false;
+    return true;
+  });
+  const request = vi.fn(); vi.stubGlobal('fetch', request);
+  await runLookupTick(f.service);
+  expect(request).not.toHaveBeenCalled();
+  expect(f.rpc).toHaveBeenCalledWith('lookup_job_finish', expect.objectContaining({ new_status: 'done', new_review: 'pending',
+    new_result: expect.objectContaining({ proposed: { phone: '1234567890' } }) }));
+  expect(console.error).toHaveBeenCalledWith('lookup: Firecrawl checkpoint failed');
 });

@@ -84,10 +84,17 @@ export async function enrichOneLead(
 
   // Free registry lookups get the first chance. Only the saved company site qualifies for Firecrawl.
   if (!proposed.owner_name && !lead.owner_name && lead.website && !siteRedirected && options?.teamFallback) {
-    await options.checkpoint?.();
-    const team = await options.teamFallback(lead.website, pages);
-    if (team?.people[0]) { proposed.owner_name = team.people[0].name; source.owner_name = 'firecrawl'; }
-    if (!proposed.email && !lead.email && team?.emails[0]) { proposed.email = team.emails[0]; source.email = 'firecrawl'; }
+    try {
+      await options.checkpoint?.();
+      const team = await options.teamFallback(lead.website, pages);
+      const owner = team?.people.find((person) => /\b(owner|director|founder|managing director|ceo|proprietor|principal|partner)\b/i.test(person.role));
+      if (owner) { proposed.owner_name = owner.name; source.owner_name = 'firecrawl'; }
+      if (!proposed.email && !lead.email && team?.emails[0]) { proposed.email = team.emails[0]; source.email = 'firecrawl'; }
+    } catch {
+      // Firecrawl is optional: preserve earlier proposals, and start no more providers after access/time is lost.
+      console.error('lookup: Firecrawl checkpoint failed');
+      return Object.keys(proposed).length ? { lead_id: lead.id, proposed, source } : null;
+    }
   }
 
   // 4. Apollo/Hunter — paid, opt-in, only for fields still blank after 1–3 AND not already on the lead.
@@ -95,7 +102,8 @@ export async function enrichOneLead(
   // then whatever Hunter has best for the domain.
   if (!proposed.email && !lead.email && keys.hunter && website) {
     await options?.checkpoint?.();
-    const ownerName = proposed.owner_name ?? lead.owner_name;
+    // An unreviewed Firecrawl name must never become input to the paid owner-email lookup.
+    const ownerName = (source.owner_name === 'firecrawl' ? undefined : proposed.owner_name) ?? lead.owner_name;
     const ownerEmail = ownerName ? await lookupHunterOwnerEmail(website, ownerName, keys.hunter) : null;
     const email = ownerEmail ?? await lookupHunterEmail(website, keys.hunter);
     if (email && email !== lead.email) { proposed.email = email; source.email = 'hunter'; }
