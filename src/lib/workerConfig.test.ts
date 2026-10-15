@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { parseOrgWorkerSecret, resolveWorkerConfig, validateWorkerConnection } from '../../supabase/functions/_shared/workerConfig';
+import { parseSharedWorkerOrgIds, parseOrgWorkerSecret, resolveWorkerConfig, validateWorkerConnection } from '../../supabase/functions/_shared/workerConfig';
 
 describe('organisation worker config', () => {
   it('parses a trimmed origin and keeps delimiters inside the secret', () => {
@@ -10,7 +10,8 @@ describe('organisation worker config', () => {
     'https://user:password@worker.example.com|test', 'https://worker.example.com|', 'https://worker.example.com|test\r\nheader'])('rejects unsafe or malformed config %s', (value) => {
     expect(parseOrgWorkerSecret(value)).toBeNull();
   });
-  const deps = () => ({ own: vi.fn(async () => ({ configured: false, value: null as string | null })),
+  const orgId = '87da102c-0e27-45e6-8bea-e2609fe80c12';
+  const deps = () => ({ orgId, sharedOrgIds: '', own: vi.fn(async () => ({ configured: false, value: null as string | null })),
     fallbackAllowed: vi.fn(async () => true), global: vi.fn(() => ({ url: 'https://shared.example.com', secret: 'test-global' })) });
   it('prefers own config without reading global config', async () => {
     const d = deps(); d.own.mockResolvedValue({ configured: true, value: 'https://own.example.com|test-own' });
@@ -29,6 +30,26 @@ describe('organisation worker config', () => {
     d.own.mockRejectedValue(new Error('fake database failure'));
     await expect(resolveWorkerConfig(d)).rejects.toThrow('fake database failure');
     expect(d.global).not.toHaveBeenCalled();
+  });
+  it('permits a listed org without enabling paid-key fallback', async () => {
+    const d = deps(); d.fallbackAllowed.mockResolvedValue(false);
+    d.sharedOrgIds = 'invalid,  ' + orgId + '  ,';
+    expect((await resolveWorkerConfig(d))?.url).toBe('https://shared.example.com');
+    d.own.mockResolvedValue({ configured: true, value: 'https://own.example.com|test-own' });
+    expect((await resolveWorkerConfig(d))?.url).toBe('https://own.example.com');
+    d.own.mockResolvedValue({ configured: true, value: 'broken' });
+    expect(await resolveWorkerConfig(d)).toBeNull();
+  });
+  it('ignores invalid allow-list entries, trims and deduplicates UUIDs', () => {
+    expect([...parseSharedWorkerOrgIds('junk,, ' + orgId.toUpperCase() + ', ' + orgId + ',87da102c')]).toEqual([orgId]);
+    expect(parseSharedWorkerOrgIds(undefined).size).toBe(0);
+  });
+  it('logs only fixed text on a failed health check', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await validateWorkerConnection('https://own.example.com|test-secret', async () => { throw new Error('private URL/key'); });
+      expect(log.mock.calls).toEqual([['lookup worker check failed']]);
+    } finally { log.mockRestore(); }
   });
   it('checks health with a header, timeout and redirects disabled', async () => {
     const request = vi.fn(async () => new Response(null, { status: 200 }));

@@ -56,7 +56,7 @@ describe('lookup tick', () => {
     }));
     expect(checkRateLimit).toHaveBeenCalledWith(f.service, 'lookup-org:org', 300, 1440, true);
     expect(checkRateLimit).toHaveBeenCalledWith(f.service, 'lookup-lead:lead', 5, 1440, true);
-    expect(resolveOrgWorkerConfig).toHaveBeenCalledWith(f.service, 'org');
+    expect(resolveOrgWorkerConfig).toHaveBeenCalledWith(f.service, 'org', undefined);
   });
   it.each([{ edit: false }, { member: false }, { deleted: true }, { stopped: true }])('skips without provider calls: %j', async (options) => {
     const f = fixture(options);

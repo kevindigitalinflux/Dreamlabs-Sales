@@ -1,3 +1,4 @@
+import { workerConnectionStatus } from '../../lib/workerStatus';
 import { useState } from 'react';
 import { Card } from '../ui/Card';
 import { Input } from '../ui/Input';
@@ -24,7 +25,7 @@ export function LookupWorkerCard({ configured, shared, host, onSave, onRemove }:
   }
   return <Card><div className="flex min-w-0 flex-col gap-3">
     <h2 className="text-lg font-bold">Lookup worker</h2>
-    <p className="break-words text-sm">{configured ? `Using your own worker${host ? ` (${host})` : ''}` : shared ? 'Using the shared worker' : 'Not set up'}</p>
+    <p className="break-words text-sm">{workerConnectionStatus(configured, shared, host)}</p>
     <Input label="Worker address" type="url" autoComplete="off" placeholder="https://worker.example.com"
       value={address} onChange={(e) => setAddress(e.target.value)} disabled={busy} />
     <Input label="Worker secret" type="password" autoComplete="new-password" value={secret}

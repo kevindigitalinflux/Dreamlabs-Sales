@@ -77,7 +77,7 @@ async function processLead(service: SupabaseClient, row: Claimed, job: Job, star
     resolveOrgApiKey(service, job.org_id, 'firecrawl'),
   ]);
   const worker = makeWorkerClient({ usage: service, orgId: job.org_id,
-    config: await resolveOrgWorkerConfig(service, job.org_id) });
+    config: await resolveOrgWorkerConfig(service, job.org_id, Deno.env.get('WORKER_SHARED_ORG_IDS')) });
   const firecrawl = makeFirecrawlClient({ key: firecrawlKey, checkpoint,
     reserve: () => checkRateLimit(service, `firecrawl-pages:${job.org_id}`, FIRECRAWL_DAILY_PAGES, 1440, true) });
   const found = await enrichOneLead(lead, { hunter, apollo, companiesHouse, openCorporates, googlePlaces }, {

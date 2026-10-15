@@ -141,7 +141,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // Organisation's worker, or the shared worker only with explicit fallback permission.
   const worker = makeWorkerClient({
     usage: service, orgId: run.org_id,
-    config: await resolveOrgWorkerConfig(service, run.org_id),
+    config: await resolveOrgWorkerConfig(service, run.org_id, Deno.env.get('WORKER_SHARED_ORG_IDS')),
   });
   const { data: contactData, error: contactErr } = await service.from('decision_maker_candidates').select('*').eq('lead_id', lead.id);
   if (contactErr) return { status: 'failed', reason: 'Could not read this lead\'s contacts.' };

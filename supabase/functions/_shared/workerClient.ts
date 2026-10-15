@@ -55,11 +55,12 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
     const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
     try {
       const res = await fetchImpl(`${config.url}${path}`, {
-        method: 'POST', signal: controller.signal,
+        method: 'POST', redirect: 'error', signal: controller.signal,
         headers: { 'content-type': 'application/json', 'x-worker-secret': config.secret },
         body: JSON.stringify(body),
       });
-      failure = failureForStatus(res.status);
+      // Redirects are refused before forwarding credentials; no work happened at the worker.
+      failure = res.status >= 300 && res.status < 400 ? 'unreachable' : failureForStatus(res.status);
       if (failure === null) {
         try { json = await res.json(); } catch { failure = 'bad_response'; }
       } else {
