@@ -7,6 +7,7 @@ import { isFinishedState, type JobItem, type JobKind } from '../lib/jobs/model';
 import { groupJobs, seenKey, tabTitle, tabTitleCount, unseenFinished, type JobGroups } from '../lib/jobs/view';
 import { readSeen, writeSeen } from '../lib/jobs/seen';
 import { useOrg } from './useOrg';
+import { useDesktopNotifications } from './useDesktopNotifications';
 
 const POLL_MS = 30_000;
 const CLOCK_MS = 60_000;
@@ -47,11 +48,13 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [failedKinds, setFailedKinds] = useState<JobKind[]>([]);
   const [loading, setLoading] = useState(orgId !== null);
+  const [loadedOrg, setLoadedOrg] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
   const jobsRef = useRef<JobItem[]>([]);
   const tokenRef = useRef(0);
   jobsRef.current = jobs;
+  useDesktopNotifications(jobs, seen, loading || loadedOrg !== orgId, orgId);
 
   const load = useCallback(async () => {
     if (!orgId) return;
@@ -73,6 +76,7 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     setJobs(next);
     setFailedKinds(failed);
     setLoading(false);
+    setLoadedOrg(orgId);
   }, [orgId]);
 
   // Organisation change: start from nothing, load seen state for that organisation.

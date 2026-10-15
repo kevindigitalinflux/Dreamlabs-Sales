@@ -14,6 +14,7 @@ import { CompanyProfileCard } from '../components/settings/CompanyProfileCard';
 import { IdealCustomerProfilesCard } from '../components/settings/IdealCustomerProfilesCard';
 import { CustomPlaceholdersCard } from '../components/settings/CustomPlaceholdersCard';
 import { UsageLimitsCard } from '../components/settings/UsageLimitsCard';
+import { DesktopNotificationsCard } from '../components/settings/DesktopNotificationsCard';
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
@@ -138,6 +139,7 @@ export function Settings() {
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-6">
       <h1 className="text-[28px] font-extrabold">Settings</h1>
+      <DesktopNotificationsCard />
       <Card>
         <div className="flex flex-col gap-4">
           <h2 className="text-[18px] font-bold">Profile</h2>
