@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useDecisionMakers } from '../../hooks/useDecisionMakers';
 import { buildFromFullName, namePreview, splitFullName } from '../../lib/knownPersonForm';
 import type { NameOverride } from '../../lib/knownPersonForm';
-import type { DecisionMakerCandidate, KnownPersonInput } from '../../types';
+import type { KnownPersonInput } from '../../types';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 
@@ -13,8 +14,6 @@ interface FindDecisionMakerPanelProps {
   lookingUp: boolean;
   /** Runs the known-person lookup; resolves to an error message, or null when the person was saved. */
   onLookup: (person: KnownPersonInput) => Promise<string | null>;
-  /** Shows the generic search results and refreshes the contacts; resolves to a warning to display, or null. */
-  onSearched: (found: Record<string, DecisionMakerCandidate[]>) => Promise<string | null>;
   onClose: () => void;
 }
 
@@ -24,7 +23,7 @@ interface FindDecisionMakerPanelProps {
  * of the generic search. The bulk action on the Pipeline list never shows this section:
  * `known_person` only works for a single lead. Errors here belong to this panel only.
  */
-export function FindDecisionMakerPanel({ leadId, lookingUp, onLookup, onSearched, onClose }: FindDecisionMakerPanelProps) {
+export function FindDecisionMakerPanel({ leadId, lookingUp, onLookup, onClose }: FindDecisionMakerPanelProps) {
   const { searching, error: searchError, runSearch } = useDecisionMakers();
   const [known, setKnown] = useState(false);
   const [fullName, setFullName] = useState('');
@@ -52,8 +51,7 @@ export function FindDecisionMakerPanel({ leadId, lookingUp, onLookup, onSearched
     if (!known) {
       const found = await runSearch([leadId]);
       if (mine !== epoch.current || !found) return;
-      const warning = await onSearched(found);
-      setNote(`Search finished. ${found[leadId]?.length ?? 0} people found for this lead.${warning ? ` ${warning}` : ''}`);
+      setNote(`Started: ${found.queued} leads. Follow it in Jobs.`);
       return;
     }
     const built = buildFromFullName(fullName, { title, email, linkedin_url: linkedin, company_domain: companyDomain }, usePaid, override);
@@ -100,7 +98,7 @@ export function FindDecisionMakerPanel({ leadId, lookingUp, onLookup, onSearched
         </div>
       )}
       {shownError && <p role="alert" className="text-sm text-danger">{shownError}</p>}
-      {note && <p className="text-sm text-success">{note}</p>}
+      {note && <p role="status" className="text-sm text-success">{note} <Link to="/jobs" className="underline">View Jobs</Link></p>}
       <div className="flex gap-2">
         <Button onClick={() => void submit()} loading={busy}>
           {busy ? 'Searching…' : known ? 'Look up this person' : 'Search for decision makers'}

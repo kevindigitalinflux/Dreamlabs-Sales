@@ -2,6 +2,7 @@
 // One adapter per run type. Each loads recent rows for an organisation and maps them to JobItem with the pure mappers
 // in ./model. Sub-project C adds a job type by appending one adapter to JOB_SOURCES.
 import { supabase } from '../supabase';
+import { mapLookupJob, type LookupJobInput, type LookupRowInput } from './lookup';
 import { fetchLogStatuses } from '../../hooks/useDraftStatuses';
 import {
   mapCampaign, mapDeepFind, mapScrape, mapSelectedOutreach,
@@ -26,6 +27,7 @@ export const JOB_TABLE: Partial<Record<JobKind, string>> = {
   deep_find: 'deep_find_runs',
   selected_outreach: 'autopilot_runs',
   scrape: 'scrape_jobs',
+  lookup: 'lookup_jobs',
 };
 
 const WINDOW_DAYS = 60;
@@ -160,4 +162,34 @@ const campaign: JobSource = {
   },
 };
 
-export const JOB_SOURCES: JobSource[] = [deepFind, selectedOutreach, scrape, campaign];
+const lookup: JobSource = {
+  kind: 'lookup',
+  watch: [{ table: 'lookup_jobs', byOrg: true }, { table: 'lookup_job_leads', byOrg: true }],
+  async load(orgId) {
+    const { data, error } = await supabase.from('lookup_jobs').select('id, org_id, created_by, kind, status, lead_count, created_at, finished_at')
+      .eq('org_id', orgId).gte('created_at', sinceIso()).order('created_at', { ascending: false }).limit(MAX_JOBS);
+    if (error) fail('lookups', error.message);
+    const jobs = (data ?? []) as LookupJobInput[];
+    const { data: auth, error: authError } = await supabase.auth.getUser();
+    if (authError || !auth.user) fail('lookup permissions', 'Sign in to see lookups');
+    const { data: member, error: memberError } = await supabase.from('org_members').select('role').eq('org_id', orgId).eq('user_id', auth.user.id).maybeSingle();
+    if (memberError || !member) fail('lookup permissions', 'Organisation membership unavailable');
+    const byJob = new Map<string, Array<LookupRowInput & { lead: { business_name: string } | null }>>();
+    // At most 50 leads/job: 20 jobs fit the server's 1000-row limit without truncation.
+    for (const ids of chunk(jobs.map((j) => j.id), 20)) {
+      const { data: rows, error: rowError } = await supabase.from('lookup_job_leads')
+        .select('job_id, status, review, lead:leads(business_name)').in('job_id', ids).eq('org_id', orgId).order('id').limit(1000);
+      if (rowError) fail('lookup results', rowError.message);
+      for (const row of (rows ?? []) as unknown as Array<LookupRowInput & { job_id: string; lead: { business_name: string } | null }>) {
+        const list = byJob.get(row.job_id) ?? [];
+        list.push(row); byJob.set(row.job_id, list);
+      }
+    }
+    return jobs.map((job) => {
+      const rows = byJob.get(job.id) ?? [];
+      return mapLookupJob(job, rows, rows.map((r) => r.lead?.business_name ?? null), { userId: auth.user.id, isAdmin: member.role === 'admin' });
+    });
+  },
+};
+
+export const JOB_SOURCES: JobSource[] = [deepFind, selectedOutreach, scrape, campaign, lookup];

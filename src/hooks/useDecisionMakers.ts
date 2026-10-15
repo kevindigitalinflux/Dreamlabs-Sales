@@ -1,32 +1,24 @@
 import { useCallback, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { readableInvokeError } from '../lib/invokeError';
-import type { DecisionMakerCandidate, KnownPersonInput, KnownPersonResult } from '../types';
+import type { KnownPersonInput, KnownPersonResult } from '../types';
+import { createLookupJob, type LookupStarted } from '../lib/lookupJobs';
 
 /**
- * Runs the free decision-maker search (Hunter + Apollo) for a batch of
- * leads. Never writes to a lead itself — Hunter's "Add to lead" and
- * Apollo's "Reveal" actions (handled inside DecisionMakerReview) are each
- * their own explicit, already-consented write.
+ * Queues the generic decision-maker search for Jobs. Known-person lookup remains
+ * synchronous: that is a separate, explicitly reviewed action on a named contact.
  */
 export function useDecisionMakers() {
   const [searching, setSearching] = useState(false);
   const [lookingUp, setLookingUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const runSearch = useCallback(async (leadIds: string[]): Promise<Record<string, DecisionMakerCandidate[]> | null> => {
+  const runSearch = useCallback(async (leadIds: string[]): Promise<LookupStarted | null> => {
     setSearching(true);
     setError(null);
-    const { data, error: invokeErr } = await supabase.functions.invoke('find-decision-makers', {
-      body: { lead_ids: leadIds },
-    });
-    setSearching(false);
-    if (invokeErr) { setError(await readableInvokeError(invokeErr)); return null; }
-    const result = data as { results?: { lead_id: string; candidates: DecisionMakerCandidate[] }[]; error?: string };
-    if (result.error) { setError(result.error); return null; }
-    const grouped: Record<string, DecisionMakerCandidate[]> = {};
-    for (const r of result.results ?? []) grouped[r.lead_id] = r.candidates;
-    return grouped;
+    try { return await createLookupJob('decision_makers', leadIds); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Could not start the lookup.'); return null; }
+    finally { setSearching(false); }
   }, []);
 
   /**

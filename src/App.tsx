@@ -36,6 +36,7 @@ import { AutopilotSetup } from './pages/AutopilotSetup';
 import { AutopilotStatus } from './pages/AutopilotStatus';
 import { PipelineManage } from './pages/PipelineManage';
 import { Jobs } from './pages/Jobs';
+import { LookupJob } from './pages/LookupJob';
 import { DeepFindRun } from './pages/DeepFindRun';
 
 /**
@@ -97,6 +98,7 @@ export function App() {
               <Route path="/pipeline/leads/:id" element={<LeadDetailPage />} />
               <Route path="/pipeline/manage" element={<PipelineManage />} />
               <Route path="/jobs" element={<Jobs />} />
+              <Route path="/jobs/lookup/:jobId" element={<LookupJob />} />
               <Route path="/pipeline/deep-find" element={<Navigate to="/jobs" replace />} />
               <Route path="/pipeline/deep-find/:runId" element={<DeepFindRun />} />
               <Route path="/scraper" element={<Scraper />} />

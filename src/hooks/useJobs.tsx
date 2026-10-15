@@ -149,6 +149,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
     if (!job || !job.canStop) return 'This job cannot be stopped.';
     let err: string | null = null;
     if (job.kind === 'deep_find') err = await cancelDeepFind(job.sourceId);
+    else if (job.kind === 'lookup') {
+      const { data, error } = await supabase.functions.invoke('run-lookup-jobs', { body: { action: 'cancel', job_id: job.sourceId } });
+      err = error || data?.error ? 'Could not stop this job. Try again.' : null;
+    }
     else if (job.kind === 'selected_outreach') {
       const { error } = await supabase.from('autopilot_runs').update({ status: 'cancelled', cancel_reason: 'stopped by user' }).eq('id', job.sourceId).eq('status', 'active');
       err = error ? 'Could not stop this job. Try again.' : null;

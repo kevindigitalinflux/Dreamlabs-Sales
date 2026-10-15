@@ -7,9 +7,7 @@ import { ConfirmDialog } from '../components/jobs/ConfirmDialog';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Skeleton } from '../components/ui/Skeleton';
-import { isFinishedState, type JobItem, type JobKind } from '../lib/jobs/model';
-
-const KIND_NAME: Record<JobKind, string> = { deep_find: 'Deep find', selected_outreach: 'Outreach to selected leads', scrape: 'Lead searches', campaign: 'Autopilot campaigns' };
+import { isFinishedState, JOB_KIND_NAME, type JobItem } from '../lib/jobs/model';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -68,7 +66,7 @@ export function Jobs() {
       <p className="text-sm text-muted">Everything that works in the background, named by the leads it is working on. Jobs that need you stay at the top.</p>
 
       {failedKinds.map((kind) => (
-        <p key={kind} role="alert" className="text-sm text-danger">{KIND_NAME[kind]} could not be loaded right now. The rest are shown.</p>
+        <p key={kind} role="alert" className="text-sm text-danger">{JOB_KIND_NAME[kind]} could not be loaded right now. The rest are shown.</p>
       ))}
       {notice && <p role="status" className="text-sm text-muted">{notice}</p>}
 

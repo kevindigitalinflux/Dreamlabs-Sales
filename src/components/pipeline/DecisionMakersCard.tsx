@@ -118,9 +118,9 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
         ))}
       </ul>
       <KnownPersonArea
-        leadId={leadId} lead={lead} flow={flow} contacts={contacts} finding={finding} onCloseFinding={() => setFinding(false)}
-        refresh={hook.refresh} addContact={hook.addContact} updateContact={hook.updateContact}
-        setIncludeInSequences={hook.setIncludeInSequences} onSave={onSave}
+        leadId={leadId} flow={flow} contacts={contacts} finding={finding} onCloseFinding={() => setFinding(false)}
+        addContact={hook.addContact} updateContact={hook.updateContact}
+        setIncludeInSequences={hook.setIncludeInSequences}
       />
       {adding ? (
         <ContactForm

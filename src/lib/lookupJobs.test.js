@@ -10,9 +10,9 @@ import { resolveOrgApiKey } from '../../supabase/functions/_shared/orgApiKeys';
 import { checkRateLimit } from '../../supabase/functions/_shared/rateLimit';
 import { runLookupTick } from '../../supabase/functions/_shared/lookupJobs';
 
-function fixture(options                                                                                                                                       = {}) {
+function fixture(options = {}) {
   let claimed = false;
-  const rpc = vi.fn(async (name        ) => {
+  const rpc = vi.fn(async (name) => {
     if (name === 'lookup_job_claim') {
       if (options.claimError) return { data: null, error: { message: 'private error' } };
       if (claimed) return { data: [], error: null };
@@ -22,7 +22,7 @@ function fixture(options                                                        
     if (name === 'deep_find_creator_can_edit') return { data: options.edit !== false, error: null };
     return { data: true, error: options.saveError ? { message: 'private error' } : null };
   });
-  const from = vi.fn((table        ) => {
+  const from = vi.fn((table) => {
     const data = table === 'lookup_jobs' ? { id: 'job', org_id: 'org', created_by: 'user', kind: options.kind ?? 'enrich', status: options.stopped ? 'cancelled' : 'active' }
       : table === 'org_members' ? options.member === false ? null : { user_id: 'user' }
       : table === 'leads' ? options.deleted ? null : { id: 'lead', org_id: 'org', website: 'https://example.com' }
@@ -30,7 +30,7 @@ function fixture(options                                                        
     const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data, error: null }) };
     return query;
   });
-  const service = { rpc, from }                                                  ;
+  const service = { rpc, from };
   return { service, rpc, finish: () => rpc.mock.calls.find(([name]) => name === 'lookup_job_finish') };
 }
 beforeEach(() => {

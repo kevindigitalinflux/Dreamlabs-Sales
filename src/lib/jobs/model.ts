@@ -4,7 +4,11 @@
 import { needsAttention } from '../deepFindView';
 import { countOpenNeedsInput } from '../runLeadGroups';
 
-export type JobKind = 'deep_find' | 'selected_outreach' | 'scrape' | 'campaign';
+export type JobKind = 'deep_find' | 'selected_outreach' | 'scrape' | 'campaign' | 'lookup';
+
+export const JOB_KIND_NAME: Record<JobKind, string> = {
+  deep_find: 'Deep find', selected_outreach: 'Outreach to selected leads', scrape: 'Lead searches', campaign: 'Autopilot campaigns', lookup: 'Lookups',
+};
 export type JobState = 'needs_you' | 'running' | 'done' | 'failed' | 'stopped';
 
 export interface JobItem {

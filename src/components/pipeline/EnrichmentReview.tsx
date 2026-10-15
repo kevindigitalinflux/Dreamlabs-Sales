@@ -36,6 +36,7 @@ export function EnrichmentReview({ open, results, leadsById, onClose, onApply }:
   const [checked, setChecked] = useState<Record<string, Set<EnrichableField>>>({});
   const [applying, setApplying] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
+  const [failures, setFailures] = useState<string[]>([]);
   // Snapshot of each lead's pre-change field values, frozen at the moment
   // `results` arrives. Apply's realtime lead refresh can land before this
   // modal closes, and reading `leadsById` live for the "from" side would
@@ -66,6 +67,7 @@ export function EnrichmentReview({ open, results, leadsById, onClose, onApply }:
     setFromSnapshot(snapshot);
     setReplaceExisting(false);
     setSummary(null);
+    setFailures([]);
     // leadsById intentionally excluded — it changes on every realtime lead
     // update, and this snapshot must only be taken once per `results` run,
     // not re-taken every time the underlying leads refresh.
@@ -93,6 +95,7 @@ export function EnrichmentReview({ open, results, leadsById, onClose, onApply }:
     const { applied, failed } = await onApply(patches, additions);
     setApplying(false);
     setSummary(failed.length === 0 ? `Updated ${applied} leads` : `Updated ${applied} leads — ${failed.length} failed`);
+    setFailures(failed.map((f) => f.error));
   }
 
   return (
@@ -129,7 +132,7 @@ export function EnrichmentReview({ open, results, leadsById, onClose, onApply }:
                           <ArrowRight className="h-3.5 w-3.5 text-muted" aria-hidden />
                         </>
                       )}
-                      <span className="font-semibold text-success">{to}</span>
+                      <span className="min-w-0 break-all font-semibold text-success">{to}</span>
                       <span className="ml-auto rounded-full bg-surface px-2 py-0.5 text-[10px] uppercase text-muted">{SOURCE_LABELS[r.source[field] ?? ''] ?? r.source[field]}</span>
                     </li>
                   );
@@ -158,6 +161,7 @@ export function EnrichmentReview({ open, results, leadsById, onClose, onApply }:
           </fieldset>
         )}
         {summary && <p role="status" className="text-sm text-success">{summary}</p>}
+        {failures.map((failure, i) => <p key={i} role="alert" className="text-sm text-danger">{failure}</p>)}
         <div className="flex items-center justify-between">
           <Button variant="ghost" onClick={onClose}>{summary ? 'Close' : 'Cancel'}</Button>
           {!summary && (

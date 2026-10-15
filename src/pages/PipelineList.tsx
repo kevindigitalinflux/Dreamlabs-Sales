@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
 import { Download, Inbox, PenLine, Plus, Radar, Tag, Telescope, Trash2, UserSearch } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLeads } from '../hooks/useLeads';
@@ -19,8 +19,6 @@ import { AddLeadWizard } from '../components/pipeline/AddLeadWizard';
 import { BulkDraftModal } from '../components/pipeline/BulkDraftModal';
 import { BulkProfileModal } from '../components/pipeline/BulkProfileModal';
 import { useIcps } from '../hooks/useIcps';
-import { EnrichmentReview } from '../components/pipeline/EnrichmentReview';
-import { DecisionMakerReview } from '../components/pipeline/DecisionMakerReview';
 import { DeepFindModal } from '../components/deepfind/DeepFindModal';
 import { DeepFindRunsLink } from '../components/deepfind/DeepFindRunsLink';
 import { useDeepFindActivity } from '../hooks/useDeepFindActivity';
@@ -31,10 +29,7 @@ import { LeadPanel } from '../components/pipeline/LeadPanel';
 import { SharedPipelineBanner } from '../components/pipeline/SharedPipelineBanner';
 import { ViewToggle } from '../components/pipeline/ViewToggle';
 import { PipelineSwitcher } from '../components/layout/PipelineSwitcher';
-import { mergeAdditions } from '../lib/enrichmentGrouping';
-import type { AdditionalDetail } from '../lib/enrichmentGrouping';
-import type { LeadPatch } from '../lib/leadUpdates';
-import type { DecisionMakerCandidate, EnrichableField, EnrichmentResult, Lead, Stage } from '../types';
+import type { Lead, Stage } from '../types';
 
 /** List pipeline view: search, filters, sortable table, side panel (SPEC.md §6). */
 export function PipelineList() {
@@ -56,12 +51,9 @@ export function PipelineList() {
   const [openLead, setOpenLead] = useState<Lead | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const { running: enriching, error: enrichError, runEnrichment } = useLeadEnrichment();
-  const [enrichResults, setEnrichResults] = useState<EnrichmentResult[]>([]);
-  const [reviewOpen, setReviewOpen] = useState(false);
   const [draftModalOpen, setDraftModalOpen] = useState(false);
   const { searching: findingDecisionMakers, error: decisionMakerError, runSearch } = useDecisionMakers();
-  const [decisionMakerResults, setDecisionMakerResults] = useState<Record<string, DecisionMakerCandidate[]>>({});
-  const [decisionMakerReviewOpen, setDecisionMakerReviewOpen] = useState(false);
+  const [lookupNotice, setLookupNotice] = useState<string | null>(null);
   const [deepFindOpen, setDeepFindOpen] = useState(false);
   const deepFind = useDeepFindActivity(currentPipeline?.org_id ?? null);
   const [moveTargetId, setMoveTargetId] = useState('');
@@ -81,6 +73,7 @@ export function PipelineList() {
   useEffect(() => {
     setSelected(new Set());
     setBulkError(null);
+    setLookupNotice(null);
   }, [filters, currentPipeline?.id]);
 
   // Arrives via navigate(..., { state: { selectAllOnLoad: true } }) — e.g. Pipeline
@@ -122,40 +115,15 @@ export function PipelineList() {
   }
 
   async function handleFillMissingDetails() {
-    const results = await runEnrichment([...selected]);
-    if (results === null) return;
-    setEnrichResults(results);
-    setReviewOpen(true);
+    setLookupNotice(null);
+    const job = await runEnrichment([...selected]);
+    if (job) setLookupNotice(`Started: ${job.queued} leads. Follow it in Jobs.`);
   }
 
-  async function handleApplyEnrichment(
-    patches: Record<string, Partial<Record<EnrichableField, string>>>,
-    additions: Record<string, AdditionalDetail[]>,
-  ) {
-    let applied = 0;
-    const failed: { leadId: string; error: string }[] = [];
-    const leadIds = new Set([...Object.keys(patches), ...Object.keys(additions)]);
-    for (const leadId of leadIds) {
-      // One update per lead: the field writes (blanks filled / replaced) plus the
-      // found values kept alongside existing ones, stored in the additional_* lists.
-      const patch: LeadPatch = {
-        ...patches[leadId],
-        ...mergeAdditions(leads.find((l) => l.id === leadId), additions[leadId] ?? []),
-      };
-      const err = Object.keys(patch).length > 0 ? await updateLead(leadId, patch) : null;
-      if (err) failed.push({ leadId, error: err }); else applied++;
-    }
-    if (failed.length === 0) setSelected(new Set());
-    return { applied, failed };
-  }
-
-  // Bulk search over many leads. The "I already know who to look for" input is deliberately NOT
-  // offered here: `known_person` works for exactly one lead, so it lives in the lead's Contacts card.
   async function handleFindDecisionMaker() {
-    const results = await runSearch([...selected]);
-    if (results === null) return;
-    setDecisionMakerResults(results);
-    setDecisionMakerReviewOpen(true);
+    setLookupNotice(null);
+    const job = await runSearch([...selected]);
+    if (job) setLookupNotice(`Started: ${job.queued} leads. Follow it in Jobs.`);
   }
 
   function handleExportCsv() {
@@ -240,9 +208,9 @@ export function PipelineList() {
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface/40 p-3">
           <span className="text-sm font-semibold">{selected.size} selected</span>
-          <Button variant="secondary" onClick={() => void handleFillMissingDetails()} disabled={enriching} loading={enriching}>
+          <Button variant="secondary" onClick={() => void handleFillMissingDetails()} disabled={enriching || selected.size > 50} loading={enriching} title={selected.size > 50 ? 'Choose up to 50 leads per lookup' : undefined}>
             <Radar className="h-4 w-4" aria-hidden />
-            {enriching ? 'Searching…' : 'Fill missing details'}
+            {enriching ? 'Starting…' : 'Fill missing details'}
           </Button>
           <Button variant="secondary" onClick={() => setDraftModalOpen(true)}>
             <PenLine className="h-4 w-4" aria-hidden />
@@ -254,9 +222,9 @@ export function PipelineList() {
               Customer profile
             </Button>
           )}
-          <Button variant="secondary" onClick={() => void handleFindDecisionMaker()} disabled={findingDecisionMakers} loading={findingDecisionMakers}>
+          <Button variant="secondary" onClick={() => void handleFindDecisionMaker()} disabled={findingDecisionMakers || selected.size > 50} loading={findingDecisionMakers} title={selected.size > 50 ? 'Choose up to 50 leads per lookup' : undefined}>
             <UserSearch className="h-4 w-4" aria-hidden />
-            {findingDecisionMakers ? 'Searching…' : 'Find decision maker'}
+            {findingDecisionMakers ? 'Starting…' : 'Find decision maker'}
           </Button>
           <Button variant="secondary" onClick={() => setDeepFindOpen(true)} disabled={selected.size > DEEP_FIND_MAX_LEADS}
             title={selected.size > DEEP_FIND_MAX_LEADS ? `Deep find works on ${DEEP_FIND_MAX_LEADS} leads or fewer at a time` : undefined}>
@@ -295,6 +263,7 @@ export function PipelineList() {
       {loading && <Skeleton className="h-64 w-full" />}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {bulkError && <p role="alert" className="text-sm text-danger">{bulkError}</p>}
+      {lookupNotice && <p role="status" className="text-sm text-success">{lookupNotice} <Link to="/jobs" className="underline">View Jobs</Link></p>}
       {enrichError && <p role="alert" className="text-sm text-danger">{enrichError}</p>}
       {decisionMakerError && <p role="alert" className="text-sm text-danger">{decisionMakerError}</p>}
       {!loading && !error && visible.length === 0 && (
@@ -322,13 +291,6 @@ export function PipelineList() {
 
       <AddLeadWizard open={wizardOpen} onClose={() => setWizardOpen(false)} onCreate={createLead} />
       <LeadPanel lead={openLead} profiles={profiles} onClose={() => setOpenLead(null)} onUpdate={updateLead} />
-      <EnrichmentReview
-        open={reviewOpen}
-        results={enrichResults}
-        leadsById={leadsById}
-        onClose={() => setReviewOpen(false)}
-        onApply={handleApplyEnrichment}
-      />
       <BulkProfileModal
         open={profileModalOpen}
         leads={[...selected].map((id) => leadsById[id]).filter((l): l is Lead => l !== undefined)}
@@ -344,13 +306,6 @@ export function PipelineList() {
         onGenerated={() => setSelected(new Set())}
       />
       <DeepFindModal open={deepFindOpen} leadIds={[...selected]} onClose={() => setDeepFindOpen(false)} />
-      <DecisionMakerReview
-        open={decisionMakerReviewOpen}
-        resultsByLead={decisionMakerResults}
-        leadsById={leadsById}
-        onClose={() => setDecisionMakerReviewOpen(false)}
-        onAddToLead={updateLead}
-      />
     </div>
   );
 }

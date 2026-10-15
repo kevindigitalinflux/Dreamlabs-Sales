@@ -17,6 +17,7 @@ const KIND_LABEL: Record<JobItem['kind'], string> = {
   selected_outreach: 'Outreach to selected leads',
   scrape: 'Lead search',
   campaign: 'Autopilot',
+  lookup: 'Lookup',
 };
 
 interface JobRowProps {
