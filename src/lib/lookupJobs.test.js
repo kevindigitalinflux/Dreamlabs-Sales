@@ -20,6 +20,7 @@ function fixture(options = {}) {
       return { data: [{ id: 'row', job_id: 'job', org_id: 'org', lead_id: 'lead', attempts: 1 }], error: null };
     }
     if (name === 'deep_find_creator_can_edit') return { data: options.edit !== false, error: null };
+    if (name === 'lookup_job_finish' && options.deleted) return { data: false, error: null };
     return { data: true, error: options.saveError ? { message: 'private error' } : null };
   });
   const from = vi.fn((table) => {
@@ -68,6 +69,17 @@ describe('lookup tick', () => {
     expect(enrichOneLead).not.toHaveBeenCalled();
     expect(resolveOrgApiKey).not.toHaveBeenCalled();
     expect(f.rpc).toHaveBeenCalledWith('lookup_job_finish', expect.objectContaining({ new_status: 'skipped' }));
+  });
+  it('survives a claimed lead cascading away and uses a plain skip reason', async () => {
+    const f = fixture({ deleted: true });
+    expect(await runLookupTick(f.service)).toBe(1);
+    expect(f.rpc).toHaveBeenCalledWith('lookup_job_finish', expect.objectContaining({
+      new_status: 'skipped', new_reason: 'This lead is no longer available.', new_review: 'none',
+    }));
+    expect(enrichOneLead).not.toHaveBeenCalled();
+    expect(findAndStoreDecisionMakers).not.toHaveBeenCalled();
+    expect(checkRateLimit).not.toHaveBeenCalled();
+    expect(console.error).not.toHaveBeenCalled();
   });
   it('stores decision-maker counts without marking them as applied', async () => {
     const f = fixture({ kind: 'decision_makers' });

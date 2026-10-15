@@ -4,6 +4,12 @@ Date: 2026-10-15. Author: Claude (architect). Status: written; Kevin said "build
 
 Parent: `docs/superpowers/specs/2026-10-14-worker-integration-design.md` (Stage 1 is live). Related: Jobs tracker spec `2026-10-14-jobs-tracker-design.md`, usage quotas `2026-10-14-usage-quotas-design.md`.
 
+## Rulings 2026-10-15
+Claude's architect rulings, supplied by Kevin to Codex for this continuation:
+- Job headers: organisation members may SELECT. Result rows: `is_org_member(org_id) AND can_view_lead(lead_id)` (existing functions from migrations 018/019 and Deep find policy 057). `needs_you` counts only result rows visible through the user's RLS query.
+- `lookup_job_review`: authenticated, non-anon caller with a user ID, membership of the row's organisation AND `can_edit_lead(lead_id)`. SECURITY DEFINER with fixed search_path; change only `review`, only from `pending` to `applied` or `dismissed`. No direct client INSERT/UPDATE.
+- Deleted leads cascade their `lookup_job_leads` rows; no skipped placeholders survive. `lead_count` remains the original snapshot. A runner holding a deleted lead's claim skips with a plain reason; finishing the vanished row is a harmless no-op, and the next claim housekeeping completes an empty job.
+
 ## Why
 "Fill in missing details" (`enrich-leads-bulk` / `useLeadEnrichment`) and "Find decision maker" (`find-decision-makers` / `useDecisionMakers`) run inside one browser request. Adding worker calls (scraper up to 25 s, email check up to 20 s) would exceed what a request should wait for, and the user cannot leave the page. Make both background jobs that appear in the Jobs tracker (`/jobs`), like Deep find.
 
@@ -25,7 +31,7 @@ Out of scope: Firecrawl, per-org worker keys, desktop pop-ups, changing Deep fin
 - `lookup_jobs`: `id uuid pk`, `org_id uuid not null` (FK organizations), `created_by uuid` (FK profiles), `kind text check in ('enrich','decision_makers')`, `status text check in ('active','completed','cancelled')`, `lead_count int`, `created_at`, `finished_at`.
 - `lookup_job_leads`: `id uuid pk`, `job_id` (FK lookup_jobs on delete cascade), `org_id`, `lead_id` (FK leads on delete cascade), `status text check in ('queued','running','done','failed','skipped')`, `reason text` (plain-English line, never raw provider text), `result jsonb` (see below), `review text check in ('none','pending','applied','dismissed') default 'none'`, `claimed_at`, `updated_at`; unique `(job_id, lead_id)`.
 - `result` for `enrich`: `{ proposed: {email?,phone?,owner_name?,website?}, source: {...}, steps: string[] }` (the existing `EnrichResult` plus plain step lines). For `decision_makers`: `{ stored: number, steps: string[] }` (candidates are stored in `decision_maker_candidates` as today, never overwriting).
-- RLS: members of the org can SELECT; INSERT through an RPC or edge function only (service role) so the tick can validate `can_edit_lead`; DELETE allowed for the creator or an org admin when `status <> 'active'` (mirror migration 060); no client UPDATE except `review` set to `applied`/`dismissed` on rows of their own org via a SECURITY DEFINER RPC `lookup_job_review(lead_row, new_review)`. Include GRANTs explicitly (see 060 for the pattern: policies without grants silently deny).
+- RLS: job headers require org membership; result rows also require `can_view_lead`. INSERT/UPDATE through service-role RPCs or edge functions only; header DELETE allowed for the creator or an org admin when `status <> 'active'` (mirror migration 060; child rows cascade). The authenticated review RPC requires org membership and `can_edit_lead`, and changes only pending review to applied/dismissed. Explicit grants: authenticated SELECT on both tables and DELETE on headers only; anon none.
 - Realtime: `alter publication supabase_realtime add table lookup_jobs, lookup_job_leads;` (REQUIRED, otherwise the Jobs channel would be rejected).
 - Claim function `lookup_job_claim(max_leads int)` modelled on `deep_find_claim` (atomic, `for update skip locked`, marks `running`, requeues stale `running` rows after a timeout), SECURITY DEFINER, executable by service role only.
 - Per-organisation daily limit: reuse `checkRateLimit` (e.g. 300 lookup leads per organisation per day, 5 per lead per day) like Deep find, with plain skip reasons.
@@ -42,7 +48,7 @@ Out of scope: Firecrawl, per-org worker keys, desktop pop-ups, changing Deep fin
 - Buttons: "Fill in missing details" and "Find decision maker" create a job and show a plain confirmation ("Started: N leads. Follow it in Jobs.") with a link to `/jobs`. Update `useLeadEnrichment.ts` / `useDecisionMakers.ts` accordingly.
 
 ## Edge cases
-Lead deleted mid-job: row `skipped` with a plain reason. Creator loses edit rights: `skipped`. Worker off/limit/down: the worker step is skipped with the standard line from `workerClient.lines()`; the rest of the lead still runs. A tick that dies mid-lead: stale `running` rows are requeued (bounded retries, then `failed`). Switching organisation: the Jobs provider already drops other-organisation data.
+Lead deleted mid-job: result rows cascade away; an in-flight runner skips with a plain reason without retaining a placeholder (see rulings). Creator loses edit rights: `skipped`. Worker off/limit/down: the worker step is skipped with the standard line from `workerClient.lines()`; the rest of the lead still runs. A tick that dies mid-lead: stale `running` rows are requeued (bounded retries, then `failed`). Switching organisation: the Jobs provider already drops other-organisation data.
 
 ## Testing and verification
 - Unit (vitest): `mapLookupJob` (every state, needs-you wins over running, titles, delete rules), any new pure rule modules (import-free, e.g. `lookupJobRules.ts`: statuses, skip reasons, limits), `workerClient` unchanged.

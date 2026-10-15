@@ -1,13 +1,8 @@
 -- Stage 2 background lookups. REVIEW REQUIRED; Kevin applies after architect review.
 -- Clients can read jobs and delete ended jobs they created (or as org admin).
 -- No client INSERT/UPDATE, including result/review fields. The review RPC is the only review write.
--- SECURITY QUESTION: lookup_job_leads SELECT policy intentionally withheld pending resolution
--- of org-wide visibility in the Stage 2 spec versus can_view_lead in migration 057.
--- Do not apply/deploy until that policy and the corresponding audit expectations are approved.
+-- Claude's 2026-10-15 rulings: retain lead visibility/edit rights and cascade deleted leads.
 BEGIN;
-DO $blocked$ BEGIN
-  RAISE EXCEPTION '061 is a review draft: resolve lookup result visibility and review permissions before applying';
-END $blocked$;
 
 CREATE TABLE public.lookup_jobs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -50,7 +45,8 @@ CREATE POLICY lookup_jobs_select ON public.lookup_jobs FOR SELECT TO authenticat
 CREATE POLICY lookup_jobs_delete ON public.lookup_jobs FOR DELETE TO authenticated
   USING (public.is_org_member(org_id) AND status <> 'active'
     AND (created_by = auth.uid() OR public.is_org_admin(org_id)));
--- lookup_job_leads SELECT policy: BLOCKED, see security question above.
+CREATE POLICY lookup_job_leads_select ON public.lookup_job_leads FOR SELECT TO authenticated
+  USING (public.is_org_member(org_id) AND public.can_view_lead(lead_id));
 
 -- Transactional create: no partially queued job, and tenant/edit checks repeated inside the write.
 CREATE FUNCTION public.lookup_job_create(target_org uuid, creator uuid, job_kind text, lead_ids uuid[])
@@ -142,12 +138,19 @@ CREATE FUNCTION public.lookup_job_review(lead_row uuid, new_review text)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE changed int;
 BEGIN
+  IF auth.uid() IS NULL OR auth.role() IS DISTINCT FROM 'authenticated' THEN
+    RAISE EXCEPTION 'Sign in to review lookup results' USING ERRCODE = '42501';
+  END IF;
   IF new_review IS NULL OR new_review NOT IN ('applied', 'dismissed') THEN
     RAISE EXCEPTION 'Invalid review choice';
   END IF;
-  -- FAIL CLOSED pending the SELECT/review visibility decision: only rows visible through RLS
-  -- should be reviewable. This RPC remains disabled until the architect resolves that question.
-  RAISE EXCEPTION 'Lookup review policy awaits approval';
+  -- SECURITY DEFINER bypasses RLS: repeat BOTH membership and lead edit rights here.
+  -- Only the review column changes; the pending predicate also fences competing reviews.
+  UPDATE public.lookup_job_leads SET review = new_review
+    WHERE id = lead_row AND review = 'pending'
+      AND public.is_org_member(org_id) AND public.can_edit_lead(lead_id);
+  GET DIAGNOSTICS changed = ROW_COUNT;
+  RETURN changed = 1;
 END;
 $$;
 
@@ -159,6 +162,8 @@ GRANT EXECUTE ON FUNCTION public.lookup_job_create(uuid, uuid, text, uuid[]), pu
 GRANT EXECUTE ON FUNCTION public.lookup_job_review(uuid, text) TO authenticated;
 
 ALTER PUBLICATION supabase_realtime ADD TABLE public.lookup_jobs, public.lookup_job_leads;
+-- Same mechanism as 057 Deep find: read the existing Vault secret at execution time.
+-- Every minute, as registered in docs/AUTOMATIONS.md; never embed a secret value here.
 SELECT cron.schedule('run-lookup-jobs-tick', '* * * * *', $cron$
   SELECT net.http_post(
     url := 'https://wgomksxelyfkzepbnkdd.supabase.co/functions/v1/run-lookup-jobs',
