@@ -28,6 +28,7 @@ import { makeWorkerClient } from './workerClient.ts';
 import { scrapeTimeoutFor, unconfirmedLabel, verifyAction } from './workerRules.ts';
 import { makeFirecrawlClient } from './firecrawlClient.ts';
 import { FIRECRAWL_DAILY_PAGES, firecrawlDomainFor } from './firecrawlRules.ts';
+import { classifyDeepFindCheckpoint, DeepFindAuthorisationLost } from './deepFindCheckpoint.ts';
 
 export const WALL_BUDGET_MS = 130_000;
 /** A lead is only started when at least this much of the invocation is left. */
@@ -134,11 +135,18 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     reserve: () => checkRateLimit(service, `firecrawl-pages:${run.org_id}`, FIRECRAWL_DAILY_PAGES, 1440, true),
     checkpoint: async () => {
       const { data: active, error } = await service.from('deep_find_runs').select('status').eq('id', run.id).eq('org_id', run.org_id).maybeSingle();
+      // Stop on a confirmed ended run before another read can fail and mask that decision.
+      const runAccess = classifyDeepFindCheckpoint({ runStatus: active?.status, runReadFailed: !!error,
+        canEdit: null, accessReadFailed: true });
+      if (runAccess === 'authorisation_lost') throw new DeepFindAuthorisationLost();
       const { data: allowed, error: accessError } = await service.rpc('deep_find_creator_can_edit', { target_user: run.created_by, target_lead: lead.id });
-      if (error || accessError || active?.status !== 'active' || allowed !== true) throw new Error('Deep find is no longer authorised.');
+      const access = classifyDeepFindCheckpoint({ runStatus: active?.status, runReadFailed: !!error,
+        canEdit: allowed, accessReadFailed: !!accessError });
+      if (access === 'authorisation_lost') throw new DeepFindAuthorisationLost();
+      if (access === 'unavailable') throw new Error('Deep find checkpoint could not be checked.');
     },
   });
-  // Organisation's worker, or the shared worker only with explicit fallback permission.
+  // Own worker key first; shared worker requires the global fallback flag or WORKER_SHARED_ORG_IDS.
   const worker = makeWorkerClient({
     usage: service, orgId: run.org_id,
     config: await resolveOrgWorkerConfig(service, run.org_id, Deno.env.get('WORKER_SHARED_ORG_IDS')),
@@ -289,7 +297,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     try {
       const team = await firecrawl.readTeam(firecrawlDomain, seenPages, left());
       if (team) extraSitePeople.push(...team.people);
-    } catch {
+    } catch (error) {
+      if (error instanceof DeepFindAuthorisationLost) {
+        return { status: 'skipped', reason: error.message, people_found: created.length };
+      }
       console.error('deep find: Firecrawl checkpoint failed');
     }
   }

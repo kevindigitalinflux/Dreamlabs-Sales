@@ -2,7 +2,7 @@
 
 Authoritative task record. The vault copy (`Dreamlabs Sales/Handoff.md`) is a snapshot of this file, labelled with the revision below. Workflow rules: vault `_Team/Shared agent workflow.md`.
 
-**Latest resume point:** the final section, **Stacked review fixes — Firecrawl (2026-10-16, Codex)**. Earlier sections are historical checkpoints; their unresolved database questions are superseded below. The vault snapshot has not been updated by this branch.
+**Latest resume point:** the final section, **Fix round 2 — Firecrawl (2026-10-16, Codex)**. Earlier sections are historical checkpoints; their unresolved database questions are superseded below. The vault snapshot has not been updated by this branch.
 
 ## Identity and authority
 - Task ID: `worker-programme` (lookup worker -> Deep find; Stage 1 done, Stage 2 next). Project: Dreamlabs Sales. Author: Claude. Time: 2026-10-15 ~15:15 (local clock shows GMT; Kevin's timezone not confirmed).
@@ -258,3 +258,11 @@ Kevin confirmed Codex BUILDER and supplied findings/acceptance criteria; no role
 
 ## Fix round 2 — worker keys (2026-10-16, Codex)
 - Merged codex/popups 1988dc4 into codex/worker-keys (started 58d683f); only appended documentation conflicted, both histories retained. No worker code changes. Gates: tsc 0 diagnostics; vitest 87 files / 1,400 tests / 0 failures; build 2,753 modules (existing chunk-size warning). Hooks not run; Claude refreshes the vault mirror manually. Next: merge this head into codex/firecrawl, then fix M3.
+
+## Fix round 2 — Firecrawl (2026-10-16, Codex)
+- Kevin continued Codex BUILDER for the specified small fix round, local actions only; no role change or unresolved question. Started 457f3be, merged worker-keys 52abca1 FIRST in 4f2c0fd. Only appended docs conflicted; both histories retained. Popups HEAD is 1988dc4, worker-keys HEAD is 52abca1; the Firecrawl fix commit contains this checkpoint (use git rev-parse codex/firecrawl).
+- M3: import-free deepFindCheckpoint.ts classifies confirmed cancellation/access loss separately from transient read errors. Deep find immediately returns skipped with a fixed plain reason and the already-created contact count on confirmed loss; no later Hunter/worker/contact/LinkedIn work runs and earlier contact writes remain. A confirmed ended run stops before the edit-rights read, so a later read failure cannot mask cancellation. Transient checkpoint failures skip only Firecrawl, log fixed text without payload and continue normally. Enrich/lookup proposal behavior is unchanged.
+- Test-first: five engine regressions failed before the initial fix; the new classifier suite initially failed on the missing module. Final diff review found cancellation could be masked by a subsequent thrown access read; that regression failed first, then passed. Focused final: 2 files / 24 tests. Final gates: tsc PASS / 0 diagnostics; vitest PASS / 93 files / 1,484 tests / 0 failures; build PASS / 2,753 modules (existing >500 kB warning).
+- Removed the blank line splitting the local automation table; documented popup transition episodes and distinct checkpoint outcomes. Worker comment now states own key, else global fallback flag or WORKER_SHARED_ORG_IDS.
+- Commit hooks were not run on Codex commits; the vault mirror is refreshed manually by Claude. No push/main merge/deploy, SQL/migration/audit execution, remote writes, secrets or paid calls. Checkout stays on codex/firecrawl, clean after commit; no jobs running. Rereview/browser/Deno/provider checks and prior configuration/migration/deployment steps remain pending; no new implementation question.
+- Resume: Claude rereviews these exact heads (main..codex/popups, codex/popups..codex/worker-keys, codex/worker-keys..codex/firecrawl), reads this checkpoint and docs/BUILD-REVIEW-2026-10-16.md, then manually refreshes the vault mirror. Publication still needs Kevin's separate authorization.

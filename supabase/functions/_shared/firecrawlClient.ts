@@ -41,7 +41,7 @@ export function makeFirecrawlClient(deps: { key: string | null; reserve(): Promi
       if (!validKey(deps.key)) { add(FIRECRAWL_NOT_CONFIGURED); return null; }
       attempted = true;
       const deadline = Date.now() + leftMs;
-      // The calling engine catches checkpoint failures to keep its earlier summary/proposals.
+      // The calling engine handles access loss and recoverable checkpoint failures.
       await deps.checkpoint?.();
       let allowed: boolean;
       try { allowed = await deps.reserve(); } catch { console.error('firecrawl: limit check failed'); problem(domain, 'limit_check'); return null; }

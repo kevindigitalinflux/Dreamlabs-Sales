@@ -119,3 +119,18 @@ Kevin supplied the independent findings and confirmed Codex BUILDER. The fixes t
 Firecrawl client errors log fixed text only. Owner proposals require the requested roles and never feed the Hunter owner-email step; other people remain visible in step text. Optional checkpoint failures preserve earlier results. Org admins can remove Firecrawl keys. Missing-key notices are eligibility-based; zero-page counters omitted. Additional expanded local edge shim check passed for the final branch; browser/provider/Deno runtime checks pending.
 
 WORKER_SHARED_ORG_IDS is NOT configured by this work. Kevin must include UX Tree and Digital Influx Academy before deploying (UUIDs in HANDOFF); their paid-key fallback flags remain false. Migrations 062/063 and rollback audits were not run. No push/main merge/deploy/live action. Both requested local stack merges are committed.
+
+## Fix round 2 (latest, 2026-10-16)
+
+| Branch | New commits | Final gates |
+|---|---|---|
+| codex/popups | 1988dc4: notify once per needs-you transition | tsc 0 diagnostics; 84 files / 1,368 tests / 0 failures; build 2,751 modules |
+| codex/worker-keys | 52abca1: merge codex/popups | tsc 0 diagnostics; 87 files / 1,400 tests / 0 failures; build 2,753 modules |
+| codex/firecrawl | 4f2c0fd: merge codex/worker-keys FIRST; fix commit containing this record (git rev-parse codex/firecrawl) | tsc 0 diagnostics; 93 files / 1,484 tests / 0 failures; build 2,753 modules |
+
+M8 uses the previous job state to detect entry, with a new delivery-history episode key on re-entry; count changes stay silent. M3 uses import-free checkpoint classification: confirmed cancellation/access loss returns skipped immediately, keeps earlier contacts and starts no further paid/worker/contact writes; transient read failure skips only Firecrawl and logs fixed text. Enrich/lookup behavior unchanged. Tests failed before each fix. No new migration/audit/provider/remote action; independent rereview and browser/Deno/provider checks pending. All builds retain the existing size warning. Commit hooks were not run on Codex commits; the vault mirror is refreshed manually by Claude.
+
+Fix-round manifests (in addition to the preceding round):
+- Popups: src/lib/jobs/popups.ts, src/lib/jobs/popups.test.ts, CLAUDE.md, docs/HANDOFF.md, docs/NEXT-STEPS.md.
+- Worker-keys: required merge, documentation conflict resolution and gate checkpoint only.
+- Firecrawl: required merge, supabase/functions/_shared/deepFind.ts, new deepFindCheckpoint.ts, firecrawlClient.ts (comment only), src/lib/deepFindFirecrawl.test.js, new src/lib/deepFindCheckpoint.test.ts, docs/AUTOMATIONS.md, docs/HANDOFF.md, docs/NEXT-STEPS.md, CLAUDE.md and this record.

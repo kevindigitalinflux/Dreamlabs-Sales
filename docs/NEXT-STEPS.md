@@ -55,3 +55,4 @@ Process: Kevin approved the Stage 2 spec/build and supplied Claude's rulings on 
 - [ ] Popup M7/M8 review fixes built and gated on codex/popups (84 files / 1,366 tests); independent rereview and browser verification pending, not deployed.
 
 - [ ] Fix round 2: M8 transition-based episodes built and gated (84 files / 1,368 tests); independent rereview/browser checks pending. Count changes are silent; same-count re-entry notifies once.
+- [ ] Fix round 2: stacked merge gated on worker-keys (87 files / 1,400 tests); M3 authorisation-loss stop/transient-read continuation built and gated on Firecrawl (93 files / 1,484 tests). Typecheck/build pass on all three; independent rereview pending, nothing deployed. Automation table/comment fixes included; Claude refreshes the vault manually because Codex commit hooks were not run.
