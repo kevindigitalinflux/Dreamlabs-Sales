@@ -26,6 +26,12 @@ or retired.** (Requested by Kevin, 2026-07-17.)
 | `check-sequences` | pg_cron daily 06:00 UTC → edge function | Schedule (job `check-sequences-daily`) | Drafts due sequence emails into the review queue (`status='draft'`), advances enrollment pointers; skips (and retries next run) on missing email/template or insert failure; 7s spacing for Gemini RPM. Gated by `x-cron-secret` (Vault). `verify_jwt=false` pinned in `supabase/config.toml`. **Cycle 3:** resolves each due lead's own org's API key the same way as `generate-email` (`resolveOrgApiKey()`) rather than always using the global secret — a lead in a non-Kevin org with no key configured still gets its plain-template draft queued, just without AI personalisation. Drafts only — never sends. Live, e2e-proven |
 | `parse-notes` | Edge function + AI | Note saved with AI toggle on | Suggests lead field updates from the note; client whitelist-validates (`sanitizeSuggestion`) then shows a review diff; only the user's Apply click writes, via the stage-auto-logging path. **Cycle 3:** resolves the note's lead's own org's API key via `resolveOrgApiKey()`, same global-fallback-for-Kevin's-orgs-only rule as `generate-email`; returns `suggestion:null` when no key is available for that org. |
 
+## Local branch, not applied or deployed
+
+| Automation | Type | Trigger | What it changes / owner |
+|---|---|---|---|
+| `run-lookup-jobs` | Supabase edge function + pg_cron | Pipeline buttons POST create; authenticated creator/admin POST cancel; `run-lookup-jobs-tick` every minute (`* * * * *`), authenticated with the existing Vault `cron_secret` header | Creates `lookup_jobs` and `lookup_job_leads`; claims one row per tick iteration, with one active row per org, a 5-minute lease and at most two attempts. Proposes enrichment using `enrichOneLead`, free reader then worker fallback before paid sources; stores decision-maker candidates through the existing helper (migration 053 defaults sequence participation off). Updates progress/results, skips cancelled/unauthorised/limited work, completes jobs. Enrichment writes to leads only after the user's Apply click; review status through `lookup_job_review`. No emails or sequence enrolment. Owner: Kevin (product), Claude (review), Codex (build), code `_shared/lookupJobs.ts` / `run-lookup-jobs/index.ts`. **Migration 061 is a blocked review draft; result visibility/review policy needs an architect ruling. Nothing in this row is live.** |
+
 ## Backlog (future cycles)
 
 | Automation | Cycle | Notes |

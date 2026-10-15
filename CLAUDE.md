@@ -1064,6 +1064,14 @@ before relying on the next build.
 
 ---
 
+### Background lookups, Stage 2 (2026-10-15) — LOCAL BUILD, DATABASE POLICY BLOCKED
+- Branch `codex/stage2-background-lookups`, based on clean `main` `57f0187a5ba014e5c36899990c3024416d802036`. Kevin explicitly approved Codex as builder, Claude as architect/reviewer; no role change. No push, merge, deployment, live SQL, remote write, credential read or vault update in this task.
+- Separate fix `7420343`: Deep find uses `scrapeTimeoutFor(left())`, reserving 32 s after a scrape (30 s downstream plus 2 s overhead); 10–25 s timeout, admitted at 42 s. Worker default timeout and reserve/refund/fail-closed rules unchanged. Six regression cases added.
+- Stage 2 code: transactional queue/claim/cancel/finish draft RPCs; `run-lookup-jobs` create/cancel/cron with JWT/cron authentication; import-free lookup rules and tests; per-org/day 300 and per-lead/day 5 checks; worker browser fallback only when free website read finds neither email nor phone. Proposals stay unapplied; decision-maker candidates use the existing helper and migration 053's default `include_in_sequences=false`.
+- Front end: lookup adapter + mapper, `/jobs/lookup/:jobId`, existing `EnrichmentReview` + `applyLeadUpdate`, Apply then mark-reviewed ordering, Dismiss, named progress and stop/delete permissions. Both generic lookup buttons queue and link to Jobs; the separate known-person action stays synchronous.
+- **Not complete:** Stage 2's org-wide result visibility conflicts with `can_view_lead` in migration 057. Per Kevin's instruction to stop on security/data-rule disagreement, migration 061 explicitly refuses to apply, result SELECT policy is withheld and review RPC is disabled. Also resolve cascade deletion versus retained skipped results. See `docs/HANDOFF.md` for exact questions, decisions and gates. The rollback audit is written but not run; some assertions deliberately fail until these policies are completed. Do not deploy front end before reviewed migration 061 publishes both new tables.
+- Obsidian sync hooks bypassed per commit (`git -c core.hooksPath=NUL commit`) because Kevin prohibited touching files outside this project. Claude should sync the vault later when authorized.
+
 ## Security
 
 **First full `di-security-auditor` pass run 2026-09-22. Audit Status: OPEN — 0 CRITICAL, 3 HIGH (all fixed

@@ -64,3 +64,60 @@ Open `C:\Users\kevin\Projects\dreamlabs-sales`. Read the vault `_Team/Shared age
 - Stage 2 spec written and pushed: `docs/superpowers/specs/2026-10-15-background-lookups-design.md` (commit `86a9f3c`). Kevin approved building it (and the fix above) on 2026-10-15.
 - Codex BUILD attempt (branch `codex/stage2-background-lookups`, task: the scrape-budget fix, then Stage 2): FAILED before starting. Codex's local execution failed at the first command: `CreateProcess ... helper_unknown_error: setup refresh had errors` (its Windows sandbox setup). No branch, commit or file change was made; `main` is untouched at `86a9f3c`. Nothing applied or deployed.
 - Exact next action: Kevin (or Codex's own session) fixes Codex's local sandbox (for example run Codex interactively in the project folder, or its sandbox/permissions setup), then re-send the same build task: the prompt is "PART 1 scrape budget fix, PART 2 Stage 2 per the spec" with the rules in `AGENTS.md`. Alternative if Kevin prefers: Claude builds it now with subagents (role change: Claude becomes builder for this task; needs Kevin's confirmation and must be recorded in Decisions.md).
+
+## Update 2026-10-15 (Codex local build checkpoint)
+
+### Authority and state
+- Kevin explicitly assigned **Codex BUILDER, Claude architect/reviewer**, approved the Stage 2 build and scrape-budget fix, and prohibited push, merge, deploy, live SQL, all remote writes, secret reads and touching anything outside this project. No role change. This explicit prompt supplied the kickoff; no second approval was requested for the build.
+- Initial checks: clean `main`, HEAD `57f0187a5ba014e5c36899990c3024416d802036`. Created **`codex/stage2-background-lookups`** from that main. Work stays local.
+- **Part 1 complete. Stage 2 application code and database draft written, but Stage 2 is NOT complete or deployable.** The security/data questions below stop the affected database items, following Kevin's explicit instruction to stop instead of guessing.
+- No other agent was invoked; no independent review performed. Claude review is the next step. No credential files were opened; no remote service was called by the new code/tests. Existing test fixtures use fake clients/providers.
+- Commit hooks disabled per commit using `git -c core.hooksPath=NUL commit` to prevent the vault sync writing outside this project. No vault files read or changed. Do not run the vault sync within the current authorization.
+
+### Commits
+- `7420343` — fix: reserve downstream time after browser scrape (separate first commit).
+- `cef0fad` — feat: add pure background lookup rules.
+- `861d581` — feat: run queued lookups with guarded worker fallback.
+- `5fcc2bc` — feat: draft lookup job schema and rollback audit (blocked policy explicitly marked).
+- `d33d9b0` — feat: show background lookups and reviewed proposals in Jobs.
+- The following checkpoint commit contains this handoff, other documentation and an explicit migration refusal guard. Use `git log 57f0187..HEAD` / `git rev-parse HEAD` for its final hash; a commit cannot contain its own hash.
+
+### Implemented and tested
+- Scrape budget: `scrapeTimeoutFor(leftMs)` returns `min(25_000, leftMs - 32_000)` or null below 10_000; Deep find passes it to the new optional per-call scrape timeout. Default worker timeout and all accounting rules retained. Tests at 39/41/42/60/100 seconds plus fake-timer timeout/no-refund case were red before implementation, then green (42 worker tests total).
+- Queue runner: create validates JWT, org membership and `can_edit_lead`; service-only transactional create repeats explicit-user rights checks. Cron uses `cronSecretMatches`; cancel requires creator/admin membership. `runLookupTick` claims, rechecks rights, enforces daily limits, uses the existing enrichment/decision-maker functions, stores fixed sentences and completes jobs with fenced result writes.
+- Free reader -> optional one worker scrape -> remaining registry/paid lookups. Optional callbacks preserve existing callers' behavior. Worker host passes `parseSafeWebsiteUrl`; output still passes `parseScrapeReply`. Results are proposals. No email or sequence operations added.
+- Jobs: source/mapper, correct action/name/progress, pending review wins over active, creator/admin delete and stop rules, results route, steps, Apply/Dismiss, existing `EnrichmentReview`, `mergeAdditions` and `applyLeadUpdate`. Apply succeeds before marking review; write failure leaves review pending. Generic buttons queue and show Jobs links. Known-person lookup remains synchronous.
+- SQL draft: tables/checks/FKs, explicit grants, ended-job delete policy, service-only create/claim/cancel/finish RPCs, retry handling and realtime publication, minute cron. **SELECT policy for result rows is withheld; review RPC raises a fixed refusal. An initial exception inside the migration transaction blocks applying the whole draft.** These must be completed before removing that guard.
+- Rolled-back audit covers org job reads, own-org result read/review expectations, creator/admin/active/other-org/anon deletion, no direct client writes, service-only RPC privileges, cascades, lease retry exhaustion, old-attempt fencing, cancellation and realtime. Not executed. Success assertions for the withheld result/review policy are expected to fail against the unfinished body; they are not reported as passing.
+
+### Decisions made by Codex
+1. Added service-only create/cancel/finish RPCs beyond the specified claim RPC so queuing is transactional, cancel/result writes lock the parent, and stale responses cannot overwrite a later attempt or revive cancelled work.
+2. At most one running lookup row per organisation, serialised at claim time with a transaction advisory lock. This keeps the existing count-and-log `checkRateLimit` calls sequential for this job type. Limits: 300 org leads/day, 5 per lead/day, 30 create requests/user/day, 50 leads/job. Duplicate jobs are not silently merged.
+3. Stale lease is 5 minutes with at most two attempts. Invocation wall budget 140 s, lead budget 100 s; do not claim a new lead without the lead reserve. Provider checkpoints check time, job/claim state, current org membership, lead org and edit rights. Existing provider timeouts remain; cancellation cannot undo work already completed by a provider.
+4. Cancel skips running rows as well as queued rows to fence late result writes. Previously completed proposals remain reviewable once the review policy is resolved. Existing stored candidates are not removed by stopping or deleting a job.
+5. Decision-maker `stored` is the number the existing helper returns (available undismissed candidates, including earlier finds), not an invented count of inserts. The page links to the lead's existing contact review controls. Migration **053**, not 050, governs the current `include_in_sequences=false` default. The tentative concern about 050 was corrected after checking later migrations; no approval is required and no sequence-default change was made.
+6. Added optional callbacks to the shared per-lead helpers; existing callers retain their old behavior. The worker callback executes immediately after the free website read, before paid lookups. No second free scrape is performed just to determine fallback eligibility.
+7. The detail page polls every 5 s with organisation/request fencing; the central Jobs adapter uses its existing realtime + 30 s refresh. Minimal Jobs kind-label registration was necessary because its label maps were exhaustive; no Jobs page/bar layout rewrite.
+8. Runtime runner integration tests are `.test.js` (included by Vite) so Deno-only imports do not enter the browser's TypeScript graph. Pure rules/mapper tests remain TypeScript. A separate temporary project-local TypeScript config checks the new edge entrypoint against the installed Supabase declarations and minimal Deno globals; this is **not** `deno check`.
+9. Existing `ON DELETE CASCADE` was written as explicitly specified, but the contradictory request to retain a deleted lead as skipped was **not** invented or implemented. Resolve with Claude before finalising the schema.
+
+### Questions for Claude / Kevin — blocking database completion
+1. **Result visibility and review:** Stage 2 says org members can SELECT results; migration 057 and candidate/LinkedIn policies also require `can_view_lead`, preventing contractors reading restricted pipelines' contact details. Should `lookup_job_leads` require `is_org_member(org_id) AND can_view_lead(lead_id)`? Should review require `can_edit_lead` or only visibility + membership? Codex recommends preserving lead visibility and limiting review to editors, but has not enacted that security decision. An async question about visibility was sent; no answer received at this checkpoint. Complete the SELECT policy + review RPC and extend the audit to cover restricted leads and the agreed review rights.
+2. **Deleted leads:** Should results disappear via the specified FK cascade, or remain as skipped with a nullable lead reference/name snapshot? These are incompatible data-retention rules. The draft follows the explicit FK shape, and retention is left unresolved. Do not remove the migration guard until this is settled.
+
+### Gates and limitations
+- Final code gates: `npx tsc --noEmit` **PASS**, zero diagnostics; `npx vitest run` **PASS, 81 files / 1,334 tests**, zero failed; `npm run build` **PASS**, 2,746 modules transformed. The existing Vite >500 kB chunk warning remains.
+- Additional local check: `npx tsc --noEmit -p .superpowers/lookup-check/tsconfig.json` **PASS** for `run-lookup-jobs` and its imports. Minimal Deno globals + installed Supabase type mapping only; no Deno runtime installed. Ignored scratch files stay inside this project.
+- `git diff --check` clean (only normal Windows LF/CRLF conversion notices).
+- **NOT run/applied/deployed:** migration 061, rollback audit, any live database query or write, any edge deployment, VPS/worker action, remote API call, browser/live UI/phone-width check, or independent review. Build/test success does not validate RLS, SQL concurrency or actual EdgeRuntime behavior.
+- **Next action:** Claude resolves both database questions and reviews the branch; Codex can finish the withheld policy/RPC, audit expectations and any review fixes. After that Kevin separately authorizes applying the migration and deployment. The frontend must not ship before both new tables are published; otherwise the Jobs realtime channel can reject the subscription. Part 1 also remains local and undeployed.
+
+### Changed files (relative to starting main; 40 files including this handoff)
+- Documentation: `CLAUDE.md`, `docs/AUTOMATIONS.md`, `docs/NEXT-STEPS.md`, `docs/HANDOFF.md`.
+- Database/config: `supabase/migrations/061_lookup_jobs.sql`, `supabase/audits/lookup_jobs_rls.sql`, `supabase/config.toml`.
+- Edge functions: `supabase/functions/run-lookup-jobs/index.ts`, `supabase/functions/_shared/lookupJobs.ts`, `lookupJobRules.ts`, `enrichLead.ts`, `findDecisionMakers.ts`, `deepFind.ts`, `workerClient.ts`, `workerRules.ts` (the latter seven share `_shared/`).
+- Routes/pages: `src/App.tsx`, `src/pages/LookupJob.tsx`, `src/pages/PipelineList.tsx`, `src/pages/Jobs.tsx`.
+- Hooks: `src/hooks/useLeadEnrichment.ts`, `src/hooks/useDecisionMakers.ts`, `src/hooks/useJobs.tsx`.
+- UI: `src/components/jobs/JobRow.tsx`, `src/components/pipeline/EnrichmentReview.tsx`, `FindDecisionMakerPanel.tsx`, `KnownPersonArea.tsx`, `DecisionMakersCard.tsx` (the latter three share `pipeline/`).
+- Browser logic: `src/lib/lookupJobs.ts`, `src/lib/applyLookupProposal.ts`, `src/lib/jobs/lookup.ts`, `src/lib/jobs/model.ts`, `src/lib/jobs/sources.ts`.
+- Tests: `src/lib/workerRules.test.ts`, `workerClient.test.ts`, `lookupJobRules.test.ts`, `lookupJobs.test.js`, `enrichWorkerFallback.test.ts`, `applyLookupProposal.test.ts` (all under `src/lib/`), `src/lib/jobs/lookup.test.ts`; `vite.config.ts` adds runtime JS test discovery.

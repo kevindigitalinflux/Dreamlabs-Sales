@@ -3,10 +3,20 @@
 Updated 2026-10-15 (checkpoint). Exact resume point: `docs/HANDOFF.md`. Order matters. Roles are the defaults of the shared workflow (vault `_Team/Shared agent workflow.md`): either agent may plan or build when Kevin confirms and records the assignment. Kevin merges unless he authorizes otherwise.
 
 ## 0. Right now (Kevin + Architect)
-- [ ] Kevin reruns Deep find on Love Living (Mr Brush & Co, `/pipeline/leads/9cb055e6-fbfb-45db-b9f8-8034090d3ab0`) after deploy `4eae38d`. Expect a "Read ... with the browser scraper" line, no duplicate built-address suggestion, "Site scrapes" 0 -> 1 on the top-bar chip. If the scrape line is still missing, the next suspect is whether `loveliving.uk` counts as a confirmed domain with no addresses on its pages (`supabase/functions/_shared/deepFind.ts`, step "1b-scrape").
+- [x] Kevin reran Deep find on Love Living after `4eae38d`; Claude's 2026-10-15 handoff records 3 addresses / 3 phones, checker results, and no duplicate suggestion. Codex did not repeat this live check.
 - [ ] Hostinger snapshot of the VPS expires 2026-10-15 12:39 UTC: refresh before any VPS change.
 
 ## 1. Stage 2: "Fill in missing details" and "Find decision maker" as background jobs (Builder, after the Architect's short spec)
+
+Build checkpoint (Codex, 2026-10-15): branch `codex/stage2-background-lookups`, local only. **Not ready to apply/deploy** until the security/data questions in `docs/HANDOFF.md` are resolved.
+- [x] Separate scrape-budget fix: 30 s downstream reserve plus 2 s overhead, minimum scrape 10 s, per-call client timeout and no-refund tests.
+- [x] Pure lookup rules, guarded queue runner, cron/create/cancel endpoint and worker fallback.
+- [x] Jobs source, mapper, results route, existing enrichment review UI, and both buttons switched to queue creation.
+- [x] Draft migration 061 and rolled-back audit written (neither executed; migration explicitly refuses to apply while blocked).
+- [ ] Resolve result SELECT/review permissions: Stage 2's org-wide access versus existing `can_view_lead` restriction. SELECT policy withheld; review RPC fails closed.
+- [ ] Resolve deleted-lead results: schema says cascade, edge-case text says retain a skipped row. No new retention semantics invented.
+- [ ] Claude reviews implementation, database draft and audit; complete the blocked policy/RPC and extend the audit for the ruling.
+- [ ] Kevin authorizes/applies the reviewed migration, then authorizes deployments and live UI/usage checks. No merge/push/deploy authorization exists for this branch.
 Why: both buttons run in one browser request today; adding worker calls (scraper up to 25 s, email checks up to 20 s each) would time out. Make them queued background jobs that show in the Jobs tracker (`/jobs`).
 
 What exists to reuse:
@@ -21,7 +31,7 @@ Requirements (decided with Kevin):
 - Per-lead and per-day limits like Deep find (`checkRateLimit`), org keys via `resolveOrgApiKey`.
 - New tables/policies need a migration + a rolled-back audit script in `supabase/audits/` (pattern: `jobs_delete_rls.sql`, `usage_quotas_*.sql`); the Architect reviews and Kevin applies migrations in the Supabase SQL editor.
 - Docs: `CLAUDE.md` entry, `docs/AUTOMATIONS.md` row.
-Process: Architect writes `docs/superpowers/specs/2026-10-15-background-lookups-design.md` + a plan, Kevin approves, Builder implements on branch `codex/stage2-...`, Architect reviews.
+Process: Kevin approved the Stage 2 spec/build on 2026-10-15; Codex remains builder and Claude architect/reviewer. Finish the explicit blockers before approval to apply/deploy.
 
 ## 2. After Stage 2 (each needs its own short spec first; Architect)
 - Firecrawl as a BYO-key provider per organisation (no global fallback), used for team/about pages when roles are missing.

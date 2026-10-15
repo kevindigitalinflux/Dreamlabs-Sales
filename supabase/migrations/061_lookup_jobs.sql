@@ -5,6 +5,9 @@
 -- of org-wide visibility in the Stage 2 spec versus can_view_lead in migration 057.
 -- Do not apply/deploy until that policy and the corresponding audit expectations are approved.
 BEGIN;
+DO $blocked$ BEGIN
+  RAISE EXCEPTION '061 is a review draft: resolve lookup result visibility and review permissions before applying';
+END $blocked$;
 
 CREATE TABLE public.lookup_jobs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
