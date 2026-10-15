@@ -8,7 +8,8 @@ import { readSeen, writeSeen } from '../lib/jobs/seen';
 const preferences = new Map<string, boolean>();
 const CHANGE = 'dreamlabs-desktop-notifications';
 const storage = () => { try { return window.localStorage; } catch { return null; } };
-const permission = () => typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
+let unavailable = false;
+const permission = () => unavailable ? 'unavailable' : typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
 
 export function useDesktopPreference() {
   const { session } = useAuth();
@@ -63,7 +64,12 @@ export function useDesktopNotifications(jobs: JobItem[], seen: ReadonlySet<strin
         notification.onclose = () => openNotifications.current.delete(notification);
         active.push(notification);
         popup.keys.forEach((key) => state.delivered.add(key));
-      } catch { console.error('jobs: desktop notification could not be shown'); }
+      } catch {
+        console.error('jobs: desktop notification could not be shown');
+        unavailable = true;
+        window.dispatchEvent(new Event(CHANGE));
+        break;
+      }
     }
     writeSeen(storage(), scope, state.delivered);
     // Keep clicks alive across progress refreshes; close only on scope change/unmount below.

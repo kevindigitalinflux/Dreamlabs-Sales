@@ -48,3 +48,5 @@ Process: Kevin approved the Stage 2 spec/build and supplied Claude's rulings on 
 - [x] Part 1: desktop popups built on codex/popups; 83 files / 1,362 tests; tsc/build pass. Claude review and browser checks pending.
 - [x] Part 2: per-organisation worker address/secret built on codex/worker-keys; migration 062/audit unexecuted; 85 files / 1,386 tests; tsc/build pass. Claude review pending (platform-only management withheld).
 - [ ] Part 3: Firecrawl BYO provider.
+
+- [ ] Popup M7/M8 review fixes built and gated on codex/popups (84 files / 1,366 tests); independent rereview and browser verification pending, not deployed.
