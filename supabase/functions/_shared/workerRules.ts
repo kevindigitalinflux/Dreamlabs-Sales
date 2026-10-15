@@ -8,7 +8,7 @@ export type WorkerFailure = 'not_configured' | 'limit_reached' | 'busy' | 'unrea
 export interface WorkerConfig { url: string; secret: string }
 
 export const SCRAPE_UNITS: Record<ScrapeMode, number> = { homepage: 1, key_pages: 1, deep: 3 };
-export const WORKER_TIMEOUT_MS = { scrape: 45_000, verify: 20_000, fetch: 12_000 } as const;
+export const WORKER_TIMEOUT_MS = { scrape: 25_000, verify: 20_000, fetch: 12_000 } as const;
 export const WORKER_RESOURCE: Record<'scrape' | 'verify' | 'fetch', UsageResource> = {
   scrape: 'worker_scrape', verify: 'worker_verify', fetch: 'worker_fetch',
 };

@@ -245,7 +245,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }
   // (1b-scrape) A confirmed domain whose pages gave no address (a site that needs a browser, or one we could not read):
   // one browser scrape per lead. Only addresses on that domain are kept; they are suggestions with their source page
-  // and also feed the email-format step below. Skipped when the worker is off, over its limit, or time is short.
+  // and also feed the email-format step below. Skipped when the worker is off, over its limit, or there is not enough time left for a 25 s scrape.
   // Phones are not pushed as suggestions: the suggestion UI only applies email and LinkedIn.
   // The lead's own website pages were read above (not part of discovery.sitePages): count what they already show,
   // so a site that gave an address or a phone number is not scraped again.
@@ -255,7 +255,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const hasContactDetails = (d: string) =>
     (siteEmails.get(d) ?? []).length > 0 || (d === siteDomain && pages.some((html) => !!extractPhone(html)));
   const scrapeDomain = [...verified].find((d) => !hasContactDetails(d) && !isDirectoryDomain(d));
-  if (scrapeDomain && left() > 50_000) {
+  if (scrapeDomain && left() > 40_000) {
     const scraped = await worker.scrapeSite(scrapeDomain, 'key_pages');
     if (scraped.ok) {
       const pageOf = (source: string | null) => { try { return source ? ` (${new URL(source).pathname.slice(0, 80)})` : ''; } catch { return ''; } };
@@ -394,7 +394,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   created.push(...peopleOut.created);
   for (const c of peopleOut.touched) touched.add(c.id);
   stats.officerEmails += peopleOut.emailsFound;
-  suggestions.push(...peopleOut.suggestions);
+  for (const s of peopleOut.suggestions) {
+    if (suggestions.some((x) => x.field === s.field && x.value.toLowerCase() === s.value.toLowerCase())) continue;
+    suggestions.push(s);
+  }
   problems.push(...peopleOut.problems);
   if (people.length > 0) steps.push(`Looked up ${people.length} known ${people.length === 1 ? 'person' : 'people'}: ${peopleOut.emailsFound} email${peopleOut.emailsFound === 1 ? '' : 's'} found.`);
 
