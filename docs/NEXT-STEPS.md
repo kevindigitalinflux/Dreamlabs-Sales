@@ -51,3 +51,7 @@ Process: Kevin approved the Stage 2 spec/build and supplied Claude's rulings on 
 
 - [ ] Kevin configures WORKER_SHARED_ORG_IDS for UX Tree/Academy (paid-key fallback remains false).
 - [ ] After independent rereview and separate authorization, Kevin applies 062 then 063, runs rollback audits, and authorizes functions/frontend deployment and browser/provider checks. Nothing from these three branches is deployed.
+
+- [ ] Popup M7/M8 review fixes built and gated on codex/popups (84 files / 1,366 tests); independent rereview and browser verification pending, not deployed.
+
+- [ ] Fix round 2: M8 transition-based episodes built and gated (84 files / 1,368 tests); independent rereview/browser checks pending. Count changes are silent; same-count re-entry notifies once.
