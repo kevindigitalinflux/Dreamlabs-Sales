@@ -11,7 +11,7 @@ Authoritative task record. The vault copy (`Dreamlabs Sales/Handoff.md`) is a sn
 - Role-change record: none yet (Codex has not taken over). Confirm with Kevin before Codex becomes architect or builder for Stage 2.
 - Publishing authorization: Kevin authorised Claude to merge/push verified work and deploy edge functions during the 2026-10-14/15 session. That authorization is session-scoped; ask Kevin again for new work.
 - Paid usage authorization: none. Hunter has 1 search left this month (renews 2026-10-17). No paid API fallback without Kevin's approval.
-- Cross-agent call authorization: none recorded.
+- Cross-agent call authorization: Kevin approved automatic cross-agent calls on 2026-10-15 (vault `_Team/Shared agent workflow.md`, "Cross-agent calls"): call at agreed review checkpoints or whenever needed and available within the approved task, without asking per call; calls are focused, bounded and read-only by default; record reason, scope and result here. Both directions (Codex plugin in Claude Code, ask-claude helper for Codex) passed live smoke tests on 2026-10-15 (per Kevin). Not authorized: paid API fallback, recursive calls, automatic repair/review loops, testing a model that is near its allowance.
 
 ## Where the work is
 - Repository/worktree: `C:\Users\kevin\Projects\dreamlabs-sales` (main checkout). Other worktrees exist under `.claude/worktrees/` (old: `bulk-lead-enrichment`, `decision-maker-enrichment`); leave them alone.
@@ -37,7 +37,7 @@ Authoritative task record. The vault copy (`Dreamlabs Sales/Handoff.md`) is a sn
   - New realtime watches may only name tables in the `supabase_realtime` publication (deep_find_runs, deep_find_leads, autopilot_run_leads, scrape_jobs, raw_leads).
   - `deepFind.ts` imports `npm:` packages, so no test imports it; keep logic in import-free modules (like `workerRules.ts`). `deno` is not installed locally; edge functions are deployed with `npx supabase functions deploy <name> --project-ref wgomksxelyfkzepbnkdd`.
 - Decisions worth keeping: see vault `Dreamlabs Sales/Decisions.md` (free tools first; Hunter only when the checker cannot decide; no n8n for new products; worker shared by Kevin's four orgs with per-org quotas; Hunter/Apollo/Firecrawl stay BYO key per org).
-- Open questions for Kevin: Stage 2 kickoff (outcome and acceptance criteria, which agent plans and builds, whether review is by the other agent); call-frequency policy for cross-agent calls (workflow doc says it awaits his answer); refresh of the Hostinger snapshot.
+- Open questions for Kevin: Stage 2 kickoff (outcome and acceptance criteria, which agent plans and builds, whether review is by the other agent); refresh of the Hostinger snapshot.
 - Known defects / risks: deferred minors are listed in `CLAUDE.md` ("Jobs tracker and notification bar", "Worker integration, Stage 1") and in `docs/NEXT-STEPS.md` section 3. `deno check` has never been run on the edge-function code. The VPS scraper firewall reboot test is pending.
 
 ## Verification and publication
@@ -50,7 +50,7 @@ Authoritative task record. The vault copy (`Dreamlabs Sales/Handoff.md`) is a sn
 - Secret names and homes (values never recorded): `WORKER_URL`, `WORKER_SECRET` (Supabase function secrets; value of the second equals `WRAPPER_SECRET` in `/opt/lookup-worker/.env` on the VPS, mode 600); `REACHER_SECRET`, `SCRAPER_SECRET`, `TUNNEL_TOKEN` (VPS `.env` only); API keys in Supabase Vault / function secrets / gitignored `.env`.
 
 ## Usage and continuation
-- Usage reading: Kevin reported Claude at about 97% of the weekly limit on 2026-10-15, reset Saturday 06:00 (user-reported, not telemetry; timezone unverified). Extra paid usage: none authorised.
+- Usage reading: the earlier 97% weekly reading (2026-10-15) was superseded the same day: Kevin reports his Claude allowance has reset (workflow doc: session/week 0% used, weekly 100% available, reset Saturday 06:00, displayed timezone unverified; a small Claude smoke test succeeded 20:41 UTC). User-reported, not live telemetry; recheck before a long step. Extra paid usage: none authorised (usage credits off, GBP 0 balance per Kevin's page).
 - Last safe checkpoint: this file at the commit that adds it.
 - Exact next action: Kevin reruns Deep find on Love Living and reports the step lines; then run the Stage 2 kickoff with Kevin.
 - Required confirmation before takeover or publication: Kevin confirms who plans and who builds Stage 2 (record in Decisions.md); no deploy or merge of new work without Kevin's go-ahead.
