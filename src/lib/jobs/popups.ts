@@ -1,7 +1,7 @@
 import type { JobItem } from './model';
 import { notifyLines } from './view';
 
-export const popupKey = (job: JobItem): string => `popup:${job.id}:${job.state}:${job.finishedAt ?? ''}:${job.state === 'needs_you' ? job.needsYou : ''}`;
+export const popupKey = (job: JobItem): string => `popup:${job.id}:${job.state}:${job.finishedAt ?? ''}:`;
 export interface JobPopup { title: string; body: string; tag: string; href: string; keys: string[] }
 
 export function decidePopups(input: {
@@ -15,9 +15,18 @@ export function decidePopups(input: {
   const eligible = notifyLines(next, seen, now, Number.MAX_SAFE_INTEGER).lines;
   const candidates = eligible.flatMap((line): JobPopup[] => {
     const job = next.find((j) => j.id === line.jobId)!;
-    if (line.tone === 'running' || (before.has(job.id) && popupKey(before.get(job.id)!) === popupKey(job)) || seen.has(popupKey(job))) return [];
+    if (line.tone === 'running') return [];
+    let key = popupKey(job);
+    if (job.state === 'needs_you') {
+      // Only entry starts an episode. Counts/progress within it are silent.
+      if (before.get(job.id)?.state === 'needs_you') return [];
+      // The delivered store distinguishes re-entry from earlier episodes, even at the same count.
+      let episode = 1;
+      while (seen.has(`${key}episode:${episode}`)) episode++;
+      key = `${key}episode:${episode}`;
+    } else if ((before.has(job.id) && popupKey(before.get(job.id)!) === key) || seen.has(key)) return [];
     const label = job.state === 'needs_you' ? 'Needs you' : job.state === 'failed' ? 'Failed' : 'Finished';
-    return [{ title: `${label}: ${job.title}`, body: job.detail, tag: `${job.id}:${job.state}`, href: job.href, keys: [popupKey(job)] }];
+    return [{ title: `${label}: ${job.title}`, body: job.detail, tag: `${job.id}:${job.state}`, href: job.href, keys: [key] }];
   });
   if (candidates.length <= 3) return candidates;
   return [...candidates.slice(0, 3), {

@@ -209,3 +209,8 @@ Next (each needs Kevin's kickoff answers and a spec first): Firecrawl (BYO key p
 
 ## Stacked review fixes — popups (2026-10-16, Codex)
 Kevin confirmed Codex BUILDER and supplied findings/acceptance criteria; no role change or unresolved kickoff question. Started at c999154 on codex/popups. M7/M8 implemented test-first (episode regression failed before fix; new pure switch tests cover reset and unavailable state). Gates: tsc zero diagnostics; vitest 84 files / 1,366 tests; build 2,751 modules, existing chunk-size warning. Local fix commit includes this note; use git log for exact hash. Independent rereview and browser checks pending. No push/main merge/deploy, live SQL/VPS calls, secret reads or paid calls. Commit hook disabled to avoid copying unfinished branch docs over accepted vault Repo references. Next: merge this branch into codex/worker-keys and fix I1/I2/M6/M9/M11.
+
+## Fix round 2 — popups (2026-10-16, Codex)
+- Kevin confirmed Codex BUILDER for this bounded local round; roles unchanged. Started at 94b72cc. M8 now keys needs-you episodes on entry from the previous items, never the count. Delivery history allocates a fresh episode key on re-entry. First load stays silent; finished/failed behavior is unchanged.
+- Test-first: both count-change and same-count re-entry regressions failed before the fix. Gates: tsc 0 diagnostics; vitest 84 files / 1,368 tests / 0 failures; build 2,751 modules (existing chunk-size warning). Independent rereview/browser checks pending.
+- Commit hooks were not run on Codex commits; the vault mirror is refreshed manually by Claude. No push/main merge/deploy, migrations/SQL, remote writes, secret reads or paid calls. Next: merge into worker-keys, gate it, then merge worker-keys into Firecrawl before M3 fixes.
