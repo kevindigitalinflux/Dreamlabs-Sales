@@ -1,6 +1,6 @@
 # Next steps (the to-do list for Codex and Claude)
 
-Updated 2026-10-15. Order matters. Each item says who can pick it up. "Architect" = Claude (specs, plans, review, migrations, deploys). "Builder" = Codex (code on a branch, tests green, hand back). Kevin merges and sets secrets.
+Updated 2026-10-15 (checkpoint). Exact resume point: `docs/HANDOFF.md`. Order matters. Roles are the defaults of the shared workflow (vault `_Team/Shared agent workflow.md`): either agent may plan or build when Kevin confirms and records the assignment. Kevin merges unless he authorizes otherwise.
 
 ## 0. Right now (Kevin + Architect)
 - [ ] Kevin reruns Deep find on Love Living (Mr Brush & Co, `/pipeline/leads/9cb055e6-fbfb-45db-b9f8-8034090d3ab0`) after deploy `4eae38d`. Expect a "Read ... with the browser scraper" line, no duplicate built-address suggestion, "Site scrapes" 0 -> 1 on the top-bar chip. If the scrape line is still missing, the next suspect is whether `loveliving.uk` counts as a confirmed domain with no addresses on its pages (`supabase/functions/_shared/deepFind.ts`, step "1b-scrape").
