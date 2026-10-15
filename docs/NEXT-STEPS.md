@@ -43,3 +43,8 @@ Process: Kevin approved the Stage 2 spec/build and supplied Claude's rulings on 
 - Jobs: Jobs link not in the phone nav; light-theme muted text contrast about 4.15:1 (app-wide); other deferred minors listed in `CLAUDE.md` under "Jobs tracker and notification bar" and "Worker integration, Stage 1".
 - Worker integration deferred minors: scraped address stored as "Company contact" stops a matching built guess being checked; no date on the scrape label; scrape of an email-only domain shows "could not be reached"; `MAX_VERIFY_PER_LEAD` (6) is above the worker's 5 checks per domain per minute; the worker's own timeouts (30 s check, 170 s scrape) are longer than the client's (20 s, 25 s), so slow calls are not refunded.
 - Firewall reboot test for the VPS scraper container (`worker/scraper-firewall.sh`) at a maintenance window.
+
+## 2026-10-16 approved three-part build (local stacked branches)
+- [x] Part 1: desktop popups built on codex/popups; 83 files / 1,362 tests; tsc/build pass. Claude review and browser checks pending.
+- [ ] Part 2: per-organisation worker address/secret.
+- [ ] Part 3: Firecrawl BYO provider.

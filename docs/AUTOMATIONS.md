@@ -43,3 +43,5 @@ or retired.** (Requested by Kevin, 2026-07-17.)
 | Overdue follow-up nudge | idea | Daily digest of overdue next-actions (email or in-app) — not yet designed |
 | CSV/Sheets lead import | idea | Bulk import from the old Google Sheets workflow — not yet designed |
 | Jobs tracker (view + delete) | B | In-app only: `/jobs`, bar, tab title. Reads deep_find_runs, autopilot_runs, scrape_jobs; deletes only finished jobs the user created or admins (migration 060). No emails, no cron. Owner: `src/lib/jobs/`. |
+
+| Desktop job popups (local branch) | Browser Notification API | Background tab, opted-in person; job enters needs-you/done/failed | Shows silent notifications only; bounded browser delivery history, no database writes or messages to others. Owner: Codex build / Claude review, src/hooks/useDesktopNotifications.ts. Not deployed. |
