@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
     const { data: org, error: orgError } = await service.from('organizations').select('use_global_api_fallback').eq('id', orgId).single();
     if (orgError) return json({ error: 'Could not load worker settings.' }, 500, headers);
     let workerHost: string | null = null;
-    if (canManage && data?.some((s) => s.provider === 'lookup_worker' && s.is_configured)) {
+    if (membership?.role === 'admin' && data?.some((s) => s.provider === 'lookup_worker' && s.is_configured)) {
       const { data: value, error: vaultError } = await service.rpc('app_get_org_api_key', { target_org: orgId, target_provider: 'lookup_worker' });
       if (vaultError) return json({ error: 'Could not load worker settings.' }, 500, headers);
       const config = parseOrgWorkerSecret(typeof value === 'string' ? value : null);
@@ -134,6 +134,7 @@ Deno.serve(async (req) => {
 
   if (body.action === 'remove') {
     if (!canManage) return json({ error: 'Org admin only' }, 403, headers);
+    if (membership?.role !== 'admin') return json({ error: 'An admin of this organisation must manage its worker.' }, 403, headers);
     if (body.provider !== 'lookup_worker') return json({ error: 'Invalid provider' }, 400, headers);
     // Clear Vault first; a partial failure fails closed instead of reusing an old credential.
     const { error: vaultError } = await service.rpc('app_set_org_api_key', { target_org: orgId, target_provider: 'lookup_worker', secret: '' });
@@ -148,6 +149,9 @@ Deno.serve(async (req) => {
     if (!canManage) return json({ error: 'Org admin only' }, 403, headers);
     const provider = String(body.provider ?? '') as Provider;
     const apiKey = String(body.api_key ?? '').trim();
+    // Platform-only worker management is withheld pending the architect's ruling on the existing override.
+    if (provider === 'lookup_worker' && membership?.role !== 'admin')
+      return json({ error: 'An admin of this organisation must manage its worker.' }, 403, headers);
     if (!['gemini', 'google_places', 'google_places_pro', 'companies_house', 'apollo', 'hunter', 'anthropic', 'opencorporates', 'cro', 'lookup_worker'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
     if (!apiKey) return json({ error: 'api_key is required' }, 400, headers);
 

@@ -59,3 +59,10 @@ it('removes by clearing Vault and disabling the configured flag', async () => {
   expect(rpc).toHaveBeenCalledWith('app_set_org_api_key', { target_org: 'org', target_provider: 'lookup_worker', secret: '' });
   expect(updates).toHaveBeenCalledWith(expect.objectContaining({ is_configured: false }));
 });
+it('withholds platform-only worker management and host disclosure pending architect ruling', async () => {
+  member = null; platformRole = 'platform_admin';
+  expect((await request({ action: 'save', provider: 'lookup_worker', api_key: 'https://own.example.com|fake' })).status).toBe(403);
+  expect((await request({ action: 'remove', provider: 'lookup_worker' })).status).toBe(403);
+  expect((await (await request({ action: 'get' })).json()).worker_host).toBeNull();
+  expect(rpc).not.toHaveBeenCalled();
+});
