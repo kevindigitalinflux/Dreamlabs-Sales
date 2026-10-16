@@ -3,6 +3,9 @@
 Updated 2026-10-16 (stacked review fixes). [x] means built AND independently reviewed; local review fixes remain [ ] until rereview. Exact resume point: `docs/HANDOFF.md`. Order matters. Roles are the defaults of the shared workflow (vault `_Team/Shared agent workflow.md`): either agent may plan or build when Kevin confirms and records the assignment. Kevin merges unless he authorizes otherwise.
 
 ## 0. Right now (Kevin + Architect)
+- [ ] Deep find suggestions/regions Parts A/B **built locally, awaiting Claude review** on `codex/deepfind-suggestions-regions`; tsc/build pass, 99 files / 1,550 tests. Add/Dismiss, role ordering, country and None of these are implemented. Do not mark reviewed yet.
+- [ ] Migration 064 and rolled-back `supabase/audits/lead_country_dismissed.sql` **built, NOT applied/executed**. Claude reviews, Kevin applies/runs after approval; existing grants/RLS unchanged.
+- [ ] After review and separate publication authorization: deploy `run-deep-find` and frontend, then check UX Tree Ireland, Add/Dismiss persistence, role mailbox order, phone width and focus. Deno/runtime checks remain pending. Full decisions/limitations in the final HANDOFF section.
 - [x] Kevin reran Deep find on Love Living after `4eae38d`; Claude's 2026-10-15 handoff records 3 addresses / 3 phones, checker results, and no duplicate suggestion. Codex did not repeat this live check.
 - [ ] Hostinger snapshot of the VPS expires 2026-10-15 12:39 UTC: refresh before any VPS change.
 
