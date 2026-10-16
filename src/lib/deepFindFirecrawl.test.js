@@ -59,6 +59,105 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const process = () => processDeepFindLead(service, { id: 'run', org_id: 'org', created_by: 'user', status: 'active' }, { id: 'row', lead_id: 'lead', org_id: 'org' });
+it('tries common formats without an inferred pattern and fills only the existing blank contact', async () => {
+  vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  contacts = [{ id: 'contact', first_name: 'Valentina', last_name: 'Antunovic', title: 'Founder', email: null, include_in_sequences: true }];
+  worker.verifyEmail.mockResolvedValueOnce({ ok: true, value: { status: 'invalid', reason: 'mailbox_missing' } })
+    .mockResolvedValueOnce({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
+  const result = await process();
+  expect(worker.verifyEmail.mock.calls.map(([e]) => e)).toEqual(['valentina.antunovic@example.com', 'valentina@example.com']);
+  expect(write).toHaveBeenCalledWith('update', expect.objectContaining({ email: 'valentina@example.com', include_in_sequences: false }));
+  expect(result.domains.steps.join(' ')).toContain('Guessed from common formats and confirmed by our email checker, check it');
+});
+it('stops a catch-all domain across people and offers only the top two common guesses per person', async () => {
+  vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null },
+    { id: 'two', first_name: 'John', last_name: 'Jones', title: 'Director', email: null }];
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'risky', reason: 'catch_all' } });
+  const result = await process();
+  expect(worker.verifyEmail).toHaveBeenCalledOnce();
+  expect(write).not.toHaveBeenCalled();
+  expect(result.domains.suggestions.map((s) => s.value)).toEqual(['jane.smith@example.com', 'jane@example.com', 'john.jones@example.com', 'john@example.com']);
+  expect(result.domains.suggestions.every((s) => s.label === 'Guess, the mail server accepts any address so it cannot be confirmed')).toBe(true);
+});
+it('does not repeat an inferred-format address among common guesses and never exceeds five per domain', async () => {
+  vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  contacts = [{ id: 'sample', first_name: 'Max', last_name: 'Jones', email: 'max.jones@example.com' },
+    { id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null }];
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'invalid', reason: 'mailbox_missing' } });
+  await process();
+  const addresses = worker.verifyEmail.mock.calls.map(([e]) => e);
+  expect(addresses).toHaveLength(5);
+  expect(new Set(addresses).size).toBe(5);
+  expect(addresses[0]).toBe('jane.smith@example.com');
+});
+it('stops at an existing inferred format when the checker confirms it', async () => {
+  vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  contacts = [{ id: 'sample', first_name: 'Max', last_name: 'Jones', email: 'max.jones@example.com' },
+    { id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null }];
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
+  await process();
+  expect(worker.verifyEmail).toHaveBeenCalledExactlyOnceWith('jane.smith@example.com');
+  expect(write).toHaveBeenCalledWith('update', expect.objectContaining({ email: 'jane.smith@example.com' }));
+});
+it('does not attempt common guesses on an unconfirmed domain', async () => {
+  vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null }];
+  vi.mocked(discoverLeadDomains).mockResolvedValue({ domains: [{ domain: 'example.com', needs_check: true, sources: ['web'] }], people: [], notes: [], problems: [], sitePages: [] });
+  const result = await process();
+  expect(worker.verifyEmail).not.toHaveBeenCalled();
+  expect(result.domains.steps.join(' ')).toContain('No company domain is confirmed.');
+});
+it('worker off stops common guesses immediately and gives one plain worker line', async () => {
+  contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null }];
+  const result = await process();
+  expect(worker.verifyEmail).not.toHaveBeenCalled();
+  expect(result.domains.suggestions).toEqual([]);
+  expect(result.domains.steps.filter((s) => s.includes('Jane Smith: no email found.'))).toEqual([
+    'Jane Smith: no email found. The email checker is not set up. No Hunter key is set.'
+  ]);
+});
+it('reserves people time before admitting the browser scrape', async () => {
+  contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null }];
+  const start = Date.now();
+  vi.spyOn(Date, 'now').mockReturnValueOnce(start).mockReturnValue(start + 20_000);
+  await process();
+  expect(worker.scrapeSite).not.toHaveBeenCalled();
+});
+it('also preserves the people floor when Firecrawl would otherwise read a team page', async () => {
+  leadOverrides = { owner_name: 'Jane Smith' };
+  const start = Date.now();
+  vi.spyOn(Date, 'now').mockReturnValueOnce(start).mockReturnValue(start + 20_000);
+  const result = await process();
+  expect(request).not.toHaveBeenCalled();
+  expect(lookUpPeople.mock.calls[0][0].people).toEqual([expect.objectContaining({ first: 'Jane', last: 'Smith' })]);
+  expect(result.domains.steps).toContain('Firecrawl was skipped to leave time for the remaining checks.');
+});
+it.each(['risky', 'unverifiable', 'invalid'])('never fills a common guess with verdict %s', async (status) => {
+  vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null }];
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status, reason: 'unknown' } });
+  const result = await process();
+  expect(write).not.toHaveBeenCalled();
+  expect(worker.verifyEmail).toHaveBeenCalledTimes(5);
+  expect(result.domains.steps.join(' ')).toContain('Tried 5 common formats on example.com (none confirmed).');
+});
+it.each(['busy', 'limit_reached', 'unreachable', 'bad_response'])('stops common guesses for the lead on %s', async (failure) => {
+  vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null },
+    { id: 'two', first_name: 'John', last_name: 'Jones', title: 'Director', email: null }];
+  worker.verifyEmail.mockResolvedValue({ ok: false, failure });
+  await process();
+  expect(worker.verifyEmail).toHaveBeenCalledOnce();
+  expect(write).not.toHaveBeenCalled();
+});
+it('offers a valid guess for a site person for review without inserting a contact', async () => {
+  vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
+  const result = await process();
+  expect(result.domains.suggestions).toEqual([expect.objectContaining({ name: 'Jane Smith', value: 'jane.smith@example.com', label: 'Guessed from common formats and confirmed by our email checker, check it' })]);
+  expect(write).not.toHaveBeenCalled();
+});
 it('fetches officers after an accidental Ireland choice is corrected to UK', async () => {
   const actual = await vi.importActual('../../supabase/functions/_shared/deepFindRegistry');
   vi.mocked(resolveRegistry).mockImplementation(actual.resolveRegistry);

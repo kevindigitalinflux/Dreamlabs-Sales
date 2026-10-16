@@ -8,7 +8,7 @@ import {
 } from './knownPersonLookup.ts';
 import { mergeFoundIntoPerson, type FoundFields } from './knownPerson.ts';
 import { runWideLookup, type KnownAddress } from './knownPersonWideRun.ts';
-import type { StepId } from './knownPersonWide.ts';
+import { STEP_DETAILS, type StepId } from './knownPersonWide.ts';
 import { emailOnLead, type ExistingContact, type PersonToLookUp } from './deepFindRules.ts';
 
 type Contact = ExistingContact & Record<string, unknown>;
@@ -48,7 +48,7 @@ export interface PeopleContext {
 }
 
 /** One person's line in the results. */
-export interface PersonResult { name: string; role: string | null; source: PersonToLookUp['source']; email_found: boolean }
+export interface PersonResult { name: string; role: string | null; source: PersonToLookUp['source']; email_found: boolean; reason?: string }
 
 /** The outcome of the people step. */
 export interface PeopleOutcome {
@@ -96,9 +96,14 @@ async function fillBlanks(service: SupabaseClient, row: Contact, patch: Record<s
 export async function lookUpPeople(ctx: PeopleContext): Promise<PeopleOutcome> {
   const out: PeopleOutcome = { results: [], touched: [], created: [], emailsFound: 0, suggestions: [], problems: [] };
   const { hunterKey, geminiKey } = ctx.keys;
-  for (const person of ctx.people.slice(0, 5)) {
+  for (const [index, person] of ctx.people.entries()) {
     const name = `${person.first} ${person.last}`.slice(0, 80);
-    if (ctx.left() < 15_000 || ctx.domains.length === 0) { out.results.push({ name, role: person.title, source: person.source, email_found: false }); continue; }
+    if (index >= 5 || ctx.left() < 15_000 || ctx.domains.length === 0) {
+      const reason = index >= 5 ? 'Only five people are looked up in one run, try Deep find again.'
+        : ctx.domains.length === 0 ? 'No company domain is confirmed.'
+        : 'Not enough time left in this run, try Deep find again.';
+      out.results.push({ name, role: person.title, source: person.source, email_found: false, reason }); continue;
+    }
     const contact = person.contactId ? ctx.contacts().find((c) => c.id === person.contactId) ?? null : null;
     const work: FoundFields = { email: null, phone: str(contact?.phone), linkedin_url: str(contact?.linkedin_url) };
     const patch: Record<string, string> = {};
@@ -138,6 +143,8 @@ export async function lookUpPeople(ctx: PeopleContext): Promise<PeopleOutcome> {
       },
     });
     for (const st of wide.steps) {
+      // Time failures are explained once in this person's final line, with a useful next action.
+      if (st.reason === 'timeout') continue;
       if (st.status !== 'error' || !st.reason || (capRefused && st.reason === 'rate_limited')) continue;
       out.problems.push({ step: 'person', target: `${name}, ${st.label}`, failure: reasonCode(st.reason) });
     }
@@ -157,7 +164,14 @@ export async function lookUpPeople(ctx: PeopleContext): Promise<PeopleOutcome> {
       out.suggestions.push({ name, field: 'email', value: patch.email, label: 'Found on the website, check it' });
     }
     if (emailFound) out.emailsFound++;
-    out.results.push({ name, role: person.title, source: person.source, email_found: emailFound });
+    const attempted = new Set(wide.steps.filter((s) => s.status !== 'skipped' && s.status !== 'unavailable').map((s) => s.id));
+    const reasons: string[] = [];
+    if (attempted.has('hunter_finder') || attempted.has('hunter_domain') || attempted.has('pattern')) reasons.push('Tried Hunter.');
+    if (attempted.has('website')) reasons.push('Read the company website.');
+    if (attempted.has('web')) reasons.push('Tried a web search.');
+    if (wide.steps.some((s) => s.reason === 'timeout' || s.detail === STEP_DETAILS.timeUp || s.detail === STEP_DETAILS.webSkippedTime)) reasons.push('Not enough time left in this run, try Deep find again.');
+    out.results.push({ name, role: person.title, source: person.source, email_found: emailFound,
+      ...(!emailFound && reasons.length > 0 ? { reason: reasons.join(' ') } : {}) });
   }
   return out;
 }

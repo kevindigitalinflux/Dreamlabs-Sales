@@ -1,5 +1,7 @@
 import { expect, it } from 'vitest';
 import { commonEmailCandidates, GuessChecks, optionalPeopleBudget, personEmailLine } from '../../supabase/functions/_shared/personEmailFinding';
+import { scrapeTimeoutFor } from '../../supabase/functions/_shared/workerRules';
+import { firecrawlTimeoutFor } from '../../supabase/functions/_shared/firecrawlRules';
 
 it('orders five ASCII candidates, takes the first given name and joins surname punctuation', () => {
   expect(commonEmailCandidates('Éva Marie', "O’Brien-Smith", 'Example.com')).toEqual([
@@ -41,6 +43,10 @@ it('reserves 25 seconds only when people need an email', () => {
   expect(optionalPeopleBudget(65_000, true)).toBe(40_000);
   expect(optionalPeopleBudget(20_000, true)).toBe(0);
   expect(optionalPeopleBudget(65_000, false)).toBe(65_000);
+  expect(scrapeTimeoutFor(optionalPeopleBudget(66_999, true))).toBeNull();
+  expect(scrapeTimeoutFor(optionalPeopleBudget(67_000, true))).toBe(10_000);
+  expect(firecrawlTimeoutFor(optionalPeopleBudget(61_999, true))).toBeNull();
+  expect(firecrawlTimeoutFor(optionalPeopleBudget(62_000, true))).toBe(5_000);
 });
 it('explains attempts, catch-all, missing worker and time using fixed sentences', () => {
   expect(personEmailLine('Jane Smith', ['Tried 3 common formats on example.com (none confirmed).', 'Hunter is used up this month.']))
