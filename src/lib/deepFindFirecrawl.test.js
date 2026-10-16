@@ -126,7 +126,7 @@ it('worker off stops common guesses immediately and gives one plain worker line'
   expect(worker.verifyEmail).not.toHaveBeenCalled();
   expect(result.domains.suggestions).toEqual([]);
   expect(result.domains.steps.filter((s) => s.includes('Jane Smith: no email found.'))).toEqual([
-    'Jane Smith: no email found. The email checker is not set up. No Hunter key is set.'
+    'Jane Smith: no email found.'
   ]);
 });
 it('reserves people time before admitting the browser scrape', async () => {
@@ -325,4 +325,43 @@ it('retains contacts written before authorisation was lost', async () => {
   expect(write).toHaveBeenCalledExactlyOnceWith('insert', expect.any(Array));
   expect(hunterDomainList).not.toHaveBeenCalled();
   expect(request).not.toHaveBeenCalled();
+});
+
+it('reports missing worker once for the lead with plain person lines', async () => {
+  contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null },
+    { id: 'two', first_name: 'John', last_name: 'Jones', title: 'Director', email: null }];
+  const result = await process();
+  expect(result.domains.steps.filter((s) => s.includes('not set up'))).toEqual([
+    'The email checker is not set up, so email formats were not tried.'
+  ]);
+  expect(result.domains.steps).toContain('Jane Smith: no email found.');
+  expect(result.domains.steps).toContain('John Jones: no email found.');
+});
+it.each([false, true])('retains legacy catch-all suggestions with Hunter available %s', async (hunter) => {
+  vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  vi.mocked(resolveOrgApiKey).mockImplementation(async (_s, _o, provider) => hunter && provider === 'hunter' ? 'fake-key' : null);
+  contacts = [{ id: 'sample', first_name: 'Max', last_name: 'Jones', email: 'max.jones@example.com' },
+    { id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null },
+    { id: 'two', first_name: 'John', last_name: 'Brown', title: 'Director', email: null }];
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'risky', reason: 'catch_all' } });
+  const result = await process();
+  expect(worker.verifyEmail.mock.calls.map(([email]) => email)).toEqual(['jane.smith@example.com', 'john.brown@example.com']);
+  expect(hunterVerifyEmail).toHaveBeenCalledTimes(hunter ? 2 : 0);
+  for (const value of ['jane.smith@example.com', 'john.brown@example.com']) {
+    expect(result.domains.suggestions).toContainEqual(expect.objectContaining({ value,
+      label: hunter ? 'Built from the email format and verified by Hunter, check it' : 'Built from the email format. The mail server accepts any address, so it cannot be confirmed, check it' }));
+  }
+  expect(write).not.toHaveBeenCalled();
+});
+it.each([false, true])('preserves wide person lookup at 26 seconds with legacy pattern %s', async (legacy) => {
+  vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null }];
+  if (legacy) contacts.push({ id: 'sample', first_name: 'Max', last_name: 'Jones', email: 'max.jones@example.com' });
+  const start = Date.now();
+  let elapsed = 44_000;
+  vi.spyOn(Date, 'now').mockReturnValueOnce(start).mockImplementation(() => start + elapsed);
+  worker.verifyEmail.mockImplementation(async () => { elapsed += 20_000; return { ok: true, value: { status: 'invalid', reason: 'mailbox_missing' } }; });
+  await process();
+  expect(worker.verifyEmail).not.toHaveBeenCalled();
+  expect(lookUpPeople.mock.calls[0][0].people).toContainEqual(expect.objectContaining({ first: 'Jane', last: 'Smith' }));
 });

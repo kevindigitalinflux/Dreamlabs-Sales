@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { commonEmailCandidates, GuessChecks, optionalPeopleBudget, personEmailLine } from '../../supabase/functions/_shared/personEmailFinding';
+import { commonEmailCandidates, GuessChecks, optionalPeopleBudget, canStartGuessCheck, personEmailLine } from '../../supabase/functions/_shared/personEmailFinding';
 import { scrapeTimeoutFor } from '../../supabase/functions/_shared/workerRules';
 import { firecrawlTimeoutFor } from '../../supabase/functions/_shared/firecrawlRules';
 
@@ -21,7 +21,7 @@ it('counts existing-format checks, deduplicates and caps each domain at five and
   state.record('one@other.com', 'invalid', 'mailbox_missing');
   expect(state.canCheck('two@other.com')).toBe(false);
 });
-it('stops a catch-all domain for all people only when its first result says catch-all', () => {
+it('stops a catch-all domain for all people when any result says catch-all', () => {
   const state = new GuessChecks();
   state.record('jane@example.com', 'risky', 'catch_all');
   expect(state.catchAll.has('example.com')).toBe(true);
@@ -29,7 +29,9 @@ it('stops a catch-all domain for all people only when its first result says catc
   const later = new GuessChecks();
   later.record('jane@example.com', 'invalid', 'mailbox_missing');
   later.record('john@example.com', 'risky', 'catch_all');
-  expect(later.catchAll.size).toBe(0);
+  expect(later.catchAll.has('example.com')).toBe(true);
+  expect(later.canCheck('next@example.com')).toBe(false);
+  expect(later.canCheck('next@example.com', true)).toBe(true);
 });
 it('stops a person on valid, and stops all guesses when the worker cannot answer', () => {
   const state = new GuessChecks();
@@ -52,4 +54,11 @@ it('explains attempts, catch-all, missing worker and time using fixed sentences'
   expect(personEmailLine('Jane Smith', ['Tried 3 common formats on example.com (none confirmed).', 'Hunter is used up this month.']))
     .toBe('Jane Smith: no email found. Tried 3 common formats on example.com (none confirmed). Hunter is used up this month.');
   expect(personEmailLine('<Jane>\nSmith', [])).toBe('Jane Smith: no email found. No confirmed address was returned.');
+});
+
+it.each([
+  [44_999, true, false], [45_000, true, false], [45_001, true, true],
+  [25_000, false, false], [25_001, false, true], [26_000, true, false],
+])('worker admission at %i ms with pending people %s is %s', (left, people, expected) => {
+  expect(canStartGuessCheck(left, people, 20_000)).toBe(expected);
 });

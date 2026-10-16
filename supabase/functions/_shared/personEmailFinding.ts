@@ -19,18 +19,22 @@ export function optionalPeopleBudget(leftMs: number, hasPeople: boolean): number
   return Math.max(0, leftMs - (hasPeople ? PEOPLE_RESERVE_MS : 0));
 }
 
+/** Leave the people floor after a full worker check; retain the old gate without pending people. */
+export function canStartGuessCheck(leftMs: number, hasPeople: boolean, verifyTimeoutMs: number): boolean {
+  return leftMs > (hasPeople ? PEOPLE_RESERVE_MS + verifyTimeoutMs : 25_000);
+}
+
 /** Shared by inferred and common formats: no repeated address, six checks per lead, five per domain. */
 export class GuessChecks {
   readonly catchAll = new Set<string>();
   readonly attempted = new Set<string>();
   private counts = new Map<string, number>();
-  private results = new Map<string, number>();
   private stopped = false;
   constructor(private maxChecks = 6) {}
-  canCheck(email: string): boolean {
+  canCheck(email: string, legacy = false): boolean {
     const key = email.toLowerCase();
     const d = key.split('@')[1] ?? '';
-    return !this.stopped && !this.catchAll.has(d) && !this.attempted.has(key)
+    return !this.stopped && (legacy || !this.catchAll.has(d)) && !this.attempted.has(key)
       && this.attempted.size < this.maxChecks && (this.counts.get(d) ?? 0) < 5;
   }
   record(email: string, status: string | null, reason: string): void {
@@ -38,10 +42,7 @@ export class GuessChecks {
     const d = key.split('@')[1] ?? '';
     this.attempted.add(key);
     this.counts.set(d, (this.counts.get(d) ?? 0) + 1);
-    if (status !== null) {
-      if (!this.results.has(d) && reason === 'catch_all') this.catchAll.add(d);
-      this.results.set(d, (this.results.get(d) ?? 0) + 1);
-    }
+    if (status !== null && reason === 'catch_all') this.catchAll.add(d);
   }
   stopWorker(): void { this.stopped = true; }
   shouldStopPerson(status: string | null): boolean { return status === 'valid'; }

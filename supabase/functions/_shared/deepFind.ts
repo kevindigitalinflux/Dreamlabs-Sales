@@ -25,8 +25,8 @@ import {
   hunterPeople, namedPersonIsStored, parseLeadPersonName, peopleToLookUp, stuckAction, type ExistingContact, type LeadStats, type SitePerson,
 } from './deepFindRules.ts';
 import { makeWorkerClient } from './workerClient.ts';
-import { MAX_VERIFY_PER_LEAD, scrapeTimeoutFor, unconfirmedLabel, verifyAction } from './workerRules.ts';
-import { commonEmailCandidates, GuessChecks, optionalPeopleBudget, personEmailLine, CATCH_ALL_GUESS_LABEL, COMMON_GUESS_LABEL } from './personEmailFinding.ts';
+import { MAX_VERIFY_PER_LEAD, WORKER_TIMEOUT_MS, scrapeTimeoutFor, unconfirmedLabel, verifyAction } from './workerRules.ts';
+import { commonEmailCandidates, GuessChecks, optionalPeopleBudget, canStartGuessCheck, personEmailLine, CATCH_ALL_GUESS_LABEL, COMMON_GUESS_LABEL } from './personEmailFinding.ts';
 import { makeFirecrawlClient } from './firecrawlClient.ts';
 import { FIRECRAWL_DAILY_PAGES, firecrawlDomainFor } from './firecrawlRules.ts';
 import { classifyDeepFindCheckpoint, DeepFindAuthorisationLost } from './deepFindCheckpoint.ts';
@@ -283,6 +283,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     ...extraSitePeople.map((p) => p.name), ...pages.flatMap((html) => extractTeamMembers(html).map((p) => p.name)),
     ...webPeople.map((p) => p.name),
   ] }, all(), officers);
+  const canCheckGuess = () => canStartGuessCheck(left(), lookupPeople().length > 0, WORKER_TIMEOUT_MS.verify);
   const optionalBudget = () => optionalPeopleBudget(left(), lookupPeople().length > 0);
   const scrapeTimeout = scrapeTimeoutFor(optionalBudget());
   if (scrapeDomain && scrapeTimeout !== null) {
@@ -367,12 +368,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       let verdict: string | null = null;
       let label = guessLabel(pattern, d);
       // Free checker first; Hunter is asked only when it cannot decide and credits remain.
-      const checked = left() > 25_000 && checks.canCheck(guess) ? await worker.verifyEmail(guess) : null;
+      const checked = canCheckGuess() && checks.canCheck(guess, true) ? await worker.verifyEmail(guess) : null;
       if (checked) {
         checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : '');
         if (!checked.ok) { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
       }
-      if (checks.catchAll.has(d)) continue;
       const action = verifyAction(checked && checked.ok ? checked.value.status : null, !!hunterKey && verifications < 3 && left() > 25_000);
       if (action === 'drop') continue;
       if (action === 'accept') {
@@ -419,7 +419,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       for (const guess of candidates) {
         if (checks.catchAll.has(d) || checkerFailure) break;
         if (emailOnLead(all(), guess) || suggestions.some((s) => s.value.toLowerCase() === guess) || !checks.canCheck(guess)) continue;
-        if (left() <= 25_000) { detail(name, 'Not enough time left in this run, try Deep find again.'); break; }
+        if (!canCheckGuess()) { detail(name, 'Not enough time left in this run, try Deep find again.'); break; }
         const checked = await worker.verifyEmail(guess);
         checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : '');
         if (!checked.ok) {
@@ -440,18 +440,12 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         break;
       }
       if (checks.catchAll.has(d)) {
-        // Remove earlier format suggestions on this domain: a catch-all offers only the top two common guesses.
-        for (let i = suggestions.length - 1; i >= 0; i--) {
-          const suggestion = suggestions[i]!;
-          const formatGuess = suggestion.label.startsWith('Guess, unverified:') || suggestion.label.startsWith('Built from the email format');
-          if (suggestion.name === name && suggestion.field === 'email' && emailDomain(suggestion.value) === d && formatGuess) suggestions.splice(i, 1);
-        }
         for (const guess of candidates.slice(0, 2)) {
           if (!emailOnLead(all(), guess) && !suggestions.some((s) => s.field === 'email' && s.value.toLowerCase() === guess)) suggestions.push({ name, field: 'email', value: guess, label: CATCH_ALL_GUESS_LABEL });
         }
         detail(name, 'The mail server accepts any address, so guesses cannot be confirmed.');
       } else if (tried > 0) detail(name, `Tried ${tried} common format${tried === 1 ? '' : 's'} on ${d} (${valid ? 'one confirmed for review' : 'none confirmed'}).`);
-      else if (!checkerFailure && left() > 25_000 && !checks.canCheck(candidates[0]!)) detail(name, 'The email check limit for this run or domain was reached.');
+      else if (!checkerFailure && canCheckGuess() && !checks.canCheck(candidates[0]!)) detail(name, 'The email check limit for this run or domain was reached.');
       if (valid) break;
     }
   }
@@ -518,9 +512,14 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     suggestions.push(s);
   }
   problems.push(...peopleOut.problems);
+  const checkerNotConfigured = checkerFailure === checkerFailures.not_configured;
+  if (checkerNotConfigured && peopleBeforeChecks.length > 0) {
+    steps.push('The email checker is not set up, so email formats were not tried.');
+  }
   for (const person of peopleBeforeChecks) {
     if (findSamePerson(all(), person.first, person.last)?.email) continue;
     const name = `${person.first} ${person.last}`.slice(0, 80);
+    if (checkerNotConfigured) { steps.push(name + ': no email found.'); continue; }
     const lines = emailDetails.get(name) ?? [];
     if (checkerFailure) lines.push(checkerFailure);
     const lookup = peopleOut.results?.find((r) => r.name === name);
