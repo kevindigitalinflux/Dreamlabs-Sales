@@ -80,6 +80,18 @@ it('stops a catch-all domain across people and offers only the top two common gu
   expect(result.domains.suggestions.map((s) => s.value)).toEqual(['jane.smith@example.com', 'jane@example.com', 'john.jones@example.com', 'john@example.com']);
   expect(result.domains.suggestions.every((s) => s.label === 'Guess, the mail server accepts any address so it cannot be confirmed')).toBe(true);
 });
+it('retains a literal website find when the domain is catch-all, without repeating that address', async () => {
+  vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  leadOverrides = { owner_name: 'Jane Smith' };
+  vi.mocked(discoverLeadDomains).mockResolvedValue({ domains: [{ domain: 'example.com', needs_check: false, sources: ['website'] }],
+    people: [], notes: [], problems: [], sitePages: [{ domain: 'example.com', pages: ['<a href="mailto:jane.smith@example.com">Jane Smith</a>'] }] });
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'risky', reason: 'catch_all' } });
+  const result = await process();
+  expect(result.domains.suggestions.filter((s) => s.value === 'jane.smith@example.com')).toEqual([
+    expect.objectContaining({ label: 'Found on example.com, check it' }),
+  ]);
+  expect(worker.verifyEmail).toHaveBeenCalledOnce();
+});
 it('does not repeat an inferred-format address among common guesses and never exceeds five per domain', async () => {
   vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
   contacts = [{ id: 'sample', first_name: 'Max', last_name: 'Jones', email: 'max.jones@example.com' },

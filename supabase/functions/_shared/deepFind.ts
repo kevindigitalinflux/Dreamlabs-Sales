@@ -442,10 +442,12 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       if (checks.catchAll.has(d)) {
         // Remove earlier format suggestions on this domain: a catch-all offers only the top two common guesses.
         for (let i = suggestions.length - 1; i >= 0; i--) {
-          if (suggestions[i]!.name === name && suggestions[i]!.field === 'email' && emailDomain(suggestions[i]!.value) === d) suggestions.splice(i, 1);
+          const suggestion = suggestions[i]!;
+          const formatGuess = suggestion.label.startsWith('Guess, unverified:') || suggestion.label.startsWith('Built from the email format');
+          if (suggestion.name === name && suggestion.field === 'email' && emailDomain(suggestion.value) === d && formatGuess) suggestions.splice(i, 1);
         }
         for (const guess of candidates.slice(0, 2)) {
-          if (!emailOnLead(all(), guess)) suggestions.push({ name, field: 'email', value: guess, label: CATCH_ALL_GUESS_LABEL });
+          if (!emailOnLead(all(), guess) && !suggestions.some((s) => s.field === 'email' && s.value.toLowerCase() === guess)) suggestions.push({ name, field: 'email', value: guess, label: CATCH_ALL_GUESS_LABEL });
         }
         detail(name, 'The mail server accepts any address, so guesses cannot be confirmed.');
       } else if (tried > 0) detail(name, `Tried ${tried} common format${tried === 1 ? '' : 's'} on ${d} (${valid ? 'one confirmed for review' : 'none confirmed'}).`);
