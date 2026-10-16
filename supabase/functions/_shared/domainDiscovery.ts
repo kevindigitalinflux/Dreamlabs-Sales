@@ -5,6 +5,7 @@
 // predicates (the existing hostname, SSRF and directory rules) and must also fit the company's brand words.
 
 import { siteConfirmLine, siteConfirmsCompany } from './domainSiteCheck.ts';
+import { countryPhoneMismatch } from './deepFindSuggestions.ts';
 
 /** Where a domain came from, strongest first (see SOURCE_RANK). */
 export type DomainSource =
@@ -264,7 +265,7 @@ export interface WebsiteSuspicion { suspect: boolean; reasons: string[] }
  * only from other countries (not +44 or +353, and no UK-style 0... number), or when neither the home page title nor
  * its footer carries the company's distinctive name words. Each reason is a fixed sentence.
  */
-export function websiteSuspicion(pages: string[], names: string[]): WebsiteSuspicion {
+export function websiteSuspicion(pages: string[], names: string[], country?: unknown): WebsiteSuspicion {
   const reasons: string[] = [];
   const all = pages.slice(0, 6).map((p) => (typeof p === 'string' ? p.slice(0, 600_000) : '')).join('\n');
   if (!all) return { suspect: false, reasons };
@@ -276,7 +277,10 @@ export function websiteSuspicion(pages: string[], names: string[]): WebsiteSuspi
   }
   for (const m of all.matchAll(/tel:\s*\+?(\d{1,3})/gi)) { if (m[1] === '44' || m[1] === '353') uk++; }
   if (/(^|[^\d+])0\d{2,4}[\s-]?\d{3,4}[\s-]?\d{3,4}\b/.test(text)) uk++;
-  if (foreign > 0 && uk === 0) reasons.push('The phone numbers on the website are not UK numbers.');
+  if (country === 'IE' || country === 'US') {
+    const telephoneLinks = [...all.matchAll(/tel:([^"'<>]+)/gi)].map((m) => m[1]).join(' ');
+    if (countryPhoneMismatch(`${text} ${telephoneLinks}`, country)) reasons.push('The phone numbers on the website do not match the lead’s country.');
+  } else if (country !== 'OTHER' && foreign > 0 && uk === 0) reasons.push('The phone numbers on the website are not UK numbers.');
   const title = /<title[^>]*>([\s\S]{0,300}?)<\/title>/i.exec(pages[0] ?? '')?.[1] ?? '';
   const footer = /(©|&copy;|copyright)[\s\S]{0,200}/i.exec(text)?.[0] ?? '';
   const carries = (s: string) => names.some((n) => {

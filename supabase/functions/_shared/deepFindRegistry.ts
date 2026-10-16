@@ -8,6 +8,7 @@ import { fetchCompanyProfile, fetchOfficerAppointments, searchCompaniesByName, s
 import { appointmentCompanies, officerAppointmentPaths, type OfficerQuery } from './registryOfficerSearch.ts';
 import { cleanCompanyNumber, locationAgrees, pickCompany, scoreCompanyCandidates, type CompanyCandidate } from './registrySearch.ts';
 import { registrySearchNames } from './nameVariants.ts';
+import { registrySkipReason } from './deepFindSuggestions.ts';
 
 /** The registered company as far as it is known, and how it was settled. */
 export interface RegistryResult {
@@ -15,7 +16,7 @@ export interface RegistryResult {
   name: string | null;
   address: string | null;
   locality: string | null;
-  how: 'saved' | 'raw_lead' | 'auto' | 'ambiguous' | 'not_found' | 'no_key' | 'error';
+  how: 'saved' | 'raw_lead' | 'auto' | 'ambiguous' | 'not_found' | 'no_key' | 'error' | 'not_uk' | 'rejected';
   /** Candidates to choose from when the search was not clear (top 5, each with why it is offered). */
   candidates: CompanyCandidate[];
 }
@@ -26,6 +27,8 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !=
 export function registryStep(r: RegistryResult): string {
   const name = (r.name ?? '').replace(/[^\p{L}\p{N} &'.,()-]/gu, '').slice(0, 120);
   switch (r.how) {
+    case 'not_uk': return 'Companies House skipped: this is not a UK company.';
+    case 'rejected': return 'Companies House skipped: you rejected the company matches for this lead.';
     case 'saved': return `Companies House: using the company saved on this lead (${name || r.number}).`;
     case 'raw_lead': return `Companies House: using the company this lead was found from (${name || r.number}).`;
     case 'auto': return `Companies House: matched ${name} (${r.number}).`;
@@ -44,6 +47,8 @@ export async function resolveRegistry(
   service: SupabaseClient, lead: Record<string, unknown> & { id: string }, chKey: string | null, people: OfficerQuery[] = [],
 ): Promise<RegistryResult> {
   const empty = { address: null, locality: null, candidates: [] as CompanyCandidate[] };
+  const skip = registrySkipReason(lead);
+  if (skip) return { ...empty, number: null, name: null, how: skip };
   const saved = cleanCompanyNumber(lead.company_number);
   if (saved) {
     const profile = chKey ? await fetchCompanyProfile(saved, chKey) : null;

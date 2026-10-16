@@ -29,6 +29,7 @@ import { scrapeTimeoutFor, unconfirmedLabel, verifyAction } from './workerRules.
 import { makeFirecrawlClient } from './firecrawlClient.ts';
 import { FIRECRAWL_DAILY_PAGES, firecrawlDomainFor } from './firecrawlRules.ts';
 import { classifyDeepFindCheckpoint, DeepFindAuthorisationLost } from './deepFindCheckpoint.ts';
+import { visibleSuggestions } from './deepFindSuggestions.ts';
 
 export const WALL_BUDGET_MS = 130_000;
 /** A lead is only started when at least this much of the invocation is left. */
@@ -192,6 +193,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   ].slice(0, 6);
   const registry = await resolveRegistry(service, lead, chKey, registryPeople);
   steps.push(registryStep(registry));
+  if (lead.country === 'IE' && await resolveOrgApiKey(service, run.org_id, 'cro')) {
+    steps.push('CRO lookup when its key arrives; Irish register lookup is not built yet.');
+  }
   const officers = registry.number && chKey ? await fetchActiveOfficers(registry.number, chKey) : [];
   const officerRows: Record<string, unknown>[] = [];
   for (const o of officers) {
@@ -214,7 +218,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const siteReadable = !!siteDomain && !siteBlocked && DOMAIN_CHECKS.usable(siteDomain);
   const sitePages = siteReadable && left() > 30_000 ? await readCompanyPages(str(lead.website)!, 12_000) : [];
   // A website that shows clear signs of another company is only a weak signal: not read for people or other domains.
-  const suspicion = websiteSuspicion(sitePages, [str(lead.business_name) ?? '', registry.name ?? ''].filter(Boolean));
+  const suspicion = websiteSuspicion(sitePages, [str(lead.business_name) ?? '', registry.name ?? ''].filter(Boolean), lead.country);
   if (suspicion.suspect) steps.push(`This website may belong to a different company: ${suspicion.reasons.join(' ')}`);
   const usableSite = siteReadable && !suspicion.suspect;
   stats.noWebsite = !usableSite;
@@ -393,9 +397,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const listed = [...lists.entries()].flatMap(([d, l]) => hunterPeople(l.emails, d, cleanEmail, cleanLinkedinProfile).map((p) => ({ ...p, domain: d })));
   const found = rankPeople(listed.filter((p) => verified.has(p.domain)), webPeople).slice(0, MAX_HUNTER_PEOPLE_PER_LEAD);
   // People on a domain that is not corroborated are never stored: they are listed for the user to check.
-  const unverifiedPeople = rankPeople(listed.filter((p) => !verified.has(p.domain)), webPeople)
+  const unverifiedPeople = visibleSuggestions(rankPeople(listed.filter((p) => !verified.has(p.domain)), webPeople)
     .filter((p) => !emailOnLead(rows, p.email)).slice(0, 10)
-    .map((p) => ({ name: `${p.first_name} ${p.last_name}`.slice(0, 80), role: p.title.slice(0, 60), email: p.email, domain: p.domain }));
+    .map((p) => ({ name: `${p.first_name} ${p.last_name}`.slice(0, 80), role: p.title.slice(0, 60), email: p.email, domain: p.domain })), lead, all());
   stats.unverifiedPeople = unverifiedPeople.length;
   const toInsert: Record<string, unknown>[] = [];
   for (const p of found) {
@@ -444,8 +448,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   for (const p of [...pages.flatMap((html) => extractTeamMembers(html)), ...extraSitePeople]) {
     if (!sitePeople.some((x) => x.name.toLowerCase() === p.name.toLowerCase())) sitePeople.push(p);
   }
-  const namedOnSite = sitePeople.filter((p) => !namedPersonIsStored(p.name, all())).slice(0, 10);
-  const namedByWeb = webPeople.filter((p) => !namedPersonIsStored(p.name, all())).slice(0, 10)
+  const namedOnSite = visibleSuggestions(sitePeople.filter((p) => !namedPersonIsStored(p.name, all())), lead, all()).slice(0, 10);
+  const namedByWeb = visibleSuggestions(webPeople.filter((p) => !namedPersonIsStored(p.name, all())), lead, all()).slice(0, 10)
     .map((p) => ({ ...p, also_on_site: namedOnSite.some((s) => s.name.toLowerCase() === p.name.toLowerCase()) }));
   stats.namedOnSite = namedOnSite.length;
   stats.namedByWeb = namedByWeb.length;
@@ -476,7 +480,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       domains: discovery.domains,
       named_by_web: namedByWeb,
       named_on_site: namedOnSite,
-      suggestions: suggestions.slice(0, 10),
+      suggestions: visibleSuggestions(suggestions, lead, all()).slice(0, 10),
       unverified_people: unverifiedPeople,
       registered_name: registry.name,
       website_suspect: suspicion.suspect,
