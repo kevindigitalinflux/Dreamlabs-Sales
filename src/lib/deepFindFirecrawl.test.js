@@ -7,7 +7,10 @@ vi.mock('../../supabase/functions/_shared/domainDiscoveryLookup', () => ({ disco
 vi.mock('../../supabase/functions/_shared/knownPersonLookup', () => ({ readCompanyPages: vi.fn(), hunterAccount: vi.fn(), hunterDomainList: vi.fn(), hunterVerifyEmail: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/deepFindPeople', () => ({ lookUpPeople: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/workerClient', () => ({ makeWorkerClient: vi.fn() }));
-vi.mock('../../supabase/functions/_shared/companiesHouse', () => ({ fetchActiveOfficers: vi.fn() }));
+vi.mock('../../supabase/functions/_shared/companiesHouse', () => ({ fetchActiveOfficers: vi.fn(), fetchCompanyProfile: vi.fn(), fetchOfficerAppointments: vi.fn(), searchCompaniesByName: vi.fn(), searchOfficers: vi.fn() }));
+vi.mock('./supabase', () => ({ supabase: { from: (...args) => service.from(...args) } }));
+import { applyLeadUpdate } from './leadUpdates';
+import { rejectDeepFindCompanies } from './deepFindReview';
 import { resolveOrgApiKey, resolveOrgWorkerConfig } from '../../supabase/functions/_shared/orgApiKeys';
 import { checkRateLimit } from '../../supabase/functions/_shared/rateLimit';
 import { resolveRegistry } from '../../supabase/functions/_shared/deepFindRegistry';
@@ -56,6 +59,30 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const process = () => processDeepFindLead(service, { id: 'run', org_id: 'org', created_by: 'user', status: 'active' }, { id: 'row', lead_id: 'lead', org_id: 'org' });
+it('fetches officers after an accidental Ireland choice is corrected to UK', async () => {
+  const actual = await vi.importActual('../../supabase/functions/_shared/deepFindRegistry');
+  vi.mocked(resolveRegistry).mockImplementation(actual.resolveRegistry);
+  vi.mocked(resolveOrgApiKey).mockImplementation(async (_s, _o, provider) => provider === 'companies_house' ? 'fake-key' : null);
+  leadOverrides = { country: 'GB', company_number: '12345678', registry_candidates_rejected: true };
+  const originalFrom = service.from;
+  service.from = (table) => {
+    const q = originalFrom(table);
+    if (table === 'leads') {
+      const update = q.update;
+      q.update = (patch) => { Object.assign(leadOverrides, patch); return update(patch); };
+      q.single = async () => ({ data: leadOverrides, error: null });
+    }
+    return q;
+  };
+  await rejectDeepFindCompanies(service, 'lead', 'IE');
+  expect(leadOverrides).toMatchObject({ country: 'IE', registry_candidates_rejected: false });
+  // Simulate a stale rejection too: changing country must clear it.
+  leadOverrides.registry_candidates_rejected = true;
+  expect(await applyLeadUpdate('lead', { country: 'GB' }, { ...leadOverrides })).toBeNull();
+  expect(leadOverrides.registry_candidates_rejected).toBe(false);
+  await process();
+  expect(fetchActiveOfficers).toHaveBeenCalledWith('12345678', 'fake-key');
+});
 it('filters remembered person dismissals from rerun results', async () => {
   leadOverrides = { dismissed_suggestions: ['person:jane smith'] };
   expect((await process()).domains.named_on_site).toEqual([]);

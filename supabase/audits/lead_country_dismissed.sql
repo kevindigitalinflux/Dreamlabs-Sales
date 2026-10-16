@@ -1,9 +1,10 @@
 -- Kevin runs after applying 064, following architect review. All writes roll back.
--- No provider calls. No customer values printed. Raises on any failed assertion.
-BEGIN;
+-- No provider calls. No customer values printed. Never remove the final exception.
 DO $$
 DECLARE
-  target uuid;
+  report text := '';
+  target uuid; target_org uuid; other_org uuid; private_pipeline uuid; contact uuid; n integer;
+  editor uuid := gen_random_uuid(); viewer uuid := gen_random_uuid(); outsider uuid := gen_random_uuid();
   value text;
 BEGIN
   ASSERT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.leads'::regclass), 'leads RLS must remain enabled';
@@ -32,14 +33,7 @@ BEGIN
   END;
   UPDATE public.leads SET dismissed_suggestions = ARRAY['email:review@example.com','person:jane smith'], registry_candidates_rejected = true WHERE id = target;
   ASSERT (SELECT dismissed_suggestions = ARRAY['email:review@example.com','person:jane smith'] AND registry_candidates_rejected FROM public.leads WHERE id = target), 'review state round trip';
-  RAISE NOTICE 'PASS: defaults, countries, constraints, review state, grants and policy checks. All writes roll back.';
-END $$;
--- Exercise the unchanged policies with an editor, a view-only share and an outsider.
-DO $$
-DECLARE
-  target uuid; target_org uuid; private_pipeline uuid; contact uuid; n integer;
-  editor uuid := gen_random_uuid(); viewer uuid := gen_random_uuid(); outsider uuid := gen_random_uuid();
-BEGIN
+  report := report || E'\nPASS defaults, countries, constraints, review state, grants and policy checks';
   SELECT id, org_id INTO target, target_org FROM public.leads LIMIT 1;
   INSERT INTO auth.users(instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_token, recovery_token,
@@ -47,7 +41,8 @@ BEGIN
   SELECT '00000000-0000-0000-0000-000000000000', u.id, 'authenticated', 'authenticated', u.id::text || '@example.invalid', '', now(),
     '{}', '{}', now(), now(), '', '', '', '', '', '', '', ''
   FROM (VALUES (editor), (viewer), (outsider)) u(id);
-  INSERT INTO public.org_members(org_id, user_id, role) VALUES (target_org, editor, 'contractor'), (target_org, viewer, 'contractor');
+  INSERT INTO public.organizations(name) VALUES ('lead-country-audit-other') RETURNING id INTO other_org;
+  INSERT INTO public.org_members(org_id, user_id, role) VALUES (target_org, editor, 'contractor'), (target_org, viewer, 'contractor'), (other_org, outsider, 'admin');
   INSERT INTO public.pipelines(org_id, name, is_default, created_by)
     VALUES (target_org, '064 rollback audit', false, editor) RETURNING id INTO private_pipeline;
   INSERT INTO public.pipeline_shares(pipeline_id, shared_with_user_id, permission, shared_by)
@@ -70,9 +65,15 @@ BEGIN
   PERFORM set_config('request.jwt.claims', json_build_object('sub', viewer, 'role', 'authenticated')::text, true);
   EXECUTE 'SET LOCAL ROLE authenticated';
   ASSERT (SELECT count(*) = 1 FROM public.leads WHERE id = target), 'viewer can read lead';
-  UPDATE public.leads SET country = 'US', dismissed_suggestions = '{}', registry_candidates_rejected = false WHERE id = target;
+  UPDATE public.leads SET country = 'US' WHERE id = target;
   GET DIAGNOSTICS n = ROW_COUNT;
-  ASSERT n = 0, 'view-only share cannot save review state';
+  ASSERT n = 0, 'M9 viewer cannot update country';
+  UPDATE public.leads SET dismissed_suggestions = '{}' WHERE id = target;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  ASSERT n = 0, 'M9 viewer cannot update dismissed_suggestions';
+  UPDATE public.leads SET registry_candidates_rejected = false WHERE id = target;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  ASSERT n = 0, 'viewer cannot update registry rejection';
   UPDATE public.decision_maker_candidates SET email = 'denied@example.invalid' WHERE id = contact;
   GET DIAGNOSTICS n = ROW_COUNT;
   ASSERT n = 0, 'view-only share cannot update a contact';
@@ -86,12 +87,34 @@ BEGIN
 
   PERFORM set_config('request.jwt.claims', json_build_object('sub', outsider, 'role', 'authenticated')::text, true);
   EXECUTE 'SET LOCAL ROLE authenticated';
-  ASSERT (SELECT count(*) = 0 FROM public.leads WHERE id = target), 'outsider cannot read lead';
+  ASSERT (SELECT count(*) = 0 FROM public.leads WHERE id = target), 'admin of another organisation cannot read lead';
   UPDATE public.leads SET country = 'OTHER', dismissed_suggestions = '{}', registry_candidates_rejected = false WHERE id = target;
   GET DIAGNOSTICS n = ROW_COUNT;
-  ASSERT n = 0, 'outsider cannot save review state';
+  ASSERT n = 0, 'admin of another organisation cannot save review state';
+  EXECUTE 'RESET ROLE';
+  PERFORM set_config('request.jwt.claims', '{"role":"anon"}', true);
+  EXECUTE 'SET LOCAL ROLE anon';
+  BEGIN
+    SELECT count(*) INTO n FROM public.leads WHERE id = target;
+    ASSERT n = 0, 'anon cannot read lead';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    UPDATE public.leads SET country = 'US' WHERE id = target;
+    GET DIAGNOSTICS n = ROW_COUNT;
+    ASSERT n = 0, 'anon cannot update country';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    UPDATE public.leads SET dismissed_suggestions = '{}' WHERE id = target;
+    GET DIAGNOSTICS n = ROW_COUNT;
+    ASSERT n = 0, 'anon cannot update dismissed_suggestions';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
   EXECUTE 'RESET ROLE';
   PERFORM set_config('request.jwt.claims', '{}', true);
-  RAISE NOTICE 'PASS: editor writes, view-only and outsider refusals, contact inserts/blank fills and sequence opt-out. Fixtures roll back.';
+  report := report || E'\nPASS editor country/review writes and contact insert/blank fill with sequences off';
+  report := report || E'\nPASS M9 viewer country/dismissal/rejection and contact writes denied';
+  report := report || E'\nPASS other-organisation admin and anon read/write denied';
+  RAISE EXCEPTION 'LEAD_COUNTRY_AUDIT (all writes rolled back)\n%', report;
 END $$;
-ROLLBACK;

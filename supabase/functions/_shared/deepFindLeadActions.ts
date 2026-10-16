@@ -82,7 +82,7 @@ export async function chooseCompany(
   if (!chKey) return { status: 400, body: { error: 'No Companies House key is set for this organisation' } };
   const profile = await fetchCompanyProfile(number, chKey);
   if (!profile) return { status: 404, body: { error: 'Companies House does not know that company number' } };
-  const { error } = await service.from('leads').update({ company_number: number }).eq('id', lead.id).eq('org_id', lead.org_id);
+  const { error } = await service.from('leads').update({ company_number: number, registry_candidates_rejected: false }).eq('id', lead.id).eq('org_id', lead.org_id);
   if (error) return { status: 500, body: { error: 'Could not save the company on this lead' } };
   const run = await queueRun(service, lead.org_id, callerId, [lead.id], CHOSEN_COMPANY_CAPS);
   return {

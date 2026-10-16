@@ -18,7 +18,8 @@ export async function applyLeadUpdate(
   // error when RLS silently blocks the write (0 rows matched, e.g. a view-only
   // shared pipeline) — the caller would think the edit succeeded when it never
   // persisted. Requesting the row back turns that silent no-op into a real error.
-  const { error } = await supabase.from('leads').update(patch).eq('id', id).select().single();
+  const clearsRegistryRejection = ('country' in patch && patch.country !== before?.country) || Boolean(patch.company_number);
+  const { error } = await supabase.from('leads').update({ ...patch, ...(clearsRegistryRejection ? { registry_candidates_rejected: false } : {}) }).eq('id', id).select().single();
   if (error) {
     // PGRST116 = "no rows returned" from .single() — RLS silently matched 0 rows
     // (e.g. a view-only shared pipeline), not a real database error.

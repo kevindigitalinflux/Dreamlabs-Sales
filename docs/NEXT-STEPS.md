@@ -59,3 +59,4 @@ Process: Kevin approved the Stage 2 spec/build and supplied Claude's rulings on 
 
 - [ ] Fix round 2: M8 transition-based episodes built and gated (84 files / 1,368 tests); independent rereview/browser checks pending. Count changes are silent; same-count re-entry notifies once.
 - [ ] Fix round 2: stacked merge gated on worker-keys (87 files / 1,400 tests); M3 authorisation-loss stop/transient-read continuation built and gated on Firecrawl (93 files / 1,484 tests). Typecheck/build pass on all three; independent rereview pending, nothing deployed. Automation table/comment fixes included; Claude refreshes the vault manually because Codex commit hooks were not run.
+- [x] Deep find suggestions/regions review fix round 1: I1/I2, M1/M2/M3/M4/M7 and M9 audit checks built locally; M4 can-edit flag absent, documented fallback used. M5/M6/M8 skipped as requested. Migration 064/audit remain unexecuted; rereview and publication pending.

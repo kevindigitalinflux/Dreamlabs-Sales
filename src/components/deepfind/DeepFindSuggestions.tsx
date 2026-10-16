@@ -6,6 +6,7 @@ import type { ReviewState } from '../../lib/deepFindReview';
 import { suggestionKey, visibleSuggestions } from '../../../supabase/functions/_shared/deepFindSuggestions';
 import type { ReviewSuggestion } from '../../../supabase/functions/_shared/deepFindSuggestions';
 import { SuggestionRows } from './SuggestionRows';
+import { logDeepFindError } from '../../lib/deepFindErrors';
 
 /** Review actions always use the person's session and RLS, never an edge/service client. */
 export function DeepFindSuggestions({ leadId, suggestions, refreshKey }: { leadId: string; suggestions: ReviewSuggestion[]; refreshKey: string }) {
@@ -21,8 +22,8 @@ export function DeepFindSuggestions({ leadId, suggestions, refreshKey }: { leadI
     let active = true;
     void loadDeepFindReview(supabase, leadId).then((next) => {
       if (active) { setState(next); setError(null); }
-    }).catch(() => {
-      console.error('deep find: review details could not be loaded');
+    }).catch((error: unknown) => {
+      logDeepFindError('deep find: review details could not be loaded', error);
       if (active) setError('Could not load review details. Refresh and try again.');
     });
     return () => { active = false; };
@@ -36,12 +37,12 @@ export function DeepFindSuggestions({ leadId, suggestions, refreshKey }: { leadI
     // Focus remains on a stable status node when the optimistic row disappears.
     status.current?.focus();
     try {
-      await saveDeepFindReview(supabase, session?.user.id ?? null, leadId, s, action);
-      setNotice(action === 'add' ? 'Added to lead. No sequence enrolment was added.' : 'Dismissed.');
+      const result = await saveDeepFindReview(supabase, session?.user.id ?? null, leadId, s, action);
+      setNotice(result === 'none' ? 'Already on this lead' : action === 'add' ? 'Added to lead. No sequence enrolment was added.' : 'Dismissed.');
       try { setState(await loadDeepFindReview(supabase, leadId)); }
-      catch { console.error('deep find: saved review could not be refreshed'); setError('Saved. Refresh to see the latest lead details.'); }
-    } catch {
-      console.error('deep find: suggestion review could not be saved');
+      catch (error: unknown) { logDeepFindError('deep find: saved review could not be refreshed', error); setError('Saved. Refresh to see the latest lead details.'); }
+    } catch (error: unknown) {
+      logDeepFindError('deep find: suggestion review could not be saved', error);
       setHidden((keys) => keys.filter((k) => k !== key));
       setNotice(''); setError('Could not save this change. Refresh and try again.');
     } finally { saving.current = false; setBusy(false); }

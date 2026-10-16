@@ -48,13 +48,13 @@ export async function resolveRegistry(
   service: SupabaseClient, lead: Record<string, unknown> & ReviewLead & { id: string }, chKey: string | null, people: OfficerQuery[] = [],
 ): Promise<RegistryResult> {
   const empty = { address: null, locality: null, candidates: [] as CompanyCandidate[] };
-  const skip = registrySkipReason(lead);
-  if (skip) return { ...empty, number: null, name: null, how: skip };
   const saved = cleanCompanyNumber(lead.company_number);
   if (saved) {
     const profile = chKey ? await fetchCompanyProfile(saved, chKey) : null;
     return { ...empty, number: saved, name: profile?.name ?? null, address: profile?.address ?? null, locality: profile?.locality ?? null, how: 'saved' };
   }
+  const skip = registrySkipReason(lead);
+  if (skip) return { ...empty, number: null, name: null, how: skip };
   const rawId = str(lead.raw_lead_id);
   if (rawId) {
     const { data } = await service.from('raw_leads').select('source, source_id, raw_data').eq('id', rawId).maybeSingle();
@@ -93,7 +93,7 @@ export async function resolveRegistry(
     if (!anyOk && viaPeople.length === 0) return { ...empty, number: null, name: null, how: 'error' };
     return { ...empty, number: null, name: null, how: candidates.length ? 'ambiguous' : 'not_found', candidates };
   }
-  const { error } = await service.from('leads').update({ company_number: pick.chosen.company_number })
+  const { error } = await service.from('leads').update({ company_number: pick.chosen.company_number, registry_candidates_rejected: false })
     .eq('id', lead.id).is('company_number', null);
   if (error) console.error('deep find: could not save the company number');
   return {

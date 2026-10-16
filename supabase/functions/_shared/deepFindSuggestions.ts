@@ -46,7 +46,7 @@ export function planSuggestionAdd(s: ReviewSuggestion, lead: ReviewLead, contact
   const email = norm(s.value);
   if (s.name.trim() === 'Company contact' && email) {
     return !norm(lead.email) ? { kind: 'lead_update', patch: { email } }
-      : { kind: 'lead_update', patch: { additional_emails: [...new Set([...strings(lead.additional_emails).map(norm).filter(Boolean), email])] } };
+      : { kind: 'lead_update', patch: { additional_emails: [...strings(lead.additional_emails), s.value!.trim()] } };
   }
   const same = contacts.find((c) => nameOf(c) === norm(s.name));
   if (same) return email && !norm(same.email) && !same.dismissed_at

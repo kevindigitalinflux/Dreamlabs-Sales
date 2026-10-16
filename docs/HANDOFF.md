@@ -2,7 +2,7 @@
 
 Authoritative task record. The vault copy (`Dreamlabs Sales/Handoff.md`) is a snapshot of this file, labelled with the revision below. Workflow rules: vault `_Team/Shared agent workflow.md`.
 
-**Latest resume point:** the final section, **Deep find suggestions and regions — local build (2026-10-16, Codex)**. Earlier sections are historical checkpoints. The vault snapshot has not been updated by this branch.
+**Latest resume point:** the final section, **Fix round 1: review findings (2026-10-16, Codex)**. Earlier sections are historical checkpoints. The vault snapshot has not been updated by this branch.
 
 ## Identity and authority
 - Task ID: `worker-programme` (lookup worker -> Deep find; Stage 1 done, Stage 2 next). Project: Dreamlabs Sales. Author: Claude. Time: 2026-10-15 ~15:15 (local clock shows GMT; Kevin's timezone not confirmed).
@@ -304,3 +304,13 @@ Phone width (400 px frame): `/settings` and `/settings/organization` have no sid
 - Session/state/view: `src/lib/deepFindReview.ts`, `src/lib/deepFindView.ts`, `src/lib/jobs/model.ts`, `src/lib/jobs/sources.ts`, `src/hooks/useDeepFindActivity.ts`, `src/hooks/useDeepFindRun.ts`, `src/types/index.ts`.
 - Tests, all in `src/lib/`: `deepFindControls.test.ts`, `deepFindFirecrawl.test.js`, `deepFindRegions.test.ts`, `deepFindRegistryRegions.test.js`, `deepFindReview.test.ts`, `deepFindSuggestionRows.test.ts`, `deepFindSuggestions.test.ts`, `deepFindView.test.ts`.
 - Documentation: `CLAUDE.md`, `docs/AUTOMATIONS.md`, `docs/HANDOFF.md`, `docs/NEXT-STEPS.md`.
+
+## Fix round 1: review findings (2026-10-16, Codex)
+
+- Kevin continued Codex as BUILDER on `codex/deepfind-suggestions-regions`, starting at clean `c74016b`. Roles unchanged; supplied requirements settle kickoff. Local changes only; no push, merge, deployment, SQL execution, remote writes, secrets or paid calls. Commit hooks remain disabled to avoid publishing branch docs into the accepted vault mirror.
+- I1 supersedes the earlier rejection decision: only the UK-not-listed choice sets `registry_candidates_rejected`. Foreign-country choices clear it; country changes and company saves clear it. Saved company numbers override both country and rejection skips. Regression coverage includes accidental Ireland selection, correction to UK through the real lead-update helper, and the real engine fetching officers through the real registry resolver.
+- I2/M9: audit is one self-contained `DO $$` block, with fixtures and checks followed by an unconditional `LEAD_COUNTRY_AUDIT (all writes rolled back)` exception. Added anon read/write denial, another organisation's admin denial, and separate viewer country/dismissal denials. No surrounding transaction wrapper is required for rollback. Migration 064 uses idempotent columns and a named country constraint replaced within one transaction. Both SQL files remain unapplied and unexecuted; SQL/runtime/RLS validation requires independent review and Kevin's later execution.
+- M2/M3/M4/M7: catches log fixed context plus only bounded code strings; session errors preserve that code. Existing additional email entries remain verbatim, including empty/non-address entries; case-insensitive matching prevents duplicate additions, and new additional addresses retain trimmed spelling. A no-op Add reports “Already on this lead”. Company rejection toggle exposes `aria-expanded`, focuses the new country listbox trigger, and labels confirmation “Save country choice”.
+- M4 permission fallback: the lead page and its `useLead` hook expose no can-edit flag. `usePipelinePermission` exists for the shared-pipeline banner, but is not a lead-page edit flag; Add/Dismiss visibility is unchanged under Kevin's explicit fallback. Session RLS remains authoritative. M5/M6/M8 were intentionally skipped.
+- Independent rereview and interactive focus/phone checks remain pending. No automation was added. Final gate results are recorded below; this commit contains the fix and checkpoint. Next: Claude rereviews this exact branch HEAD, then Kevin separately authorizes SQL and publication. No open implementation question.
+- Final gates (one full run): TypeScript PASS / 0 diagnostics; Vitest PASS / 100 current test files / 0 failed files; build PASS / 0 errors (existing chunk-size warning). Successful RTK output did not retain the individual test total; file counts were recovered from Vitest's results cache, excluding one nonexistent stale file. `git diff --check` clean. Targeted suites passed before full gates. Migration/audit and interactive browser checks were not run.

@@ -34,6 +34,7 @@ it('fails closed on read errors, no session and RLS-blocked writes', async () =>
   expect(db.writes).toEqual([]);
   await expect(saveDeepFindReview(database().client, null, 'lead', s, 'add')).rejects.toThrow('Sign in');
   await expect(saveDeepFindReview(database({ writeError: true }).client, 'user', 'lead', s, 'add')).rejects.toThrow('Could not save');
+  await expect(saveDeepFindReview(database({ writeError: true }).client, 'user', 'lead', s, 'add')).rejects.toMatchObject({ code: 'PGRST116' });
 });
 it('creates a contact under the current user with sequences off', async () => {
   const db = database();
@@ -54,6 +55,11 @@ it('appends company emails and never writes sequence tables', async () => {
 it.each(['IE','US','OTHER','unlisted'] as const)('persists rejection %s without changing country for unlisted UK', async (country) => {
   const db = database();
   const notice = await rejectDeepFindCompanies(db.client, 'lead', country);
-  expect(db.writes[0]?.patch).toEqual({ registry_candidates_rejected: true, ...(country === 'unlisted' ? {} : { country }) });
+  expect(db.writes[0]?.patch).toEqual({ registry_candidates_rejected: country === 'unlisted', ...(country === 'unlisted' ? {} : { country }) });
   expect(notice).toContain(country === 'unlisted' ? 'will not ask again' : 'not a UK company');
+});
+it('reports an already-present suggestion without writing', async () => {
+  const db = database({ email: s.value });
+  expect(await saveDeepFindReview(db.client, 'user', 'lead', s, 'add')).toBe('none');
+  expect(db.writes).toEqual([]);
 });

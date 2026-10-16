@@ -35,7 +35,10 @@ describe('Deep find review rules', () => {
   });
   it('sets a blank primary or appends a company email without overwriting', () => {
     expect(planSuggestionAdd(email, {}, [])).toEqual({ kind: 'lead_update', patch: { email: 'hello@example.com' } });
-    expect(planSuggestionAdd(email, { email: 'saved@example.com', additional_emails: ['ONE@example.com', 'one@example.com'] }, [])).toEqual({ kind: 'lead_update', patch: { additional_emails: ['one@example.com', 'hello@example.com'] } });
+    expect(planSuggestionAdd(email, { email: 'saved@example.com', additional_emails: ['ONE@example.com', 'one@example.com', '', ' legacy value '] }, [])).toEqual({ kind: 'lead_update', patch: { additional_emails: ['ONE@example.com', 'one@example.com', '', ' legacy value ', 'HELLO@Example.com'] } });
+  });
+  it('dedupes new addresses case-insensitively without rewriting existing entries', () => {
+    expect(planSuggestionAdd(email, { email: 'saved@example.com', additional_emails: ['HELLO@example.com', ' legacy value ', ''] }, [])).toEqual({ kind: 'none' });
   });
   it('ignores malformed emails, unsupported fields and blank names', () => {
     expect(visibleSuggestions([{ name: '', value: 'a@example.com' }, { ...email, field: 'linkedin_url' }, { ...email, value: 'bad' }], {}, [])).toEqual([]);
