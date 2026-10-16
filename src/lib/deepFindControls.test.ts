@@ -11,6 +11,9 @@ it('offers None of these beside the original company actions', () => {
   expect(html).toContain('None of these / not a UK company');
   expect(html).toContain('Use this company');
   expect(html).toContain('aria-expanded="false"');
+  expect(html.indexOf('None of these / not a UK company')).toBeLessThan(html.indexOf('<ul'));
+  expect(html).toContain('Not a UK company, or your company is not listed?');
+  expect(html).toMatch(/bg-violet[^>]*>None of these/);
 });
 it('places the labelled country control next to the website field', () => {
   const html = renderToStaticMarkup(createElement(ContactInfo, { lead: { id: 'lead', country: 'IE' } as Lead, onSave: async () => null }));

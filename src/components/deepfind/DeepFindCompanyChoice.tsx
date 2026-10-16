@@ -48,6 +48,15 @@ export function DeepFindCompanyChoice({ leadId, candidates }: { leadId: string; 
   return (
     <div className="flex flex-col gap-1.5">
       <p className="text-xs font-semibold">Which company is this? Companies House has more than one possible match:</p>
+      <p className="text-xs">Not a UK company, or your company is not listed?</p>
+      <Button variant="primary" className="w-full whitespace-normal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet" disabled={busy !== null} aria-expanded={rejecting} onClick={() => setRejecting((open) => !open)}>None of these / not a UK company</Button>
+      {rejecting && <div ref={countryChoice} className="flex min-w-0 flex-col gap-2 rounded-md border border-line p-2">
+        <SelectField label="Where is this company?" value={country} disabled={busy !== null} onChange={(e) => setCountry(e.target.value as typeof country)}>
+          <option value="IE">Ireland</option><option value="US">United States</option><option value="OTHER">Other country</option>
+          <option value="unlisted">It is a UK company, my company is not listed</option>
+        </SelectField>
+        <Button variant="secondary" disabled={busy !== null} onClick={() => void reject()}>Save country choice</Button>
+      </div>}
       <ul className="flex flex-col gap-1.5">
         {candidates.map((c) => (
           <li key={c.company_number} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface/40 p-2 text-xs">
@@ -62,14 +71,6 @@ export function DeepFindCompanyChoice({ leadId, candidates }: { leadId: string; 
           </li>
         ))}
       </ul>
-      <Button variant="secondary" disabled={busy !== null} aria-expanded={rejecting} onClick={() => setRejecting((open) => !open)}>None of these / not a UK company</Button>
-      {rejecting && <div ref={countryChoice} className="flex min-w-0 flex-col gap-2 rounded-md border border-line p-2">
-        <SelectField label="Where is this company?" value={country} disabled={busy !== null} onChange={(e) => setCountry(e.target.value as typeof country)}>
-          <option value="IE">Ireland</option><option value="US">United States</option><option value="OTHER">Other country</option>
-          <option value="unlisted">It is a UK company, my company is not listed</option>
-        </SelectField>
-        <Button variant="secondary" disabled={busy !== null} onClick={() => void reject()}>Save country choice</Button>
-      </div>}
       {error && <p role="alert" className="text-xs text-danger">{error}</p>}
     </div>
   );
