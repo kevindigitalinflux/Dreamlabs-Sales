@@ -30,6 +30,7 @@ import { makeFirecrawlClient } from './firecrawlClient.ts';
 import { FIRECRAWL_DAILY_PAGES, firecrawlDomainFor } from './firecrawlRules.ts';
 import { classifyDeepFindCheckpoint, DeepFindAuthorisationLost } from './deepFindCheckpoint.ts';
 import { visibleSuggestions } from './deepFindSuggestions.ts';
+import type { ReviewLead } from './deepFindSuggestions.ts';
 
 export const WALL_BUDGET_MS = 130_000;
 /** A lead is only started when at least this much of the invocation is left. */
@@ -110,7 +111,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const left = () => deadline - Date.now();
   const { data: leadData, error: leadErr } = await service.from('leads').select('*').eq('id', row.lead_id).maybeSingle();
   if (leadErr) return { status: 'failed', reason: 'Could not load this lead.' };
-  const lead = leadData as (Record<string, unknown> & { id: string; org_id: string }) | null;
+  const lead = leadData as (Record<string, unknown> & ReviewLead & { id: string; org_id: string }) | null;
   if (!lead) return { status: 'skipped', reason: 'The lead no longer exists.' };
   if (lead.org_id !== run.org_id || row.org_id !== run.org_id) return { status: 'skipped', reason: 'The lead is not in this organisation.' };
   // Re-check, as the run's creator, the same edit rights can_edit_lead gives (they may have changed since create).

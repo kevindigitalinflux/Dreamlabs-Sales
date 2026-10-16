@@ -5,12 +5,12 @@ export interface ReviewLead {
   country?: unknown; registry_candidates_rejected?: unknown;
 }
 export interface ReviewContact {
-  id: string; first_name?: string | null; last_name?: string | null; email?: string | null; dismissed_at?: string | null;
+  id: string; first_name?: unknown; last_name?: unknown; email?: unknown; dismissed_at?: unknown;
 }
 const norm = (v: unknown): string => typeof v === 'string' ? v.trim().toLowerCase().replace(/\s+/g, ' ') : '';
 const strings = (v: unknown): string[] => Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [];
 const validEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-const nameOf = (c: ReviewContact) => norm(`${c.first_name ?? ''} ${c.last_name ?? ''}`);
+const nameOf = (c: ReviewContact) => norm(`${norm(c.first_name)} ${norm(c.last_name)}`);
 const ROLE_MAILBOXES = new Set(['privacy','gdpr','dpo','legal','compliance','careers','jobs','recruitment','press','media','abuse','postmaster','webmaster','noreply','no-reply','donotreply','unsubscribe']);
 
 export function suggestionKey(s: ReviewSuggestion): string {

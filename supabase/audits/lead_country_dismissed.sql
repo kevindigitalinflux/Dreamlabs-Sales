@@ -34,4 +34,64 @@ BEGIN
   ASSERT (SELECT dismissed_suggestions = ARRAY['email:review@example.com','person:jane smith'] AND registry_candidates_rejected FROM public.leads WHERE id = target), 'review state round trip';
   RAISE NOTICE 'PASS: defaults, countries, constraints, review state, grants and policy checks. All writes roll back.';
 END $$;
+-- Exercise the unchanged policies with an editor, a view-only share and an outsider.
+DO $$
+DECLARE
+  target uuid; target_org uuid; private_pipeline uuid; contact uuid; n integer;
+  editor uuid := gen_random_uuid(); viewer uuid := gen_random_uuid(); outsider uuid := gen_random_uuid();
+BEGIN
+  SELECT id, org_id INTO target, target_org FROM public.leads LIMIT 1;
+  INSERT INTO auth.users(instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+    raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_token, recovery_token,
+    email_change_token_new, email_change_token_current, email_change, phone_change, phone_change_token, reauthentication_token)
+  SELECT '00000000-0000-0000-0000-000000000000', u.id, 'authenticated', 'authenticated', u.id::text || '@example.invalid', '', now(),
+    '{}', '{}', now(), now(), '', '', '', '', '', '', '', ''
+  FROM (VALUES (editor), (viewer), (outsider)) u(id);
+  INSERT INTO public.org_members(org_id, user_id, role) VALUES (target_org, editor, 'contractor'), (target_org, viewer, 'contractor');
+  INSERT INTO public.pipelines(org_id, name, is_default, created_by)
+    VALUES (target_org, '064 rollback audit', false, editor) RETURNING id INTO private_pipeline;
+  INSERT INTO public.pipeline_shares(pipeline_id, shared_with_user_id, permission, shared_by)
+    VALUES (private_pipeline, viewer, 'view', editor);
+  UPDATE public.leads SET pipeline_id = private_pipeline WHERE id = target;
+
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', editor, 'role', 'authenticated')::text, true);
+  EXECUTE 'SET LOCAL ROLE authenticated';
+  UPDATE public.leads SET country = 'IE', dismissed_suggestions = ARRAY['person:audit reviewer'], registry_candidates_rejected = true WHERE id = target;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  ASSERT n = 1, 'editor can save country and review state';
+  INSERT INTO public.decision_maker_candidates(lead_id, source, kind, first_name, last_name, created_by, include_in_sequences)
+    VALUES (target, 'manual', 'person', 'Audit', 'Reviewer', editor, false) RETURNING id INTO contact;
+  UPDATE public.decision_maker_candidates SET email = editor::text || '@example.invalid', include_in_sequences = false WHERE id = contact AND email IS NULL;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  ASSERT n = 1, 'editor can fill a contact blank';
+  ASSERT (SELECT NOT include_in_sequences FROM public.decision_maker_candidates WHERE id = contact), 'found contact follow-ups remain off';
+  EXECUTE 'RESET ROLE';
+
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', viewer, 'role', 'authenticated')::text, true);
+  EXECUTE 'SET LOCAL ROLE authenticated';
+  ASSERT (SELECT count(*) = 1 FROM public.leads WHERE id = target), 'viewer can read lead';
+  UPDATE public.leads SET country = 'US', dismissed_suggestions = '{}', registry_candidates_rejected = false WHERE id = target;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  ASSERT n = 0, 'view-only share cannot save review state';
+  UPDATE public.decision_maker_candidates SET email = 'denied@example.invalid' WHERE id = contact;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  ASSERT n = 0, 'view-only share cannot update a contact';
+  BEGIN
+    INSERT INTO public.decision_maker_candidates(lead_id, source, first_name, created_by, include_in_sequences)
+      VALUES (target, 'manual', 'Denied', viewer, false);
+    RAISE EXCEPTION 'view-only contact INSERT accepted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  EXECUTE 'RESET ROLE';
+
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', outsider, 'role', 'authenticated')::text, true);
+  EXECUTE 'SET LOCAL ROLE authenticated';
+  ASSERT (SELECT count(*) = 0 FROM public.leads WHERE id = target), 'outsider cannot read lead';
+  UPDATE public.leads SET country = 'OTHER', dismissed_suggestions = '{}', registry_candidates_rejected = false WHERE id = target;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  ASSERT n = 0, 'outsider cannot save review state';
+  EXECUTE 'RESET ROLE';
+  PERFORM set_config('request.jwt.claims', '{}', true);
+  RAISE NOTICE 'PASS: editor writes, view-only and outsider refusals, contact inserts/blank fills and sequence opt-out. Fixtures roll back.';
+END $$;
 ROLLBACK;

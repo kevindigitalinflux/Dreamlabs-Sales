@@ -9,6 +9,7 @@ import { appointmentCompanies, officerAppointmentPaths, type OfficerQuery } from
 import { cleanCompanyNumber, locationAgrees, pickCompany, scoreCompanyCandidates, type CompanyCandidate } from './registrySearch.ts';
 import { registrySearchNames } from './nameVariants.ts';
 import { registrySkipReason } from './deepFindSuggestions.ts';
+import type { ReviewLead } from './deepFindSuggestions.ts';
 
 /** The registered company as far as it is known, and how it was settled. */
 export interface RegistryResult {
@@ -44,7 +45,7 @@ export function registryStep(r: RegistryResult): string {
  * runs reuse it; an unclear one is never guessed.
  */
 export async function resolveRegistry(
-  service: SupabaseClient, lead: Record<string, unknown> & { id: string }, chKey: string | null, people: OfficerQuery[] = [],
+  service: SupabaseClient, lead: Record<string, unknown> & ReviewLead & { id: string }, chKey: string | null, people: OfficerQuery[] = [],
 ): Promise<RegistryResult> {
   const empty = { address: null, locality: null, candidates: [] as CompanyCandidate[] };
   const skip = registrySkipReason(lead);
