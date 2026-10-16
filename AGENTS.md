@@ -46,3 +46,12 @@ Vault: `C:/Users/kevin/OneDrive/Desktop/DI Dreamlabs Context Brain` (one vault, 
 - `scripts/sync-vault.sh` copies `AGENTS.md`, `CLAUDE.md`, `SPEC.md`, `docs/*.md` and the specs/plans into the vault folder `Dreamlabs Sales/Repo/` (one way, repo -> vault). A git `post-commit` hook runs it after every commit in this checkout, so anything either agent commits shows up in Obsidian.
 - If you work in a DIFFERENT clone or worktree, install the hook there: `printf '#!/usr/bin/env bash\nbash "$(git rev-parse --show-toplevel)/scripts/sync-vault.sh" >/dev/null 2>&1 || true\n' > .git/hooks/post-commit` (Git Bash), or run `bash scripts/sync-vault.sh` before handing back. Override the vault location with `VAULT="<path>"`.
 - The agent-written notes `Status.md`, `Decisions.md`, `Log.md` live ONLY in the vault (`Dreamlabs Sales/`); edit them there. The `Repo/` folder is read-only reference: never edit it, edit the repo files instead.
+
+## Token discipline (both agents; Kevin's request 2026-10-16: allowances are limited, Codex's is almost used)
+- Tools installed (see vault `_Tools/Token savers.md`): RTK (shell-output compression hook, `rtk` binary) and Caveman (short-answer voice). Hooks only help once the session is restarted and, in Codex, trusted via `/hooks`; do not rely on them: follow the habits below regardless.
+- Shell: prefer RTK wrappers or flags that shrink output: `rtk git status`, `rtk git diff`, `rtk read <file>`, `rtk grep <pat> <path>`, `rtk test npx vitest run`, `rtk err npm run build`, `rtk err npx tsc --noEmit`. Never dump whole test or build logs; only failures and counts.
+- Read only what you need: line ranges, not whole large files; `git diff --stat` before a full diff; do not re-read a file you just edited; do not re-read docs already summarised in HANDOFF.md.
+- Write like Caveman: short sentences, no preamble, no recap of the task, no praise, no restating the spec. Plan in a few bullets, then act.
+- Put long detail in files (HANDOFF.md section, report file) and keep the final answer short: branch, HEAD hash, commits, gate counts, files changed, open questions, next action (under about 25 lines).
+- Use one run per branch; avoid re-running the full suite after every tiny edit (run the targeted test file, then the full gates once at the end).
+- Do not paste whole diffs, logs or file contents into the final answer.
