@@ -17,9 +17,9 @@ import { lookUpPeople } from '../../supabase/functions/_shared/deepFindPeople';
 import { makeWorkerClient } from '../../supabase/functions/_shared/workerClient';
 import { fetchActiveOfficers } from '../../supabase/functions/_shared/companiesHouse';
 import { processDeepFindLead } from '../../supabase/functions/_shared/deepFind';
-let request, service, write, contacts, checkpointError, checkpointReads, accessLostAt, cancelledAt, worker;
+let request, service, write, contacts, checkpointError, checkpointReads, accessLostAt, cancelledAt, worker, leadOverrides;
 beforeEach(() => {
-  vi.clearAllMocks(); contacts = []; checkpointError = false; checkpointReads = 0;
+  vi.clearAllMocks(); contacts = []; leadOverrides = {}; checkpointError = false; checkpointReads = 0;
   accessLostAt = 0; cancelledAt = 0;
   worker = { scrapeSite: vi.fn(async () => ({ ok: false, failure: 'not_configured' })),
     verifyEmail: vi.fn(async () => ({ ok: false, failure: 'not_configured' })), lines: () => [] };
@@ -39,7 +39,7 @@ beforeEach(() => {
   request = vi.fn(async () => Response.json({ success: true, data: { rawHtml: '<p>Jane Smith, Director</p>', metadata: { url: 'https://example.com/team' } } }));
   vi.stubGlobal('fetch', request);
   service = { rpc: vi.fn(async (name) => ({ data: !(name === 'deep_find_creator_can_edit' && checkpointReads > 0 && checkpointReads === accessLostAt), error: null })), from(table) {
-    const data = table === 'leads' ? { id: 'lead', org_id: 'org', website: 'https://example.com', business_name: 'Example', owner_name: null }
+    const data = table === 'leads' ? { id: 'lead', org_id: 'org', website: 'https://example.com', business_name: 'Example', owner_name: null, ...leadOverrides }
       : table === 'deep_find_runs' ? { status: 'active' } : contacts;
     const query = { select: () => query, eq: () => query, is: () => query, maybeSingle: async () => {
       if (table === 'deep_find_runs') {
@@ -56,6 +56,23 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const process = () => processDeepFindLead(service, { id: 'run', org_id: 'org', created_by: 'user', status: 'active' }, { id: 'row', lead_id: 'lead', org_id: 'org' });
+it('filters remembered person dismissals from rerun results', async () => {
+  leadOverrides = { dismissed_suggestions: ['person:jane smith'] };
+  expect((await process()).domains.named_on_site).toEqual([]);
+});
+it.each([{ dismissed_suggestions: ['email:hello@example.com'] }, { email: 'HELLO@example.com' }, { additional_emails: ['HELLO@example.com'] }])('filters dismissed and already-saved addresses from rerun results: %j', async (saved) => {
+  leadOverrides = saved;
+  worker.scrapeSite.mockResolvedValue({ ok: true, value: { emails: [{ value: 'hello@example.com', source: null }], phones: [] } });
+  expect((await process()).domains.suggestions).toEqual([]);
+});
+it('uses the Irish website as a confirmed domain without the unusable-website summary', async () => {
+  leadOverrides = { country: 'IE' };
+  vi.mocked(readCompanyPages).mockResolvedValue(['<title>Example</title><p>+353 (0)1 234 5678</p>']);
+  const result = await process();
+  expect(result.domains.website_suspect).toBe(false);
+  expect(discoverLeadDomains.mock.calls[0][2].websiteSuspect).toBe(false);
+  expect(result.reason).not.toContain('no usable website');
+});
 it('keeps Firecrawl names under named_on_site, records one page, and never writes contacts', async () => {
   const result = await process();
   expect(result.domains.named_on_site).toEqual([{ name: 'Jane Smith', role: 'Director' }]);

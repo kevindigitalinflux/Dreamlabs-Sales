@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { companyDomainsLine, deepFindProgress, parseCap, readDeepFindDetails } from './deepFindView';
+import { companyDomainsLine, deepFindProgress, parseCap, readDeepFindDetails, needsAttention } from './deepFindView';
+
+it('clears attention for rejected or non-UK company choices and reviewed suggestions', () => {
+  const domains = { company_candidates: [{ company_number: '12345678', name: 'Example' }] };
+  expect(needsAttention({ status: 'done', domains, lead: { country: 'IE' } })).toBe(false);
+  expect(needsAttention({ status: 'done', domains, lead: { registry_candidates_rejected: true } })).toBe(false);
+  expect(needsAttention({ status: 'done', domains: { named_on_site: [{ name: 'Jane Smith' }] }, lead: { dismissed_suggestions: ['person:jane smith'] } })).toBe(false);
+});
 
 describe('readDeepFindDetails', () => {
   it('reads the engine JSON and drops anything odd', () => {

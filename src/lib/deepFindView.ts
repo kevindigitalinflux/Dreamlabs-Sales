@@ -1,4 +1,6 @@
 import type { DeepFindLeadRow } from '../types';
+import { registrySkipReason, visibleSuggestions } from '../../supabase/functions/_shared/deepFindSuggestions';
+import type { ReviewLead, ReviewContact } from '../../supabase/functions/_shared/deepFindSuggestions';
 
 /** Defaults and limits shown in the Deep find confirm step (the server enforces the same). */
 export const DEEP_FIND_DEFAULT_CAPS = { hunter: 60, ai: 25 } as const;
@@ -136,7 +138,7 @@ export interface DeepFindActivityRow {
   people_found: number;
   domains: unknown;
   updated_at: string;
-  lead: { company_number?: string | null } | null;
+  lead: (ReviewLead & { company_number?: string | null; contacts?: ReviewContact[] }) | null;
 }
 
 /**
@@ -146,8 +148,8 @@ export interface DeepFindActivityRow {
 export function needsAttention(row: Pick<DeepFindActivityRow, 'status' | 'domains' | 'lead'>): boolean {
   if (row.status !== 'done') return false;
   const d = readDeepFindDetails(row.domains);
-  const openChoice = d.companyCandidates.length > 0 && !row.lead?.company_number;
-  return openChoice || d.unverified.length + d.namedByWeb.length + d.namedOnSite.length > 0;
+  const openChoice = d.companyCandidates.length > 0 && !row.lead?.company_number && !registrySkipReason(row.lead ?? {});
+  return openChoice || visibleSuggestions([...d.suggestions, ...d.unverified, ...d.namedByWeb, ...d.namedOnSite], row.lead ?? {}, row.lead?.contacts ?? []).length > 0;
 }
 
 /** Per-run totals for the runs list: leads finished, leads in total, people added, leads needing the user. */

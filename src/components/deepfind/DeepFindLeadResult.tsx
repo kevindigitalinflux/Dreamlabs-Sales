@@ -3,6 +3,8 @@ import { DEEP_FIND_STATUS_LABELS, readDeepFindDetails } from '../../lib/deepFind
 import type { DeepFindRowWithLead } from '../../hooks/useDeepFindRun';
 import { DeepFindCompanyChoice } from './DeepFindCompanyChoice';
 import { CompanyDomainsEditor } from './CompanyDomainsEditor';
+import { DeepFindSuggestions } from './DeepFindSuggestions';
+import { registrySkipReason } from '../../../supabase/functions/_shared/deepFindSuggestions';
 
 const STATUS_CLASSES: Record<DeepFindRowWithLead['status'], string> = {
   queued: 'bg-surface text-muted',
@@ -20,7 +22,8 @@ const STATUS_CLASSES: Record<DeepFindRowWithLead['status'], string> = {
 export function DeepFindLeadResult({ row }: { row: DeepFindRowWithLead }) {
   const details = readDeepFindDetails(row.domains);
   // Only the officer step waits for this choice; everything else already ran (the row is done).
-  const openChoice = details.companyCandidates.length > 0 && !row.lead?.company_number;
+  const registrySkipped = registrySkipReason(row.lead ?? {});
+  const openChoice = details.companyCandidates.length > 0 && !row.lead?.company_number && !registrySkipped;
   const toCheck = [...details.unverified, ...details.namedByWeb, ...details.namedOnSite];
   return (
     <li className="flex flex-col gap-1.5 rounded-lg border border-line p-3">
@@ -38,6 +41,7 @@ export function DeepFindLeadResult({ row }: { row: DeepFindRowWithLead }) {
           <DeepFindCompanyChoice leadId={row.lead_id} candidates={details.companyCandidates} />
         </div>
       )}
+      {registrySkipped && <p role="status" className="text-xs text-muted">{registrySkipped === 'not_uk' ? 'Companies House skipped: this is not a UK company.' : 'Company matches dismissed for this lead.'}</p>}
       {row.status === 'done' && (
         <p className="text-xs text-muted">{row.people_found === 1 ? '1 person added' : `${row.people_found} people added`}</p>
       )}
@@ -58,17 +62,7 @@ export function DeepFindLeadResult({ row }: { row: DeepFindRowWithLead }) {
           People looked up: {details.people.map((p) => `${p.name}${p.role ? ` (${p.role})` : ''}${p.email_found ? ': email found' : ''}`).join(', ')}
         </p>
       )}
-      {details.suggestions.length > 0 && (
-        <div className="text-xs text-muted">
-          <p>Addresses to check (not saved, not used for follow-ups):</p>
-          <ul className="ml-4 list-disc">
-            {details.suggestions.map((s) => <li key={`${s.name}-${s.value}`}>{s.name}: {s.value} ({s.label})</li>)}
-          </ul>
-        </div>
-      )}
-      {toCheck.length > 0 && (
-        <p className="text-xs text-muted">To check: {toCheck.map((p) => (p.role ? `${p.name} (${p.role})` : p.name)).join(', ')}</p>
-      )}
+      {row.lead && details.suggestions.length + toCheck.length > 0 && <DeepFindSuggestions key={row.lead_id} leadId={row.lead_id} refreshKey={row.updated_at} suggestions={[...details.suggestions, ...toCheck]} />}
     </li>
   );
 }

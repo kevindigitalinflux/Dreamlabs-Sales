@@ -30,7 +30,7 @@ export function useDeepFindActivity(orgId: string | null) {
     const load = async () => {
       const [r, l] = await Promise.all([
         supabase.from('deep_find_runs').select('*').eq('org_id', orgId).order('started_at', { ascending: false }).limit(RECENT_RUNS),
-        supabase.from('deep_find_leads').select('run_id, lead_id, status, people_found, domains, updated_at, lead:leads(company_number)')
+        supabase.from('deep_find_leads').select('run_id, lead_id, status, people_found, domains, updated_at, lead:leads(company_number, country, registry_candidates_rejected, dismissed_suggestions, email, additional_emails, contacts:decision_maker_candidates(id, first_name, last_name, email, dismissed_at))')
           .eq('org_id', orgId).gte('updated_at', since).order('updated_at', { ascending: false }).limit(300),
       ]);
       if (!active) return;

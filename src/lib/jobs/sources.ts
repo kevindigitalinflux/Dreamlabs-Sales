@@ -4,6 +4,7 @@
 import { supabase } from '../supabase';
 import { mapLookupJob, type LookupJobInput, type LookupRowInput } from './lookup';
 import { fetchLogStatuses } from '../../hooks/useDraftStatuses';
+import type { DeepFindActivityRow } from '../deepFindView';
 import {
   mapCampaign, mapDeepFind, mapScrape, mapSelectedOutreach,
   type DeepFindLeadInput, type DeepFindRunInput, type JobItem, type JobKind, type SelectedLeadInput, type SelectedRunInput, type ScrapeJobInput, type CampaignRunInput,
@@ -48,7 +49,7 @@ function fail(what: string, message: string): never {
 // ---------- Deep find ----------
 interface DeepFindLeadRow {
   run_id: string; status: DeepFindLeadInput['status']; people_found: number; domains: unknown;
-  lead: { business_name: string | null; company_number: string | null } | null;
+  lead: (NonNullable<DeepFindActivityRow['lead']> & { business_name: string | null }) | null;
 }
 
 const deepFind: JobSource = {
@@ -63,12 +64,12 @@ const deepFind: JobSource = {
     const byRun = new Map<string, DeepFindLeadInput[]>();
     for (const ids of chunk(runs.map((r) => r.id), 20)) {
       const { data, error: leadErr } = await supabase.from('deep_find_leads')
-        .select('run_id, status, people_found, domains, lead:leads(business_name, company_number)')
+        .select('run_id, status, people_found, domains, lead:leads(business_name, company_number, country, registry_candidates_rejected, dismissed_suggestions, email, additional_emails, contacts:decision_maker_candidates(id, first_name, last_name, email, dismissed_at))')
         .in('run_id', ids).limit(1000);
       if (leadErr) fail('deep find leads', leadErr.message);
       for (const row of (data as unknown as DeepFindLeadRow[] | null) ?? []) {
         const list = byRun.get(row.run_id) ?? [];
-        list.push({ status: row.status, people_found: row.people_found, domains: row.domains, business_name: row.lead?.business_name ?? null, company_number: row.lead?.company_number ?? null });
+        list.push({ status: row.status, people_found: row.people_found, domains: row.domains, business_name: row.lead?.business_name ?? null, company_number: row.lead?.company_number ?? null, review: row.lead });
         byRun.set(row.run_id, list);
       }
     }

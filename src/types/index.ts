@@ -45,6 +45,10 @@ export interface Lead {
   /** True once the lead has unsubscribed (migration 010). */
   opted_out?: boolean;
   website: string | null;
+  /** Deep find region/review state (064); null country preserves the UK default. */
+  country?: 'GB' | 'IE' | 'US' | 'OTHER' | null;
+  dismissed_suggestions?: string[];
+  registry_candidates_rejected?: boolean;
   /** The ideal customer profile this lead is most like; overrides its template's/sequence's profile when drafting. */
   icp_id: string | null;
   /** Extra values kept alongside the primary email/phone/website/owner (e.g. from Fill missing details). */

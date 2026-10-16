@@ -2,6 +2,7 @@
 // The shared shape of a background job and the pure mappers that turn each existing run type into it.
 // Pure on purpose (no React, no Supabase): unit-tested in node. See docs/superpowers/specs/2026-10-14-jobs-tracker-design.md.
 import { needsAttention } from '../deepFindView';
+import type { DeepFindActivityRow } from '../deepFindView';
 import { countOpenNeedsInput } from '../runLeadGroups';
 
 export type JobKind = 'deep_find' | 'selected_outreach' | 'scrape' | 'campaign' | 'lookup';
@@ -68,10 +69,11 @@ export interface DeepFindLeadInput {
   domains: unknown;
   business_name: string | null;
   company_number: string | null;
+  review?: DeepFindActivityRow['lead'];
 }
 
 export function mapDeepFind(run: DeepFindRunInput, leads: DeepFindLeadInput[]): JobItem {
-  const needsYou = leads.filter((l) => needsAttention({ status: l.status, domains: l.domains, lead: { company_number: l.company_number } })).length;
+  const needsYou = leads.filter((l) => needsAttention({ status: l.status, domains: l.domains, lead: l.review ?? { company_number: l.company_number } })).length;
   const done = leads.filter((l) => l.status !== 'queued' && l.status !== 'running').length;
   const total = Math.max(run.lead_count, leads.length);
   const people = leads.reduce((sum, l) => sum + (l.people_found || 0), 0);
