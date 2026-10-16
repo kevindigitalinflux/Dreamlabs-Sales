@@ -10,6 +10,12 @@ or retired.** (Requested by Kevin, 2026-07-17.)
 - **Sends anything?** — automations never send email or mutate leads without a human
   click unless explicitly stated.
 
+## Local changes awaiting review
+
+| Automation | Type | Trigger | What it does |
+|---|---|---|---|
+| Person email finding (2026-10-16) | Existing Deep find edge function | A Deep find run finds a named person without an email on a confirmed domain | Tries at most five common formats per person, sequentially through workerClient; shares the existing six-check lead cap and caps one domain at five. A first-result catch-all stops that domain and offers two guesses for review. Only checker-valid common guesses fill an existing blank contact, with follow-ups disabled; new people remain suggestions. Optional browser/Firecrawl reads preserve a 25-second people floor; per-person steps explain failures/skips. No new scheduler, sequence enrolment or messaging. Owner: Kevin (product), Codex (build), Claude (review). Local branch `codex/person-email-finding`; independent review and deployment pending. The existing inferred-format Hunter-only fill conflict is stopped for an architect ruling in HANDOFF. |
+
 ## Live
 
 | Automation | Type | Trigger | What it does |
