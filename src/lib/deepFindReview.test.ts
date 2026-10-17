@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { expect, it, vi } from 'vitest';
-import { loadDeepFindReview, rejectDeepFindCompanies, saveDeepFindReview } from './deepFindReview';
+import { describe, expect, it, vi } from 'vitest';
+import { planTitleUpgrade } from '../../supabase/functions/_shared/deepFindSuggestions';
+import { loadDeepFindReview, rejectDeepFindCompanies, reviewNotice, saveDeepFindReview } from './deepFindReview';
 
 function database(options: { owner?: string | null; email?: string | null; contacts?: object[]; readError?: boolean; writeError?: boolean } = {}) {
   const writes: { table: string; operation: string; patch: Record<string, unknown>; filters: unknown[][] }[] = [];
@@ -88,4 +89,68 @@ it('uses a blank-trimmed owner as blank and an existing contact title as the rol
 it('throws a coded error when the owner write fails', async () => {
   const db = database();
   await expect(saveDeepFindReview({ from: (t: string) => t === 'leads' ? { ...db.client.from(t), update: () => { throw Object.assign(new Error('boom'), { code: 'X' }); } } : db.client.from(t) } as unknown as SupabaseClient, 'user', 'lead', val, 'add', founder)).rejects.toThrow();
+});
+const jane = (title: unknown, extra: object = {}) => ({ id: 'c', first_name: 'Valentina', last_name: 'Antunovic', title, email: null, ...extra });
+describe('planTitleUpgrade', () => {
+  it.each([
+    [null, 'Founder', 'Founder'], ['  ', 'Co-founder', 'Co-founder'], ['Director', 'Managing Director', 'Managing Director'], ['Manager', 'CEO', 'CEO'],
+    ['Owner', 'Founder', null], ['Co-founder & CEO', 'Owner', null],
+    [null, null, null], [null, '', null], ['Manager', 'Marketing Manager', null], [null, 'Director', null],
+  ])('title %j with role %j -> %j', (title, role, expected) => {
+    expect(planTitleUpgrade(jane(title) as never, role as string | null)).toBe(expected);
+  });
+  it('never touches a dismissed contact', () => {
+    expect(planTitleUpgrade(jane(null, { dismissed_at: '2026-01-01' }) as never, 'Founder')).toBeNull();
+  });
+});
+describe('title upgrade save flow', () => {
+  it('upgrades a non-owner title while filling the email, with a compare-and-set on the old title', async () => {
+    const db = database({ contacts: [jane('Director')] });
+    expect(await saveDeepFindReview(db.client, 'user', 'lead', val, 'add', founder)).toBe('owner_title_set');
+    expect(db.writes[0]).toMatchObject({ patch: { email: 'val@example.com', include_in_sequences: false } });
+    expect(db.writes[1]).toMatchObject({ table: 'decision_maker_candidates', patch: { title: 'Founder' }, filters: [['id','c'],['lead_id','lead'],['dismissed_at',null],['title','Director']] });
+    expect(db.writes[2]).toMatchObject({ table: 'leads', patch: { owner_name: 'Valentina Antunovic' } });
+  });
+  it('upgrades a blank title only when still blank, and reports title_set when the owner is already known', async () => {
+    const db = database({ owner: 'Someone Else', contacts: [jane(null)] });
+    expect(await saveDeepFindReview(db.client, 'user', 'lead', val, 'add', founder)).toBe('title_set');
+    expect(db.writes[1]).toMatchObject({ patch: { title: 'Founder' }, filters: [['id','c'],['lead_id','lead'],['dismissed_at',null],['title',null]] });
+    expect(Object.keys(db.writes[1]!.patch)).toEqual(['title']);
+  });
+  it('upgrades the title of a named person who already has an email, without any other write', async () => {
+    const db = database({ owner: 'Someone Else', contacts: [jane('Manager', { email: 'val@example.com' })] });
+    expect(await saveDeepFindReview(db.client, 'user', 'lead', { name: val.name }, 'add', founder)).toBe('title_set');
+    expect(db.writes).toHaveLength(1);
+    expect(db.writes[0]).toMatchObject({ patch: { title: 'Founder' } });
+  });
+  it('leaves an owner-like title, an unknown role and a dismissed contact alone', async () => {
+    const a = database({ owner: 'X', contacts: [jane('CEO')] });
+    expect(await saveDeepFindReview(a.client, 'user', 'lead', val, 'add', founder)).toBe('saved');
+    expect(a.writes).toHaveLength(1);
+    const b = database({ owner: 'X', contacts: [jane('Manager')] });
+    expect(await saveDeepFindReview(b.client, 'user', 'lead', val, 'add', [])).toBe('saved');
+    expect(b.writes).toHaveLength(1);
+    const c = database({ owner: 'X', contacts: [jane(null, { dismissed_at: 'x' })] });
+    expect(await saveDeepFindReview(c.client, 'user', 'lead', { name: val.name }, 'add', founder)).toBe('none');
+    expect(c.writes).toEqual([]);
+  });
+  it('keeps a newly created contact on the existing insert path (role as title, no extra update)', async () => {
+    const db = database({ owner: 'X' });
+    expect(await saveDeepFindReview(db.client, 'user', 'lead', val, 'add', founder)).toBe('saved');
+    expect(db.writes).toHaveLength(1);
+    expect(db.writes[0]).toMatchObject({ operation: 'insert', patch: { title: 'Founder' } });
+  });
+  it('throws the coded error when the title write fails', async () => {
+    const db = database({ owner: 'X', contacts: [jane('Manager', { email: 'v@example.com' })], writeError: true });
+    await expect(saveDeepFindReview(db.client, 'user', 'lead', { name: val.name }, 'add', founder)).rejects.toMatchObject({ code: 'PGRST116' });
+  });
+});
+describe('reviewNotice', () => {
+  it.each([
+    ['title_set', 'Added to lead. Contact title updated to Founder.'],
+    ['owner_title_set', "Added to lead. Also set as the lead's owner and updated their title."],
+    ['owner_set', "Added to lead. Also set as the lead's owner."],
+    ['saved', 'Added to lead. No sequence enrolment was added.'],
+    ['none', 'Already on this lead'],
+  ] as const)('%s', (result, text) => { expect(reviewNotice(result, 'add', 'Founder')).toBe(text); });
 });

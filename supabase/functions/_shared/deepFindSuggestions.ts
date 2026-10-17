@@ -87,6 +87,13 @@ export function roleForPerson(name: string, entries: { name: string; role?: stri
   return contact ? String(contact.title).trim() : null;
 }
 
+/** New title for an existing contact, or null. Only an owner-like role upgrades a blank or non-owner-like title; never downgrades. */
+export function planTitleUpgrade(contact: ReviewContact, role: string | null): string | null {
+  if (contact.dismissed_at || !isOwnerRole(role)) return null;
+  if (plain(contact.title) && isOwnerRole(contact.title)) return null;
+  return role!.trim();
+}
+
 /** Full name to store as the lead owner, or null. Never replaces a non-blank owner and needs a known owner-like role. */
 export function planOwnerFromSuggestion(s: ReviewSuggestion, role: string | null, lead: ReviewLead): string | null {
   const name = s.name.trim().replace(/\s+/g, ' ');

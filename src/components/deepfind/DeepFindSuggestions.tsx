@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
-import { loadDeepFindReview, saveDeepFindReview } from '../../lib/deepFindReview';
+import { foundRole, loadDeepFindReview, reviewNotice, saveDeepFindReview } from '../../lib/deepFindReview';
 import type { ReviewState } from '../../lib/deepFindReview';
 import { suggestionKey, visibleSuggestions } from '../../../supabase/functions/_shared/deepFindSuggestions';
 import type { ReviewSuggestion } from '../../../supabase/functions/_shared/deepFindSuggestions';
@@ -38,7 +38,7 @@ export function DeepFindSuggestions({ leadId, suggestions, refreshKey, roles = [
     status.current?.focus();
     try {
       const result = await saveDeepFindReview(supabase, session?.user.id ?? null, leadId, s, action, roles);
-      setNotice(result === 'none' ? 'Already on this lead' : result === 'owner_set' ? "Added to lead. Also set as the lead's owner." : action === 'add' ? 'Added to lead. No sequence enrolment was added.' : 'Dismissed.');
+      setNotice(reviewNotice(result, action, foundRole(s, roles)));
       try { setState(await loadDeepFindReview(supabase, leadId)); }
       catch (error: unknown) { logDeepFindError('deep find: saved review could not be refreshed', error); setError('Saved. Refresh to see the latest lead details.'); }
     } catch (error: unknown) {

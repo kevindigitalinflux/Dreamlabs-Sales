@@ -1,10 +1,20 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { deepFindErrorCode } from './deepFindErrors';
-import { planOwnerFromSuggestion, planSuggestionAdd, registrySkipReason, roleForPerson, suggestionKey } from '../../supabase/functions/_shared/deepFindSuggestions';
+import { planOwnerFromSuggestion, planTitleUpgrade, planSuggestionAdd, registrySkipReason, roleForPerson, suggestionKey } from '../../supabase/functions/_shared/deepFindSuggestions';
 import type { ReviewContact, ReviewLead, ReviewSuggestion } from '../../supabase/functions/_shared/deepFindSuggestions';
 
 export interface ReviewState { lead: ReviewLead & { id: string; updated_at: string }; contacts: ReviewContact[] }
 const FAILURE = 'Could not save this change. Refresh and try again.';
+export type ReviewResult = 'saved' | 'owner_set' | 'title_set' | 'owner_title_set' | 'none';
+/** Role Deep find reported for the person (never the contact's own title), else the suggestion's role. */
+export const foundRole = (s: ReviewSuggestion, roles: { name: string; role?: string | null }[]): string | null => roleForPerson(s.name, roles) ?? s.role?.trim() ?? null;
+export function reviewNotice(result: ReviewResult, action: 'add' | 'dismiss', role: string | null): string {
+  if (result === 'none') return 'Already on this lead';
+  if (result === 'owner_title_set') return "Added to lead. Also set as the lead's owner and updated their title.";
+  if (result === 'title_set') return `Added to lead. Contact title updated to ${role ?? 'the new role'}.`;
+  if (result === 'owner_set') return "Added to lead. Also set as the lead's owner.";
+  return action === 'add' ? 'Added to lead. No sequence enrolment was added.' : 'Dismissed.';
+}
 const failure = (error: unknown, message = FAILURE) => Object.assign(new Error(message), { code: deepFindErrorCode(error) });
 
 /** Session client only. Read failures must not turn existing contacts into an empty list. */
@@ -18,7 +28,7 @@ export async function loadDeepFindReview(client: SupabaseClient, leadId: string)
 }
 
 /** A fresh read and compare-and-set prevent lost array additions and overwriting a concurrent email fill. */
-export async function saveDeepFindReview(client: SupabaseClient, userId: string | null, leadId: string, suggestion: ReviewSuggestion, action: 'add' | 'dismiss', roles: { name: string; role?: string | null }[] = []): Promise<'saved' | 'owner_set' | 'none'> {
+export async function saveDeepFindReview(client: SupabaseClient, userId: string | null, leadId: string, suggestion: ReviewSuggestion, action: 'add' | 'dismiss', roles: { name: string; role?: string | null }[] = []): Promise<ReviewResult> {
   if (!userId) throw new Error('Sign in to save this change.');
   const state = await loadDeepFindReview(client, leadId);
   if (action === 'dismiss') {
@@ -30,7 +40,11 @@ export async function saveDeepFindReview(client: SupabaseClient, userId: string 
   }
   const plan = planSuggestionAdd(suggestion, state.lead, state.contacts);
   const role = roleForPerson(suggestion.name, roles, state.contacts) ?? suggestion.role?.trim() ?? null;
-  if (plan.kind === 'none') return 'none';
+  const personName = suggestion.name.trim().replace(/\s+/g, ' ').toLowerCase();
+  const existing = suggestion.name.trim() === 'Company contact' || (suggestion.field && suggestion.field !== 'email') ? undefined
+    : state.contacts.find((c) => `${String(c.first_name ?? '').trim()} ${String(c.last_name ?? '').trim()}`.trim().replace(/\s+/g, ' ').toLowerCase() === personName);
+  const newTitle = existing ? planTitleUpgrade(existing, foundRole(suggestion, roles)) : null;
+  if (plan.kind === 'none' && !newTitle) return 'none';
   if (plan.kind === 'lead_update') {
     const { error } = await client.from('leads').update(plan.patch).eq('id', leadId).eq('updated_at', state.lead.updated_at).select('id').single();
     if (error) throw failure(error);
@@ -40,15 +54,23 @@ export async function saveDeepFindReview(client: SupabaseClient, userId: string 
     query = old.email === null ? query.is('email', null) : query.eq('email', old.email ?? '');
     const { error } = await query.select('id').single();
     if (error) throw failure(error);
-  } else {
+  } else if (plan.kind === 'contact_insert') {
     const { error } = await client.from('decision_maker_candidates').insert({ ...plan.patch, title: plan.patch.title ?? role, lead_id: leadId, created_by: userId }).select('id').single();
     if (error) throw failure(error);
   }
+  let titled = false;
+  if (newTitle && existing && (plan.kind === 'contact_update' || plan.kind === 'none')) {
+    let query = client.from('decision_maker_candidates').update({ title: newTitle }).eq('id', existing.id).eq('lead_id', leadId).is('dismissed_at', null);
+    query = typeof existing.title === 'string' && existing.title.trim() !== '' ? query.eq('title', existing.title) : query.is('title', null);
+    const { error } = await query.select('id').single();
+    if (error) throw failure(error);
+    titled = true;
+  }
   const owner = plan.kind === 'lead_update' ? null : planOwnerFromSuggestion(suggestion, role, state.lead);
-  if (!owner) return 'saved';
+  if (!owner) return titled ? 'title_set' : 'saved';
   const { error } = await client.from('leads').update({ owner_name: owner }).eq('id', leadId).eq('updated_at', state.lead.updated_at).select('id').single();
   if (error) throw failure(error);
-  return 'owner_set';
+  return titled ? 'owner_title_set' : 'owner_set';
 }
 
 /** Historical candidate JSON stays as a record; lead state clears the active choice across every run. */

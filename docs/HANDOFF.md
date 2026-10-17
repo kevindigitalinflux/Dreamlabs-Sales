@@ -368,3 +368,9 @@ Not live-checked by Claude (my browser cannot open UX Tree): Valentina's run, th
 - Role comes from `named_by_web` / `named_on_site` (name matched ignoring case, accents, spacing) or the contact's existing title; unknown role = no change. Existing owners are never overwritten.
 - Save flow is in `saveDeepFindReview` (session client, compare-and-set on `updated_at`, coded error on failure). A new contact also stores the role as `title`. Sequences stay off. UI: "Added to lead. Also set as the lead's owner."
 - No SQL or migration. Not live-checked; Kevin to retry on the UX Tree lead (Valentina Antunovic).
+
+## Contact title upgrade (2026-10-17, branch claude/upgrade-contact-title)
+
+- When a person suggestion is added and the person already exists as a (non-dismissed) contact, and Deep find's role for them is owner-like (`isOwnerRole`), the contact's `title` is upgraded: blank or non-owner-like (e.g. "Director") becomes the role; an already owner-like title is left alone (no downgrade). Pure planner: `planTitleUpgrade` in `_shared/deepFindSuggestions.ts`.
+- Only the `title` column is written, via the session client (RLS), compare-and-set on the title we read, coded error on failure. `include_in_sequences` and everything else untouched. Role is taken from Deep find entries (not the contact's own title).
+- UI notices: "Added to lead. Contact title updated to <role>." / "Added to lead. Also set as the lead's owner and updated their title." (`reviewNotice`). No SQL or migration. Not live-checked.
