@@ -361,3 +361,10 @@ Note: the Supabase tool holds back DELETE statements and some multi-statement wr
 ## Update 2026-10-16 (later, Claude): person email finding MERGED + deployed (`41613be`)
 Built by Codex (terse mode), Sonnet review (no Critical; 2 Important fixed: worker checks gated on PEOPLE_RESERVE_MS + verify timeout; legacy catch-all behaviour restored; plus catch-all detection on any result and one "email checker not set up" line). Tests 102 files / 1594 pass, tsc clean. `run-deep-find` deployed; no migration. Architect ruling kept: legacy inferred-format guesses keep the Hunter-verified fill; only the NEW common-format guesses (first.last, first, flast, firstlast, first_last; max 5 per person per domain, 5 checks per domain per run) fill ONLY on a checker `valid` into a blank email of an existing contact.
 Not live-checked by Claude (my browser cannot open UX Tree): Valentina's run, the new CTA "None of these / not a UK company" button (top of the company panel), the per-person "no email found" lines. Kevin to re-run Deep find on the UX Tree lead and report the step lines. Leftover test lead "ZZ IRELAND TEST (delete me)" (pipeline "Commercial offices London") still to delete.
+
+## Owner from suggestion (2026-10-17, branch claude/owner-from-suggestion)
+
+- "Add to lead" on a person suggestion also sets `leads.owner_name` when the lead's owner is blank and the person's role is owner-like (`isOwnerRole`: owner, founder, co-founder, CEO, chief executive, managing director, proprietor, principal; not plain director/manager/head of).
+- Role comes from `named_by_web` / `named_on_site` (name matched ignoring case, accents, spacing) or the contact's existing title; unknown role = no change. Existing owners are never overwritten.
+- Save flow is in `saveDeepFindReview` (session client, compare-and-set on `updated_at`, coded error on failure). A new contact also stores the role as `title`. Sequences stay off. UI: "Added to lead. Also set as the lead's owner."
+- No SQL or migration. Not live-checked; Kevin to retry on the UX Tree lead (Valentina Antunovic).

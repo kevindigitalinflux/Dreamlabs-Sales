@@ -9,7 +9,7 @@ import { SuggestionRows } from './SuggestionRows';
 import { logDeepFindError } from '../../lib/deepFindErrors';
 
 /** Review actions always use the person's session and RLS, never an edge/service client. */
-export function DeepFindSuggestions({ leadId, suggestions, refreshKey }: { leadId: string; suggestions: ReviewSuggestion[]; refreshKey: string }) {
+export function DeepFindSuggestions({ leadId, suggestions, refreshKey, roles = [] }: { leadId: string; suggestions: ReviewSuggestion[]; refreshKey: string; roles?: { name: string; role?: string | null }[] }) {
   const { session } = useAuth();
   const [state, setState] = useState<ReviewState | null>(null);
   const [hidden, setHidden] = useState<string[]>([]);
@@ -37,8 +37,8 @@ export function DeepFindSuggestions({ leadId, suggestions, refreshKey }: { leadI
     // Focus remains on a stable status node when the optimistic row disappears.
     status.current?.focus();
     try {
-      const result = await saveDeepFindReview(supabase, session?.user.id ?? null, leadId, s, action);
-      setNotice(result === 'none' ? 'Already on this lead' : action === 'add' ? 'Added to lead. No sequence enrolment was added.' : 'Dismissed.');
+      const result = await saveDeepFindReview(supabase, session?.user.id ?? null, leadId, s, action, roles);
+      setNotice(result === 'none' ? 'Already on this lead' : result === 'owner_set' ? "Added to lead. Also set as the lead's owner." : action === 'add' ? 'Added to lead. No sequence enrolment was added.' : 'Dismissed.');
       try { setState(await loadDeepFindReview(supabase, leadId)); }
       catch (error: unknown) { logDeepFindError('deep find: saved review could not be refreshed', error); setError('Saved. Refresh to see the latest lead details.'); }
     } catch (error: unknown) {

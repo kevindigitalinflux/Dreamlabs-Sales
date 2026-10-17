@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { deepFindErrorCode } from './deepFindErrors';
-import { planSuggestionAdd, registrySkipReason, suggestionKey } from '../../supabase/functions/_shared/deepFindSuggestions';
+import { planOwnerFromSuggestion, planSuggestionAdd, registrySkipReason, roleForPerson, suggestionKey } from '../../supabase/functions/_shared/deepFindSuggestions';
 import type { ReviewContact, ReviewLead, ReviewSuggestion } from '../../supabase/functions/_shared/deepFindSuggestions';
 
 export interface ReviewState { lead: ReviewLead & { id: string; updated_at: string }; contacts: ReviewContact[] }
@@ -10,15 +10,15 @@ const failure = (error: unknown, message = FAILURE) => Object.assign(new Error(m
 /** Session client only. Read failures must not turn existing contacts into an empty list. */
 export async function loadDeepFindReview(client: SupabaseClient, leadId: string): Promise<ReviewState> {
   const [lead, contacts] = await Promise.all([
-    client.from('leads').select('id, email, additional_emails, dismissed_suggestions, country, registry_candidates_rejected, updated_at').eq('id', leadId).single(),
-    client.from('decision_maker_candidates').select('id, first_name, last_name, email, dismissed_at').eq('lead_id', leadId),
+    client.from('leads').select('id, email, additional_emails, dismissed_suggestions, country, registry_candidates_rejected, owner_name, updated_at').eq('id', leadId).single(),
+    client.from('decision_maker_candidates').select('id, first_name, last_name, title, email, dismissed_at').eq('lead_id', leadId),
   ]);
   if (lead.error || contacts.error || !lead.data || !contacts.data) throw failure(lead.error ?? contacts.error, 'Could not load this lead’s review details. Refresh and try again.');
   return { lead: lead.data as ReviewState['lead'], contacts: contacts.data as ReviewContact[] };
 }
 
 /** A fresh read and compare-and-set prevent lost array additions and overwriting a concurrent email fill. */
-export async function saveDeepFindReview(client: SupabaseClient, userId: string | null, leadId: string, suggestion: ReviewSuggestion, action: 'add' | 'dismiss'): Promise<'saved' | 'none'> {
+export async function saveDeepFindReview(client: SupabaseClient, userId: string | null, leadId: string, suggestion: ReviewSuggestion, action: 'add' | 'dismiss', roles: { name: string; role?: string | null }[] = []): Promise<'saved' | 'owner_set' | 'none'> {
   if (!userId) throw new Error('Sign in to save this change.');
   const state = await loadDeepFindReview(client, leadId);
   if (action === 'dismiss') {
@@ -29,6 +29,7 @@ export async function saveDeepFindReview(client: SupabaseClient, userId: string 
     return 'saved';
   }
   const plan = planSuggestionAdd(suggestion, state.lead, state.contacts);
+  const role = roleForPerson(suggestion.name, roles, state.contacts) ?? suggestion.role?.trim() ?? null;
   if (plan.kind === 'none') return 'none';
   if (plan.kind === 'lead_update') {
     const { error } = await client.from('leads').update(plan.patch).eq('id', leadId).eq('updated_at', state.lead.updated_at).select('id').single();
@@ -40,10 +41,14 @@ export async function saveDeepFindReview(client: SupabaseClient, userId: string 
     const { error } = await query.select('id').single();
     if (error) throw failure(error);
   } else {
-    const { error } = await client.from('decision_maker_candidates').insert({ ...plan.patch, lead_id: leadId, created_by: userId }).select('id').single();
+    const { error } = await client.from('decision_maker_candidates').insert({ ...plan.patch, title: plan.patch.title ?? role, lead_id: leadId, created_by: userId }).select('id').single();
     if (error) throw failure(error);
   }
-  return 'saved';
+  const owner = plan.kind === 'lead_update' ? null : planOwnerFromSuggestion(suggestion, role, state.lead);
+  if (!owner) return 'saved';
+  const { error } = await client.from('leads').update({ owner_name: owner }).eq('id', leadId).eq('updated_at', state.lead.updated_at).select('id').single();
+  if (error) throw failure(error);
+  return 'owner_set';
 }
 
 /** Historical candidate JSON stays as a record; lead state clears the active choice across every run. */

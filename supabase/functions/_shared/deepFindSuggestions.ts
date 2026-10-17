@@ -2,10 +2,10 @@
 export interface ReviewSuggestion { name: string; value?: string; role?: string | null; label?: string; field?: string }
 export interface ReviewLead {
   email?: unknown; additional_emails?: unknown; dismissed_suggestions?: unknown;
-  country?: unknown; registry_candidates_rejected?: unknown;
+  country?: unknown; registry_candidates_rejected?: unknown; owner_name?: unknown;
 }
 export interface ReviewContact {
-  id: string; first_name?: unknown; last_name?: unknown; email?: unknown; dismissed_at?: unknown;
+  id: string; first_name?: unknown; last_name?: unknown; email?: unknown; dismissed_at?: unknown; title?: unknown;
 }
 const norm = (v: unknown): string => typeof v === 'string' ? v.trim().toLowerCase().replace(/\s+/g, ' ') : '';
 const strings = (v: unknown): string[] => Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [];
@@ -67,4 +67,30 @@ export function countryPhoneMismatch(text: string, country: unknown): boolean {
   const phones = [...text.matchAll(/(?:\+|\b00)\s*(\d[\d\s().-]{6,}\d)/g)].map((m) => m[1]!.replace(/\D/g, ''));
   const localIrish = country === 'IE' && /\b08\d[\s-]?\d{3}[\s-]?\d{4}\b/.test(text);
   return phones.length > 0 && !localIrish && !phones.some((p) => country === 'IE' ? p.startsWith('353') : p.startsWith('1'));
+}
+
+const OWNER_ROLE = /\b(owner|founder|ceo|chief executive|managing director|proprietor|principal)\b/;
+const plain = (v: unknown): string => typeof v === 'string' ? v.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim() : '';
+
+/** Owner-like titles only. Plain director, manager and head-of roles do not make someone the owner. */
+export function isOwnerRole(role: unknown): boolean {
+  return OWNER_ROLE.test(plain(role).replace(/[-/&,]/g, ' '));
+}
+
+/** Role for a person from Deep find result entries (matched by accent-free name), else the contact's saved title. */
+export function roleForPerson(name: string, entries: { name: string; role?: string | null }[], contacts: ReviewContact[] = []): string | null {
+  const key = plain(name);
+  if (!key) return null;
+  const found = entries.find((e) => plain(e.name) === key && plain(e.role));
+  if (found) return found.role!.trim();
+  const contact = contacts.find((c) => plain(`${plain(c.first_name)} ${plain(c.last_name)}`) === key && plain(c.title));
+  return contact ? String(contact.title).trim() : null;
+}
+
+/** Full name to store as the lead owner, or null. Never replaces a non-blank owner and needs a known owner-like role. */
+export function planOwnerFromSuggestion(s: ReviewSuggestion, role: string | null, lead: ReviewLead): string | null {
+  const name = s.name.trim().replace(/\s+/g, ' ');
+  if (!name || name === 'Company contact' || (s.field && s.field !== 'email')) return null;
+  if (typeof lead.owner_name === 'string' && lead.owner_name.trim() !== '') return null;
+  return isOwnerRole(role ?? s.role) ? name : null;
 }

@@ -2,12 +2,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { expect, it, vi } from 'vitest';
 import { loadDeepFindReview, rejectDeepFindCompanies, saveDeepFindReview } from './deepFindReview';
 
-function database(options: { email?: string | null; contacts?: object[]; readError?: boolean; writeError?: boolean } = {}) {
+function database(options: { owner?: string | null; email?: string | null; contacts?: object[]; readError?: boolean; writeError?: boolean } = {}) {
   const writes: { table: string; operation: string; patch: Record<string, unknown>; filters: unknown[][] }[] = [];
   const from = vi.fn((table: string) => {
     let write: typeof writes[number] | undefined;
     const result = () => ({ data: options.readError ? null : table === 'leads'
-      ? { id: 'lead', updated_at: 'version', email: options.email ?? null, additional_emails: ['old@example.com'], dismissed_suggestions: ['person:old name'], ...write?.patch }
+      ? { id: 'lead', updated_at: 'version', email: options.email ?? null, owner_name: options.owner ?? null, additional_emails: ['old@example.com'], dismissed_suggestions: ['person:old name'], ...write?.patch }
       : write ? { id: 'contact', ...write.patch } : options.contacts ?? [], error: options.readError || (write && options.writeError) ? { code: 'PGRST116' } : null });
     const q = {
       select: () => q,
@@ -62,4 +62,30 @@ it('reports an already-present suggestion without writing', async () => {
   const db = database({ email: s.value });
   expect(await saveDeepFindReview(db.client, 'user', 'lead', s, 'add')).toBe('none');
   expect(db.writes).toEqual([]);
+});
+const val = { name: 'Valentina Antunovic', value: 'val@example.com', label: 'Found on site' };
+const founder = [{ name: 'Valentína  Antunovic', role: 'Founder' }];
+it('sets a blank lead owner from an owner-like role and fills the contact title', async () => {
+  const db = database();
+  expect(await saveDeepFindReview(db.client, 'user', 'lead', val, 'add', founder)).toBe('owner_set');
+  expect(db.writes[0]).toMatchObject({ table: 'decision_maker_candidates', operation: 'insert', patch: { title: 'Founder', include_in_sequences: false } });
+  expect(db.writes[1]).toMatchObject({ table: 'leads', patch: { owner_name: 'Valentina Antunovic' }, filters: [['id','lead'],['updated_at','version']] });
+});
+it('never overwrites an existing owner, and does nothing extra without a known or owner-like role', async () => {
+  const a = database({ owner: 'Someone Else' });
+  expect(await saveDeepFindReview(a.client, 'user', 'lead', val, 'add', founder)).toBe('saved');
+  expect(a.writes.some((w) => w.table === 'leads')).toBe(false);
+  const b = database();
+  expect(await saveDeepFindReview(b.client, 'user', 'lead', val, 'add', [])).toBe('saved');
+  expect(await saveDeepFindReview(b.client, 'user', 'lead', { ...val, name: 'Jo Bloggs', value: 'jo@example.com' }, 'add', [{ name: 'Jo Bloggs', role: 'Marketing Manager' }])).toBe('saved');
+  expect(b.writes.some((w) => w.table === 'leads')).toBe(false);
+});
+it('uses a blank-trimmed owner as blank and an existing contact title as the role', async () => {
+  const db = database({ owner: '   ', contacts: [{ id: 'c', first_name: 'Valentina', last_name: 'Antunovic', title: 'CEO', email: null }] });
+  expect(await saveDeepFindReview(db.client, 'user', 'lead', val, 'add')).toBe('owner_set');
+  expect(db.writes[0]?.table).toBe('decision_maker_candidates');
+});
+it('throws a coded error when the owner write fails', async () => {
+  const db = database();
+  await expect(saveDeepFindReview({ from: (t: string) => t === 'leads' ? { ...db.client.from(t), update: () => { throw Object.assign(new Error('boom'), { code: 'X' }); } } : db.client.from(t) } as unknown as SupabaseClient, 'user', 'lead', val, 'add', founder)).rejects.toThrow();
 });

@@ -62,7 +62,7 @@ export function DeepFindLeadResult({ row }: { row: DeepFindRowWithLead }) {
           People looked up: {details.people.map((p) => `${p.name}${p.role ? ` (${p.role})` : ''}${p.email_found ? ': email found' : ''}`).join(', ')}
         </p>
       )}
-      {row.lead && details.suggestions.length + toCheck.length > 0 && <DeepFindSuggestions key={row.lead_id} leadId={row.lead_id} refreshKey={row.updated_at} suggestions={[...details.suggestions, ...toCheck]} />}
+      {row.lead && details.suggestions.length + toCheck.length > 0 && <DeepFindSuggestions key={row.lead_id} leadId={row.lead_id} refreshKey={row.updated_at} roles={[...details.namedByWeb, ...details.namedOnSite]} suggestions={[...details.suggestions, ...toCheck]} />}
     </li>
   );
 }
