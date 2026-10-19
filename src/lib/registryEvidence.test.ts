@@ -53,3 +53,15 @@ it('picks one all-words match with two independent signals and asks when another
 it('finds footer legal wording when an earlier name mention has no legal context', () => {
   expect(match(undefined, { pages: ['<title>BK PROPERTY MANAGEMENT SERVICES LIMITED</title>' + ' ordinary content '.repeat(20) + '<footer>BK PROPERTY MANAGEMENT SERVICES LIMITED. Registered in England and Wales.</footer>'] }).evidence['13550006'].E3).toBe(true);
 });
+
+const bk = (pages: string[]) => matchRegistryEvidence([candidate('13550006', 'BK PROPERTY LIMITED')], 'BK Property', { postcode: null, city: 'London', address: null }, { pages, people: [], officers: {} }).evidence['13550006'].E3;
+it.each(['abc bk property limited, registered office: 1 High St', 'ABC BK PROPERTY LIMITED, Registered office: 1 High St', 'BK PROPERTY LIMITED GROUP HOLDINGS registered in England and Wales'])('longer legal name does not give E3: %s', t => expect(bk([t])).toBe(false));
+it.each(['Registered name: BK Property Limited. Company no. 13550006x', 'Registered name: BK Property Limited. Company no. 1', '© 2024 BK Property Limited. Registered in England and Wales', 'Company name: BK Property Limited, registered office 1 High St', 'Trading as BK Property Limited registered in England'])('legal labels and footers give E3: %s', t => expect(bk([t])).toBe(true));
+it.each(['Powered by SMITH BUILDERS LIMITED | Registered office: 1 High St', 'Part of SMITH BUILDERS LIMITED. Registered in England and Wales', 'A subsidiary of SMITH BUILDERS LIMITED, company no. 5', 'Designed by SMITH BUILDERS LIMITED. Registered office: x', 'Formerly SMITH BUILDERS LIMITED. Registered office: x'])('context exclusion: %s', t => {
+  expect(match([candidate('13550006', 'SMITH BUILDERS LIMITED')], { pages: [t] }).evidence['13550006'].E3).toBe(false);
+});
+it('number proof is excluded only by words immediately before it', () => {
+  expect(match([candidate('13550006', 'SMITH BUILDERS LIMITED')], { pages: ['Built by 13550006'] }).evidence['13550006'].E3).toBe(false);
+  expect(match([candidate('13550006', 'SMITH BUILDERS LIMITED')], { pages: ['Built by someone else long ago in the past decade. Company no. 13550006'] }).evidence['13550006'].E3).toBe(true);
+});
+it.each(['Registered in England & Wales', 'Reg No 1', 'Reg. No. 1', 'Reg number 1', 'Registered number 1', 'Company registration number 1', 'Company reg 1'])('recognises wording: %s', w => expect(bk([`Registered name: BK Property Limited. ${w}`])).toBe(true));

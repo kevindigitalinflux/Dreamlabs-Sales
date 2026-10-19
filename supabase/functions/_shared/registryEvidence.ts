@@ -5,13 +5,30 @@ export interface RegistryEvidence { E1: boolean; E2: boolean; E3: boolean; E4: b
 export interface RegistryProof {
   pages: string[]; people: string[]; officers: Record<string, string[]>; website?: string | null; webNumbers?: string[]; peopleNumbers?: string[];
 }
+const EXCLUDED_CONTEXT = /\b(?:powered by|partners?|acquired|subsidiary of|part of|owned by|built by|designed by|developed by|formerly|in association with|member of|sister company)\b/;
+const LEGAL_WORDING = /\b(registered in (?:england|wales|scotland|northern ireland)|company (?:no\.?|number|registration number|reg\b)|registered (?:office|number)|reg\.? ?(?:no\.?|number))/;
+const LABEL_WORDS = new Set(['of', 'at', 'is', 'by', 'as', 'name', 'copyright', 'ltd']);
+const NEXT_WORDS = new Set(['registered', 'company', 'reg', 'registration', 'trading', 'vat', 'is', 'are', 'was', 'a', 'an', 'the', 'whose', 'and', 'no', 'number', 'at', 'of', 'in', 'all', 'copyright']);
+/** The match must start where a name can start: text start, punctuation, a year, or a small connector/label word. */
+function startsAtBoundary(prefix: string) {
+  const t = prefix.trimEnd();
+  if (!t || !/[a-z0-9]$/.test(t)) return true;
+  const word = t.match(/[a-z0-9]+$/)![0];
+  return LABEL_WORDS.has(word) || /^(?:19|20)\d\d$/.test(word);
+}
+/** The name must not continue into more name words. */
+function endsAtBoundary(suffix: string) {
+  const t = suffix.trimStart();
+  if (!t || !/^[a-z0-9]/.test(t)) return true;
+  return NEXT_WORDS.has(t.match(/^[a-z0-9]+/)![0]);
+}
 const personKey = (v: string) => v.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z]+/g, ' ').trim().replace(/^(?:(?:mr|mrs|ms|miss|dr|prof|sir|dame|lord|lady) )+/, '');
 /** Evidence is scored independently of provider ordering. Weak domain evidence can never authorize a pick. */
 export function matchRegistryEvidence(scored: CompanyCandidate[], name: string, loc: LeadLocation, proof: RegistryProof) {
   const words = companyNameTokens(name);
   const allWords = (c: CompanyCandidate) => words.length > 0 && (words.every(w => companyNameTokens(c.name).includes(w)) || sameCompanyName(c.name, name));
   const evidence: Record<string, RegistryEvidence> = {};
-  const text = proof.pages.join(' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').toLowerCase();
+  const text = proof.pages.join(' ').replace(/<[^>]*>/g, ' | ').replace(/\s+/g, ' ').toLowerCase();
   const known = proof.people.map(personKey).filter(p => p.split(' ').length >= 2 && p.split(' ').every(part => part.length >= 2));
   let host = '';
   try { host = new URL(proof.website?.includes('://') ? proof.website : `https://${proof.website ?? ''}`).hostname.replace(/^www\./, '').split('.')[0]; } catch { /* An invalid website contributes no evidence. */ }
@@ -24,11 +41,13 @@ export function matchRegistryEvidence(scored: CompanyCandidate[], name: string, 
     const legalPattern = legalName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const legalWording = [...text.matchAll(new RegExp(`(?<![a-z0-9])${legalPattern}(?![a-z0-9])`, 'g'))].some(match => {
       const index = match.index!;
+      if (EXCLUDED_CONTEXT.test(text.slice(Math.max(0, index - 60), index))) return false;
+      if (!startsAtBoundary(text.slice(0, index)) || !endsAtBoundary(text.slice(index + legalName.length))) return false;
       const nearby = text.slice(Math.max(0, index - 100), index) + ' '
         + text.slice(index + legalName.length, index + legalName.length + 100);
-      return /\b(registered in (?:england|wales|scotland|northern ireland)|company (?:no\.?|number)|registered office|reg\. no\.?)\b/.test(nearby);
+      return LEGAL_WORDING.test(nearby);
     });
-    const websiteNumber = new RegExp(`\\b${escapedNumber}\\b`).test(text);
+    const websiteNumber = [...text.matchAll(new RegExp(`\\b${escapedNumber}\\b`, 'g'))].some(m => !EXCLUDED_CONTEXT.test(text.slice(Math.max(0, m.index! - 30), m.index!)));
     const E3 = websiteNumber || legalWording;
     const E4 = (proof.peopleNumbers ?? []).includes(c.company_number) || (proof.officers[c.company_number] ?? []).some(p => known.includes(personKey(p)));
     const E5 = (proof.webNumbers ?? []).includes(c.company_number);
