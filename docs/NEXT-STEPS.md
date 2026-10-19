@@ -80,3 +80,8 @@ Process: Kevin approved the Stage 2 spec/build and supplied Claude's rulings on 
 Phase 3a-c gates at `2877d787d90e3a921a293ea1365accbb3239e2c5`: TypeScript 0 diagnostics; 119 files / 1,796 tests / 0 failures; build 0 errors. The checklist remains unchecked because independent review is pending.
 
 - [x] Phase 3a-c Fix round 1: I1–I5, M1–M5 and M7 fixed locally on `codex/deepfind-phase3a` from `7892d0f`; M6/M8 skipped as requested. Implementation complete; independent rereview and publication remain pending. See HANDOFF for limits and final gates.
+
+## Deep find effort and company matching — Build A (2026-10-19)
+
+- [ ] Resolve effort storage with Claude/Kevin: `deep_find_runs` has no JSONB/params or effort column. Approve storing effort in each queued lead's existing `domains` JSONB, or defer to Build B's reviewed migration. See HANDOFF **Build A**. Implementation stopped as explicitly required by the spec and Kevin's instruction.
+- [ ] Build A1 company matching v2 and A2 effort levels after the storage ruling; neither is built or reviewed. No migration, readiness badge or parallel leads belongs to Build A.

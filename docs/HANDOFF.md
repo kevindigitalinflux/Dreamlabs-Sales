@@ -2,7 +2,7 @@
 
 Authoritative task record. The vault copy (`Dreamlabs Sales/Handoff.md`) is a snapshot of this file, labelled with the revision below. Workflow rules: vault `_Team/Shared agent workflow.md`.
 
-**Latest resume point:** the final section, **Phase 2 — Scraper merges sources (2026-10-19, Codex)**. Earlier sections are historical checkpoints. The vault snapshot has not been updated by this branch.
+**Latest resume point:** the final section, **Build A — effort storage stop (2026-10-19, Codex)**. Earlier sections are historical checkpoints. The vault snapshot has not been updated by this branch.
 
 ## Identity and authority
 - Task ID: `worker-programme` (lookup worker -> Deep find; Stage 1 done, Stage 2 next). Project: Dreamlabs Sales. Author: Claude. Time: 2026-10-15 ~15:15 (local clock shows GMT; Kevin's timezone not confirmed).
@@ -562,3 +562,15 @@ Next (needs Kevin's go-ahead for the migration): Phase 3d-e = readiness badge (m
 ## Dream Agent dismiss (2026-10-19, branch `claude/dreamagent-dismiss`)
 - Bug: Dismiss stored `{status:'dismissed'}` but rows looked unchanged. Now every action row (create, update, ambiguous, company context, add/update contact) shows a compact row: struck-through title, a "Dismissed" text label, `role="status"` announcement, and an Undo button (`{status:'pending'}`). Focus moves to Undo, and back to the card's first control after Undo. The full card stays mounted (hidden) so edits survive Undo.
 - `confirmAll` and the Apply button already ignore dismissed rows (they only act on `confirmed_*`); unchanged. Title logic is the pure helper `src/lib/dreamAgentDismissed.ts` (tested). No component tests exist in the repo, so the row UI is not unit-tested; not checked in a browser.
+
+## Build A — effort storage stop (2026-10-19, Codex)
+
+- Kevin confirmed Codex as BUILDER and Claude as architect/reviewer on 2026-10-19; roles are unchanged. Scope: Build A only, company matching v2 and effort levels. Local branch `codex/deepfind-effort-matching` starts from clean main `446be55aec4319e662ab2fd1f7e7750a4dad2dd1`. No push, merge, deployment, SQL, remote writes, secrets or paid fallback is authorized.
+- Read the complete approved `docs/superpowers/specs/2026-10-19-deepfind-effort-and-matching-design.md`, shared workflow, relevant handoff and next steps. Storage inspection reached the spec's explicit STOP condition before implementation. Neither A1 nor A2 has been built.
+- Evidence: `supabase/migrations/057_deep_find.sql:33-48` defines `deep_find_runs` with scalar columns only: no `effort`, JSONB or params field. Searching all checked-in migrations found no later addition. `src/types/index.ts` agrees. Actual cap columns are `credit_cap_hunter` and `credit_cap_ai`, not the spec's `hunter_cap` and `ai_cap`. `queueRun` in `deepFindLeadActions.ts` inserts these scalar run fields; cron resumes through stored rows, so an HTTP-only effort value would be lost.
+- `deep_find_leads.domains` is existing per-lead JSONB, not run JSONB. An alternative could store effort on every queued lead, load it when processing, and preserve it in every outcome. This is a proposal requiring an architect ruling; it has not been implemented or tested. Do not overload `cancel_reason`, encode effort in cap values, or invent a run params column.
+- Open question for Claude/Kevin: may Build A persist `effort` in each `deep_find_leads.domains` JSONB instead of a run params field, including retry/failure/result preservation and a defined legacy default? Otherwise defer effort storage to Build B's reviewed migration. No migration was written or applied.
+- Stop follows Kevin's explicit instruction and the approved A2 spec: if the existing run cannot carry effort without a new column, STOP and record the question. No remaining code inspection, test-first implementation or UI work was attempted after this condition was confirmed. A1 is also unstarted under that stop instruction.
+- Only HANDOFF.md, CLAUDE.md and NEXT-STEPS.md change. Independent architect review is pending. No automation changed. Vault writes and the post-commit mirror are skipped to respect the project-folder restriction and avoid replacing accepted main references with a task branch. Claude can mirror the reviewed checkpoint separately.
+- Resume: resolve the storage question first, then read the remaining requested engine/registry/UI files, write failing regression tests and build A. Build B readiness, migration and parallel leads remain out of scope. Subscription usage telemetry is unavailable.
+- Baseline gates after this documentation-only checkpoint: `rtk err npx tsc --noEmit` exit 0 (0 diagnostics); `rtk test npx vitest run` exit 0 (RTK returned only timing, so test/file counts were not exposed); `rtk err npm run build` exit 0 (0 errors, existing chunk-size warning). Gates passed 3/3. No test or implementation changes were made; these baseline gates do not verify Build A. `git diff --check` passed.
