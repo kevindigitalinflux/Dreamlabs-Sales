@@ -1,10 +1,10 @@
 import { expect, it } from 'vitest';
 import { isReviewPhone, isOwnerRole, suggestionKey, visibleSuggestions } from '../../supabase/functions/_shared/deepFindSuggestions';
 
-it.each(['020 7946 0958', '07700 900123', '+44 20 7946 0958', '+44 (0)20 7946 0958', '087 123 4567', '01 234 5678', '+353 87 123 4567', '+1 212 555 0198'])('accepts plausible phone %s', value => {
+it.each(['020 7946 0958', '07700 900123', '+44 20 7946 0958', '+44 (0)20 7946 0958', '087 123 4567', '01 234 5678', '0207 946 0958', '01234 567890', '+353 1 234 5678', '087 160 7207', '+353 87 123 4567', '+1 212 555 0198'])('accepts plausible phone %s', value => {
   expect(isReviewPhone(value)).toBe(true);
 });
-it.each(['2010-2024', '2023-10-19', 'Company No. 12345678', '123456789012345', '12345678', '00000000000', '+11111111111', '09999999999', '+44 9999999999', '020123', '087123456789012', 'abc02079460958'])('rejects non-phone %s', value => {
+it.each(['2010-2024', '2023-10-19', 'Company No. 12345678', '123456789012345', '12345678', '00000000000', '+11111111111', '09999999999', '+44 9999999999', '020123', '087123456789012', 'abc02079460958', '05-10-2019', '01.02.2023', '01/02/2023', '1/2/23'])('rejects non-phone %s', value => {
   expect(isReviewPhone(value)).toBe(false);
 });
 it.each(['Product Owner', 'Scrum Owner', 'Process Owner', 'Account Owner', 'Principal Consultant', 'Principal Engineer', 'Principal Designer', 'Principal Architect', 'Principal Developer', 'Principal Analyst'])('rejects non-ownership role %s', value => {

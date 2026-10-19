@@ -15,6 +15,7 @@ const validEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 export function isReviewPhone(value: unknown): boolean {
   if (typeof value !== 'string') return false;
   const raw = value.trim();
+  if (/^\s*\d{1,2}\s*[-./]\s*\d{1,2}\s*[-./]\s*\d{2,4}\s*$/.test(raw)) return false;
   if (!/^\+?[\d\s().-]+$/.test(raw) || /\d{4}-\d{2}-\d{2}|^\d{4}-\d{4}$/.test(raw)) return false;
   let digits = raw.replace(/\D/g, '');
   if (/^(\d)\1+$/.test(digits) || /(\d)\1{6}/.test(digits)) return false;
