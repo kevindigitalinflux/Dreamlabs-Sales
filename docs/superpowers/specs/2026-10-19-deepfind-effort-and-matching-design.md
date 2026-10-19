@@ -1,0 +1,41 @@
+# Deep find: effort levels and smarter company matching — Design
+
+Date: 2026-10-19. Author: Claude (architect). Trigger (Kevin, after the Phase 3 live test): (1) Companies House still needs hand-holding, e.g. BK Property Management Services (Googling the name shows the Companies House entry with its number in the first results); (2) how many Hunter credits and AI calls should a run get? Replace the two number boxes with understandable effort levels (Low / Medium / High / Extra high) that explain what is spent and when each level fits. Parent: `2026-10-19-deepfind-one-engine-design.md` (Phase 3d-e still to build: readiness badge, smart depth, parallel runs; this spec supersedes the "smart depth" wording there and makes effort the policy for it).
+
+## Rules (binding, unchanged)
+Review-before-send; auto-apply only high-confidence facts into BLANK fields with Undo and dismissal memory; worker calls only through `workerClient`; Hunter/AI/Firecrawl/Apollo/Places keep their guards and per-org caps; secrets never logged; plain English; accessible; phone width; migrations: reviewed first, Kevin's per-migration permission, audit ending in `RAISE EXCEPTION` inside one `DO $$`; Codex never applies migrations.
+
+## Build A (no migration): Company matching v2 + effort levels
+
+### A1. Company matching v2 (evidence-based auto-pick)
+Hypothesis for BK: exact name match but the registered address differs from the lead's address, so `pickCompany` (`supabase/functions/_shared/registrySearch.ts`) returns "ambiguous" ("a name match whose address disagrees with a known location is never picked").
+New evidence per ACTIVE candidate (pure, tested module; keep `scoreCompanyCandidates` shape so the UI still lists candidates):
+- E1 name: exact legal name (existing `isExact`/`sameCompanyName`).
+- E2 location: existing `locationAgrees`.
+- E3 own-website proof: the candidate's company NUMBER, or its exact registered name together with "registered"/"company no"/"limited" wording, appears on the lead's own website pages already read by Deep find (footer, terms, privacy, contact). Strong, independent of address. (Reuse the pages Deep find reads; no new fetches.)
+- E4 people proof: a person we already know (lead `owner_name`, existing contacts, people named on the company's own site) matches an ACTIVE officer or PSC of the candidate (fetch officers for at most the top 3 name-matching candidates, free Companies House calls, bounded by the per-lead time budget). Strong.
+- E5 web corroboration (only at High / Extra high effort, one AI call): a grounded web search "<name> Companies House" returns a company number that equals a candidate's number. Medium.
+- E6 domain slug: the website domain contains the candidate's name slug (e.g. bkpropertymanagementservices.com). Weak, never enough alone.
+Auto-pick rule: exactly one active candidate carries all name words AND has at least two of {E2, E3, E4, E5 (medium counts as one)}, OR is the only active exact-name match and has at least one of {E2, E3, E4}; never pick when another active candidate ties on evidence; never pick an inactive company; E1 alone never picks when a location is known and disagrees unless E3 or E4 is present. When not auto-picked, show the candidate with the best evidence at the top as "Most likely" with the reasons in plain words ("exact name, active, your website shows number 13550006") and a single "Use this company" button; keep the "None of these / not a UK company" CTA. Record the evidence that decided in the Deep find result (`registry_evidence`, inside the existing `domains` jsonb) and show it next to "Companies House: using company X (why)".
+Tests: BK-style case (exact name, address differs, website footer shows number), tie between two similar names (still asks), inactive companies, person-proof, web-corroboration-only (does not pick alone), no website pages (falls back to old behaviour).
+
+### A2. Effort levels (replace the two caps boxes in the Deep find confirm dialog)
+Selector (radio cards, plain words), default Medium; a small "Custom" link keeps today's two numeric caps for power users. Per-run totals scale with the number of leads and are capped by the existing maxima (`DEEP_FIND_CAP_LIMITS`) and by what the organisation can actually spend (Hunter allowance via the existing `HunterAllowanceLine`, per-org Places/Apollo/Firecrawl daily caps, worker usage limits). The dialog shows "For N leads: up to X Hunter credits, Y AI calls, Z Firecrawl pages, W browser scrapes, and our email checker (free)" and warns in words when an allowance is short ("Hunter has 1 search left this month, so Hunter steps will be skipped").
+| Level | What runs | Per lead, at most | Best for |
+|---|---|---|---|
+| Low | Free steps only: Companies House (rule-based matching), the lead's own website, browser scraper, our email checker and common-format guesses. No Hunter, no AI, no Firecrawl, no Apollo. | 0 Hunter, 0 AI, 0 Firecrawl | Big batches (25 to 200), a first pass, leads that already have a website, when credits are low. |
+| Medium (default) | Everything in Low, then the deeper steps ONLY for leads still missing a verified email or a named decision maker. | 1 Hunter, 2 AI (one web search, one person lookup), 1 Firecrawl page | Everyday use: most leads finish free, the rest get one deeper look. |
+| High | Low, then deeper steps for every lead that is not "Ready"; adds web corroboration for the company match, LinkedIn search for owner-like people, Apollo decision makers and company phone. | 3 Hunter, 4 AI, 1 Firecrawl, Apollo within its per-org cap | Warm lists, leads you plan to call this week. |
+| Extra high | Every step for every lead regardless, including a second Firecrawl page and all LinkedIn searches. | 6 Hunter, 8 AI, 2 Firecrawl, Apollo within its cap | A handful of high-value leads you want fully researched. |
+Explain "what is spent": Hunter credits are real monthly credits on the organisation's Hunter plan; AI calls use the organisation's Gemini key (small cost each, a few thousand tokens); Firecrawl pages use the organisation's Firecrawl credits; browser scrapes and email checks are free but counted against the daily worker limits (100 scrapes, 150 checks per organisation). Numbers are defaults in ONE constants module (`deepFindEffort.ts`, pure, tested) so they can be tuned without touching the UI.
+Engine: `run-deep-find` receives `effort` (`low|medium|high|extra_high|custom`) and derives the per-run Hunter/AI caps (`deep_find_runs.hunter_cap/ai_cap` as today: effort is computed client-side into those caps AND stored as `effort` inside the run's existing jsonb/params if a column does not exist; if a column is needed, STOP and record it for Build B's migration). Per-lead behaviour follows the table: Low skips every Hunter/AI/Firecrawl/Apollo/LinkedIn step; Medium/High/Extra high run the quick (free) phase first for every lead and decide per lead whether to run the deep phase (rule in Build B); the plain "what ran and why" line in each lead's result names the level ("Medium effort: free steps found a verified email, so deeper steps were skipped").
+Tests: constants and totals (1, 25, 200 leads), allowance warnings, Low makes no paid/AI call (engine test), Medium deep phase only when missing, custom path unchanged.
+
+## Build B (needs migration 065 and Kevin's go-ahead): readiness badge, smart depth, parallel leads
+As in `2026-10-19-deepfind-one-engine-design.md` Phase 3d-e: `leads.readiness text check in ('ready','almost','needs_work')` + `leads.readiness_missing text[]` (null = not checked), computed at the end of each run, badge on list/card/lead page and sort/filter; the deep-phase rule for Medium = "after the quick phase the lead lacks a verified email or a named decision maker"; several leads at once (default 3, within worker limits: scraper 2 at a time, checker 5 per domain per minute, usage reserve per call); every run reports the effort level and which phase ran.
+
+## Build C (small): Dream Agent dismissed state
+Already in progress as a separate small fix (`claude/dreamagent-dismiss`).
+
+## Delivery
+Build A first (branch `codex/deepfind-effort-matching`), independent review, deploy `run-deep-find` + site, live check on BK Property Management Services (a lead with an unresolved company), then Build B. Roles: Codex builds, Claude reviews (unchanged).
