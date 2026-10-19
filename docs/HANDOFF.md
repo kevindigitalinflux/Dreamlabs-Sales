@@ -483,3 +483,61 @@ Kevin confirmed Codex as builder and Claude as architect/reviewer on 2026-10-19.
 | Sequences | No enrollment | Provider candidates | New contacts excluded; fills switch follow-ups off | Keep review-before-send and exclusion; no enrollment |
 
 Plain registry directors are suggestions, not proof of ownership. No migration is needed for result JSON or additional suggestion fields. Scraper rows must be approved into the pipeline before Deep find can run; the UI must make that prerequisite explicit.
+
+### Built behaviour and review scope
+
+- Engine checkpoints: `ead9148` adds parity and automatic-change rules; `3f1fa03` removes the legacy UI entry points and completes registry/invalid-email safeguards. The final documentation commit records gates; review the final branch HEAD against the starting main revision above. No other writer or running provider job was involved.
+- Places runs before website-dependent work only when a key exists and website or phone is blank. Values pass the existing domain/block-list rules; writes compare the exact original blank value. No Hunter/AI units are used by Places. Existing Places account limits and the Deep find lead/org rate limits remain unchanged.
+- Registry officers stay contacts with sequences disabled. Plain Director is not owner proof: those names are owner proposals. Only `isOwnerRole` evidence permits automatic owner name or blank contact title. Own-page owner evidence requires a confirmed `site_confirms` domain; web-only roles stay proposals. Dismissed contacts and dismissed ownership are not restored. OpenCorporates retains the old name-only fallback as a proposal.
+- Hunter domain lists and named-person lookups reuse Spend guards and existing caps; there is no duplicate Hunter decision-maker request. Company emails from the same lists remain proposals. Every contact-email fill, including literal website addresses, Hunter results and wide-lookup results, must pass our own checker as valid. Existing workerClient limits remain authoritative. Risky/unverifiable/unavailable results stay suggestions; invalid results are dropped. New Hunter contacts start without an email; their validated blank email fill gets its own Undo record.
+- Apollo searches at most three people on one confirmed domain, preserves obfuscated names and already revealed rows through ignoreDuplicates, and does not request personal email/phone reveals. Obfuscated names are excluded from email guesses, registry person hints and LinkedIn searches. Company phone uses the existing organization-enrichment helper only while the lead phone is blank, and remains a proposal. Provider profile links remain reviewable; owner LinkedIn search retains Phase 1 evidence checks and AI guards. Hunter/AI caps do not pretend to cover Apollo or Places provider-account usage.
+- Automatic business-field writes use exact-value CAS, scope filters, active-run/edit-rights checkpoints, and the original auto_applied shape. Contact email fills keep follow-ups off. Later failure or authorization loss returns earlier automatic changes with Undo in the outcome. Undo restores only the recorded field and never re-enables sequences. No sequence table is written and nobody is enrolled or messaged. This retains the existing non-transactional result-save architecture: abrupt process termination between a data write and result persistence remains a runtime limitation for independent review, not a claimed database guarantee.
+- Kevin’s explicit Phase 3 blank-only policy supersedes Phase 1’s permission to replace an unreachable/suspect nonblank website. The current engine never replaces it; historical archive records and their Undo still work. No readiness fields, migration, smart-depth phase or concurrent lead processing were added.
+- Pipeline list and shared lead Contacts card expose Deep find. The generic panel and unused enrichment hook were removed; named-contact Add-person lookup/results remain available. Generic lookup-job creation has no UI caller. `/jobs/lookup/:id`, lookup adapter/client, `run-lookup-jobs`, tables and Autopilot helpers remain. Uncertain phone, website, owner and contact-title fields now support session/RLS Add/Dismiss, with exact-value or updated_at guards. Jobs/activity reads include these fields so resolved proposals stop counting as attention.
+- Scraper results retain approved rows with one Deep find action. Pending rows explain the approval prerequisite. Opening Deep find reads the already approved lead using the real source-row IDs and organisation scope; it never approves or inserts a lead. This avoids a second engine for raw rows or a schema change.
+- Initial parity and proposal regressions failed before implementation. Targeted suites cover real-engine Places ordering/Undo, Apollo dedupe/revealed data, Hunter credit refusal, worker-valid versus risky/unverifiable/invalid email, owner provenance, obfuscated names, failure retention, exact blank CAS, scoped review writes, existing Undo and scraper SSR/action resolution. A local TypeScript shim checked the real edge import graph successfully; this is not a Deno runtime check.
+- Independent Claude review, Deno/provider/live verification, interactive phone-width/focus/theme checks, and publication remain pending. No external service, database, VPS or Cloudflare mutation occurred. No subscription usage telemetry was exposed; no paid fallback was used. Vault writes/sync were not run under the project-folder restriction; Claude can mirror reviewed documentation separately. No blocking implementation or migration question remains.
+
+### Final verification and exact resume point
+
+- Final code revision: `2877d787d90e3a921a293ea1365accbb3239e2c5`; code commits `ead9148`, `3f1fa03`, `2877d78`. The following documentation-only commit is the final branch HEAD. Working checkout was clean except the four explicitly edited documentation files and temporary local verification artifacts.
+- Final gates: `rtk err npx tsc --noEmit` PASS, **0 diagnostics**; `rtk test npx vitest run --reporter=json --outputFile=.phase3-vitest.json` PASS, **119 files / 1,796 tests / 0 failures**; `rtk err npm run build` PASS, **0 errors**, existing chunk-size warning. JSON reporting only records counts; it does not filter the full suite. The first full suite exposed `domainPattern.test.ts` / “keeps only well-formed email suggestions”: newly supported phone values lacked a malformed-value check. A test-first phone-validation fix passed targeted tests, then all three gates were rerun successfully because code changed. The edge import-graph shim check also passed. Whitespace checks passed.
+- 35 files changed against main (including deleted dead UI files):
+
+  - `CLAUDE.md`
+  - `docs/AUTOMATIONS.md`
+  - `docs/HANDOFF.md`
+  - `docs/NEXT-STEPS.md`
+  - `src/components/deepfind/DeepFindConfirm.tsx`
+  - `src/components/deepfind/SuggestionRows.tsx`
+  - `src/components/pipeline/BulkDraftModal.tsx`
+  - `src/components/pipeline/ContactRow.tsx`
+  - `src/components/pipeline/DecisionMakersCard.tsx`
+  - `src/components/pipeline/FindDecisionMakerPanel.tsx`
+  - `src/components/pipeline/KnownPersonArea.tsx`
+  - `src/hooks/useDecisionMakers.ts`
+  - `src/hooks/useDeepFindActivity.ts`
+  - `src/hooks/useLeadEnrichment.ts`
+  - `src/hooks/useRawLeadActions.ts`
+  - `src/lib/deepFindApply.test.js`
+  - `src/lib/deepFindFirecrawl.test.js`
+  - `src/lib/deepFindPhase1Engine.test.js`
+  - `src/lib/deepFindPhase3Engine.test.js`
+  - `src/lib/deepFindPhase3Suggestions.test.ts`
+  - `src/lib/deepFindReview.test.ts`
+  - `src/lib/deepFindReview.ts`
+  - `src/lib/deepFindView.ts`
+  - `src/lib/jobs/sources.ts`
+  - `src/lib/scrapeDeepFind.test.ts`
+  - `src/lib/scrapeDeepFind.ts`
+  - `src/lib/scrapeResults.test.ts`
+  - `src/pages/OrganizationSettings.tsx`
+  - `src/pages/PipelineList.tsx`
+  - `src/pages/ScraperJob.tsx`
+  - `supabase/functions/_shared/deepFind.ts`
+  - `supabase/functions/_shared/deepFindApply.ts`
+  - `supabase/functions/_shared/deepFindPeople.ts`
+  - `supabase/functions/_shared/deepFindRules.ts`
+  - `supabase/functions/_shared/deepFindSuggestions.ts`
+
+- Resume: open this **Phase 3a-c** section, inspect final branch HEAD and diff against `5720ffd0247a8d0b17f1460487c951cef5c41361`, and have Claude review the implementation. Review must cover the final code revision above, not the earlier engine checkpoint alone. No push, merge, deploy, migration, provider test or message is authorized. Kevin’s separate publication approval is still required after independent review. There is no unresolved implementation question. Temporary verification files were removed before handoff; no background test/build process remains.

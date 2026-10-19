@@ -68,3 +68,13 @@ Process: Kevin approved the Stage 2 spec/build and supplied Claude's rulings on 
 - [ ] Scraper merged sources built on `codex/deepfind-phase2`: configured country-gated checkboxes, durable grouped review, tested merge/dedupe, registry-FK/officer-preserving approvals and shared Jobs markers. No migration. Gates: TypeScript 0 diagnostics; 113 files / 1,727 tests / 0 failures; build 0 errors. Independent Claude review remains pending; leave unchecked until reviewed. See HANDOFF section **Phase 2**.
 - [ ] After review and Kevin's separate publication authorization, deploy parser/scraper functions with the frontend and verify grouped reloads, source failures, approval/officer copying, phone width, focus and both themes. Nothing from Phase 2 is deployed; Phase 3 is not started.
 - [ ] Phase 2 Fix round 1: I1/I2/I3/I4/M2/M3 fixed locally from `40e4b5d`; Claude rereview pending. Registry per-company Places lookups are restored, including their extra cost. M1/M4/M5/M6 are intentionally skipped. See HANDOFF for timeout, polling and merge regression evidence.
+
+
+## Deep find one engine — Phase 3a-c (2026-10-19)
+
+- [ ] Phase 3a/b/c built locally on `codex/deepfind-phase3a`: parity matrix, Places/registry/site/Hunter/Apollo coverage, one Deep find action, blank-only automatic fields with existing Undo, and uncertain Add/Dismiss proposals. Independent Claude review is pending; do not tick until built and reviewed. See HANDOFF **Phase 3a-c**.
+- [ ] Claude reviews this branch against `5720ffd0247a8d0b17f1460487c951cef5c41361`, including checker-only email writes, concurrent blank fills, owner evidence, provider caps, historical lookup routes, and scraper approval/resolution.
+- [ ] After review and separate Kevin authorization: deploy frontend and `run-deep-find`, then verify a name-only Places lead, registry/own-page owner, Apollo candidates/phone, valid versus catch-all email, Add/Dismiss/Undo, phone width, focus and both themes. No deployment is authorized by this build.
+- [ ] Phase 3d/e remains separate and unbuilt: readiness migration/badge, smart depth and concurrency. No SQL is required or authorized for Phase 3a-c.
+
+Phase 3a-c gates at `2877d787d90e3a921a293ea1365accbb3239e2c5`: TypeScript 0 diagnostics; 119 files / 1,796 tests / 0 failures; build 0 errors. The checklist remains unchecked because independent review is pending.
