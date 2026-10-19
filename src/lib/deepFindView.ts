@@ -97,7 +97,7 @@ export function readDeepFindDetails(value: unknown): DeepFindDetails {
     const name = text(x.name, 80);
     const value = text(x.value, 200);
     const label = text(x.label, 500);
-    return name && value && label && (x.field === 'email' || x.field === 'linkedin_url') ? [{ name, value, label, ...(x.field === 'linkedin_url' ? { field: x.field } : {}) }] : [];
+    return name && value && label && ['email', 'linkedin_url', 'phone', 'owner_name', 'website', 'title'].includes(String(x.field)) ? [{ name, value, label, ...(x.field !== 'email' ? { field: String(x.field) } : {}) }] : [];
   });
   return {
     autoApplied: readAutoApplied(o.auto_applied),

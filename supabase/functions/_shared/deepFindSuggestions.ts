@@ -3,6 +3,7 @@ export interface ReviewSuggestion { name: string; value?: string; role?: string 
 export interface ReviewLead {
   email?: unknown; additional_emails?: unknown; dismissed_suggestions?: unknown;
   country?: unknown; registry_candidates_rejected?: unknown; owner_name?: unknown;
+  phone?: unknown; website?: unknown;
 }
 export interface ReviewContact {
   id: string; first_name?: unknown; last_name?: unknown; email?: unknown; dismissed_at?: unknown; title?: unknown; linkedin_url?: unknown;
@@ -14,6 +15,8 @@ const nameOf = (c: ReviewContact) => norm(`${norm(c.first_name)} ${norm(c.last_n
 const ROLE_MAILBOXES = new Set(['privacy','gdpr','dpo','legal','compliance','careers','jobs','recruitment','press','media','abuse','postmaster','webmaster','noreply','no-reply','donotreply','unsubscribe']);
 
 export function suggestionKey(s: ReviewSuggestion): string {
+  if (s.field === 'title') return `title:${norm(s.name)}:${norm(s.value)}`;
+  if (['phone', 'owner_name', 'website'].includes(s.field ?? '')) return `${s.field}:${norm(s.value)}`;
   if (s.field === 'linkedin_url') return `linkedin_url:${norm(s.name)}:${norm(s.value)}`;
   return s.value ? `email:${norm(s.value)}` : `person:${norm(s.name)}`;
 }
@@ -26,6 +29,19 @@ export function visibleSuggestions<T extends ReviewSuggestion>(suggestions: T[],
   const seen = new Set(strings(lead.dismissed_suggestions).map(norm));
   const emails = new Set([norm(lead.email), ...strings(lead.additional_emails).map(norm), ...contacts.map((c) => norm(c.email))].filter(Boolean));
   return suggestions.filter((s) => {
+    if (s.field === 'title') {
+      const same = contacts.find((c) => nameOf(c) === norm(s.name));
+      const key = suggestionKey(s);
+      if (!same || same.dismissed_at || norm(same.title) || !norm(s.value) || seen.has(key)) return false;
+      seen.add(key); return true;
+    }
+    if (s.field === 'phone' || s.field === 'owner_name' || s.field === 'website') {
+      const key = suggestionKey(s);
+      if (!norm(s.value) || norm(lead[s.field]) || seen.has(key)) return false;
+      if (s.field === 'website' && !/^https?:\/\/[^\s/]+(?:\/[^\s]*)?$/i.test(s.value ?? '')) return false;
+      seen.add(key);
+      return true;
+    }
     if (s.field === 'linkedin_url') {
       if (!norm(s.name) || !/^https:\/\/www\.linkedin\.com\/in\/[a-zA-Z0-9_-]+\/?$/.test(s.value ?? '')) return false;
       const key = suggestionKey(s);
@@ -45,14 +61,19 @@ export function visibleSuggestions<T extends ReviewSuggestion>(suggestions: T[],
 
 export type SuggestionAddPlan =
   | { kind: 'none' }
+  | { kind: 'title_update'; id: string; patch: { title: string } }
   | { kind: 'linkedin_update'; id: string; patch: { linkedin_url: string } }
-  | { kind: 'lead_update'; patch: { email: string } | { additional_emails: string[] } }
+  | { kind: 'lead_update'; patch: { email: string } | { additional_emails: string[] } | { phone: string } | { owner_name: string } | { website: string } }
   | { kind: 'contact_update'; id: string; patch: { email: string; include_in_sequences: false } }
   | { kind: 'contact_insert'; patch: { source: 'manual'; kind: 'person'; first_name: string; last_name: string | null; title: string | null; email: string | null; linkedin_url?: string; include_in_sequences: false; is_primary: false } };
 
 /** Plans only blank fills or new rows. The caller supplies lead_id/created_by from the signed-in session. */
 export function planSuggestionAdd(s: ReviewSuggestion, lead: ReviewLead, contacts: ReviewContact[]): SuggestionAddPlan {
   if (!visibleSuggestions([s], lead, contacts).length) return { kind: 'none' };
+  if (s.field === 'title') return { kind: 'title_update', id: contacts.find((c) => nameOf(c) === norm(s.name))!.id, patch: { title: s.value!.trim() } };
+  if (s.field === 'phone') return { kind: 'lead_update', patch: { phone: s.value!.trim() } };
+  if (s.field === 'owner_name') return { kind: 'lead_update', patch: { owner_name: s.value!.trim() } };
+  if (s.field === 'website') return { kind: 'lead_update', patch: { website: s.value!.trim() } };
   if (s.field === 'linkedin_url') {
     const same = contacts.find((c) => nameOf(c) === norm(s.name));
     if (same) return { kind: 'linkedin_update', id: same.id, patch: { linkedin_url: s.value! } };

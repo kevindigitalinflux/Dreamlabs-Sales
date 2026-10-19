@@ -23,6 +23,11 @@ function database(options: { owner?: string | null; email?: string | null; conta
   return { client: { from } as unknown as SupabaseClient, writes };
 }
 const s = { name: 'Company contact', value: 'hello@example.com' };
+it('saves provider title proposals only through the session with exact blank-value CAS', async () => {
+  const db = database({ contacts: [{ id: 'c', first_name: 'Jane', last_name: 'Smith', title: '' }] });
+  await saveDeepFindReview(db.client, 'user', 'lead', { name: 'Jane Smith', field: 'title', value: 'Founder' }, 'add');
+  expect(db.writes[0]).toMatchObject({ table: 'decision_maker_candidates', patch: { title: 'Founder' }, filters: [['id','c'],['lead_id','lead'],['dismissed_at',null],['title','']] });
+});
 it('saves a dismissal without dropping earlier keys and guards against concurrent lead edits', async () => {
   const db = database();
   await saveDeepFindReview(db.client, 'user', 'lead', s, 'dismiss');

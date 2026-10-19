@@ -32,7 +32,7 @@ beforeEach(() => {
   lookUpPeople.mockResolvedValue({ created: [], touched: [], emailsFound: 0, suggestions: [], problems: [], results: [] });
   service = { rpc: vi.fn(async (name) => ({ data: name === 'deep_find_reserve' ? aiAllowed : true })), from(table) {
     let patch; const filters = [];
-    const records = () => table === 'leads' ? [lead] : table === 'decision_maker_candidates' ? contacts : [];
+    const records = () => table === 'deep_find_runs' ? [{ id: 'run', org_id: 'org', status: 'active' }] : table === 'leads' ? [lead] : table === 'decision_maker_candidates' ? contacts : [];
     const result = () => {
       if (table === 'leads' && patch?.website) beforeWebsiteWrite?.();
       const found = records().filter((r) => filters.every(([k,v]) => Array.isArray(r[k]) ? v === '{' + r[k].map(x => JSON.stringify(x)).join(',') + '}' : r[k] === v));
@@ -46,12 +46,11 @@ beforeEach(() => {
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
-it('replaces an unreachable website, archives the old URL, records coherent Undo, and auto-captures LinkedIn', async () => {
+it('keeps a nonblank website under Phase 3 policy and auto-captures LinkedIn with Undo', async () => {
   const out = await run();
-  expect(lead.website).toBe('https://acme.com');
-  expect(lead.additional_websites).toEqual(['old.com']);
+  expect(lead.website).toBe('old.com');
+  expect(lead.additional_websites).toBeNull();
   expect(out.domains.auto_applied).toEqual(expect.arrayContaining([
-    { table: 'leads', id: 'lead', field: 'website', before: 'old.com', after: 'https://acme.com', archivedWebsite: 'old.com' },
     { table: 'decision_maker_candidates', id: 'c', field: 'linkedin_url', before: null, after: profile },
   ]));
   expect(writes.find((w) => w.table === 'linkedin_contacts')).toMatchObject({ patch: { decision_maker_candidate_id: 'c', linkedin_url: profile } });
@@ -104,7 +103,8 @@ it('keeps the existing time budget and skips new searches when time is short', a
   expect(out.domains.auto_applied.some((c) => c.table === 'leads')).toBe(false);
 });
 
-it('saves the website after the real registry resolver and timestamp trigger write first', async () => {
+it('saves a blank website after the registry resolver writes first', async () => {
+  lead.website = null;
   resolveOrgApiKey.mockImplementation(async (_s, _o, provider) => ['gemini', 'companies_house'].includes(provider) ? 'fake' : null);
   searchCompaniesByName.mockResolvedValue([{ company_number: '01234567', title: 'ACME LIMITED', company_status: 'active' }]);
   const out = await run();
@@ -115,8 +115,8 @@ it('saves the website after the real registry resolver and timestamp trigger wri
   expect(out.domains.auto_applied.some((c) => c.field === 'website')).toBe(true);
 });
 it('explains a website compare-and-set miss', async () => {
-  deny = true;
-  expect((await run()).domains.steps).toContain('The saved website changed while Deep find ran, so it was left as is.');
+  deny = true; lead.website = null;
+  expect((await run()).domains.auto_applied).toEqual([]);
 });
 it('requests evidence only for owner-like searches and keeps non-owner URL results', async () => {
   contacts[0].title = 'Manager'; contacts[0].email = null;
@@ -130,30 +130,30 @@ it('requests evidence only for owner-like searches and keeps non-owner URL resul
   expect(webSearchForPerson.mock.calls[0][0].includeEvidence).not.toBe(true);
 });
 
-it('uses the fresh archive snapshot and preserves additions made earlier in the run', async () => {
+it('preserves archive additions without replacing a saved website', async () => {
   lead.additional_websites = ['initial.com'];
   lookUpPeople.mockImplementation(async () => {
     lead.additional_websites = ['initial.com', 'later.com'];
     return { created: [], touched: [], emailsFound: 0, suggestions: [], problems: [], results: [] };
   });
   const out = await run();
-  expect(lead.additional_websites).toEqual(['initial.com', 'later.com', 'old.com']);
+  expect(lead.additional_websites).toEqual(['initial.com', 'later.com']);
   const write = writes.find(w => w.patch.website);
-  expect(write.filters).toContainEqual(['additional_websites', '{"initial.com","later.com"}']);
-  expect(write.filters.some(([key]) => key === 'updated_at')).toBe(false);
-  expect(out.domains.auto_applied.filter(c => c.table === 'leads')).toHaveLength(1);
+  expect(write).toBeUndefined();
+  expect(out.domains.auto_applied.filter(c => c.table === 'leads')).toHaveLength(0);
 });
-it.each(['website', 'additional_websites'])('protects a concurrent %s change at the website write', async (field) => {
-  beforeWebsiteWrite = () => { lead[field] = field === 'website' ? 'concurrent.com' : ['concurrent.com']; };
+it('protects a concurrent website fill with an exact blank-value filter', async () => {
+  lead.website = null;
+  beforeWebsiteWrite = () => { lead.website = 'concurrent.com'; };
   const out = await run();
-  expect(out.domains.auto_applied.some(c => c.table === 'leads')).toBe(false);
-  expect(out.domains.steps).toContain('The saved website changed while Deep find ran, so it was left as is.');
-  expect(lead[field]).toEqual(field === 'website' ? 'concurrent.com' : ['concurrent.com']);
+  expect(lead.website).toBe('concurrent.com');
+  expect(out.domains.auto_applied.some(c => c.field === 'website')).toBe(false);
 });
-it('keeps a pre-existing archive entry out of website Undo', async () => {
+it('leaves historical archive entries untouched', async () => {
   lead.additional_websites = ['old.com'];
   const out = await run();
-  expect(out.domains.auto_applied.find(c => c.field === 'website').archivedWebsite).toBeUndefined();
+  expect(lead.additional_websites).toEqual(['old.com']);
+  expect(out.domains.auto_applied.some(c => c.field === 'website')).toBe(false);
 });
 it('offers person/company prose without a profile on the same line for review only', async () => {
   webSearchForPerson.mockResolvedValue({ ok: true, found: { linkedin_url: profile }, evidence: 'Jane Smith founded Acme.\n' + profile });

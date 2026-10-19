@@ -48,6 +48,9 @@ export interface PeopleContext {
   left: () => number;
   /** Shared per-person grounded-search cache; owns its AI reservation when supplied. */
   searchPerson?: (person: WebSearchPerson, timeoutMs: number) => Promise<LookupResult>;
+  /** The engine owns checker validation, authorization, blank fills and Undo records. */
+  saveContact?: (contact: Contact, patch: Record<string, string>) => Promise<Contact | null>;
+  checkpoint?: () => Promise<void>;
 }
 
 /** One person's line in the results. */
@@ -156,15 +159,20 @@ export async function lookUpPeople(ctx: PeopleContext): Promise<PeopleOutcome> {
     for (const s of wide.suggestions) out.suggestions.push({ name, field: s.field, value: s.value.slice(0, 200), label: s.label });
     let emailFound = false;
     if (contact && Object.keys(patch).length > 0) {
-      const saved = await fillBlanks(ctx.service, contact, patch);
+      const saved = ctx.saveContact ? await ctx.saveContact(contact, patch) : await fillBlanks(ctx.service, contact, patch);
       if (saved) { Object.assign(contact, saved); out.touched.push(contact); emailFound = !!patch.email; }
     } else if (!contact && patch.email && emailStep && HUNTER_EMAIL_STEPS.includes(emailStep)) {
+      await ctx.checkpoint?.();
       const { data, error } = await ctx.service.from('decision_maker_candidates').upsert({
         lead_id: ctx.lead.id, source: 'hunter', kind: 'person', first_name: person.first, last_name: person.last, title: person.title,
-        email: patch.email, email_revealed: true, name_obfuscated: false, linkedin_url: patch.linkedin_url ?? null,
+        email: ctx.saveContact ? null : patch.email, email_revealed: !ctx.saveContact, name_obfuscated: false, linkedin_url: ctx.saveContact ? null : patch.linkedin_url ?? null,
         include_in_sequences: false, is_primary: false, created_by: ctx.run.created_by,
       }, { onConflict: 'lead_id,dedupe_key', ignoreDuplicates: true }).select('*');
-      if (!error && data && data.length > 0) { out.created.push(data[0] as Contact); out.touched.push(data[0] as Contact); emailFound = true; }
+      if (!error && data && data.length > 0) {
+        const added = data[0] as Contact;
+        if (ctx.saveContact) await ctx.saveContact(added, patch);
+        out.created.push(added); out.touched.push(added); emailFound = !!added.email;
+      }
     } else if (!contact && patch.email) {
       out.suggestions.push({ name, field: 'email', value: patch.email, label: 'Found on the website, check it' });
     }

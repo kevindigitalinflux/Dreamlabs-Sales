@@ -288,6 +288,7 @@ it.each([1, 2])('stops all downstream work when checkpoint %s confirms cancellat
 
 it.each([1, 2])('continues pending Hunter/worker/contact work after a transient checkpoint %s read failure', async (at) => {
   pendingPaidAndContactWork(); checkpointError = at;
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
   const log = vi.spyOn(console, 'error').mockImplementation(() => {});
   const result = await process();
   expect(result.status).toBe('done');
@@ -315,8 +316,8 @@ it('stops on confirmed cancellation even if a subsequent edit-rights read would 
 });
 
 it('retains contacts written before authorisation was lost', async () => {
-  pendingPaidAndContactWork(); contacts = []; accessLostAt = 1;
-  vi.mocked(resolveOrgApiKey).mockResolvedValue('fake-key');
+  pendingPaidAndContactWork(); contacts = []; accessLostAt = 2;
+  vi.mocked(resolveOrgApiKey).mockImplementation(async (_s, _o, provider) => ['hunter', 'firecrawl', 'companies_house'].includes(provider) ? 'fake-key' : null);
   vi.mocked(resolveRegistry).mockResolvedValue({ number: '12345678', name: 'Example', address: null, candidates: [] });
   vi.mocked(fetchActiveOfficers).mockResolvedValue([{ first_name: 'Jane', last_name: 'Smith', title: null }]);
   const result = await process();

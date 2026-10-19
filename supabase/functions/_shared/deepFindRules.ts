@@ -68,6 +68,7 @@ export function cleanTitle(value: unknown): string | null {
 /** An existing contact row, as far as de-duplication needs it. */
 export interface ExistingContact {
   id: string; kind?: unknown; source?: unknown; first_name?: unknown; last_name?: unknown; email?: unknown; dismissed_at?: unknown;
+  name_obfuscated?: unknown;
 }
 
 /** True when two first names plausibly name the same person: same name, or one is an initial or a prefix of the other. */
@@ -317,7 +318,7 @@ export function peopleToLookUp(
   const withEmail = contacts.filter((c) => typeof c.email === 'string' && c.email.trim() !== '');
   const alreadyHasEmail = (first: string, last: string) => findSamePerson(withEmail, first, last) !== null;
   for (const c of contacts) {
-    if (c.kind === 'general' || c.dismissed_at || (typeof c.email === 'string' && c.email.trim() !== '')) continue;
+      if (c.kind === 'general' || c.name_obfuscated === true || c.dismissed_at || (typeof c.email === 'string' && c.email.trim() !== '')) continue;
     const first = cleanNamePart(c.first_name);
     const last = cleanNamePart(c.last_name);
     if (first && last) add({ first, last, title: cleanTitle((c as { title?: unknown }).title), source: 'contact', contactId: c.id });
