@@ -16,3 +16,12 @@ it('disables actions while saving and describes named people without an email', 
   expect(html).toContain('Director');
   expect(html.match(/disabled=""/g)).toHaveLength(2);
 });
+
+it('links https LinkedIn suggestions safely and rejects unsafe schemes', () => {
+  const render = (value: string) => renderToStaticMarkup(createElement(SuggestionRows, { suggestions: [{ name: 'Jane', field: 'linkedin_url', value }], busy: false, onAction: () => {} }));
+  const html = render('https://www.linkedin.com/in/jane');
+  expect(html).toContain('href="https://www.linkedin.com/in/jane"');
+  expect(html).toContain('rel="noreferrer noopener"');
+  expect(html).toContain('target="_blank"');
+  for (const value of ['javascript:alert(1)', 'http://www.linkedin.com/in/jane']) expect(render(value)).not.toContain('<a ');
+});

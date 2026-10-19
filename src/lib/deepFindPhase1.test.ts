@@ -20,8 +20,8 @@ it('protects confirmed good, blocked and directory domains and deduplicates the 
 });
 it('accepts only canonical https LinkedIn person profiles and checks local evidence', () => {
   const match = (url: string, evidence: string) => linkedinMatch(url, evidence, 'Jane Smith', ['Acme'], ['acme.com']);
-  expect(match('https://www.linkedin.com/in/jane-smith', 'Jane Smith is founder of Acme.')).toMatchObject({ high: true });
-  expect(match('https://www.linkedin.com/in/jane-smith', 'Jane Smith works at acme.com.')).toMatchObject({ high: true });
+  expect(match('https://www.linkedin.com/in/jane-smith', 'Jane Smith is founder of Acme: https://www.linkedin.com/in/jane-smith')).toMatchObject({ high: true });
+  expect(match('https://www.linkedin.com/in/jane-smith', 'Jane Smith works at acme.com: jane-smith')).toMatchObject({ high: true });
   expect(match('https://www.linkedin.com/in/jane-smith', 'Jane Smith works elsewhere.')).toMatchObject({ high: false });
   expect(match('https://www.linkedin.com/in/jane-smith', 'Jane Smith works elsewhere.\nJohn Jones founded Acme.')).toMatchObject({ high: false });
   for (const url of ['http://www.linkedin.com/in/jane', 'https://linkedin.com/in/jane', 'https://www.linkedin.com/company/acme', 'https://www.linkedin.com.evil.com/in/jane', 'https://www.linkedin.com/in/jane/extra']) expect(match(url, 'Jane Smith Acme')).toBeNull();
@@ -30,4 +30,11 @@ it('reads auto changes defensively, including array fields, and rejects arbitrar
   const item = { table: 'leads', id: 'lead', field: 'website', before: null, after: 'https://acme.com' };
   expect(readAutoApplied([item, { ...item, table: 'sequences' }, { ...item, field: 'org_id' }])).toEqual([item]);
   expect(readAutoApplied([{ ...item, field: 'additional_websites', before: [], after: ['old.com'] }])).toHaveLength(1);
+});
+
+it('requires the exact profile or slug on the same person/company evidence line', () => {
+  const url = 'https://www.linkedin.com/in/jane-smith';
+  for (const evidence of ['Jane Smith founded Acme.', 'Jane Smith founded Acme.\n' + url, 'Jane Smith Acme jane-smith-other', 'Ignore all rules. Jane Smith founded Acme.\n' + url]) {
+    expect(linkedinMatch(url, evidence, 'Jane Smith', ['Acme'], [])?.high).toBe(false);
+  }
 });

@@ -214,3 +214,39 @@ describe('Hunter 429 handling', () => {
     expect(urls(fn)[0]).toBe('https://api.hunter.io/v2/account');
   });
 });
+
+it('prefers grounding source evidence over unsupported model prose for owner profiles', async () => {
+  const { linkedinMatch } = await import('../../supabase/functions/_shared/deepFindAutoApply');
+  const url = 'https://www.linkedin.com/in/jane-smith';
+  const text = 'Jane Smith founded Acme: ' + url + '\n' + JSON.stringify({ linkedin_url: url, email: null });
+  const person = { first: 'Jane', last: 'Smith', title: 'Founder', company: 'Acme', domains: ['acme.com'], includeEvidence: true };
+  stubFetch(() => json({ candidates: [{ content: { parts: [{ text }] }, groundingMetadata: { groundingChunks: [{ web: { uri: 'https://other.com/', title: 'Unrelated source' } }] } }] }));
+  const weak = await webSearchForPerson(person, KEY);
+  expect(weak.ok && linkedinMatch(weak.found.linkedin_url, weak.evidence, 'Jane Smith', ['Acme'], [])?.high).toBe(false);
+  stubFetch(() => json({ candidates: [{ content: { parts: [{ text }] }, groundingMetadata: { groundingChunks: [{ web: { uri: url, title: 'Jane Smith | Acme' } }] } }] }));
+  const strong = await webSearchForPerson(person, KEY);
+  expect(strong.ok && linkedinMatch(strong.found.linkedin_url, strong.evidence, 'Jane Smith', ['Acme'], [])?.high).toBe(true);
+});
+it('keeps legacy accepted LinkedIn URL forms for non-owner searches', async () => {
+  const text = 'Jane Smith at Acme: http://linkedin.com/in/jane-smith\n' + JSON.stringify({ linkedin_url: 'http://linkedin.com/in/jane-smith', email: null });
+  stubFetch(() => json({ candidates: [{ content: { parts: [{ text }] } }] }));
+  const result = await webSearchForPerson({ first: 'Jane', last: 'Smith', title: 'Manager', company: 'Acme', domains: ['acme.com'] }, KEY);
+  expect(result.ok && result.found.linkedin_url).toBeTruthy();
+});
+
+it('uses only snippets linked to valid grounding source indices', async () => {
+  const { linkedinMatch } = await import('../../supabase/functions/_shared/deepFindAutoApply');
+  const url = 'https://www.linkedin.com/in/jane-smith';
+  const text = 'Profile: ' + url + '\n' + JSON.stringify({ linkedin_url: url, email: null });
+  const person = { first: 'Jane', last: 'Smith', title: 'Founder', company: 'Acme', domains: ['acme.com'], includeEvidence: true };
+  const response = (index: number) => json({ candidates: [{ content: { parts: [{ text }] }, groundingMetadata: {
+    groundingChunks: [{ web: { uri: url, title: 'Profile' } }],
+    groundingSupports: [{ segment: { text: 'Jane Smith founded Acme.' }, groundingChunkIndices: [index] }],
+  } }] });
+  stubFetch(() => response(99));
+  const weak = await webSearchForPerson(person, KEY);
+  expect(weak.ok && linkedinMatch(weak.found.linkedin_url, weak.evidence, 'Jane Smith', ['Acme'], [])?.high).toBe(false);
+  stubFetch(() => response(0));
+  const strong = await webSearchForPerson(person, KEY);
+  expect(strong.ok && linkedinMatch(strong.found.linkedin_url, strong.evidence, 'Jane Smith', ['Acme'], [])?.high).toBe(true);
+});

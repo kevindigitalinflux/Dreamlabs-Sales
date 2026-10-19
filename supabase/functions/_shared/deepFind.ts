@@ -32,7 +32,7 @@ import { FIRECRAWL_DAILY_PAGES, firecrawlDomainFor } from './firecrawlRules.ts';
 import { classifyDeepFindCheckpoint, DeepFindAuthorisationLost } from './deepFindCheckpoint.ts';
 import { isOwnerRole, roleForPerson, visibleSuggestions } from './deepFindSuggestions.ts';
 import type { ReviewLead } from './deepFindSuggestions.ts';
-import { linkedinMatch, planWebsiteAutoUpdate, type AutoApplied } from './deepFindAutoApply.ts';
+import { arrayEquality, linkedinMatch, planWebsiteAutoUpdate, type AutoApplied } from './deepFindAutoApply.ts';
 
 export const WALL_BUDGET_MS = 130_000;
 /** A lead is only started when at least this much of the invocation is left. */
@@ -516,7 +516,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (cached) return cached;
     const result = (async (): Promise<LookupResult> => {
       if (!geminiKey || !await spend.ai('people')) return { ok: false, failure: 429 };
-      return webSearchForPerson({ ...p, includeEvidence: true }, geminiKey, Math.min(timeout, Math.max(1, left() - 2_000)));
+      return webSearchForPerson({ ...p, includeEvidence: ownerLike(p) }, geminiKey, Math.min(timeout, Math.max(1, left() - 2_000)));
     })();
     searches.set(key, result);
     return result;
@@ -605,14 +605,24 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // Apply website changes only after all searches, guarding both the old URL and the array snapshot.
   const websitePatch = planWebsiteAutoUpdate(lead, discovery.domains, { checked: siteChecked, reachable: sitePages.length > 0, suspect: suspicion.suspect });
   if (websitePatch) {
-    let query = service.from('leads').update({ ...websitePatch, updated_at: nowIso() }).eq('id', lead.id).eq('org_id', run.org_id);
-    query = lead.website == null ? query.is('website', null) : query.eq('website', lead.website);
-    if (typeof lead.updated_at === 'string') query = query.eq('updated_at', lead.updated_at);
-    const { data, error } = await query.select('id');
-    if (error) { console.error('deep find: website save failed'); steps.push('Could not save the confirmed company website.'); }
-    else if (data?.length) for (const [field, after] of Object.entries(websitePatch)) {
-      const before = lead[field] ?? null;
-      if (JSON.stringify(before) !== JSON.stringify(after)) autoApplied.push({ table: 'leads', id: lead.id, field, before: before as string | string[] | null, after });
+    const changed = 'The saved website changed while Deep find ran, so it was left as is.';
+    // Registry writes may change updated_at. Read the archive now and guard only the business values we use.
+    const { data: snapshot, error: readError } = await service.from('leads').select('website, additional_websites').eq('id', lead.id).eq('org_id', run.org_id).maybeSingle();
+    if (readError) { console.error('deep find: website snapshot failed'); steps.push('Could not save the confirmed company website.'); }
+    else if (!snapshot || (snapshot.website ?? null) !== (lead.website ?? null)) steps.push(changed);
+    else {
+      const patch = planWebsiteAutoUpdate({ ...lead, ...snapshot }, discovery.domains, { checked: siteChecked, reachable: sitePages.length > 0, suspect: suspicion.suspect })!;
+      let query = service.from('leads').update({ ...patch, updated_at: nowIso() }).eq('id', lead.id).eq('org_id', run.org_id);
+      query = snapshot.website == null ? query.is('website', null) : query.eq('website', snapshot.website);
+      query = snapshot.additional_websites == null ? query.is('additional_websites', null) : query.eq('additional_websites', arrayEquality(snapshot.additional_websites));
+      const { data, error } = await query.select('id');
+      if (error) { console.error('deep find: website save failed'); steps.push('Could not save the confirmed company website.'); }
+      else if (!data?.length) steps.push(changed);
+      else {
+        const before = snapshot.website ?? null;
+        const archivedWebsite = typeof before === 'string' && patch.additional_websites?.includes(before) && !snapshot.additional_websites?.includes(before) ? before : undefined;
+        autoApplied.push({ table: 'leads', id: lead.id, field: 'website', before, after: patch.website, ...(archivedWebsite ? { archivedWebsite } : {}) });
+      }
     }
   }
   stats.namedOnSite = namedOnSite.length;

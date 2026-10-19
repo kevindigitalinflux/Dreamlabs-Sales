@@ -317,7 +317,7 @@ export function webSearchPrompt(p: WebSearchPerson): string {
  */
 export async function webSearchForPerson(p: WebSearchPerson, geminiKey: string, timeoutMs = 10_000): Promise<LookupResult> {
   try {
-    const { text } = await geminiGroundedSearch(webSearchPrompt(p), geminiKey, timeoutMs);
+    const { text, sources, sourceEvidence } = await geminiGroundedSearch(webSearchPrompt(p), geminiKey, timeoutMs);
     const parsed = parseWebFindings(text, p.domains, p.first, p.last);
     const found: FoundFields = {};
     const email = cleanFoundField('email', parsed.email);
@@ -331,7 +331,9 @@ export async function webSearchForPerson(p: WebSearchPerson, geminiKey: string, 
     }
     if (email) found.email = email;
     if (linkedin) found.linkedin_url = linkedin;
-    return { ok: true, found, ...(p.includeEvidence ? { evidence: text.slice(0, 12_000) } : {}) };
+    // Prefer provider grounding to model prose. A bare URI alone cannot establish the person's company.
+    const evidence = sources.length ? (sourceEvidence ?? sources).join('\n') : text;
+    return { ok: true, found, ...(p.includeEvidence ? { evidence: evidence.slice(0, 12_000) } : {}) };
   } catch (err) {
     return { ok: false, failure: geminiFailure(err) };
   }

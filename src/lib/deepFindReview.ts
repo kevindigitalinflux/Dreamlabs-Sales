@@ -2,19 +2,45 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { deepFindErrorCode } from './deepFindErrors';
 import { planOwnerFromSuggestion, planTitleUpgrade, planSuggestionAdd, registrySkipReason, roleForPerson, suggestionKey } from '../../supabase/functions/_shared/deepFindSuggestions';
 import type { ReviewContact, ReviewLead, ReviewSuggestion } from '../../supabase/functions/_shared/deepFindSuggestions';
-import { readAutoApplied, type AutoApplied } from '../../supabase/functions/_shared/deepFindAutoApply';
+import { arrayEquality, readAutoApplied, type AutoApplied } from '../../supabase/functions/_shared/deepFindAutoApply';
 
 /** User-session RLS applies. The after-value filter makes concurrent edits a harmless no-op. */
 export async function undoDeepFindChange(client: SupabaseClient, userId: string | null, leadId: string, change: AutoApplied): Promise<string> {
   if (!userId) throw new Error('Sign in to undo this change.');
   if (!readAutoApplied([change]).length || (change.table === 'leads' && change.id !== leadId)) throw new Error('Invalid automatic change.');
-  let query = client.from(change.table).update({ [change.field]: change.before }).eq('id', change.id);
+  const scoped = async () => {
+    let query = client.from(change.table).select(change.field === 'website' ? 'website, additional_websites' : change.field).eq('id', change.id);
+    if (change.table === 'decision_maker_candidates') query = query.eq('lead_id', leadId);
+    const { data, error } = await query.maybeSingle();
+    return { data: data as unknown as Record<string, unknown> | null, error };
+  };
+  const patch: Record<string, unknown> = { [change.field]: change.before };
+  let archive: string[] | null | undefined;
+  if (change.archivedWebsite) {
+    const { data, error } = await scoped();
+    if (error) throw failure(error, 'Could not undo this change. Refresh and try again.');
+    if (!data) return 'You cannot change this lead';
+    if (data.website !== change.after) return 'Changed since, left as is';
+    archive = data.additional_websites as string[] | null;
+    if (Array.isArray(archive) && archive.includes(change.archivedWebsite)) {
+      patch.additional_websites = archive.filter((v) => v !== change.archivedWebsite);
+    }
+  }
+  let query = client.from(change.table).update(patch).eq('id', change.id);
   if (change.table === 'decision_maker_candidates') query = query.eq('lead_id', leadId);
   // PostgREST text[] equality needs an array literal, not JavaScript's comma-joined array string.
-  const after = Array.isArray(change.after) ? `{${change.after.map((v) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}` : change.after;
+  const after = Array.isArray(change.after) ? arrayEquality(change.after) : change.after;
+  if (archive !== undefined) query = archive === null ? query.is('additional_websites', null) : query.eq('additional_websites', arrayEquality(archive));
   const { data, error } = await query.eq(change.field, after).select('id');
   if (error) throw failure(error, 'Could not undo this change. Refresh and try again.');
-  return data?.length ? 'Undone.' : 'Changed since, left as is';
+  if (data?.length) return 'Undone.';
+  // UPDATE policies may hide a still-readable row. Re-read values to distinguish that from a CAS miss.
+  const current = await scoped();
+  if (current.error) throw failure(current.error, 'Could not undo this change. Refresh and try again.');
+  if (!current.data) return 'You cannot change this lead';
+  const sameField = JSON.stringify(current.data[change.field]) === JSON.stringify(change.after);
+  const sameArchive = archive === undefined || JSON.stringify(current.data.additional_websites) === JSON.stringify(archive);
+  return sameField && sameArchive ? 'You cannot change this lead' : 'Changed since, left as is';
 }
 
 export interface ReviewState { lead: ReviewLead & { id: string; updated_at: string }; contacts: ReviewContact[] }

@@ -3,7 +3,9 @@ import { DOMAIN_CHECKS, savedDomains } from './domainChecks.ts';
 import { domainFromWebsite, isDirectoryDomain } from './knownPerson.ts';
 
 export type AutoValue = string | null | string[];
-export interface AutoApplied { table: 'leads' | 'decision_maker_candidates'; id: string; field: string; before: AutoValue; after: AutoValue }
+export interface AutoApplied { table: 'leads' | 'decision_maker_candidates'; id: string; field: string; before: AutoValue; after: AutoValue; archivedWebsite?: string }
+/** PostgREST text[] equality requires a quoted array literal. */
+export const arrayEquality = (values: string[]): string => `{${values.map((v) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`;
 const FIELDS: Record<AutoApplied['table'], readonly string[]> = {
   leads: ['website', 'additional_websites', 'email', 'owner_name', 'phone'],
   decision_maker_candidates: ['linkedin_url', 'email', 'phone', 'title'],
@@ -17,6 +19,7 @@ export function readAutoApplied(value: unknown): AutoApplied[] {
   return value.slice(0, 100).filter((v): v is AutoApplied => {
     if (!v || typeof v !== 'object' || !Object.hasOwn(FIELDS, v.table) || typeof v.id !== 'string' || !v.id) return false;
     if (!FIELDS[v.table as AutoApplied['table']].includes(v.field)) return false;
+    if (v.archivedWebsite !== undefined && (v.table !== 'leads' || v.field !== 'website' || typeof v.archivedWebsite !== 'string' || v.archivedWebsite !== v.before)) return false;
     return v.field === 'additional_websites' ? (v.before === null || strings(v.before)) && strings(v.after)
       : scalar(v.before) && typeof v.after === 'string' && !!v.after.trim();
   });
@@ -54,12 +57,14 @@ export function planWebsiteAutoUpdate(
 const words = (v: string) => v.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const contains = (line: string, value: string) => !!words(value) && ` ${words(line)} `.includes(` ${words(value)} `);
 
-/** Evidence must name this person and company together, outside the model's JSON block. Never fetches LinkedIn. */
+/** Untrusted evidence must bind the exact profile, person and company on one line. Never fetches LinkedIn. */
 export function linkedinMatch(url: unknown, evidence: unknown, name: string, companies: string[], domains: string[]): { url: string; high: boolean; evidence: string } | null {
   if (typeof url !== 'string' || !/^https:\/\/www\.linkedin\.com\/in\/[a-zA-Z0-9_-]+\/?$/.test(url.trim())) return null;
   const lines = typeof evidence === 'string' ? evidence.slice(0, 12_000).split(/[\r\n]+/).filter((l) => !l.trim().startsWith('{') && !l.trim().startsWith('```')) : [];
   const named = lines.filter((l) => contains(l, name));
-  const strong = named.find((l) => [...companies, ...domains].some((c) => contains(l, c)));
+  const slug = url.trim().replace(/\/$/, '').split('/').pop()!;
+  const profileOnLine = (line: string) => line.split(/[^a-zA-Z0-9_-]+/).includes(slug);
+  const strong = named.find((l) => profileOnLine(l) && [...companies, ...domains].some((c) => contains(l, c)));
   const line = strong ?? named[0] ?? lines[0] ?? 'No supporting evidence was returned. Check this profile before adding.';
   return { url: url.trim().replace(/\/$/, ''), high: !!strong, evidence: line.slice(0, 500) };
 }
