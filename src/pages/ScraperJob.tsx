@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { CheckCircle2, XCircle, SkipForward, Sparkles, Mail } from 'lucide-react';
 import { useScrapeJob } from '../hooks/useScrapeJob';
+import { isScrapeJobFinished, isScrapeJobTimedOut } from '../lib/scrapeJobState';
 import { useRawLeadActions } from '../hooks/useRawLeadActions';
 import { useOrgApiSettings } from '../hooks/useOrgApiSettings';
 import { usePipeline } from '../hooks/usePipeline';
@@ -110,7 +111,9 @@ export function ScraperJob() {
   if (!job) return <p role="alert" className="text-sm text-danger">{error ?? 'Job not found.'}</p>;
 
   const pending = rawLeads.filter((l) => l.status === 'pending' || l.status === 'duplicate');
-  const running = jobs.some((j) => j.status === 'pending' || j.status === 'running');
+  const now = Date.now();
+  const running = jobs.some((j) => !isScrapeJobFinished(j, now));
+  const timedOut = jobs.some((j) => isScrapeJobTimedOut(j, now));
   const reviewDisabled = running || !!error || busyId !== null || bulkBusy;
   const group = readScrapeGroup(job.icp_params);
   const missing = group?.sources.filter((s) => !jobs.some((j) => j.sources.includes(s))) ?? [];
@@ -144,6 +147,7 @@ export function ScraperJob() {
       {jobs.filter((j) => j.status === 'failed').map((j) => <p key={j.id} role="status" className="text-sm text-danger">{j.sources.map((s) => SOURCE_NAMES[s]).join(', ')} could not finish. Results from other sources are still available. Check Settings and try again.</p>)}
       {missing.map((s) => <p key={s} role="status" className="text-sm text-danger">{SOURCE_NAMES[s]} has not returned a job. Results from other sources are still available.</p>)}
       {running && <p role="status" className="text-sm text-muted">{rawLeads.length} businesses found so far. Review opens when all started sources finish.</p>}
+      {timedOut && <p role="status" className="text-sm text-warning">One source did not finish. You can review what arrived.</p>}
 
       <div className="overflow-x-auto rounded-xl border border-line">
         <table className="block w-full text-left text-sm sm:table">

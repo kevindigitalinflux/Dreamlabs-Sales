@@ -12,8 +12,3 @@ export function readScrapeGroup(params: unknown): ScrapeGroup | null {
     || !group.sources.every((s) => ['google_places', 'companies_house', 'cro'].includes(s))) return null;
   return { id: group.id, sources: group.sources } as ScrapeGroup;
 }
-
-/** Grouped registry searches must not add paid Places lookups on top of the main search. */
-export function registryContactKey(params: unknown, key: string | null): string | null {
-  return readScrapeGroup(params) ? null : key;
-}

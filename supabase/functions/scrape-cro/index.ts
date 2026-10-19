@@ -8,7 +8,7 @@ import { runBounded } from '../_shared/concurrency.ts';
 import { searchCroCompanies, splitCroSecret } from '../_shared/cro.ts';
 import type { RegistryOfficer } from '../_shared/registryOfficers.ts';
 import { lookupCompanyContacts } from '../_shared/registryContacts.ts';
-import { readScrapeGroup, registryContactKey } from '../_shared/scrapeGroup.ts';
+import { readScrapeGroup } from '../_shared/scrapeGroup.ts';
 
 interface IcpParams {
   industry: string | null; location: string | null; city: string | null;
@@ -30,7 +30,7 @@ async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: strin
       return seen.some((s) => s.business_name.toLowerCase() === businessName.toLowerCase());
     }
 
-    const googlePlaces = registryContactKey(icp, await resolveOrgApiKey(service, orgId, 'google_places'));
+    const googlePlaces = await resolveOrgApiKey(service, orgId, 'google_places');
     const city = icp.city ?? null;
     const found = await runBounded(companies, 5, async (c) => {
       // CRO's open data may not expose directors: officers stays [] (normal, not an error).

@@ -49,12 +49,25 @@ describe('combined results review view', () => {
     expect(html).toMatch(/<button(?![^>]*disabled="")[^>]*aria-label="Reject ACME LIMITED"/);
   });
   it('blocks review while another source runs or a refresh cannot load the complete list', () => {
-    setup(); state.jobs[1].status = 'running';
+    setup(); state.jobs[1].status = 'running'; state.jobs[1].created_at = new Date().toISOString();
     let html = renderToStaticMarkup(createElement(Results));
     expect(html).toContain('Review opens when all started sources finish');
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Reject ACME LIMITED"/);
     state.jobs[1].status = 'completed'; state.error = 'Could not load all search results';
     html = renderToStaticMarkup(createElement(Results));
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Reject ACME LIMITED"/);
+  });
+  it('allows review with the plain warning after a source runs for ten minutes', () => {
+    setup(); state.jobs[1].status = 'running';
+    state.jobs[1].created_at = new Date(Date.now() - 600_000).toISOString();
+    const html = renderToStaticMarkup(createElement(Results));
+    expect(html).toContain('One source did not finish. You can review what arrived.');
+    expect(html).toMatch(/<button(?![^>]*disabled="")[^>]*aria-label="Reject ACME LIMITED"/);
+    expect(html).not.toContain('Review opens when all started sources finish');
+  });
+  it('offers a late matching pending row after an earlier member was rejected', () => {
+    setup(); state.rows[0].status = 'rejected'; state.rows[1].status = 'pending';
+    const html = renderToStaticMarkup(createElement(Results));
+    expect(html.match(/aria-label="Approve /g)).toHaveLength(1);
   });
 });

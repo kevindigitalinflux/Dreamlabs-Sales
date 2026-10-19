@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { ScrapeJob, RawLead } from '../types';
 import { readScrapeGroup } from '../../supabase/functions/_shared/scrapeGroup';
 import { mergeScrapeLeads } from '../lib/scrapeMerge';
+import { shouldPollScrapeJobs } from '../lib/scrapeJobState';
 
 /** Complete snapshot or an error: callers must not approve from a partially loaded group. */
 export async function loadScrapeSearch(jobId: string): Promise<{ jobs: ScrapeJob[]; rawLeads: RawLead[] }> {
@@ -37,6 +38,7 @@ export function useScrapeJob(jobId: string) {
   const [rawLeads, setRawLeads] = useState<RawLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now);
   const version = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -53,10 +55,16 @@ export function useScrapeJob(jobId: string) {
   useEffect(() => {
     setLoading(true); setJobs([]); setRawLeads([]); setError(null);
     void refresh();
-    // Also discovers late job creation after a source's start request timed out.
-    const timer = setInterval(() => void refresh(), 5000);
-    return () => { clearInterval(timer); version.current++; };
+    return () => { version.current++; };
   }, [refresh]);
+
+  const polling = shouldPollScrapeJobs(jobs, now);
+  useEffect(() => {
+    if (!polling) return;
+    // Also discovers late job creation after a source's start request timed out.
+    const timer = setInterval(() => { setNow(Date.now()); void refresh(); }, 5000);
+    return () => clearInterval(timer);
+  }, [refresh, polling]);
 
   const jobIds = jobs.map((j) => j.id).sort().join(',');
   useEffect(() => {
@@ -70,5 +78,6 @@ export function useScrapeJob(jobId: string) {
     return () => { void supabase.removeChannel(channel); };
   }, [jobIds, jobId, refresh]);
 
-  return { job: jobs.find((j) => j.id === jobId) ?? null, jobs, rawLeads: mergeScrapeLeads(rawLeads), loading, error, refresh };
+  const mergedLeads = useMemo(() => mergeScrapeLeads(rawLeads), [rawLeads]);
+  return { job: jobs.find((j) => j.id === jobId) ?? null, jobs, rawLeads: mergedLeads, loading, error, refresh };
 }

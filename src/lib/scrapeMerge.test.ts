@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { RawLead } from '../types';
-import { mergeScrapeLeads, sourceAvailability } from './scrapeMerge';
-import { readScrapeGroup, registryContactKey } from '../../supabase/functions/_shared/scrapeGroup';
+import { extractAddressPostcode, mergeScrapeLeads, sourceAvailability } from './scrapeMerge';
+import { readScrapeGroup } from '../../supabase/functions/_shared/scrapeGroup';
+import companiesHouseSource from '../../supabase/functions/scrape-companies-house/index.ts?raw';
+import croSource from '../../supabase/functions/scrape-cro/index.ts?raw';
 
 export function raw(id: string, patch: Partial<RawLead> = {}): RawLead {
   return { id, scrape_job_id: 'job', business_name: 'Acme Ltd', owner_name: null,
@@ -12,6 +14,47 @@ export function raw(id: string, patch: Partial<RawLead> = {}): RawLead {
 }
 
 describe('merged scrape review', () => {
+  it.each(['yell.com', 'facebook.com', 'instagram.com', 'linkedin.com', 'linktr.ee', 'sites.google.com',
+    'business.site', 'wixsite.com', 'squarespace.com', 'booking.com', 'tripadvisor.co.uk', 'opentable.com', 'fresha.com'])('does not use shared host %s as identity', (domain) => {
+    expect(mergeScrapeLeads([raw('a', { website: `https://${domain}/one` }),
+      raw('b', { business_name: 'Other', website: `https://${domain}/two` })])).toHaveLength(2);
+  });
+  it('allows exact builder tenant hosts, never different tenants', () => {
+    for (const domain of ['wixsite.com', 'squarespace.com']) {
+      expect(mergeScrapeLeads([raw('a', { website: `acme.${domain}` }),
+        raw('b', { business_name: 'Other', website: `acme.${domain}/contact` })])).toHaveLength(1);
+      expect(mergeScrapeLeads([raw('a', { website: `acme.${domain}` }),
+        raw('b', { business_name: 'Other', website: `other.${domain}` })])).toHaveLength(2);
+    }
+  });
+  it.each([['SW1A 1AA', 'N1 1AA'], ['D02 X285', 'A65 F4E2']])('prevents host merges and missing-postcode bridges between %s and %s', (first, second) => {
+    const a = raw('a', { website: 'acme.com', postcode: first });
+    const b = raw('b', { website: 'acme.com', postcode: second });
+    const bridge = raw('c', { website: 'acme.com' });
+    expect(mergeScrapeLeads([a, b])).toHaveLength(2);
+    const result = mergeScrapeLeads([a, bridge, b]);
+    expect(result).toHaveLength(2);
+    expect(result.every((r) => !(r.rawIds.includes('a') && r.rawIds.includes('b')))).toBe(true);
+    expect(mergeScrapeLeads([b, bridge, a])).toEqual(result);
+  });
+  it.each(['D02 X285', 'd02x285', ' D02   x285 ', 'A65 F4E2', 'a65f4e2'])('extracts Eircode %s from an address', (code) => {
+    expect(extractAddressPostcode(`1 Road, Dublin, ${code}, Ireland`)).toBe(code.replace(/\s/g, '').toUpperCase());
+  });
+  it('uses address Eircodes before city fallback and preserves extracted codes', () => {
+    const a = raw('a', { address: 'Dublin D02 X285' });
+    expect(mergeScrapeLeads([a, raw('b', { address: 'Dublin A65 F4E2' })])).toHaveLength(2);
+    expect(mergeScrapeLeads([a, raw('b', { city: null, raw_data: { company: { eircode: 'd02x285' } } })])).toHaveLength(1);
+    expect(mergeScrapeLeads([raw('a', { address: null }), raw('b', { address: 'Dublin D02 X285' })])[0].postcode).toBe('D02X285');
+    expect(extractAddressPostcode('London sw1a 1aa')).toBe('SW1A1AA');
+    expect(extractAddressPostcode('Dublin')).toBe('');
+  });
+  it.each([
+    ['rejected', 'rejected', 'rejected'], ['rejected', 'pending', 'pending'],
+    ['rejected', 'duplicate', 'duplicate'], ['rejected', 'approved', 'approved'],
+    ['duplicate', 'pending', 'pending'], ['approved', 'pending', 'approved'],
+  ] as const)('rolls up %s and %s to %s', (first, second, status) => {
+    expect(mergeScrapeLeads([raw('a', { status: first }), raw('b', { status: second })])[0].status).toBe(status);
+  });
   it('merges names with legal suffixes, punctuation and accents; anchors the registry FK and keeps Places contact fields', () => {
     const places = raw('p', { business_name: 'Ácme', website: 'acme.com', phone: '123', email: 'hi@acme.com' });
     const registry = raw('r', { source: 'companies_house', source_id: '12345678', website: 'old.com',
@@ -75,12 +118,14 @@ describe('source availability and durable group metadata', () => {
     expect(sourceAvailability('cro', 'IE', true)).toBeNull();
     expect(sourceAvailability('google_places', 'US', false)).toMatch(/Settings/);
   });
-  it('validates group markers and leaves legacy and Autopilot contact lookups unchanged', () => {
+  it('validates group markers', () => {
     const params = { scrape_group: { id: '12345678-1234-4234-8234-123456789abc', sources: ['google_places', 'companies_house'] } };
     expect(readScrapeGroup(params)?.sources).toHaveLength(2);
     expect(readScrapeGroup({ scrape_group: { id: 'bad', sources: ['cro'] } })).toBeNull();
-    expect(registryContactKey(params, 'key')).toBeNull();
-    expect(registryContactKey({}, 'key')).toBe('key');
-    expect(registryContactKey(null, null)).toBeNull();
+  });
+  it.each([companiesHouseSource, croSource])('keeps per-company Places lookup independent of group metadata', (source) => {
+    expect(source).not.toContain('registryContactKey');
+    expect(source).toContain("const googlePlaces = await resolveOrgApiKey(service, orgId, 'google_places');");
+    expect(source).toMatch(/runBounded\(companies,[\s\S]*lookupCompanyContacts\(/);
   });
 });
