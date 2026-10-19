@@ -48,6 +48,10 @@ or retired.** (Requested by Kevin, 2026-07-17.)
 
 Deep find suggestions/regions extension (2026-10-16): **built locally on `codex/deepfind-suggestions-regions`, not reviewed/applied/deployed**. The existing Deep find tick reads the lead's country and rejection/dismissal state, skips Companies House for non-UK/rejected leads, and filters already-stored/dismissed suggestions. Explicit Add/Dismiss clicks use the user's session/RLS; new or filled contact addresses have sequences off, company addresses fill/append only, and no enrolment or messaging occurs. No new cron, worker or edge endpoint. Owner: Kevin (product and migration 064), Codex (build), Claude (review). Rollback audit is unexecuted. This extends the existing automation; it creates no second automation owner or runner.
 
+| Existing automation extension | Runtime | Trigger | Behavior and ownership |
+|---|---|---|---|
+| Deep find Build A effort and matching (2026-10-19, local; review pending) | Existing Supabase `run-deep-find` engine and cron | Existing signed-in create action stores effort/caps on each queued lead; existing claim resumes it | Free registry/site/browser/checker work precedes preset depth decisions. Per-lead caps supplement atomic run Hunter/AI reservations and existing org quotas. E1–E6 registry evidence is recorded; ambiguity asks for review. High-confidence company numbers use blank-only CAS with Undo and dismissal memory. Low disables paid/AI providers; Custom preserves numeric caps. No new scheduler, migration, parallel leads, enrolment or messaging. Owner: Kevin product / Codex build / Claude independent review. Not deployed. |
+
 ## Backlog (future cycles)
 
 | Automation | Cycle | Notes |

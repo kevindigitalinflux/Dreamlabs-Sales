@@ -83,5 +83,7 @@ Phase 3a-c gates at `2877d787d90e3a921a293ea1365accbb3239e2c5`: TypeScript 0 dia
 
 ## Deep find effort and company matching — Build A (2026-10-19)
 
-- [ ] Resolve effort storage with Claude/Kevin: `deep_find_runs` has no JSONB/params or effort column. Approve storing effort in each queued lead's existing `domains` JSONB, or defer to Build B's reviewed migration. See HANDOFF **Build A**. Implementation stopped as explicitly required by the spec and Kevin's instruction.
-- [ ] Build A1 company matching v2 and A2 effort levels after the storage ruling; neither is built or reviewed. No migration, readiness badge or parallel leads belongs to Build A.
+- Storage ruling resolved by the architect and supplied by Kevin: use each queued lead's existing `domains` JSONB; missing effort means Custom. A run-level effort column may accompany migration 065 later. No migration is part of Build A.
+- [ ] Build A1/A2 implemented locally on `codex/deepfind-effort-matching`; independent Claude review pending. Evidence-based matching, Most likely/reasons, effort controls/totals, free-first conditional depth, per-lead caps and persisted policy are built. Gates: TypeScript 0 diagnostics; 128 files / 1,928 tests / 0 failures; build 0 errors. Leave unchecked until reviewed. See HANDOFF **Build A — implemented**.
+- [ ] After independent review and separate publication authorization: deploy frontend and `run-deep-find`, then verify BK matching, effort/allowances, free versus deep outcomes, Undo/dismissals, keyboard focus and phone width. No publication is authorized by this build.
+- [ ] Build B remains excluded and unbuilt: readiness badge, migration 065 and parallel leads. Migration needs review and Kevin's explicit authorization.
