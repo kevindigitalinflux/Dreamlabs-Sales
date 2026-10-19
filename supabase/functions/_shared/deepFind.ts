@@ -2,6 +2,8 @@
 // Deep find engine: claims queued leads, discovers the company's domains and people, stores people as contacts that are
 // NOT in sequences, and writes a plain-English summary per lead. Never emails anyone and never touches sequences.
 // Runs with the service client, so every org boundary is re-checked here. Keys only go to providers in headers.
+import { EFFORT_LEVELS, effortPolicy, deepPhaseDecision, type Effort } from './deepFindEffort.ts';
+import { registryWebNumbers } from './registryWebProof.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { resolveOrgApiKey, resolveOrgWorkerConfig } from './orgApiKeys.ts';
 import { checkRateLimit } from './rateLimit.ts';
@@ -47,7 +49,7 @@ const nowIso = () => new Date().toISOString();
 
 /** The run columns the engine reads. */
 export interface DeepFindRun { id: string; org_id: string; created_by: string; status: string }
-interface ClaimedRow { id: string; run_id: string; org_id: string; lead_id: string; attempts: number }
+interface ClaimedRow { id: string; run_id: string; org_id: string; lead_id: string; attempts: number; domains?: Record<string, unknown> }
 type Contact = ExistingContact & Record<string, unknown>;
 interface LeadOutcome { status: 'done' | 'failed' | 'skipped'; reason: string; people_found?: number; domains?: Record<string, unknown> }
 
@@ -61,7 +63,13 @@ class Spend {
   aiHit = false;
   /** Credits actually reserved, per step, for the results view. */
   used: { hunter: Record<string, number>; ai: Record<string, number> } = { hunter: {}, ai: {} };
-  constructor(private service: SupabaseClient, private runId: string) {}
+  enabled = true;
+  private hunterCount = 0;
+  private aiCount = 0;
+  constructor(private service: SupabaseClient, private runId: string, private effort: Effort = 'custom') {}
+  private within(kind: 'hunter' | 'ai', count: number) {
+    return this.effort === 'custom' || count < EFFORT_LEVELS[this.effort][kind];
+  }
   private async reserve(hunter: number, ai: number): Promise<boolean> {
     const { data, error } = await this.service.rpc('deep_find_reserve', { run_id: this.runId, hunter, ai });
     return !error && data === true;
@@ -70,17 +78,17 @@ class Spend {
   hunterStopped = false;
   stopHunter(): void { this.hunterStopped = true; }
   async hunter(step = 'other'): Promise<boolean> {
-    if (this.hunterHit || this.hunterStopped) return false;
+    if (!this.enabled || !this.within('hunter', this.hunterCount) || this.hunterHit || this.hunterStopped) return false;
     const ok = await this.reserve(1, 0);
     if (!ok) this.hunterHit = true;
-    else this.used.hunter[step] = (this.used.hunter[step] ?? 0) + 1;
+    else { this.hunterCount++; this.used.hunter[step] = (this.used.hunter[step] ?? 0) + 1; }
     return ok;
   }
   async ai(step = 'other'): Promise<boolean> {
-    if (this.aiHit) return false;
+    if (!this.enabled || !this.within('ai', this.aiCount) || this.aiHit) return false;
     const ok = await this.reserve(0, 1);
     if (!ok) this.aiHit = true;
-    else this.used.ai[step] = (this.used.ai[step] ?? 0) + 1;
+    else { this.aiCount++; this.used.ai[step] = (this.used.ai[step] ?? 0) + 1; }
     return ok;
   }
 }
@@ -98,6 +106,8 @@ async function insertContacts(service: SupabaseClient, rows: Record<string, unkn
 
 /** One lead, start to finish. Returns the outcome to store; never throws for provider problems. */
 export async function processDeepFindLead(service: SupabaseClient, run: DeepFindRun, row: ClaimedRow): Promise<LeadOutcome> {
+  const effort = effortPolicy(row.domains);
+  const metadata = { effort, effort_caps: effort === 'custom' ? row.domains?.effort_caps : { hunter: EFFORT_LEVELS[effort].hunter, ai: EFFORT_LEVELS[effort].ai, firecrawl: EFFORT_LEVELS[effort].firecrawl } };
   const deadline = Date.now() + LEAD_BUDGET_MS;
   const left = () => deadline - Date.now();
   const { data: leadData, error: leadErr } = await service.from('leads').select('*').eq('id', row.lead_id).maybeSingle();
@@ -116,7 +126,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     return { status: 'skipped', reason: 'This organisation reached its daily Deep find limit. Try again tomorrow.' };
   }
 
-  const [hunterKey, geminiKey, chKey, apolloKey, firecrawlKey, placesKey, ocKey] = await Promise.all([
+  let [hunterKey, geminiKey, chKey, apolloKey, firecrawlKey, placesKey, ocKey] = await Promise.all([
     resolveOrgApiKey(service, run.org_id, 'hunter'),
     resolveOrgApiKey(service, run.org_id, 'gemini'),
     resolveOrgApiKey(service, run.org_id, 'companies_house'),
@@ -125,7 +135,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     resolveOrgApiKey(service, run.org_id, 'google_places'),
     resolveOrgApiKey(service, run.org_id, 'opencorporates'),
   ]);
-  const spend = new Spend(service, run.id);
+  const configured = { hunterKey, geminiKey, apolloKey, firecrawlKey, placesKey, ocKey };
+  let deepEnabled = effort === 'custom';
+  if (!deepEnabled) { hunterKey = null; geminiKey = null; apolloKey = null; firecrawlKey = null; placesKey = null; ocKey = null; }
+  const spend = new Spend(service, run.id, effort);
+  spend.enabled = deepEnabled;
   const checkpoint = async () => {
       const { data: active, error } = await service.from('deep_find_runs').select('status').eq('id', run.id).eq('org_id', run.org_id).maybeSingle();
       // Stop on a confirmed ended run before another read can fail and mask that decision.
@@ -139,7 +153,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       if (access === 'unavailable') throw new Error('Deep find checkpoint could not be checked.');
 
   };
-  const firecrawl = makeFirecrawlClient({ key: firecrawlKey,
+  const firecrawl = makeFirecrawlClient({ key: configured.firecrawlKey, maxPages: effort === 'custom' ? 1 : EFFORT_LEVELS[effort].firecrawl,
     reserve: () => checkRateLimit(service, `firecrawl-pages:${run.org_id}`, FIRECRAWL_DAILY_PAGES, 1440, true), checkpoint,
   });
   // Own worker key first; shared worker requires the global fallback flag or WORKER_SHARED_ORG_IDS.
@@ -151,7 +165,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const created: Contact[] = [];
   const stats: LeadStats = {
     hunterPeople: 0, officersAdded: 0, officerEmails: 0, domainsShown: [], domainsToCheck: 0, namedByWeb: 0, namedOnSite: 0,
-    hunterCapHit: false, aiCapHit: false, noHunterKey: !hunterKey, noWebsite: false, unverifiedPeople: 0,
+    hunterCapHit: false, aiCapHit: false, noHunterKey: !configured.hunterKey, noWebsite: false, unverifiedPeople: 0,
   };
   /** Steps that gave no answer, turned into one plain line each at the end. */
   const problems: ProblemInput[] = [];
@@ -162,6 +176,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   let apolloPeople = 0;
   /** Plain-English step lines shown with the results. */
   const steps: string[] = [];
+  let registryEvidence: Record<string, unknown> = {};
   if (!geminiKey) steps.push('LinkedIn search skipped: no Gemini key is configured.');
   const all = () => [...rows, ...created];
   const scope = { leadId: lead.id, orgId: run.org_id };
@@ -239,69 +254,25 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     return changed ? contact : null;
   };
   try {
-  // Hunter's free account check (no search credits): how many searches are left, and stop early when none are.
   let hunterAccountInfo: HunterAccount | null = null;
-  if (hunterKey) {
-    const acc = await hunterAccount(hunterKey, 5_000);
-    if (acc.ok) {
-      hunterAccountInfo = acc.account;
-      const line = hunterAccountLine(acc.account);
-      if (line) steps.push(line);
-      if (hunterAccountEmpty(acc.account)) { spend.stopHunter(); problems.push({ step: 'hunter_company', target: 'account', failure: 'usage_exhausted' }); }
-    } else if (acc.failure === 'usage_exhausted' || acc.failure === 'rate_limited') {
-      spend.stopHunter();
-      problems.push({ step: 'hunter_company', target: 'account', failure: acc.failure });
-    }
-  }
+  const checkHunterAllowance = async () => {
+    // Hunter's free account check (no search credits): how many searches are left, and stop early when none are.
 
-  // (0) the registered company and its officers (officers become companies_house contacts, as before)
-  // People we already know (owner names on the lead, contacts): used to find the company through Companies House officers.
-  const registryPeople = [
-    ...[lead.owner_name, ...(Array.isArray(lead.additional_owners) ? lead.additional_owners.slice(0, 10) : [])]
-      .flatMap((n) => { const p = parseLeadPersonName(n); return p ? [{ first: p.first, last: p.last }] : []; }),
-    ...rows.flatMap((c) => (str(c.first_name) && str(c.last_name) && !c.dismissed_at && c.name_obfuscated !== true ? [{ first: str(c.first_name)!, last: str(c.last_name)! }] : [])),
-  ].slice(0, 6);
-  const registry = await resolveRegistry(service, lead, chKey, registryPeople);
-  steps.push(registryStep(registry));
-  if (lead.country === 'IE' && await resolveOrgApiKey(service, run.org_id, 'cro')) {
-    steps.push('CRO lookup when its key arrives; Irish register lookup is not built yet.');
-  }
-  const officers = registry.number && chKey ? await fetchActiveOfficers(registry.number, chKey) : [];
-  const officerRows: Record<string, unknown>[] = [];
-  for (const o of officers) {
-    if (!o.first_name || !o.last_name || findSamePerson(all(), o.first_name, o.last_name)) continue;
-    if (officerRows.some((r) => r.first_name === o.first_name && r.last_name === o.last_name)) continue;
-    officerRows.push({ lead_id: lead.id, source: 'companies_house', first_name: o.first_name, last_name: o.last_name, title: o.title, created_by: run.created_by });
-  }
-  if (officerRows.length > 0) {
-    await checkpoint();
-    const { data, error } = await service.from('decision_maker_candidates').insert(await prepareContacts(officerRows.map((r) => ({ ...r, include_in_sequences: false })))).select('*');
-    if (error) problems.push({ step: 'save', target: 'the Companies House officers', failure: 'network' });
-    else { created.push(...((data ?? []) as Contact[])); stats.officersAdded = (data ?? []).length; }
-  }
-  if (!str(lead.owner_name)) {
-    const officer = officers.find((o) => isOwnerRole(o.title));
-    if (officer) {
-      const name = (officer.first_name + ' ' + officer.last_name).trim();
-      const exact = exactContact(officer.first_name, officer.last_name);
-      if (exact && !exact.dismissed_at) await applyLead('owner_name', name);
-      else suggestions.push({ name, field: 'owner_name', value: name, label: 'Registry owner role; review the full name before adding.' });
+    if (hunterKey) {
+      const acc = await hunterAccount(hunterKey, 5_000);
+      if (acc.ok) {
+        hunterAccountInfo = acc.account;
+        const line = hunterAccountLine(acc.account);
+        if (line) steps.push(line);
+        if (hunterAccountEmpty(acc.account)) { spend.stopHunter(); problems.push({ step: 'hunter_company', target: 'account', failure: 'usage_exhausted' }); }
+      } else if (acc.failure === 'usage_exhausted' || acc.failure === 'rate_limited') {
+        spend.stopHunter();
+        problems.push({ step: 'hunter_company', target: 'account', failure: acc.failure });
+      }
     }
-    else for (const o of officers.slice(0, 5)) suggestions.push({ name: `${o.first_name} ${o.last_name}`.trim(), field: 'owner_name', value: `${o.first_name} ${o.last_name}`.trim(), label: `Companies House: ${o.title ?? 'officer'}. Check ownership before adding.` });
-    if (!officers.length && ocKey && left() > 30_000) {
-      await checkpoint();
-      const name = await lookupOpenCorporatesOfficer(str(lead.business_name) ?? '', ocKey);
-      if (name) suggestions.push({ name, field: 'owner_name', value: name, label: 'OpenCorporates officer match; check company and ownership before adding.' });
-    }
-  }
-  for (const officer of officers.filter((o) => isOwnerRole(o.title))) {
-    if (!officer.first_name || !officer.last_name) continue;
-    const contact = exactContact(officer.first_name, officer.last_name);
-    if (contact && !ownerSuppressed(`${officer.first_name} ${officer.last_name}`)) {
-      await applyDeepFindBlank(service, scope, 'decision_maker_candidates', contact, 'title', officer.title!, autoApplied, checkpoint);
-    }
-  }
-  if (registry.number) steps.push(`Companies House officers: ${officers.length} active, ${stats.officersAdded} added as contacts.`);
+
+  };
+  if (effort === 'custom') await checkHunterAllowance();
 
   // the website pages, read once
   const siteDomain = domainFromWebsite(str(lead.website));
@@ -312,11 +283,68 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const siteChecked = siteReadable && left() > 30_000;
   const sitePages = siteChecked ? await readCompanyPages(str(lead.website)!, 12_000) : [];
   // A website that shows clear signs of another company is only a weak signal: not read for people or other domains.
-  const suspicion = websiteSuspicion(sitePages, [str(lead.business_name) ?? '', registry.name ?? ''].filter(Boolean), lead.country);
+  const suspicion = websiteSuspicion(sitePages, [str(lead.business_name) ?? '', ''].filter(Boolean), lead.country);
   if (suspicion.suspect) steps.push(`This website may belong to a different company: ${suspicion.reasons.join(' ')}`);
   const usableSite = siteReadable && !suspicion.suspect;
   stats.noWebsite = !usableSite;
   const pages = usableSite ? sitePages : [];
+
+  // (0) the registered company and its officers (officers become companies_house contacts, as before)
+  // People we already know (owner names on the lead, contacts): used to find the company through Companies House officers.
+  const registryPeople = [
+    ...[lead.owner_name, ...(Array.isArray(lead.additional_owners) ? lead.additional_owners.slice(0, 10) : [])]
+      .flatMap((n) => { const p = parseLeadPersonName(n); return p ? [{ first: p.first, last: p.last }] : []; }),
+    ...rows.flatMap((c) => (str(c.first_name) && str(c.last_name) && !c.dismissed_at && c.name_obfuscated !== true ? [{ first: str(c.first_name)!, last: str(c.last_name)! }] : [])),
+    ...pages.flatMap(extractTeamMembers).flatMap(p => { const n = parseLeadPersonName(p.name); return n ? [{ first: n.first, last: n.last }] : []; }),
+  ].slice(0, 6);
+  let registry = await resolveRegistry(service, lead, chKey, registryPeople, { pages, website: usableSite ? str(lead.website) : null, left, checkpoint, applyNumber: number => applyLead('company_number', number) });
+  registryEvidence = registry.evidence ?? {};
+  steps.push(registryStep(registry));
+  if (lead.country === 'IE' && await resolveOrgApiKey(service, run.org_id, 'cro')) {
+    steps.push('CRO lookup when its key arrives; Irish register lookup is not built yet.');
+  }
+  let officers: Awaited<ReturnType<typeof fetchActiveOfficers>> = [];
+  const addRegistryOfficers = async () => {
+    officers = registry.number && chKey ? await fetchActiveOfficers(registry.number, chKey) : [];
+    const officerRows: Record<string, unknown>[] = [];
+    for (const o of officers) {
+      if (!o.first_name || !o.last_name || findSamePerson(all(), o.first_name, o.last_name)) continue;
+      if (officerRows.some((r) => r.first_name === o.first_name && r.last_name === o.last_name)) continue;
+      officerRows.push({ lead_id: lead.id, source: 'companies_house', first_name: o.first_name, last_name: o.last_name, title: o.title, created_by: run.created_by });
+    }
+    if (officerRows.length > 0) {
+      await checkpoint();
+      const { data, error } = await service.from('decision_maker_candidates').insert(await prepareContacts(officerRows.map((r) => ({ ...r, include_in_sequences: false })))).select('*');
+      if (error) problems.push({ step: 'save', target: 'the Companies House officers', failure: 'network' });
+      else { created.push(...((data ?? []) as Contact[])); stats.officersAdded = (data ?? []).length; }
+    }
+    if (!str(lead.owner_name)) {
+      const officer = officers.find((o) => isOwnerRole(o.title));
+      if (officer?.first_name && officer.last_name) {
+        const name = (officer.first_name + ' ' + officer.last_name).trim();
+        const exact = exactContact(officer.first_name, officer.last_name);
+        if (exact && !exact.dismissed_at) await applyLead('owner_name', name);
+        else suggestions.push({ name, field: 'owner_name', value: name, label: 'Registry owner role; review the full name before adding.' });
+      }
+      else for (const o of officers.slice(0, 5)) suggestions.push({ name: `${o.first_name} ${o.last_name}`.trim(), field: 'owner_name', value: `${o.first_name} ${o.last_name}`.trim(), label: `Companies House: ${o.title ?? 'officer'}. Check ownership before adding.` });
+      if (!officers.length && ocKey && left() > 30_000) {
+        await checkpoint();
+        const name = await lookupOpenCorporatesOfficer(str(lead.business_name) ?? '', ocKey);
+        if (name) suggestions.push({ name, field: 'owner_name', value: name, label: 'OpenCorporates officer match; check company and ownership before adding.' });
+      }
+    }
+    for (const officer of officers.filter((o) => isOwnerRole(o.title))) {
+      if (!officer.first_name || !officer.last_name) continue;
+      const contact = exactContact(officer.first_name, officer.last_name);
+      if (contact && !ownerSuppressed(`${officer.first_name} ${officer.last_name}`)) {
+        await applyDeepFindBlank(service, scope, 'decision_maker_candidates', contact, 'title', officer.title!, autoApplied, checkpoint);
+      }
+    }
+    if (registry.number) steps.push(`Companies House officers: ${officers.length} active, ${stats.officersAdded} added as contacts.`);
+
+  };
+  await addRegistryOfficers();
+
   // Everyone known to work there (contacts, officers, names on the lead): a domain where Hunter lists one of them is confirmed.
   const knownPeople: KnownPersonName[] = [
     ...all().flatMap((c) => (str(c.first_name) && str(c.last_name) && !c.dismissed_at && c.name_obfuscated !== true ? [{ first: str(c.first_name)!, last: str(c.last_name)! }] : [])),
@@ -333,7 +361,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }, {
     registeredName: registry.name, registeredAddress: registry.address, people: knownPeople, websiteSuspect: suspicion.suspect,
     extraKnown: contactDomains.map((domain) => ({ domain, source: 'contact_email' as const })),
-    keys: { hunterKey, geminiKey, apolloKey }, allow: { hunter: true, site: pages.length > 0, web: true, apollo: true },
+    keys: { hunterKey, geminiKey, apolloKey }, allow: { hunter: deepEnabled, site: pages.length > 0, web: deepEnabled, apollo: deepEnabled },
     budgetMs: Math.min(30_000, Math.max(0, left() - 30_000)), pages, hunterCap: 12,
     guard: { hunter: () => spend.hunter('company domains'), ai: () => spend.ai('web search') },
   });
@@ -355,28 +383,33 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const websitePatch = !str(lead.website) ? planWebsiteAutoUpdate(lead, discovery.domains, { checked: siteChecked, reachable: sitePages.length > 0, suspect: suspicion.suspect }) : null;
   if (websitePatch) await applyLead('website', websitePatch.website);
   let placesSuppliedPhone = false;
-  if (placesKey && !str(lead.phone) && left() > 30_000) {
-    await checkpoint();
-    if (!await checkRateLimit(service, 'places-lookups:' + run.org_id, 300, 1440, true)) {
-      steps.push("Google Places lookups reached today's limit for this organisation.");
-    } else {
-      const place = await lookupPlaceContact(str(lead.business_name) ?? '', str(lead.city), placesKey);
-      const automatic = !!str(lead.city) && place?.strength === 2 && place.cityMatches === true;
-      const label = 'Google Places: ' + (place?.name ?? 'business match') + ', ' + (place?.address ?? 'address unavailable') + '. Review the match before adding.';
-      const domain = domainFromWebsite(place?.website ?? null);
-      const confirmedOwnSite = discovery.domains.some(d => !d.needs_check && d.sources.includes('site_confirms'));
-      if (place?.website && !str(lead.website) && !confirmedOwnSite && domain && DOMAIN_CHECKS.usable(domain) && !savedDomains(lead.blocked_domains).includes(domain)) {
-        if (automatic) await applyLead('website', place.website);
-        else suggestions.push({ name: 'Company contact', field: 'website', value: place.website, label });
+  const fillPlaces = async () => {
+
+    if (placesKey && !str(lead.phone) && left() > 30_000) {
+      await checkpoint();
+      if (!await checkRateLimit(service, 'places-lookups:' + run.org_id, 300, 1440, true)) {
+        steps.push("Google Places lookups reached today's limit for this organisation.");
+      } else {
+        const place = await lookupPlaceContact(str(lead.business_name) ?? '', str(lead.city), placesKey);
+        const automatic = !!str(lead.city) && place?.strength === 2 && place.cityMatches === true;
+        const label = 'Google Places: ' + (place?.name ?? 'business match') + ', ' + (place?.address ?? 'address unavailable') + '. Review the match before adding.';
+        const domain = domainFromWebsite(place?.website ?? null);
+        const confirmedOwnSite = discovery.domains.some(d => !d.needs_check && d.sources.includes('site_confirms'));
+        if (place?.website && !str(lead.website) && !confirmedOwnSite && domain && DOMAIN_CHECKS.usable(domain) && !savedDomains(lead.blocked_domains).includes(domain)) {
+          if (automatic) await applyLead('website', place.website);
+          else suggestions.push({ name: 'Company contact', field: 'website', value: place.website, label });
+        }
+        if (place?.phone && isReviewPhone(place.phone)) {
+          placesSuppliedPhone = true;
+          if (automatic) await applyLead('phone', place.phone);
+          else suggestions.push({ name: 'Company contact', field: 'phone', value: place.phone, label });
+        }
+        steps.push(place ? 'Checked Google Places for missing website and phone.' : 'Google Places found no matching contact details.');
       }
-      if (place?.phone && isReviewPhone(place.phone)) {
-        placesSuppliedPhone = true;
-        if (automatic) await applyLead('phone', place.phone);
-        else suggestions.push({ name: 'Company contact', field: 'phone', value: place.phone, label });
-      }
-      steps.push(place ? 'Checked Google Places for missing website and phone.' : 'Google Places found no matching contact details.');
     }
-  }
+
+  };
+  if (effort === 'custom') await fillPlaces();
 
   // (1b) free team scan on discovered domains whose OWN website confirmed them: emails written literally on the
   // site for the people we know (filled for existing contacts, suggestions otherwise) and named staff to check.
@@ -390,6 +423,16 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const ownSites = [...confirmedSites, ...(siteDomain && verified.has(siteDomain) ? [{ domain: siteDomain, pages }] : [])];
   const ownerSites = new Set(discovery.domains.filter((d) => !d.needs_check && d.sources.includes('site_confirms')).map((d) => d.domain));
   const trustedOwnerPeople = ownSites.filter((s) => ownerSites.has(s.domain)).flatMap((s) => s.pages.flatMap(extractTeamMembers));
+  const registryPages = [...pages, ...confirmedSites.filter(s => ownerSites.has(s.domain)).flatMap(s => s.pages)];
+  if (registry.how === 'ambiguous' && registryPages.length > pages.length) {
+    registryPeople.push(...trustedOwnerPeople.flatMap(p => { const n = parseLeadPersonName(p.name); return n ? [{ first: n.first, last: n.last }] : []; }));
+    registry = await resolveRegistry(service, lead, chKey, registryPeople, { pages: registryPages,
+      website: usableSite ? str(lead.website) : null, cached: registry.allCandidates ?? registry.candidates,
+      cachedPeople: registry.proofPeople, priorEvidence: registry.evidence, left, checkpoint, applyNumber: number => applyLead('company_number', number) });
+    registryEvidence = registry.evidence ?? {};
+    steps.push(registryStep(registry));
+    if (registry.number) await addRegistryOfficers();
+  }
   for (const site of ownSites) for (const html of site.pages) {
     for (const email of domainEmailsOnPages([html], site.domain).filter((e) => !emailOnLead(all(), e))) {
       suggestions.push({ name: 'Company contact', field: 'email', value: email, label: `Found on ${site.domain}, check it` });
@@ -429,27 +472,32 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       for (const phone of scraped.value.phones) if (!str(lead.phone)) suggestions.push({ name: 'Company contact', field: 'phone', value: phone.value, label: 'Found by the browser scraper; review before adding.' });
     }
   }
-  // Names/roles only: Firecrawl people go to named_on_site for review, never contact inserts.
-  const hasNamedRoles = all().some((c) => !!str(c.first_name) && !!str(c.last_name) && !!str(c.title))
-    || extraSitePeople.length > 0 || pages.some((html) => extractTeamMembers(html).length > 0)
-    || webPeople.some((p) => !!p.name && !!p.role);
-  const firecrawlDomain = firecrawlDomainFor([...verified], hasNamedRoles);
-  if (firecrawlDomain) {
-    const seenPages = [...(firecrawlDomain === siteDomain ? pages : []),
-      ...confirmedSites.filter((s) => s.domain === firecrawlDomain).flatMap((s) => s.pages)];
-    try {
-      const team = await firecrawl.readTeam(firecrawlDomain, seenPages, optionalBudget());
-      if (team) {
-        extraSitePeople.push(...team.people);
-        if (ownerSites.has(firecrawlDomain)) trustedOwnerPeople.push(...team.people);
+  const readDeeperPages = async () => {
+    // Names/roles only: Firecrawl people go to named_on_site for review, never contact inserts.
+    const hasNamedRoles = all().some((c) => !!str(c.first_name) && !!str(c.last_name) && !!str(c.title))
+      || extraSitePeople.length > 0 || pages.some((html) => extractTeamMembers(html).length > 0)
+      || webPeople.some((p) => !!p.name && !!p.role);
+    const firecrawlDomain = deepEnabled ? firecrawlDomainFor([...verified], effort === 'extra_high' ? false : hasNamedRoles) : null;
+    if (firecrawlDomain) {
+      const seenPages = [...(firecrawlDomain === siteDomain ? pages : []),
+        ...confirmedSites.filter((s) => s.domain === firecrawlDomain).flatMap((s) => s.pages)];
+      try {
+        for (let page = 0; page < (effort === 'extra_high' ? 2 : 1); page++) {
+          const team = await firecrawl.readTeam(firecrawlDomain, seenPages, optionalBudget());
+          if (team) {
+            extraSitePeople.push(...team.people);
+            if (ownerSites.has(firecrawlDomain)) trustedOwnerPeople.push(...team.people);
+          }
+        }
+      } catch (error) {
+        if (error instanceof DeepFindAuthorisationLost) {
+          throw error;
+        }
+        console.error('deep find: Firecrawl checkpoint failed');
       }
-    } catch (error) {
-      if (error instanceof DeepFindAuthorisationLost) {
-        throw error;
-      }
-      console.error('deep find: Firecrawl checkpoint failed');
     }
-  }
+  };
+  if (effort === 'custom') await readDeeperPages();
   for (const person of confirmedSites.length > 0 ? peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers) : []) {
     for (const s of confirmedSites) {
       const picked = pickWebsiteFindings(s.pages.map((h) => extractWebsiteFindings(h, s.domain, person.first, person.last)), person.first, person.last);
@@ -584,6 +632,67 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     }
   }
 
+  if (effort !== 'custom') {
+    // Re-check saved emails: an address alone, catch-all or unavailable verdict is never verified evidence.
+    const emails = [...new Set([str(lead.email), ...all().filter(c => !c.dismissed_at).map(c => str(c.email))].filter((e): e is string => !!e))];
+    for (const email of emails.slice(0, MAX_VERIFY_PER_LEAD)) {
+      if (left() < WORKER_TIMEOUT_MS.verify + 2_000) break;
+      const checked = await checkEmail(email);
+      if (checked.ok && checked.value.status === 'valid') break;
+    }
+    const decision = deepPhaseDecision(effort, {
+      verifiedEmail: [...checkedEmails.values()].some(c => c.ok && c.value.status === 'valid'),
+      namedPerson: (!!parseLeadPersonName(lead.owner_name) && !ownerSuppressed(String(lead.owner_name))) || all().some(c => c.kind !== 'general' && !c.dismissed_at && c.name_obfuscated !== true && !!parseLeadPersonName(`${str(c.first_name) ?? ''} ${str(c.last_name) ?? ''}`))
+        || [...trustedOwnerPeople, ...extraSitePeople, ...pages.flatMap(extractTeamMembers)].some(p => !!parseLeadPersonName(p.name) && !ownerSuppressed(p.name)),
+      confirmedWebsite: discovery.domains.some(d => d.domain === domainFromWebsite(str(lead.website)) && !d.needs_check && d.sources.includes('site_confirms')),
+    });
+    steps.push(decision.line);
+    deepEnabled = decision.run;
+    spend.enabled = deepEnabled;
+    if (deepEnabled) {
+      hunterKey = configured.hunterKey; geminiKey = configured.geminiKey;
+      if (effort === 'high' || effort === 'extra_high') { apolloKey = configured.apolloKey; placesKey = configured.placesKey; }
+      await checkHunterAllowance();
+      await fillPlaces();
+      // The free discovery has finished; only now may missing details use provider credits.
+      const deeper = await discoverLeadDomains(service, {
+        id: lead.id, org_id: lead.org_id, business_name: str(lead.business_name), website: str(lead.website), email: str(lead.email),
+        city: str(lead.city), postcode: str(lead.postcode), email_domains: lead.email_domains, blocked_domains: lead.blocked_domains,
+      }, {
+        registeredName: registry.name, registeredAddress: registry.address, people: knownPeople, websiteSuspect: suspicion.suspect,
+        extraKnown: contactDomains.map(domain => ({ domain, source: 'contact_email' as const })),
+        keys: { hunterKey, geminiKey, apolloKey }, allow: { hunter: true, site: pages.length > 0, web: true, apollo: !!apolloKey },
+        pages, budgetMs: Math.min(30_000, Math.max(0, left() - 30_000)), hunterCap: EFFORT_LEVELS[effort].hunter,
+        guard: { hunter: () => spend.hunter('company domains'), ai: () => spend.ai('web search') },
+      });
+      for (const d of deeper.domains) {
+        const existing = discovery.domains.find(c => c.domain === d.domain);
+        if (!existing) discovery.domains.push(d);
+        else if (!d.needs_check) Object.assign(existing, d);
+        if (!domains.includes(d.domain)) domains.push(d.domain);
+        if (!d.needs_check) verified.add(d.domain);
+      }
+      webPeople.push(...deeper.people);
+      for (const site of deeper.sitePages.filter(s => verified.has(s.domain))) {
+        confirmedSites.push(site);
+        extraSitePeople.push(...site.pages.flatMap(extractTeamMembers));
+        const own = deeper.domains.some(d => d.domain === site.domain && !d.needs_check && d.sources.includes('site_confirms'));
+        if (own) { ownerSites.add(site.domain); trustedOwnerPeople.push(...site.pages.flatMap(extractTeamMembers)); }
+      }
+      discovery.sitePages.push(...deeper.sitePages);
+      steps.push(...deeper.notes.slice(0, 6)); problems.push(...deeper.problems);
+      if ((effort === 'high' || effort === 'extra_high') && registry.how === 'ambiguous' && geminiKey && left() > 18_000 && await spend.ai('company registry proof')) {
+        await checkpoint();
+        const webNumbers = await registryWebNumbers(str(lead.business_name) ?? '', geminiKey, Math.min(10_000, left() - 5_000));
+        registry = await resolveRegistry(service, lead, chKey, registryPeople, { pages: registryPages, website: usableSite ? str(lead.website) : null, cached: registry.allCandidates ?? registry.candidates, cachedPeople: registry.proofPeople, priorEvidence: registry.evidence, webNumbers, left, checkpoint, applyNumber: number => applyLead('company_number', number) });
+        registryEvidence = registry.evidence ?? {};
+        steps.push(registryStep(registry));
+        if (registry.number) await addRegistryOfficers();
+      }
+      await readDeeperPages();
+    }
+  } else steps.push(deepPhaseDecision('custom', { verifiedEmail: false, namedPerson: false, confirmedWebsite: false }).line);
+
   // (2) Hunter's company list on every domain: every named person with a role
   const lists = new Map<string, { emails: unknown[]; pattern: string | null }>();
   for (const d of domains) {
@@ -661,7 +770,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (cached) return cached;
     const result = (async (): Promise<LookupResult> => {
       if (!geminiKey || !await spend.ai('people')) return { ok: false, failure: 429 };
-      return webSearchForPerson({ ...p, includeEvidence: ownerLike(p) }, geminiKey, Math.min(timeout, Math.max(1, left() - 2_000)));
+      return webSearchForPerson({ ...p, includeEvidence: effort === 'extra_high' || ownerLike(p) }, geminiKey, Math.min(timeout, Math.max(1, left() - 2_000)));
     })();
     searches.set(key, result);
     return result;
@@ -728,7 +837,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }
   // Apollo's search is free and keeps its obfuscated names. No paid person/phone reveal is requested.
   const apolloDomain = [...verified][0];
-  if (apolloKey && apolloDomain && left() > 15_000) {
+  if (deepEnabled && apolloKey && apolloDomain && left() > 15_000) {
     await checkpoint();
     const candidates = await searchApolloDecisionMakers(apolloDomain, apolloKey, 3);
     await checkpoint();
@@ -756,7 +865,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // Owner-like contacts are searched even when an email is already saved. Names without a contact remain reviewable.
   const linkedinPeople: WebSearchPerson[] = [];
   const addLinkedinPerson = (p: WebSearchPerson) => {
-    if (!p.first || !p.last || !ownerLike(p) || linkedinPeople.some((x) => personKey(x.first, x.last) === personKey(p.first, p.last))) return;
+    if (!p.first || !p.last || (effort !== 'extra_high' && !ownerLike(p)) || linkedinPeople.some((x) => personKey(x.first, x.last) === personKey(p.first, p.last))) return;
     const contact = findSamePerson(all(), p.first, p.last);
     if (contact?.dismissed_at || str(contact?.linkedin_url)) return;
     linkedinPeople.push(p);
@@ -767,7 +876,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     const name = parseLeadPersonName(p.name);
     if (name) addLinkedinPerson({ ...name, title: p.role, company: str(lead.business_name), domains: verifiedDomains });
   }
-  if (geminiKey) for (const p of linkedinPeople) {
+  if (geminiKey && (effort === 'custom' || effort === 'high' || effort === 'extra_high')) for (const p of linkedinPeople) {
     const name = `${p.first} ${p.last}`;
     if (!searches.has(personKey(p.first, p.last)) && left() < 7_000) { steps.push(`LinkedIn search for ${name} skipped: not enough time left. Try Deep find again.`); continue; }
     const result = await searchRaw(p, 8_000);
@@ -807,6 +916,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     reason: (apolloPeople ? `Apollo added ${apolloPeople} decision-maker contacts. ` : '') + deepFindSummary(stats),
     people_found: stats.hunterPeople + stats.officersAdded + apolloPeople,
     domains: {
+      ...metadata,
+      registry_evidence: registryEvidence,
       auto_applied: autoApplied.slice(0, 100),
       domains: discovery.domains,
       named_by_web: namedByWeb,
@@ -830,7 +941,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (!(error instanceof DeepFindAuthorisationLost)) console.error('deep find: lead processing stopped', error instanceof Error && ['Error', 'TypeError', 'RangeError', 'SyntaxError', 'AbortError'].includes(error.name) ? error.name : 'UnknownError', 'Unexpected failure while processing a lead; provider payload omitted.');
     return { status: error instanceof DeepFindAuthorisationLost ? 'skipped' : 'failed',
       reason: error instanceof DeepFindAuthorisationLost ? error.message : 'Deep find could not finish. Saved changes are listed below with Undo.',
-      people_found: created.length, domains: { auto_applied: autoApplied.slice(0, 100), suggestions: reviewableSuggestions().slice(0, 25), steps } };
+      people_found: created.length, domains: { ...metadata, registry_evidence: registryEvidence, auto_applied: autoApplied.slice(0, 100), suggestions: reviewableSuggestions().slice(0, 25), steps } };
   }
 }
 
@@ -860,7 +971,7 @@ export async function cancelDeepFindRun(service: SupabaseClient, runId: string, 
 async function housekeeping(service: SupabaseClient): Promise<void> {
   const { data: running } = await service.from('deep_find_leads').select('id, claimed_at, attempts').eq('status', 'running');
   const now = new Date();
-  for (const r of (running ?? []) as { id: string; claimed_at: string | null; attempts: number }[]) {
+  for (const r of (running ?? []) as { id: string; claimed_at: string | null; attempts: number; domains?: Record<string, unknown> }[]) {
     const action = stuckAction(r, now);
     if (action === 'ignore') continue;
     const patch = action === 'requeue'
@@ -910,10 +1021,14 @@ export async function runDeepFindTick(service: SupabaseClient, startedAt: number
       continue;
     }
     let out: LeadOutcome;
-    try { out = await processDeepFindLead(service, run, row); } catch { out = { status: 'failed', reason: 'Something went wrong while searching this lead.' }; }
+    try { out = await processDeepFindLead(service, run, row); } catch { console.error('deep find: claimed lead processing failed'); out = { status: 'failed', reason: 'Something went wrong while searching this lead.' }; }
+    const effort = effortPolicy(row.domains);
+    const label = effort === 'custom' ? 'Custom' : EFFORT_LEVELS[effort].label;
+    const resultSteps = Array.isArray(out.domains?.steps) ? out.domains.steps as string[] : [];
+    if (!resultSteps.some(line => line.startsWith(`${label} effort:`))) resultSteps.push(`${label} effort: stopped before the free phase finished; deeper steps were skipped. ${out.reason}`);
     await updateRow(service, row.id, {
       status: out.status, reason: out.reason.slice(0, 1000), people_found: out.people_found ?? 0,
-      ...(out.domains ? { domains: out.domains } : {}), finished_at: nowIso(),
+      domains: { ...row.domains, ...out.domains, effort, steps: resultSteps }, finished_at: nowIso(),
     });
     await completeIfDone(service, run.id);
     processed++;

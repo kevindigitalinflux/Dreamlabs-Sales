@@ -4,9 +4,13 @@
 // (registrySearch.ts) and otherwise offers the top 3 candidates for the user to choose. Service client only; the
 // caller has already checked the org and the run creator's rights on the lead.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { fetchCompanyProfile, fetchOfficerAppointments, searchCompaniesByName, searchOfficers } from './companiesHouse.ts';
+import { fetchActiveOfficers, fetchCompanyProfile, fetchOfficerAppointments, searchCompaniesByName, searchOfficers } from './companiesHouse.ts';
+import { matchRegistryEvidence, type RegistryEvidence } from './registryEvidence.ts';
+import { companyNameTokens } from './registrySearch.ts';
+import { fetchActivePscNames } from './registryProofPeople.ts';
+import { sameCompanyName } from './nameVariants.ts';
 import { appointmentCompanies, officerAppointmentPaths, type OfficerQuery } from './registryOfficerSearch.ts';
-import { cleanCompanyNumber, locationAgrees, pickCompany, scoreCompanyCandidates, type CompanyCandidate } from './registrySearch.ts';
+import { cleanCompanyNumber, locationAgrees, scoreCompanyCandidates, type CompanyCandidate } from './registrySearch.ts';
 import { registrySearchNames } from './nameVariants.ts';
 import { registrySkipReason } from './deepFindSuggestions.ts';
 import type { ReviewLead } from './deepFindSuggestions.ts';
@@ -20,6 +24,10 @@ export interface RegistryResult {
   how: 'saved' | 'raw_lead' | 'auto' | 'ambiguous' | 'not_found' | 'no_key' | 'error' | 'not_uk' | 'rejected';
   /** Candidates to choose from when the search was not clear (top 5, each with why it is offered). */
   candidates: CompanyCandidate[];
+  evidence?: Record<string, RegistryEvidence>;
+  /** Kept internally for a later evidence pass, so the UI's five-row limit cannot hide a competing match. */
+  allCandidates?: CompanyCandidate[];
+  proofPeople?: Record<string, string[]>;
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
@@ -32,7 +40,7 @@ export function registryStep(r: RegistryResult): string {
     case 'rejected': return 'Companies House skipped: you rejected the company matches for this lead.';
     case 'saved': return `Companies House: using the company saved on this lead (${name || r.number}).`;
     case 'raw_lead': return `Companies House: using the company this lead was found from (${name || r.number}).`;
-    case 'auto': return `Companies House: matched ${name} (${r.number}).`;
+    case 'auto': return `Companies House: using company ${name} (${r.number})${r.evidence?.[r.number ?? ''] ? `: ${r.evidence[r.number!].reasons.join(', ')}` : ''}.`;
     case 'ambiguous': return `Companies House: ${r.candidates.length} possible companies, please choose.`;
     case 'not_found': return 'Companies House: no company with this name was found.';
     case 'no_key': return 'Companies House: no key is set for this organisation, so it was skipped.';
@@ -46,6 +54,7 @@ export function registryStep(r: RegistryResult): string {
  */
 export async function resolveRegistry(
   service: SupabaseClient, lead: Record<string, unknown> & ReviewLead & { id: string }, chKey: string | null, people: OfficerQuery[] = [],
+  proof: { pages?: string[]; website?: string | null; left?: () => number; checkpoint?: () => Promise<void>; cached?: CompanyCandidate[]; cachedPeople?: Record<string, string[]>; priorEvidence?: Record<string, RegistryEvidence>; webNumbers?: string[]; applyNumber?: (number: string) => Promise<boolean> } = {},
 ): Promise<RegistryResult> {
   const empty = { address: null, locality: null, candidates: [] as CompanyCandidate[] };
   const saved = cleanCompanyNumber(lead.company_number);
@@ -72,7 +81,8 @@ export async function resolveRegistry(
   const items: unknown[] = [];
   const seen = new Set<string>();
   let anyOk = false;
-  for (const variant of registrySearchNames(name)) {
+  for (const variant of proof.cached ? [] : registrySearchNames(name)) {
+    if (proof.left && proof.left() < 12_000) break;
     const found = await searchCompaniesByName(variant, chKey);
     if (found === null) continue;
     anyOk = true;
@@ -82,23 +92,40 @@ export async function resolveRegistry(
     }
   }
   const loc = { postcode: str(lead.postcode), city: str(lead.city), address: str(lead.address) };
-  const pick = anyOk ? pickCompany(scoreCompanyCandidates(items, name, loc), name, loc) : { chosen: null, candidates: [] as CompanyCandidate[] };
+  const scored = proof.cached ?? scoreCompanyCandidates(items, name, loc);
+  anyOk ||= !!proof.cached;
+  const officers: Record<string, string[]> = { ...proof.cachedPeople };
+  const words = companyNameTokens(name);
+  for (const c of scored.filter(c => c.status === 'active' && words.length > 0 && (words.every(w => companyNameTokens(c.name).includes(w)) || sameCompanyName(c.name, name))).slice(0, 3)) {
+    if (Object.hasOwn(officers, c.company_number)) continue;
+    if (!people.length || (proof.left && proof.left() < 15_000)) break;
+    await proof.checkpoint?.();
+    officers[c.company_number] = (await fetchActiveOfficers(c.company_number, chKey)).map(o => `${o.first_name} ${o.last_name}`);
+    if (!proof.left || proof.left() > 15_000) {
+      await proof.checkpoint?.();
+      officers[c.company_number].push(...await fetchActivePscNames(c.company_number, chKey));
+    }
+  }
+  const pick = matchRegistryEvidence(scored, name, loc, { pages: proof.pages ?? [], website: proof.website,
+    people: people.map(p => `${p.first} ${p.last}`), officers, webNumbers: proof.webNumbers,
+    peopleNumbers: Object.entries(proof.priorEvidence ?? {}).filter(([,e]) => e.E4).map(([number]) => number) });
   if (!pick.chosen) {
     // No clear match by name: look the company up through the people we know (officer search, then their
     // appointments). Never auto-picked: the user still chooses, with the reason shown.
-    const viaPeople = await companiesViaOfficers(chKey, people, [name, ...registrySearchNames(name)]);
+    const viaPeople = proof.cached || (proof.left && proof.left() < 25_000) ? [] : await companiesViaOfficers(chKey, people, [name, ...registrySearchNames(name)], proof);
     const byName = pick.candidates.filter((c) => !viaPeople.some((p) => p.company_number === c.company_number))
-      .map((c) => ({ ...c, why: locationAgrees(c, loc) ? 'Name and place match' : 'Name matches' }));
-    const candidates = [...viaPeople, ...byName].slice(0, 5);
+      .map((c) => ({ ...c, why: c.why ?? (locationAgrees(c, loc) ? 'Name and place match' : 'Name matches') }));
+    const candidates = [...byName, ...viaPeople].sort((a, b) => Number(b.status === 'active') - Number(a.status === 'active')).slice(0, 5);
     if (!anyOk && viaPeople.length === 0) return { ...empty, number: null, name: null, how: 'error' };
-    return { ...empty, number: null, name: null, how: candidates.length ? 'ambiguous' : 'not_found', candidates };
+    return { ...empty, number: null, name: null, how: candidates.length ? 'ambiguous' : 'not_found', candidates, evidence: pick.evidence, allCandidates: scored, proofPeople: officers };
   }
-  const { error } = await service.from('leads').update({ company_number: pick.chosen.company_number, registry_candidates_rejected: false })
-    .eq('id', lead.id).is('company_number', null);
-  if (error) console.error('deep find: could not save the company number');
+  // The engine owns the scoped blank-only write, fresh dismissal check and Undo record.
+  if (proof.applyNumber && !await proof.applyNumber(pick.chosen.company_number)) {
+    return { ...empty, number: null, name: null, how: 'ambiguous', candidates: pick.candidates, evidence: pick.evidence, allCandidates: scored, proofPeople: officers };
+  }
   return {
     number: pick.chosen.company_number, name: pick.chosen.name, address: pick.chosen.address, locality: pick.chosen.locality,
-    how: 'auto', candidates: [],
+    how: 'auto', candidates: [], evidence: pick.evidence,
   };
 }
 
@@ -107,14 +134,20 @@ export async function resolveRegistry(
  * appointments (max 2 matching officers each), kept when the company's name matches one of the lead's name variants.
  * Each comes with its registered office (profile) and the fixed reason. At most 3. Free API; every call is guarded.
  */
-async function companiesViaOfficers(chKey: string, people: OfficerQuery[], names: string[]): Promise<CompanyCandidate[]> {
+async function companiesViaOfficers(chKey: string, people: OfficerQuery[], names: string[], budget: { left?: () => number; checkpoint?: () => Promise<void> } = {}): Promise<CompanyCandidate[]> {
   const out: CompanyCandidate[] = [];
   for (const person of people.slice(0, 3)) {
     if (out.length >= 3) break;
+    if (budget.left && budget.left() < 12_000) break;
+    await budget.checkpoint?.();
     const found = await searchOfficers(`${person.first} ${person.last}`, chKey);
     for (const path of officerAppointmentPaths(found, person).slice(0, 2)) {
+      if (budget.left && budget.left() < 12_000) return out;
+      await budget.checkpoint?.();
       for (const c of appointmentCompanies(await fetchOfficerAppointments(path, chKey), names, person)) {
         if (out.length >= 3 || out.some((x) => x.company_number === c.company_number)) continue;
+        if (budget.left && budget.left() < 12_000) return out;
+        await budget.checkpoint?.();
         const profile = await fetchCompanyProfile(c.company_number, chKey);
         out.push({
           company_number: c.company_number, name: profile?.name ?? c.name, address: profile?.address ?? null,

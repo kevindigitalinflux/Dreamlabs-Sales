@@ -3,7 +3,7 @@ import { sameCompanyName } from './nameVariants.ts';
 
 export interface RegistryEvidence { E1: boolean; E2: boolean; E3: boolean; E4: boolean; E5: boolean; E6: boolean; reasons: string[] }
 export interface RegistryProof {
-  pages: string[]; people: string[]; officers: Record<string, string[]>; website?: string | null; webNumbers?: string[];
+  pages: string[]; people: string[]; officers: Record<string, string[]>; website?: string | null; webNumbers?: string[]; peopleNumbers?: string[];
 }
 const personKey = (v: string) => v.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z]+/g, ' ').trim();
 /** Evidence is scored independently of provider ordering. Weak domain evidence can never authorize a pick. */
@@ -12,7 +12,7 @@ export function matchRegistryEvidence(scored: CompanyCandidate[], name: string, 
   const allWords = (c: CompanyCandidate) => words.length > 0 && (words.every(w => companyNameTokens(c.name).includes(w)) || sameCompanyName(c.name, name));
   const evidence: Record<string, RegistryEvidence> = {};
   const text = proof.pages.join(' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').toLowerCase();
-  const known = proof.people.map(personKey).filter(p => p.split(' ').length >= 2);
+  const known = proof.people.map(personKey).filter(p => p.split(' ').length >= 2 && p.split(' ').every(part => part.length >= 2));
   let host = '';
   try { host = new URL(proof.website?.includes('://') ? proof.website : `https://${proof.website ?? ''}`).hostname.replace(/^www\./, '').split('.')[0]; } catch { /* An invalid website contributes no evidence. */ }
   for (const c of scored) {
@@ -21,15 +21,17 @@ export function matchRegistryEvidence(scored: CompanyCandidate[], name: string, 
     const E2 = locationAgrees(c, loc);
     const escapedNumber = c.company_number.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const legalName = c.name.toLowerCase().replace(/\s+/g, ' ').trim();
-    const nameIndex = text.indexOf(legalName);
+    const legalPattern = legalName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const nameIndex = text.search(new RegExp(`(?<![a-z0-9])${legalPattern}(?![a-z0-9])`));
     const nearby = nameIndex < 0 ? '' : text.slice(Math.max(0, nameIndex - 100), nameIndex + legalName.length + 100);
-    const E3 = new RegExp(`\\b${escapedNumber}\\b`).test(text) || (nameIndex >= 0 && /\b(registered|company no|limited)\b/.test(nearby));
-    const E4 = (proof.officers[c.company_number] ?? []).some(p => known.includes(personKey(p)));
+    const websiteNumber = new RegExp(`\\b${escapedNumber}\\b`).test(text);
+    const E3 = websiteNumber || (nameIndex >= 0 && /\b(registered|company no|limited)\b/.test(nearby));
+    const E4 = (proof.peopleNumbers ?? []).includes(c.company_number) || (proof.officers[c.company_number] ?? []).some(p => known.includes(personKey(p)));
     const E5 = (proof.webNumbers ?? []).includes(c.company_number);
     const slug = tokens.join('');
     const E6 = slug.length >= 5 && host.includes(slug);
     const reasons = [E1 ? 'exact name' : allWords(c) ? 'all name words match' : 'partial name match', c.status ?? 'status unknown',
-      E2 && 'registered location matches', E3 && `your website shows ${c.company_number} or the registered name`,
+      E2 && 'registered location matches', E3 && (websiteNumber ? `your website shows number ${c.company_number}` : 'your website shows the exact registered name with legal wording'),
       E4 && 'a known person is an active officer or PSC', E5 && 'web search confirms the company number', E6 && 'website name matches'].filter(Boolean) as string[];
     evidence[c.company_number] = { E1, E2, E3, E4, E5, E6, reasons };
   }
@@ -39,7 +41,7 @@ export function matchRegistryEvidence(scored: CompanyCandidate[], name: string, 
   const eligible = active.filter(c => {
     const e = evidence[c.company_number];
     if (hasLocation(loc) && !e.E2 && !e.E3 && !e.E4) return false;
-    return (active.length === 1 && strength(c) >= 2) || (exact.length === 1 && e.E1 && (e.E2 || e.E3 || e.E4));
+    return strength(c) >= 2 || (exact.length === 1 && e.E1 && (e.E2 || e.E3 || e.E4));
   });
   let chosen = eligible.length === 1 ? eligible[0] : null;
   if (chosen && active.some(c => c !== chosen && strength(c) >= strength(chosen!))) chosen = null;

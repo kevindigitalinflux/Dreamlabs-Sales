@@ -5,6 +5,7 @@ vi.mock('../../supabase/functions/_shared/rateLimit', () => ({ checkRateLimit: v
 vi.mock('../../supabase/functions/_shared/domainDiscoveryLookup', () => ({ discoverLeadDomains: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/knownPersonLookup', () => ({ readCompanyPages: vi.fn(async () => []), webSearchForPerson: vi.fn(), hunterAccount: vi.fn(), hunterDomainList: vi.fn(), hunterVerifyEmail: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/deepFindPeople', () => ({ lookUpPeople: vi.fn() }));
+vi.mock('../../supabase/functions/_shared/registryWebProof', () => ({ registryWebNumbers: vi.fn(async () => []) }));
 vi.mock('../../supabase/functions/_shared/googlePlacesLookup', () => ({ lookupPlaceContact: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/apolloHunterLookup', () => ({ lookupApolloPhone: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/apolloPeopleSearch', () => ({ searchApolloDecisionMakers: vi.fn(async () => []) }));
@@ -22,13 +23,17 @@ import { webSearchForPerson, readCompanyPages, hunterAccount, hunterDomainList }
 import { lookUpPeople } from '../../supabase/functions/_shared/deepFindPeople';
 import { processDeepFindLead } from '../../supabase/functions/_shared/deepFind';
 import { checkRateLimit } from '../../supabase/functions/_shared/rateLimit';
+import { registryWebNumbers } from '../../supabase/functions/_shared/registryWebProof';
 import { undoDeepFindChange } from './deepFindReview';
 
 let lead, contacts, writes, service, deny, aiAllowed, beforeWebsiteWrite, worker, revoked;
 const profile = 'https://www.linkedin.com/in/jane-smith';
-const run = () => processDeepFindLead(service, { id: 'run', org_id: 'org', created_by: 'user', status: 'active' }, { id: 'result', lead_id: 'lead', org_id: 'org' });
+const run = (effort) => processDeepFindLead(service, { id: 'run', org_id: 'org', created_by: 'user', status: 'active' }, { id: 'result', lead_id: 'lead', org_id: 'org', domains: effort ? { effort } : {} });
 beforeEach(() => {
   vi.clearAllMocks(); revoked = false;
+  fetchActiveOfficers.mockResolvedValue([]);
+  searchCompaniesByName.mockResolvedValue([]);
+  registryWebNumbers.mockResolvedValue([]);
   checkRateLimit.mockImplementation(async () => true);
   worker = { lines: () => [], verifyEmail: vi.fn(async () => ({ ok: false, failure: 'not_configured' })), scrapeSite: vi.fn(async () => ({ ok: false, failure: 'not_configured' })) };
   makeWorkerClient.mockReturnValue(worker);
@@ -69,6 +74,95 @@ beforeEach(() => {
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it('Low disables paid discovery, Hunter, AI, Apollo, Places and LinkedIn even with every key', async () => {
+  resolveOrgApiKey.mockImplementation(async (_s, _o, p) => p === 'companies_house' ? null : 'fake');
+  lead.phone = null;
+  const out = await run('low');
+  expect(discoverLeadDomains.mock.calls[0][2].allow).toMatchObject({ hunter: false, web: false, apollo: false });
+  expect(hunterAccount).not.toHaveBeenCalled();
+  expect(hunterDomainList).not.toHaveBeenCalled();
+  expect(webSearchForPerson).not.toHaveBeenCalled();
+  expect(searchApolloDecisionMakers).not.toHaveBeenCalled();
+  expect(lookupPlaceContact).not.toHaveBeenCalled();
+  expect(service.rpc.mock.calls.filter(([name]) => name === 'deep_find_reserve')).toHaveLength(0);
+  expect(out.domains.effort).toBe('low');
+  expect(out.domains.steps.join(' ')).toContain('Low effort');
+});
+it('Medium runs free checks before deciding and skips deep work when the checker confirms an existing email', async () => {
+  resolveOrgApiKey.mockImplementation(async (_s, _o, p) => p === 'companies_house' ? null : 'fake');
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'test' } });
+  const out = await run('medium');
+  expect(worker.verifyEmail).toHaveBeenCalledWith('jane@acme.com');
+  expect(out.domains.steps.join(' ')).toContain('deeper steps were skipped');
+  expect(hunterDomainList).not.toHaveBeenCalled();
+  expect(webSearchForPerson).not.toHaveBeenCalled();
+});
+it('Medium deepens when an existing email is unverified and retains metadata on failure', async () => {
+  const out = await run('medium');
+  expect(out.domains.steps.join(' ')).toContain('deeper steps ran');
+  expect(out.domains.effort).toBe('medium');
+});
+it.each([['medium', 1, 2], ['high', 3, 4], ['extra_high', 6, 8]])('%s enforces per-lead credits across all phases', async (effort, hunter, ai) => {
+  resolveOrgApiKey.mockImplementation(async (_s, _o, p) => ['hunter', 'gemini'].includes(p) ? 'fake' : null);
+  const result = () => ({ domains: [{ domain: 'acme.com', sources: ['site_confirms'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] });
+  let freeFinished = false;
+  discoverLeadDomains.mockImplementation(async (_service, _lead, options) => {
+    if (!options.allow.hunter) { freeFinished = true; return result(); }
+    expect(freeFinished).toBe(true);
+    expect(worker.verifyEmail).toHaveBeenCalled();
+    for (let i = 0; i < 12; i++) { await options.guard.hunter(); await options.guard.ai(); }
+    return result();
+  });
+  const out = await run(effort);
+  expect(out.status).toBe('done');
+  const reservations = service.rpc.mock.calls.filter(([name]) => name === 'deep_find_reserve').map(([,args]) => args);
+  expect(reservations.reduce((sum, r) => sum + r.hunter, 0)).toBe(hunter);
+  expect(reservations.reduce((sum, r) => sum + r.ai, 0)).toBe(ai);
+});
+it('preserves effort and earlier automatic changes when later deep work fails', async () => {
+  lead.website = null;
+  discoverLeadDomains.mockResolvedValueOnce({ domains: [{ domain: 'acme.com', sources: ['site_confirms'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] })
+    .mockRejectedValueOnce(new Error('private payload'));
+  const out = await run('medium');
+  expect(out.status).toBe('failed');
+  expect(out.domains.effort).toBe('medium');
+  expect(out.domains.auto_applied).toContainEqual(expect.objectContaining({ field: 'website', after: 'https://acme.com' }));
+  expect(out.domains.steps.join(' ')).toContain('Medium effort');
+});
+it('records a blank company match with Undo and never restores the undone number', async () => {
+  lead.business_name = 'Acme'; lead.city = 'London'; lead.dismissed_suggestions = null;
+  resolveOrgApiKey.mockImplementation(async (_s,_o,p) => p === 'companies_house' ? 'fake' : null);
+  searchCompaniesByName.mockResolvedValue([{ company_number: '13550006', title: 'ACME LIMITED', company_status: 'active', address: { locality: 'Manchester' } }]);
+  readCompanyPages.mockResolvedValue(['<title>Acme</title><footer>Registered company number 13550006</footer>']);
+  const out = await run('low');
+  expect(out.domains.registry_evidence['13550006']).toMatchObject({ E1: true, E2: false, E3: true });
+  const change = out.domains.auto_applied.find(c => c.field === 'company_number');
+  expect(change).toMatchObject({ before: null, after: '13550006' });
+  expect(await undoDeepFindChange(service, 'user', 'lead', change)).toBe('Undone.');
+  expect(lead.company_number).toBeNull();
+  await run('low');
+  expect(lead.company_number).toBeNull();
+});
+it('High spends one guarded AI call on grounded registry proof after free evidence remains ambiguous', async () => {
+  lead.company_number = null;
+  resolveOrgApiKey.mockImplementation(async (_s,_o,p) => ['companies_house', 'gemini'].includes(p) ? 'fake' : null);
+  searchCompaniesByName.mockResolvedValue([{ company_number: '13550006', title: 'ACME PROPERTY LIMITED', company_status: 'active', address: { locality: 'Manchester' } }]);
+  readCompanyPages.mockResolvedValue(['<title>Acme</title><footer>Registered company number 13550006</footer>']);
+  registryWebNumbers.mockResolvedValue(['13550006']);
+  const out = await run('high');
+  expect(out.status).toBe('done');
+  expect(registryWebNumbers).toHaveBeenCalledTimes(1);
+  expect(out.domains.registry_evidence['13550006']).toMatchObject({ E1: false, E3: true, E5: true });
+  expect(out.domains.company_number).toBe('13550006');
+  expect(out.domains.credits.ai['company registry proof']).toBe(1);
+});
+it('High deepens for a missing confirmed website; Extra high deepens for complete leads', async () => {
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'test' } });
+  discoverLeadDomains.mockResolvedValue({ domains: [], people: [], notes: [], problems: [], sitePages: [] });
+  expect((await run('high')).domains.steps.join(' ')).toContain('a confirmed website');
+  discoverLeadDomains.mockResolvedValue({ domains: [{ domain: 'acme.com', sources: ['site_confirms'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] });
+  expect((await run('extra_high')).domains.steps.join(' ')).toContain('regardless');
+});
 it('uses Places after discovery and records safe city-matched fills with Undo', async () => {
   lead.website = null; lead.phone = null; lead.city = 'London';
   resolveOrgApiKey.mockImplementation(async (_s, _o, provider) => provider === 'google_places' ? 'fake' : null);

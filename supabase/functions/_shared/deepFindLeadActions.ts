@@ -9,6 +9,7 @@ import { fetchCompanyProfile } from './companiesHouse.ts';
 import { cleanCompanyNumber } from './registrySearch.ts';
 import { isUuid } from './deepFindRules.ts';
 import { cleanCompanyDomain } from './knownPersonWide.ts';
+import { EFFORT_LEVELS, type Effort } from './deepFindEffort.ts';
 
 /** An action result: the JSON body and HTTP status to send. */
 export interface ActionResult { status: number; body: Record<string, unknown> }
@@ -35,7 +36,7 @@ export async function editableLead(
  * a lead another run is already working on (unique index, 23505) is left out. Returns null when nothing was queued.
  */
 export async function queueRun(
-  service: SupabaseClient, orgId: string, userId: string, leadIds: string[], caps: { hunter: number; ai: number },
+  service: SupabaseClient, orgId: string, userId: string, leadIds: string[], caps: { hunter: number; ai: number }, effort: Effort = 'custom',
 ): Promise<{ runId: string; queued: number; raced: number } | { runId: null; queued: 0; raced: number; failed: boolean }> {
   const { data: runRow, error: runErr } = await service.from('deep_find_runs').insert({
     org_id: orgId, created_by: userId, lead_count: leadIds.length, credit_cap_hunter: caps.hunter, credit_cap_ai: caps.ai,
@@ -45,7 +46,9 @@ export async function queueRun(
   let queued = 0;
   let raced = 0;
   for (const lead_id of leadIds) {
-    const { error } = await service.from('deep_find_leads').insert({ run_id: runId, org_id: orgId, lead_id });
+    const { error } = await service.from('deep_find_leads').insert({ run_id: runId, org_id: orgId, lead_id,
+      domains: { effort, effort_caps: effort === 'custom' ? caps : { hunter: EFFORT_LEVELS[effort].hunter, ai: EFFORT_LEVELS[effort].ai, firecrawl: EFFORT_LEVELS[effort].firecrawl } },
+    });
     if (!error) queued++;
     else if (error.code === '23505') raced++;
     else console.error('deep find: queue insert failed');
@@ -82,6 +85,7 @@ export async function chooseCompany(
   if (!chKey) return { status: 400, body: { error: 'No Companies House key is set for this organisation' } };
   const profile = await fetchCompanyProfile(number, chKey);
   if (!profile) return { status: 404, body: { error: 'Companies House does not know that company number' } };
+  if (profile.status !== 'active') return { status: 400, body: { error: 'Choose an active company' } };
   const { error } = await service.from('leads').update({ company_number: number, registry_candidates_rejected: false }).eq('id', lead.id).eq('org_id', lead.org_id);
   if (error) return { status: 500, body: { error: 'Could not save the company on this lead' } };
   const run = await queueRun(service, lead.org_id, callerId, [lead.id], CHOSEN_COMPANY_CAPS);

@@ -7,7 +7,7 @@ export interface AutoApplied { table: 'leads' | 'decision_maker_candidates'; id:
 /** PostgREST text[] equality requires a quoted array literal. */
 export const arrayEquality = (values: string[]): string => `{${values.map((v) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`;
 const FIELDS: Record<AutoApplied['table'], readonly string[]> = {
-  leads: ['website', 'additional_websites', 'email', 'owner_name', 'phone'],
+  leads: ['website', 'additional_websites', 'email', 'owner_name', 'phone', 'company_number'],
   decision_maker_candidates: ['linkedin_url', 'email', 'phone', 'title'],
 };
 const scalar = (v: unknown): v is string | null => v === null || typeof v === 'string';

@@ -22,24 +22,27 @@ export async function validateFirecrawlKey(key: string, request: typeof fetch = 
 }
 
 /** One instance per lead/run. A submitted page is counted even on timeout; no retries or silent credit refunds. */
-export function makeFirecrawlClient(deps: { key: string | null; reserve(): Promise<boolean>; request?: typeof fetch; checkpoint?(): Promise<void> }) {
+export function makeFirecrawlClient(deps: { key: string | null; reserve(): Promise<boolean>; request?: typeof fetch; checkpoint?(): Promise<void>; maxPages?: number }) {
   const request = deps.request ?? fetch;
   let attempted = false;
   let used = 0;
   const lines: string[] = [];
+  const seenUrls = new Set<string>();
   const add = (line: string) => { if (!lines.includes(line)) lines.push(line); };
   const problem = (domain: string, failure: string) => problemLines([{ step: 'firecrawl', target: domain, failure }]).forEach(add);
   return {
     pagesUsed: () => used,
     lines: () => [...lines],
     async readTeam(domain: string, pages: string[], leftMs: number): Promise<FirecrawlTeam | null> {
-      if (attempted) return null;
-      const url = chooseFirecrawlPage(domain, pages);
+      const maxPages = Math.max(0, Math.min(2, deps.maxPages ?? 1));
+      if (used >= maxPages || (attempted && maxPages === 1)) return null;
+      const url = chooseFirecrawlPage(domain, pages, [...seenUrls]);
       const timeoutMs = firecrawlTimeoutFor(leftMs);
       if (!url) { add('Firecrawl was skipped because no confirmed public company domain was available.'); return null; }
       if (timeoutMs === null) { add('Firecrawl was skipped to leave time for the remaining checks.'); return null; }
       if (!validKey(deps.key)) { add(FIRECRAWL_NOT_CONFIGURED); return null; }
       attempted = true;
+      seenUrls.add(url);
       const deadline = Date.now() + leftMs;
       // The calling engine handles access loss and recoverable checkpoint failures.
       await deps.checkpoint?.();

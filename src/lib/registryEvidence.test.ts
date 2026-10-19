@@ -18,3 +18,13 @@ it('web corroboration alone does not pick; no pages retains known-location ambig
   expect(match(undefined, { webNumbers: ['13550006'] }).chosen).toBeNull();
   expect(match().chosen).toBeNull();
 });
+it('requires exact registered-name boundaries and full person names', () => {
+  expect(match([candidate('13550006', 'ACME LIMITED')], { pages: ['NOTACME LIMITED registered'], people: ['J Smith'], officers: { '13550006': ['J Smith'] } }).chosen).toBeNull();
+});
+it('picks one all-words match with two independent signals and asks when another ties', () => {
+  const candidates = [candidate('13550006', 'BK PROPERTY MANAGEMENT SERVICES GROUP LIMITED'), candidate('13550007', 'BK PROPERTY MANAGEMENT SERVICES HOMES LIMITED')];
+  candidates[0].locality = 'London';
+  expect(match(candidates, { pages: ['13550006'] }).chosen?.company_number).toBe('13550006');
+  candidates[1].locality = 'London';
+  expect(match(candidates, { pages: ['13550006 13550007'] }).chosen).toBeNull();
+});

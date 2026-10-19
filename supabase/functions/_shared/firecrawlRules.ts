@@ -21,7 +21,7 @@ export function firecrawlTimeoutFor(leftMs: number): number | null {
 }
 
 /** The caller supplies a confirmed domain, never an arbitrary URL. Only links actually seen on that domain qualify. */
-export function chooseFirecrawlPage(domain: string, pages: string[]): string | null {
+export function chooseFirecrawlPage(domain: string, pages: string[], excluded: string[] = []): string | null {
   if (DOMAIN_CHECKS.clean(domain) !== domain || !DOMAIN_CHECKS.usable(domain)) return null;
   const home = `https://${domain}/`;
   const found: Array<{ url: string; rank: number }> = [];
@@ -38,7 +38,7 @@ export function chooseFirecrawlPage(domain: string, pages: string[]): string | n
       if (found.length >= 40) break;
     }
   }
-  return found.sort((a, b) => a.rank - b.rank)[0]?.url ?? home;
+  return found.filter(p => !excluded.includes(p.url)).sort((a, b) => a.rank - b.rank)[0]?.url ?? (excluded.includes(home) ? null : home);
 }
 
 export interface FirecrawlTeam { people: SitePerson[]; emails: string[] }

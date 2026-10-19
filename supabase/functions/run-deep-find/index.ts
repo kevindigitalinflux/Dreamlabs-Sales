@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
   if (leadIds.length === 0) return json({ error: 'Deep find is already working on these leads' }, 409, headers);
 
   // Service-client inserts: every check above has passed (no client INSERT exists on the 057 tables).
-  const queued = await queueRun(service, orgId, caller.id, leadIds, parsed.caps);
+  const queued = await queueRun(service, orgId, caller.id, leadIds, parsed.caps, parsed.effort);
   if (!queued.runId) {
     return 'failed' in queued && queued.failed
       ? json({ error: 'Could not queue the selected leads' }, 500, headers)

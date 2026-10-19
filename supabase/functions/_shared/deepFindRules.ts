@@ -3,6 +3,7 @@
 // names, and the plain-English per-lead summary. No imports on purpose: tested from src/lib. Provider, page and model
 // text is untrusted data: every value is type-checked and cleaned, and only fixed sentences carry counts and domains.
 
+import { effortTotals, isEffort, type Effort } from './deepFindEffort.ts';
 export const MAX_DEEP_FIND_LEADS = 25;
 /** Caps per run: `hunter` is Hunter CREDITS (one unit per Hunter request, each request limited to about one credit), `ai` is AI calls. */
 export const DEFAULT_CAPS = { hunter: 60, ai: 25 } as const;
@@ -17,7 +18,7 @@ export const STUCK_AFTER_MS = 10 * 60 * 1000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** A validated create request. */
-export type CreateRequest = { ok: true; leadIds: string[]; caps: { hunter: number; ai: number } } | { ok: false; error: string };
+export type CreateRequest = { ok: true; leadIds: string[]; caps: { hunter: number; ai: number }; effort: Effort } | { ok: false; error: string };
 
 function cap(value: unknown, fallback: number, max: number): number | null {
   if (value === undefined || value === null) return fallback;
@@ -38,7 +39,10 @@ export function parseCreateRequest(body: unknown): CreateRequest {
   const ai = cap(caps.ai, DEFAULT_CAPS.ai, CAP_LIMITS.ai);
   if (hunter === null) return { ok: false, error: `The Hunter credit cap must be a whole number from 0 to ${CAP_LIMITS.hunter}` };
   if (ai === null) return { ok: false, error: `The AI cap must be a whole number from 0 to ${CAP_LIMITS.ai}` };
-  return { ok: true, leadIds: ids, caps: { hunter, ai } };
+  if (b.effort !== undefined && !isEffort(b.effort)) return { ok: false, error: 'Choose a valid effort level' };
+  const effort = isEffort(b.effort) ? b.effort : 'custom';
+  const totals = effort === 'custom' ? { hunter, ai } : effortTotals(effort, ids.length);
+  return { ok: true, leadIds: ids, caps: { hunter: totals.hunter, ai: totals.ai }, effort };
 }
 
 /** True for a UUID string. */

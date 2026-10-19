@@ -7,6 +7,19 @@ const setup = (key: string | null = 'fake-test-only') => {
   return { request, reserve, client: makeFirecrawlClient({ key, request, reserve }) };
 };
 describe('Firecrawl client', () => {
+  it('Extra high reserves at most two distinct pages, including after a charged failure', async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response('', { status: 500 })).mockImplementation(async () => reply());
+    const reserve = vi.fn(async () => true);
+    const client = makeFirecrawlClient({ key: 'fake', request, reserve, maxPages: 2 });
+    const pages = ['<a href="/team">Team</a><a href="/about">About</a>'];
+    await client.readTeam('example.com', pages, 70_000);
+    await client.readTeam('example.com', pages, 70_000);
+    await client.readTeam('example.com', pages, 70_000);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(reserve).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls.map(([,options]) => JSON.parse(options!.body as string).url)).toEqual(['https://example.com/team', 'https://example.com/about']);
+    expect(client.pagesUsed()).toBe(2);
+  });
   it('reserves before one request, reports one page, and refuses a second attempt', async () => {
     const { client, request, reserve } = setup();
     expect(await client.readTeam('example.com', ['<a href="/team">Team</a>'], 70_000)).toMatchObject({ people: [{ name: 'Jane Smith', role: 'Director' }] });

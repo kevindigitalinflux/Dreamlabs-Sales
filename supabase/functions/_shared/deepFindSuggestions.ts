@@ -33,6 +33,7 @@ const ROLE_MAILBOXES = new Set(['privacy','gdpr','dpo','legal','compliance','car
 /** Canonical keys shared by review, automatic fills and Undo. */
 export function suggestionKey(s: ReviewSuggestion): string {
   const value = norm(s.value);
+  if (s.field === 'company_number') return 'company_number:' + value;
   if (s.field === 'title') return 'title:' + norm(s.name);
   if (s.field === 'owner_name') return 'owner:' + value;
   if (s.field === 'phone') return 'phone:' + value.replace(/\D/g, '');
