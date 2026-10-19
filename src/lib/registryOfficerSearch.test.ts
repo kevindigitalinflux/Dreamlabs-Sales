@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { appointmentCompanies, companyNameMatches, officerAppointmentPaths } from '../../supabase/functions/_shared/registryOfficerSearch';
 import { registrySearchNames } from '../../supabase/functions/_shared/nameVariants';
+it('rejects matching initials and different first names', () => {
+  const items = ['J Smith', 'John Smith', 'Jane Smith', 'SMITH, Jane Ann'].map((title, i) => ({ title, links: { self: `/officers/id${i}/appointments` } }));
+  expect(officerAppointmentPaths({ items }, { first: 'Jane', last: 'Smith' })).toEqual(['/officers/id2/appointments', '/officers/id3/appointments']);
+});
 
 describe('officer search', () => {
   const search = { items: [

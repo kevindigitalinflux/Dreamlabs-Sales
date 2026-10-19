@@ -40,3 +40,15 @@ it('bounds evidence officer/PSC lookups to three candidates and reuses them for 
   expect(later.evidence['13550000'].E4).toBe(true);
   expect(fetchActiveOfficers).toHaveBeenCalledTimes(3);
 });
+
+it('checks active non-name-matching candidates for competing person proof', async () => {
+  vi.clearAllMocks();
+  searchCompaniesByName.mockResolvedValue([
+    { company_number: '13550006', title: 'ACME LIMITED', company_status: 'active', address: { locality: 'London' } },
+    { company_number: '13550007', title: 'OTHER TRADING ENTITY LIMITED', company_status: 'active', address: { locality: 'Manchester' } },
+  ]);
+  fetchActiveOfficers.mockImplementation(async number => number === '13550007' ? [{ first_name: 'Jane', last_name: 'Smith', title: 'Director' }] : []);
+  const result = await resolveRegistry({}, { id: 'lead', business_name: 'Acme', city: 'London' }, 'fake', [{ first: 'Jane', last: 'Smith' }]);
+  expect(result.how).toBe('ambiguous');
+  expect(result.evidence['13550007'].E4).toBe(true);
+});

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { effortTotals, effortPolicy, deepPhaseDecision, hunterShortfall, EFFORT_LEVELS } from '../../supabase/functions/_shared/deepFindEffort';
+import { effortTotals, effortPolicy, deepPhaseDecision, hunterShortfall, EFFORT_LEVELS, hunterAllowanceLeft, EFFORT_RUN_LIMITS } from '../../supabase/functions/_shared/deepFindEffort';
 
 it.each([1, 25, 200])('scales effort totals for %i leads within run and daily limits', n => {
   expect(effortTotals('medium', n)).toEqual({ hunter: Math.min(n, 500), ai: Math.min(n * 2, 200), firecrawl: Math.min(n, 100), scrapes: Math.min(n, 100) });
@@ -27,4 +27,17 @@ it('warns only when a known allowance is short', () => {
   expect(hunterShortfall(1, 25)).toContain('1 search');
   expect(hunterShortfall(25, 25)).toBeNull();
   expect(hunterShortfall(null, 25)).toBeNull();
+});
+
+it('uses one source for run credit limits', async () => {
+  const { CAP_LIMITS } = await import('../../supabase/functions/_shared/deepFindRules');
+  expect(EFFORT_RUN_LIMITS).toBe(CAP_LIMITS);
+});
+it('uses the same fallback allowance for totals and shortfall warnings', () => {
+  expect(hunterAllowanceLeft({ searchesLeft: 4, creditsLeft: 20 })).toBe(4);
+  expect(hunterAllowanceLeft({ searchesLeft: null, creditsLeft: 2 })).toBe(2);
+  expect(hunterShortfall(hunterAllowanceLeft({ searchesLeft: null, creditsLeft: 2 }), 3)).toContain('2 searches');
+  expect(hunterAllowanceLeft({ configured: false, searchesLeft: 8, creditsLeft: 8 })).toBe(0);
+  expect(hunterAllowanceLeft({ usedUp: true, searchesLeft: 8, creditsLeft: 8 })).toBe(0);
+  expect(hunterAllowanceLeft(null)).toBeNull();
 });

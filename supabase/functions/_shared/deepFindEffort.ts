@@ -1,3 +1,4 @@
+import { CAP_LIMITS } from './deepFindLimits.ts';
 /** Pure effort policy shared by confirmation, request validation and the queued engine. */
 export const EFFORT_LEVELS = {
   low: { label: 'Low', hunter: 0, ai: 0, firecrawl: 0, explanation: 'Free steps only. Best for a first pass or large lists.' },
@@ -6,7 +7,7 @@ export const EFFORT_LEVELS = {
   extra_high: { label: 'Extra high', hunter: 6, ai: 8, firecrawl: 2, explanation: 'Try every step, even when details are complete. Best for a few high-value leads.' },
 } as const;
 export type Effort = keyof typeof EFFORT_LEVELS | 'custom';
-export const EFFORT_RUN_LIMITS = { hunter: 500, ai: 200 } as const;
+export const EFFORT_RUN_LIMITS = CAP_LIMITS;
 export const EFFORT_DAILY_LIMITS = { firecrawl: 100, scrapes: 100, checks: 150, places: 300, apollo: 100 } as const;
 export function isEffort(value: unknown): value is Effort {
   return value === 'custom' || (typeof value === 'string' && Object.hasOwn(EFFORT_LEVELS, value));
@@ -36,4 +37,9 @@ export function deepPhaseDecision(effort: Effort, facts: { verifiedEmail: boolea
 }
 export function hunterShortfall(left: number | null, requested: number): string | null {
   return left !== null && left < requested ? `Hunter has ${left} search${left === 1 ? '' : 'es'} left this month. Hunter steps stop when this allowance runs out; free steps continue.` : null;
+}
+
+/** The confirmation total and warning must use the same remaining Hunter allowance. */
+export function hunterAllowanceLeft(allowance: { configured?: boolean; usedUp?: boolean; searchesLeft: number | null; creditsLeft: number | null } | null): number | null {
+  return allowance?.configured === false || allowance?.usedUp ? 0 : allowance?.searchesLeft ?? allowance?.creditsLeft ?? null;
 }

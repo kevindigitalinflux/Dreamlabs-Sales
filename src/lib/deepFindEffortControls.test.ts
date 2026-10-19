@@ -6,6 +6,9 @@ vi.mock('../components/deepfind/HunterAllowanceLine', () => ({ HunterAllowanceLi
 import { DeepFindConfirm } from '../components/deepfind/DeepFindConfirm';
 import { DeepFindCompanyChoice } from '../components/deepfind/DeepFindCompanyChoice';
 const props = { leadCount: 25, hunterCap: '60', aiCap: '25', onHunterCap: () => {}, onAiCap: () => {}, capError: null };
+it('uses singular lead in one-lead totals', () => {
+  expect(renderToStaticMarkup(createElement(DeepFindConfirm, { ...props, leadCount: 1 }))).toContain('For 1 lead:');
+});
 it('defaults to Medium radio cards with totals and daily allowance explanations', () => {
   const html = renderToStaticMarkup(createElement(DeepFindConfirm, props));
   expect(html.match(/type="radio"/g)).toHaveLength(4);

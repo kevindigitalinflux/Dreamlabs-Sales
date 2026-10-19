@@ -3,6 +3,7 @@
 // NOT in sequences, and writes a plain-English summary per lead. Never emails anyone and never touches sequences.
 // Runs with the service client, so every org boundary is re-checked here. Keys only go to providers in headers.
 import { EFFORT_LEVELS, effortPolicy, deepPhaseDecision, type Effort } from './deepFindEffort.ts';
+import { cleanCompanyNumber } from './registrySearch.ts';
 import { registryWebNumbers } from './registryWebProof.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { resolveOrgApiKey, resolveOrgWorkerConfig } from './orgApiKeys.ts';
@@ -177,7 +178,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   /** Plain-English step lines shown with the results. */
   const steps: string[] = [];
   let registryEvidence: Record<string, unknown> = {};
-  if (!geminiKey) steps.push('LinkedIn search skipped: no Gemini key is configured.');
+  if (effort !== 'low' && !configured.geminiKey) steps.push('LinkedIn search skipped: no Gemini key is configured.');
   const all = () => [...rows, ...created];
   const scope = { leadId: lead.id, orgId: run.org_id };
   const ownerSuppressed = (name: string) => {
@@ -274,6 +275,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   };
   if (effort === 'custom') await checkHunterAllowance();
 
+  // Resolve an already saved identity before judging a trading-brand website. No name search here.
+  const savedRegistryNumber = cleanCompanyNumber(lead.company_number);
+  const knownRegistry = savedRegistryNumber || str(lead.raw_lead_id)
+    ? await resolveRegistry(service, lead, savedRegistryNumber ? chKey : null) : null;
   // the website pages, read once
   const siteDomain = domainFromWebsite(str(lead.website));
   // A website domain the user marked "Not their domain" is never read or searched.
@@ -283,7 +288,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const siteChecked = siteReadable && left() > 30_000;
   const sitePages = siteChecked ? await readCompanyPages(str(lead.website)!, 12_000) : [];
   // A website that shows clear signs of another company is only a weak signal: not read for people or other domains.
-  const suspicion = websiteSuspicion(sitePages, [str(lead.business_name) ?? '', ''].filter(Boolean), lead.country);
+  const suspicion = websiteSuspicion(sitePages, [str(lead.business_name) ?? '', knownRegistry?.name ?? ''].filter(Boolean), lead.country);
   if (suspicion.suspect) steps.push(`This website may belong to a different company: ${suspicion.reasons.join(' ')}`);
   const usableSite = siteReadable && !suspicion.suspect;
   stats.noWebsite = !usableSite;
@@ -297,7 +302,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     ...rows.flatMap((c) => (str(c.first_name) && str(c.last_name) && !c.dismissed_at && c.name_obfuscated !== true ? [{ first: str(c.first_name)!, last: str(c.last_name)! }] : [])),
     ...pages.flatMap(extractTeamMembers).flatMap(p => { const n = parseLeadPersonName(p.name); return n ? [{ first: n.first, last: n.last }] : []; }),
   ].slice(0, 6);
-  let registry = await resolveRegistry(service, lead, chKey, registryPeople, { pages, website: usableSite ? str(lead.website) : null, left, checkpoint, applyNumber: number => applyLead('company_number', number) });
+  let registry = knownRegistry?.number ? knownRegistry : await resolveRegistry(service, lead, chKey, registryPeople, { pages, website: usableSite ? str(lead.website) : null, left, checkpoint, applyNumber: number => applyLead('company_number', number) });
   registryEvidence = registry.evidence ?? {};
   steps.push(registryStep(registry));
   if (lead.country === 'IE' && await resolveOrgApiKey(service, run.org_id, 'cro')) {
@@ -517,10 +522,6 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // (1c) the email format on each confirmed domain, from addresses we already know there (contacts, the lead's own
   // email, addresses written on the domain's site). Built addresses are checked with our own checker first, then Hunter when it cannot decide and credits allow;
   // otherwise they are only offered as "Guess, unverified" suggestions: never filled in, never in sequences.
-  const knownNames = [
-    ...peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers).map((p) => ({ first: p.first, last: p.last })),
-    ...extraSitePeople.flatMap((p) => { const n = parseLeadPersonName(p.name); return n ? [{ first: n.first, last: n.last }] : []; }),
-  ].slice(0, 20);
   const ownerName = parseLeadPersonName(lead.owner_name);
   const checks = new GuessChecks(MAX_VERIFY_PER_LEAD);
   const confirmedGuessPeople = new Set<string>();
@@ -534,103 +535,114 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   };
   let checkerFailure: string | null = workerConfig ? null : checkerFailures.not_configured;
   let verifications = 0;
-  for (const d of [...verified].slice(0, 4)) {
-    const samples: PatternSample[] = [
-      ...all().flatMap((c) => (str(c.email) && emailDomain(str(c.email)) === d ? [{ email: str(c.email)!, first: str(c.first_name), last: str(c.last_name) }] : [])),
-      ...(str(lead.email) && emailDomain(str(lead.email)) === d ? [{ email: str(lead.email)!, first: ownerName?.first ?? null, last: ownerName?.last ?? null }] : []),
-      ...(siteEmails.get(d) ?? []).map((email) => ({ email, first: null, last: null })),
-    ];
-    const pattern = inferDomainPattern(d, samples, knownNames);
-    if (!pattern) continue;
-    steps.push(patternLine(d, pattern));
-    for (const person of peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers).slice(0, 5)) {
-      const guess = patternGuess(pattern, person, d);
-      if (!guess || emailOnLead(all(), guess) || suggestions.some((s) => s.value === guess)) continue;
+  const freeCheckedDomains = new Set<string>();
+  const runFreeDomainChecks = async (checkDomains: string[]) => {
+    for (const domain of checkDomains) freeCheckedDomains.add(domain);
+    const knownNames = [
+      ...peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers).map((p) => ({ first: p.first, last: p.last })),
+      ...extraSitePeople.flatMap((p) => { const n = parseLeadPersonName(p.name); return n ? [{ first: n.first, last: n.last }] : []; }),
+    ].slice(0, 20);
+
+    for (const d of checkDomains.slice(0, 4)) {
+      const samples: PatternSample[] = [
+        ...all().flatMap((c) => (str(c.email) && emailDomain(str(c.email)) === d ? [{ email: str(c.email)!, first: str(c.first_name), last: str(c.last_name) }] : [])),
+        ...(str(lead.email) && emailDomain(str(lead.email)) === d ? [{ email: str(lead.email)!, first: ownerName?.first ?? null, last: ownerName?.last ?? null }] : []),
+        ...(siteEmails.get(d) ?? []).map((email) => ({ email, first: null, last: null })),
+      ];
+      const pattern = inferDomainPattern(d, samples, knownNames);
+      if (!pattern) continue;
+      steps.push(patternLine(d, pattern));
+      for (const person of peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers).slice(0, 5)) {
+        const guess = patternGuess(pattern, person, d);
+        if (!guess || emailOnLead(all(), guess) || suggestions.some((s) => s.value === guess)) continue;
+        const name = `${person.first} ${person.last}`.slice(0, 80);
+        if (confirmedGuessPeople.has(name)) continue;
+        let verdict: string | null = null;
+        let label = guessLabel(pattern, d);
+        // Free checker first; Hunter is asked only when it cannot decide and credits remain.
+        const checked = canCheckGuess() && checks.canCheck(guess, true) ? await checkEmail(guess) : null;
+        if (checked) {
+          checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : '');
+          if (!checked.ok) { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
+        }
+        const action = verifyAction(checked && checked.ok ? checked.value.status : null, !!hunterKey && verifications < 3 && left() > 25_000);
+        if (action === 'drop') continue;
+        if (action === 'accept') {
+          confirmedGuessPeople.add(name);
+          detail(name, 'An email-format guess was confirmed by our email checker.');
+          verdict = 'verified';
+          label = 'Built from the email format and confirmed by our email checker, check it';
+        } else if (action === 'ask_hunter' && await spend.hunter('verify email format')) {
+          verifications++;
+          const v = await hunterVerifyEmail(guess, hunterKey!, 5_000);
+          if (v.ok) {
+            verdict = v.verdict;
+            if (verdict === 'verified') label = 'Built from the email format and verified by Hunter, check it';
+          } else {
+            problems.push({ step: 'hunter_verify', target: d, failure: safeFailure(v.failure) });
+            if (v.failure === 'usage_exhausted' || v.failure === 'rate_limited') spend.stopHunter();
+          }
+        }
+        if (verdict === 'invalid') continue;
+        if (verdict !== 'verified' && checked && checked.ok) label = unconfirmedLabel(checked.value.reason);
+        const contact = person.contactId ? all().find((c) => c.id === person.contactId) ?? null : null;
+        // When our checker answered (risky/unverifiable) Hunter's "verified" only makes this a labelled suggestion, never a fill.
+        const checkerSaidValid = action === 'accept';
+        if (verdict === 'verified' && contact && checkerSaidValid) {
+          const saved = await saveContact(contact, { email: guess });
+          if (saved) { Object.assign(contact, saved); touched.add(contact.id); stats.officerEmails++; }
+        } else {
+          suggestions.push({ name, field: 'email', value: guess, label });
+        }
+      }
+    }
+
+    // Common guesses share the inferred-format check budget. Only our checker's valid verdict can fill a blank.
+    // A new person always remains a suggestion for human review, even when their guessed address is valid.
+    for (const person of lookupPeople().slice(0, 5)) {
       const name = `${person.first} ${person.last}`.slice(0, 80);
       if (confirmedGuessPeople.has(name)) continue;
-      let verdict: string | null = null;
-      let label = guessLabel(pattern, d);
-      // Free checker first; Hunter is asked only when it cannot decide and credits remain.
-      const checked = canCheckGuess() && checks.canCheck(guess, true) ? await checkEmail(guess) : null;
-      if (checked) {
-        checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : '');
-        if (!checked.ok) { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
-      }
-      const action = verifyAction(checked && checked.ok ? checked.value.status : null, !!hunterKey && verifications < 3 && left() > 25_000);
-      if (action === 'drop') continue;
-      if (action === 'accept') {
-        confirmedGuessPeople.add(name);
-        detail(name, 'An email-format guess was confirmed by our email checker.');
-        verdict = 'verified';
-        label = 'Built from the email format and confirmed by our email checker, check it';
-      } else if (action === 'ask_hunter' && await spend.hunter('verify email format')) {
-        verifications++;
-        const v = await hunterVerifyEmail(guess, hunterKey!, 5_000);
-        if (v.ok) {
-          verdict = v.verdict;
-          if (verdict === 'verified') label = 'Built from the email format and verified by Hunter, check it';
-        } else {
-          problems.push({ step: 'hunter_verify', target: d, failure: safeFailure(v.failure) });
-          if (v.failure === 'usage_exhausted' || v.failure === 'rate_limited') spend.stopHunter();
+      for (const d of checkDomains.slice(0, 4)) {
+        const candidates = commonEmailCandidates(person.first, person.last, d);
+        if (candidates.length === 0) { detail(name, 'This name could not be used to build an email address.'); continue; }
+        let tried = candidates.filter((email) => checks.attempted.has(email)).length;
+        let valid = false;
+        for (const guess of candidates) {
+          if (checks.catchAll.has(d) || checkerFailure) break;
+          if (emailOnLead(all(), guess) || suggestions.some((s) => s.value.toLowerCase() === guess) || !checks.canCheck(guess)) continue;
+          if (!canCheckGuess()) { detail(name, 'Not enough time left in this run, try Deep find again.'); break; }
+          const checked = await checkEmail(guess);
+          checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : '');
+          if (!checked.ok) {
+            checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; break;
+          }
+          tried++;
+          if (checks.catchAll.has(d)) break;
+          if (verifyAction(checked.value.status, false) !== 'accept') continue;
+          valid = checks.shouldStopPerson(checked.value.status);
+          const contact = person.contactId ? all().find((c) => c.id === person.contactId) : null;
+          if (contact) {
+            const saved = await saveContact(contact, { email: guess });
+            if (saved) {
+              Object.assign(contact, saved); touched.add(contact.id); stats.officerEmails++;
+              steps.push(`${name}: ${COMMON_GUESS_LABEL}.`);
+            } else detail(name, 'A confirmed guess could not be saved; refresh and try again.');
+          } else suggestions.push({ name, field: 'email', value: guess, label: COMMON_GUESS_LABEL });
+          break;
         }
-      }
-      if (verdict === 'invalid') continue;
-      if (verdict !== 'verified' && checked && checked.ok) label = unconfirmedLabel(checked.value.reason);
-      const contact = person.contactId ? all().find((c) => c.id === person.contactId) ?? null : null;
-      // When our checker answered (risky/unverifiable) Hunter's "verified" only makes this a labelled suggestion, never a fill.
-      const checkerSaidValid = action === 'accept';
-      if (verdict === 'verified' && contact && checkerSaidValid) {
-        const saved = await saveContact(contact, { email: guess });
-        if (saved) { Object.assign(contact, saved); touched.add(contact.id); stats.officerEmails++; }
-      } else {
-        suggestions.push({ name, field: 'email', value: guess, label });
+        if (checks.catchAll.has(d)) {
+          for (const guess of candidates.slice(0, 2)) {
+            if (!emailOnLead(all(), guess) && !suggestions.some((s) => s.field === 'email' && s.value.toLowerCase() === guess)) suggestions.push({ name, field: 'email', value: guess, label: CATCH_ALL_GUESS_LABEL });
+          }
+          detail(name, 'The mail server accepts any address, so guesses cannot be confirmed.');
+        } else if (tried > 0) detail(name, `Tried ${tried} common format${tried === 1 ? '' : 's'} on ${d} (${valid ? 'one confirmed for review' : 'none confirmed'}).`);
+        else if (!checkerFailure && canCheckGuess() && !checks.canCheck(candidates[0]!)) detail(name, 'The email check limit for this run or domain was reached.');
+        if (valid) break;
       }
     }
-  }
 
-  // Common guesses share the inferred-format check budget. Only our checker's valid verdict can fill a blank.
-  // A new person always remains a suggestion for human review, even when their guessed address is valid.
-  for (const person of lookupPeople().slice(0, 5)) {
-    const name = `${person.first} ${person.last}`.slice(0, 80);
-    if (confirmedGuessPeople.has(name)) continue;
-    for (const d of [...verified].slice(0, 4)) {
-      const candidates = commonEmailCandidates(person.first, person.last, d);
-      if (candidates.length === 0) { detail(name, 'This name could not be used to build an email address.'); continue; }
-      let tried = candidates.filter((email) => checks.attempted.has(email)).length;
-      let valid = false;
-      for (const guess of candidates) {
-        if (checks.catchAll.has(d) || checkerFailure) break;
-        if (emailOnLead(all(), guess) || suggestions.some((s) => s.value.toLowerCase() === guess) || !checks.canCheck(guess)) continue;
-        if (!canCheckGuess()) { detail(name, 'Not enough time left in this run, try Deep find again.'); break; }
-        const checked = await checkEmail(guess);
-        checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : '');
-        if (!checked.ok) {
-          checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; break;
-        }
-        tried++;
-        if (checks.catchAll.has(d)) break;
-        if (verifyAction(checked.value.status, false) !== 'accept') continue;
-        valid = checks.shouldStopPerson(checked.value.status);
-        const contact = person.contactId ? all().find((c) => c.id === person.contactId) : null;
-        if (contact) {
-          const saved = await saveContact(contact, { email: guess });
-          if (saved) {
-            Object.assign(contact, saved); touched.add(contact.id); stats.officerEmails++;
-            steps.push(`${name}: ${COMMON_GUESS_LABEL}.`);
-          } else detail(name, 'A confirmed guess could not be saved; refresh and try again.');
-        } else suggestions.push({ name, field: 'email', value: guess, label: COMMON_GUESS_LABEL });
-        break;
-      }
-      if (checks.catchAll.has(d)) {
-        for (const guess of candidates.slice(0, 2)) {
-          if (!emailOnLead(all(), guess) && !suggestions.some((s) => s.field === 'email' && s.value.toLowerCase() === guess)) suggestions.push({ name, field: 'email', value: guess, label: CATCH_ALL_GUESS_LABEL });
-        }
-        detail(name, 'The mail server accepts any address, so guesses cannot be confirmed.');
-      } else if (tried > 0) detail(name, `Tried ${tried} common format${tried === 1 ? '' : 's'} on ${d} (${valid ? 'one confirmed for review' : 'none confirmed'}).`);
-      else if (!checkerFailure && canCheckGuess() && !checks.canCheck(candidates[0]!)) detail(name, 'The email check limit for this run or domain was reached.');
-      if (valid) break;
-    }
-  }
+  };
+  await runFreeDomainChecks([...verified].slice(0, 4));
 
   if (effort !== 'custom') {
     // Re-check saved emails: an address alone, catch-all or unavailable verdict is never verified evidence.
@@ -641,9 +653,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       if (checked.ok && checked.value.status === 'valid') break;
     }
     const decision = deepPhaseDecision(effort, {
-      verifiedEmail: [...checkedEmails.values()].some(c => c.ok && c.value.status === 'valid'),
-      namedPerson: (!!parseLeadPersonName(lead.owner_name) && !ownerSuppressed(String(lead.owner_name))) || all().some(c => c.kind !== 'general' && !c.dismissed_at && c.name_obfuscated !== true && !!parseLeadPersonName(`${str(c.first_name) ?? ''} ${str(c.last_name) ?? ''}`))
-        || [...trustedOwnerPeople, ...extraSitePeople, ...pages.flatMap(extractTeamMembers)].some(p => !!parseLeadPersonName(p.name) && !ownerSuppressed(p.name)),
+      verifiedEmail: emails.some(email => { const c = checkedEmails.get(email.toLowerCase()); return c?.ok && c.value.status === 'valid'; }),
+      namedPerson: (!!parseLeadPersonName(lead.owner_name) && !ownerSuppressed(String(lead.owner_name))) || all().some(c => (isOwnerRole(c.title) || (['hunter', 'apollo', 'web'].includes(str(c.source) ?? '') && !!str(c.title))) && c.kind !== 'general' && !c.dismissed_at && c.name_obfuscated !== true && !!parseLeadPersonName(`${str(c.first_name) ?? ''} ${str(c.last_name) ?? ''}`))
+        || officers.some(o => !!parseLeadPersonName(`${o.first_name ?? ''} ${o.last_name ?? ''}`))
+        || [...trustedOwnerPeople, ...extraSitePeople, ...pages.flatMap(extractTeamMembers), ...webPeople].some(p => !!str(p.role) && !!parseLeadPersonName(p.name) && !ownerSuppressed(p.name)),
       confirmedWebsite: discovery.domains.some(d => d.domain === domainFromWebsite(str(lead.website)) && !d.needs_check && d.sources.includes('site_confirms')),
     });
     steps.push(decision.line);
@@ -651,7 +664,13 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     spend.enabled = deepEnabled;
     if (deepEnabled) {
       hunterKey = configured.hunterKey; geminiKey = configured.geminiKey;
+      if (effort === 'extra_high') ocKey = configured.ocKey;
       if (effort === 'high' || effort === 'extra_high') { apolloKey = configured.apolloKey; placesKey = configured.placesKey; }
+      if (effort === 'extra_high' && ocKey && !str(lead.owner_name) && !officers.length && left() > 30_000) {
+        await checkpoint();
+        const name = await lookupOpenCorporatesOfficer(str(lead.business_name) ?? '', ocKey);
+        if (name) suggestions.push({ name, field: 'owner_name', value: name, label: 'OpenCorporates officer match; check company and ownership before adding.' });
+      }
       await checkHunterAllowance();
       await fillPlaces();
       // The free discovery has finished; only now may missing details use provider credits.
@@ -689,6 +708,23 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         steps.push(registryStep(registry));
         if (registry.number) await addRegistryOfficers();
       }
+      // Newly confirmed domains share the original time reserves, checker budget and Hunter caps.
+      const newDomains = [...verified].filter(d => !freeCheckedDomains.has(d)).slice(0, Math.max(0, 4 - freeCheckedDomains.size));
+      for (const domain of newDomains) {
+        const supplied = deeper.sitePages.find(s => s.domain === domain)?.pages ?? [];
+        const pageBudget = Math.min(8_000, optionalBudget() - 30_000);
+        if (!supplied.length && pageBudget >= 2_000) await checkpoint();
+        const newPages = supplied.length ? supplied : pageBudget >= 2_000 ? await readCompanyPages('https://' + domain, pageBudget) : [];
+        if (newPages.length) {
+          siteEmails.set(domain, domainEmailsOnPages(newPages, domain));
+          if (!confirmedSites.some(s => s.domain === domain)) confirmedSites.push({ domain, pages: newPages });
+          extraSitePeople.push(...newPages.flatMap(extractTeamMembers));
+          for (const email of siteEmails.get(domain) ?? []) {
+            if (!emailOnLead(all(), email) && !suggestions.some(s => s.value === email)) suggestions.push({ name: 'Company contact', field: 'email', value: email, label: 'Found on ' + domain + ', check it' });
+          }
+        }
+      }
+      await runFreeDomainChecks(newDomains);
       await readDeeperPages();
     }
   } else steps.push(deepPhaseDecision('custom', { verifiedEmail: false, namedPerson: false, confirmedWebsite: false }).line);

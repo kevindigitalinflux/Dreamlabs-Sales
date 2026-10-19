@@ -37,7 +37,7 @@ export function officerAppointmentPaths(json: unknown, person: OfficerQuery): st
     const lastWords = last.split(' ');
     const hasLast = words.some((_, i) => lastWords.every((w, j) => words[i + j] === w));
     const given = words.filter((w) => !lastWords.includes(w));
-    const firstOk = given.some((w) => w === first) || given[0] === first[0];
+    const firstOk = first.length > 1 && given[0] === first;
     const path = typeof r.links?.self === 'string' ? r.links.self : '';
     if (hasLast && firstOk && APPOINTMENTS_PATH.test(path) && !out.includes(path)) out.push(path);
   }

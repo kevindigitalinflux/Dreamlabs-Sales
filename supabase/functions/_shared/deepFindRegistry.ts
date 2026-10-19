@@ -6,9 +6,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { fetchActiveOfficers, fetchCompanyProfile, fetchOfficerAppointments, searchCompaniesByName, searchOfficers } from './companiesHouse.ts';
 import { matchRegistryEvidence, type RegistryEvidence } from './registryEvidence.ts';
-import { companyNameTokens } from './registrySearch.ts';
 import { fetchActivePscNames } from './registryProofPeople.ts';
-import { sameCompanyName } from './nameVariants.ts';
 import { appointmentCompanies, officerAppointmentPaths, type OfficerQuery } from './registryOfficerSearch.ts';
 import { cleanCompanyNumber, locationAgrees, scoreCompanyCandidates, type CompanyCandidate } from './registrySearch.ts';
 import { registrySearchNames } from './nameVariants.ts';
@@ -95,8 +93,7 @@ export async function resolveRegistry(
   const scored = proof.cached ?? scoreCompanyCandidates(items, name, loc);
   anyOk ||= !!proof.cached;
   const officers: Record<string, string[]> = { ...proof.cachedPeople };
-  const words = companyNameTokens(name);
-  for (const c of scored.filter(c => c.status === 'active' && words.length > 0 && (words.every(w => companyNameTokens(c.name).includes(w)) || sameCompanyName(c.name, name))).slice(0, 3)) {
+  for (const c of scored.filter(c => c.status === 'active').slice(0, 3)) {
     if (Object.hasOwn(officers, c.company_number)) continue;
     if (!people.length || (proof.left && proof.left() < 15_000)) break;
     await proof.checkpoint?.();

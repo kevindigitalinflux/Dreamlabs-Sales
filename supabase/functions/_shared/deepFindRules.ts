@@ -7,7 +7,8 @@ import { effortTotals, isEffort, type Effort } from './deepFindEffort.ts';
 export const MAX_DEEP_FIND_LEADS = 25;
 /** Caps per run: `hunter` is Hunter CREDITS (one unit per Hunter request, each request limited to about one credit), `ai` is AI calls. */
 export const DEFAULT_CAPS = { hunter: 60, ai: 25 } as const;
-export const CAP_LIMITS = { hunter: 500, ai: 200 } as const;
+export { CAP_LIMITS } from './deepFindLimits.ts';
+import { CAP_LIMITS } from './deepFindLimits.ts';
 /** At most this many people from Hunter lists are stored per lead. */
 export const MAX_HUNTER_PEOPLE_PER_LEAD = 15;
 /** At most this many registry officers get a wide lookup per lead. */

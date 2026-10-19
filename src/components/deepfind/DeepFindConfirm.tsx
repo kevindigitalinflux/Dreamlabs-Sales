@@ -3,7 +3,7 @@ import { useState } from 'react';
 import type { HunterAllowance } from '../../lib/deepFind';
 import { DEEP_FIND_CAP_LIMITS } from '../../lib/deepFindView';
 import { HunterAllowanceLine } from './HunterAllowanceLine';
-import { EFFORT_LEVELS, effortTotals, type Effort } from '../../../supabase/functions/_shared/deepFindEffort';
+import { EFFORT_LEVELS, effortTotals, hunterAllowanceLeft, type Effort } from '../../../supabase/functions/_shared/deepFindEffort';
 
 interface DeepFindConfirmProps {
   leadCount: number;
@@ -20,7 +20,7 @@ interface DeepFindConfirmProps {
 export function DeepFindConfirm({ leadCount, hunterCap, aiCap, onHunterCap, onAiCap, capError, effort = 'medium', onEffort }: DeepFindConfirmProps) {
   const [allowance, setAllowance] = useState<HunterAllowance | null>(null);
   const totals = effort === 'custom' ? { hunter: Number(hunterCap) || 0, ai: Number(aiCap) || 0, firecrawl: Math.min(leadCount, 100), scrapes: Math.min(leadCount, 100) } : effortTotals(effort, leadCount);
-  const hunterLeft = allowance?.configured === false || allowance?.usedUp ? 0 : allowance?.searchesLeft ?? allowance?.creditsLeft ?? null;
+  const hunterLeft = hunterAllowanceLeft(allowance);
   const hunterTotal = hunterLeft === null ? totals.hunter : Math.min(totals.hunter, hunterLeft);
   return (
     <div className="flex flex-col gap-3 text-sm">
@@ -48,7 +48,7 @@ export function DeepFindConfirm({ leadCount, hunterCap, aiCap, onHunterCap, onAi
         </div>
       </fieldset>
       <button type="button" aria-pressed={effort === 'custom'} className="self-start underline focus-visible:outline-2 focus-visible:outline-violet" onClick={() => onEffort?.('custom')}>Custom</button>
-      <p role="status">For {leadCount} leads: up to {hunterTotal} Hunter credits, {totals.ai} AI calls, {totals.firecrawl} Firecrawl pages, {totals.scrapes} browser scrapes, and our email checker (free).</p>
+      <p role="status">For {leadCount} {leadCount === 1 ? 'lead' : 'leads'}: up to {hunterTotal} Hunter credits, {totals.ai} AI calls, {totals.firecrawl} Firecrawl pages, {totals.scrapes} browser scrapes, and our email checker (free).</p>
       <HunterAllowanceLine requested={totals.hunter} onAllowance={setAllowance} />
       {effort === 'custom' && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Input label={`Hunter credits (max ${DEEP_FIND_CAP_LIMITS.hunter})`} inputMode="numeric" value={hunterCap} onChange={(e) => onHunterCap(e.target.value)} />

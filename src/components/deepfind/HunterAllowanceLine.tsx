@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useOrg } from '../../hooks/useOrg';
 import { fetchHunterAllowance, hunterAllowanceText, type HunterAllowance } from '../../lib/deepFind';
-import { hunterShortfall } from '../../../supabase/functions/_shared/deepFindEffort';
+import { hunterShortfall, hunterAllowanceLeft } from '../../../supabase/functions/_shared/deepFindEffort';
 
 /**
  * "Hunter: N searches left this month", read through the server from Hunter's free account endpoint. Warns (but does
@@ -25,6 +25,6 @@ export function HunterAllowanceLine({ requested = 0, onAllowance }: { requested?
   if (state.loading) return <p className="text-xs text-muted">Checking Hunter&apos;s searches left this month...</p>;
   const text = hunterAllowanceText(state.allowance);
   if (!text) return <p className="text-xs text-muted">Could not check how many Hunter searches are left.</p>;
-  const warning = hunterShortfall(state.allowance?.searchesLeft ?? null, requested);
+  const warning = hunterShortfall(hunterAllowanceLeft(state.allowance), requested);
   return <p role="status" className={state.allowance?.usedUp || warning ? 'text-xs text-danger' : 'text-xs text-muted'}>{text}{warning && <> {warning}</>}</p>;
 }

@@ -5,6 +5,7 @@ vi.mock('../../supabase/functions/_shared/rateLimit', () => ({ checkRateLimit: v
 vi.mock('../../supabase/functions/_shared/domainDiscoveryLookup', () => ({ discoverLeadDomains: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/knownPersonLookup', () => ({ readCompanyPages: vi.fn(async () => []), webSearchForPerson: vi.fn(), hunterAccount: vi.fn(), hunterDomainList: vi.fn(), hunterVerifyEmail: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/deepFindPeople', () => ({ lookUpPeople: vi.fn() }));
+vi.mock('../../supabase/functions/_shared/openCorporates', () => ({ lookupOpenCorporatesOfficer: vi.fn(async () => null) }));
 vi.mock('../../supabase/functions/_shared/registryWebProof', () => ({ registryWebNumbers: vi.fn(async () => []) }));
 vi.mock('../../supabase/functions/_shared/googlePlacesLookup', () => ({ lookupPlaceContact: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/apolloHunterLookup', () => ({ lookupApolloPhone: vi.fn() }));
@@ -12,17 +13,18 @@ vi.mock('../../supabase/functions/_shared/apolloPeopleSearch', () => ({ searchAp
 vi.mock('../../supabase/functions/_shared/workerClient', () => ({ makeWorkerClient: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/companiesHouse', () => ({ fetchActiveOfficers: vi.fn(async () => []), searchCompaniesByName: vi.fn(), searchOfficers: vi.fn(async () => []), fetchCompanyProfile: vi.fn() }));
 import { makeWorkerClient } from '../../supabase/functions/_shared/workerClient';
-import { fetchActiveOfficers } from '../../supabase/functions/_shared/companiesHouse';
+import { fetchCompanyProfile, fetchActiveOfficers } from '../../supabase/functions/_shared/companiesHouse';
 import { lookupPlaceContact } from '../../supabase/functions/_shared/googlePlacesLookup';
 import { lookupApolloPhone } from '../../supabase/functions/_shared/apolloHunterLookup';
 import { searchApolloDecisionMakers } from '../../supabase/functions/_shared/apolloPeopleSearch';
 import { searchCompaniesByName } from '../../supabase/functions/_shared/companiesHouse';
 import { resolveOrgApiKey, resolveOrgWorkerConfig } from '../../supabase/functions/_shared/orgApiKeys';
 import { discoverLeadDomains } from '../../supabase/functions/_shared/domainDiscoveryLookup';
-import { webSearchForPerson, readCompanyPages, hunterAccount, hunterDomainList } from '../../supabase/functions/_shared/knownPersonLookup';
+import { webSearchForPerson, readCompanyPages, hunterAccount, hunterDomainList, hunterVerifyEmail } from '../../supabase/functions/_shared/knownPersonLookup';
 import { lookUpPeople } from '../../supabase/functions/_shared/deepFindPeople';
 import { processDeepFindLead } from '../../supabase/functions/_shared/deepFind';
 import { checkRateLimit } from '../../supabase/functions/_shared/rateLimit';
+import { lookupOpenCorporatesOfficer } from '../../supabase/functions/_shared/openCorporates';
 import { registryWebNumbers } from '../../supabase/functions/_shared/registryWebProof';
 import { undoDeepFindChange } from './deepFindReview';
 
@@ -405,4 +407,119 @@ it('dedupes existing dismissal keys while appending Undo suppression', async () 
   const out = await run();
   await undoDeepFindChange(service, 'user', 'lead', out.domains.auto_applied.find(c => c.field === 'website'));
   expect(lead.dismissed_suggestions).toEqual(['person:other', 'website:acme.com']);
+});
+
+it('Low keeps free Companies House with a key and does not claim Gemini is missing', async () => {
+  resolveOrgApiKey.mockResolvedValue('fake');
+  const out = await run('low');
+  expect(searchCompaniesByName).toHaveBeenCalled();
+  expect(out.domains.steps.join(' ')).not.toContain('LinkedIn search skipped');
+});
+it('accepts a saved registered name when the site only carries that legal name', async () => {
+  lead.company_number = '13550006'; lead.business_name = 'Trading Brand';
+  resolveOrgApiKey.mockImplementation(async (_s,_o,p) => p === 'companies_house' ? 'fake' : null);
+  fetchCompanyProfile.mockResolvedValue({ name: 'OTHER LEGAL ENTITY LIMITED', address: null, locality: null });
+  readCompanyPages.mockResolvedValue(['<title>OTHER LEGAL ENTITY LIMITED</title><footer>OTHER LEGAL ENTITY LIMITED</footer>']);
+  const out = await run('low');
+  expect(out.domains.steps.join(' ')).not.toContain('may belong to a different company');
+  expect(fetchCompanyProfile).toHaveBeenCalledTimes(1);
+});
+it.each(['medium', 'high'])('%s runs guesses on a domain first confirmed by deep web search', async effort => {
+  contacts[0].email = null;
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'test' } });
+  discoverLeadDomains.mockResolvedValueOnce({ domains: [], people: [], notes: [], problems: [], sitePages: [] })
+    .mockResolvedValueOnce({ domains: [{ domain: 'newco.com', sources: ['web'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] });
+  await run(effort);
+  expect(worker.verifyEmail.mock.calls.some(([email]) => email.endsWith('@newco.com'))).toBe(true);
+});
+it('valid suggestion-only guesses do not stop Medium deepening', async () => {
+  contacts = []; lead.owner_name = 'Jane Smith';
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'test' } });
+  const out = await run('medium');
+  expect(out.domains.steps.join(' ')).toContain('deeper steps ran');
+});
+it.each([null, 'Account Manager', 'Product Owner'])('contact title %s is not a decision maker', async title => {
+  contacts[0].title = title;
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'test' } });
+  const out = await run('medium');
+  expect(out.domains.steps.join(' ')).toContain('a named decision maker, so deeper steps ran');
+});
+
+it.each(['hunter', 'apollo', 'web'])('Medium counts a titled person from %s', async source => {
+  contacts[0].title = 'Sales Manager'; contacts[0].source = source;
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'test' } });
+  expect((await run('medium')).domains.steps.join(' ')).toContain('deeper steps were skipped');
+});
+it.each([null, 'Director'])('web person with role %s controls depth', async role => {
+  contacts[0].title = null;
+  discoverLeadDomains.mockResolvedValue({ domains: [], people: [{ name: 'Alex Brown', role }], notes: [], problems: [], sitePages: [] });
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'test' } });
+  expect((await run('medium')).domains.steps.join(' ')).toContain(role ? 'deeper steps were skipped' : 'a named decision maker, so deeper steps ran');
+});
+it('site text containing only a name does not satisfy the decision maker gate', async () => {
+  contacts[0].title = null;
+  readCompanyPages.mockResolvedValue(['<title>Acme</title><p>Alex Brown</p>']);
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'test' } });
+  expect((await run('medium')).domains.steps.join(' ')).toContain('a named decision maker, so deeper steps ran');
+});
+it('Medium counts an active individual registry officer even without an owner title', async () => {
+  lead.company_number = '13550006'; contacts[0].title = null;
+  resolveOrgApiKey.mockImplementation(async (_s,_o,p) => p === 'companies_house' ? 'fake' : null);
+  fetchActiveOfficers.mockResolvedValue([{ first_name: 'Alex', last_name: 'Brown', title: 'Secretary' }]);
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'test' } });
+  expect((await run('medium')).domains.steps.join(' ')).toContain('deeper steps were skipped');
+});
+it('Medium counts a checker-valid lead email', async () => {
+  contacts[0].email = null; lead.email = 'office@acme.com';
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'test' } });
+  expect((await run('medium')).domains.steps.join(' ')).toContain('deeper steps were skipped');
+});
+it('uses the raw lead legal name before website suspicion', async () => {
+  lead.raw_lead_id = 'raw'; lead.business_name = 'Trading Brand';
+  const original = service.from;
+  service.from = table => table === 'raw_leads' ? { select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: { source: 'companies_house', source_id: '13550006', raw_data: { company: { title: 'OTHER LEGAL ENTITY LIMITED' } } } }) } : original(table);
+  readCompanyPages.mockResolvedValue(['<title>OTHER LEGAL ENTITY LIMITED</title><footer>OTHER LEGAL ENTITY LIMITED</footer>']);
+  expect((await run('low')).domains.steps.join(' ')).not.toContain('may belong to a different company');
+});
+it.each(['low', 'medium', 'high', 'extra_high'])('%s allows OpenCorporates only for Extra high', async effort => {
+  resolveOrgApiKey.mockImplementation(async (_s,_o,p) => p === 'opencorporates' ? 'fake' : null);
+  await run(effort);
+  expect(lookupOpenCorporatesOfficer).toHaveBeenCalledTimes(effort === 'extra_high' ? 1 : 0);
+});
+it.each([false, true])('late-domain inference uses checker first and Hunter only when configured: %s', async hunter => {
+  contacts[0].email = null; lead.owner_name = 'Alex Brown';
+  resolveOrgApiKey.mockImplementation(async (_s,_o,p) => hunter && p === 'hunter' ? 'fake' : null);
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'unverifiable', reason: 'test' } });
+  hunterVerifyEmail.mockResolvedValue({ ok: true, verdict: 'unverifiable' });
+  discoverLeadDomains.mockResolvedValueOnce({ domains: [], people: [], notes: [], problems: [], sitePages: [] })
+    .mockResolvedValueOnce({ domains: [{ domain: 'newco.com', sources: ['web'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] });
+  readCompanyPages.mockImplementation(async url => url.includes('newco.com') ? ['<title>Acme</title><p>alex.brown@newco.com</p>'] : []);
+  await run('medium');
+  expect(worker.verifyEmail).toHaveBeenCalledWith('jane.smith@newco.com');
+  expect(hunterVerifyEmail).toHaveBeenCalledTimes(hunter ? 1 : 0);
+});
+
+it('historical registry source alone does not prove an active decision maker', async () => {
+  contacts[0].source = 'companies_house'; contacts[0].title = 'Secretary';
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'test' } });
+  expect((await run('medium')).domains.steps.join(' ')).toContain('a named decision maker, so deeper steps ran');
+});
+
+it('late own-site reads preserve the downstream people and checker reserve', async () => {
+  contacts[0].email = null;
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'test' } });
+  let elapsed = 0;
+  vi.spyOn(Date, 'now').mockImplementation(() => elapsed);
+  discoverLeadDomains.mockImplementation(async (_s,_l,options) => {
+    if (!options.allow.web) return { domains: [], people: [], notes: [], problems: [], sitePages: [] };
+    elapsed = 20_000;
+    return { domains: [{ domain: 'newco.com', sources: ['web'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] };
+  });
+  await run('medium');
+  expect(readCompanyPages.mock.calls.some(([url]) => url.includes('newco.com'))).toBe(false);
+  expect(worker.verifyEmail.mock.calls.some(([email]) => email.endsWith('@newco.com'))).toBe(true);
 });
