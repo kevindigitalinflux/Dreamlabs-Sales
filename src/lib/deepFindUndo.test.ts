@@ -1,0 +1,33 @@
+import { expect, it, vi } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { undoDeepFindChange } from './deepFindReview';
+import type { AutoApplied } from '../../supabase/functions/_shared/deepFindAutoApply';
+const change: AutoApplied = { table: 'decision_maker_candidates', id: 'contact', field: 'linkedin_url', before: null, after: 'https://www.linkedin.com/in/jane' };
+function db(data: unknown = [{ id: 'contact' }], error: unknown = null) {
+  const filters: unknown[] = []; const update = vi.fn();
+  const q = { update: (patch: unknown) => { update(patch); return q; }, eq: (...a: unknown[]) => { filters.push(a); return q; },
+    select: () => q, then: (resolve: (v: unknown) => void) => resolve({ data, error }) };
+  return { client: { from: () => q } as unknown as SupabaseClient, filters, update };
+}
+it('restores only the recorded field through a scoped atomic compare-and-set', async () => {
+  const d = db(); expect(await undoDeepFindChange(d.client, 'user', 'lead', change)).toBe('Undone.');
+  expect(d.update).toHaveBeenCalledWith({ linkedin_url: null });
+  expect(d.filters).toEqual([['id','contact'], ['lead_id','lead'], ['linkedin_url', change.after]]);
+});
+it('leaves concurrent changes alone and distinguishes errors from a no-row update', async () => {
+  expect(await undoDeepFindChange(db([]).client, 'user', 'lead', change)).toBe('Changed since, left as is');
+  await expect(undoDeepFindChange(db(null, { code: '42501' }).client, 'user', 'lead', change)).rejects.toThrow('Could not undo');
+});
+it('refuses unsigned writes, arbitrary fields and another lead identity', async () => {
+  const d = db();
+  await expect(undoDeepFindChange(d.client, null, 'lead', change)).rejects.toThrow('Sign in');
+  await expect(undoDeepFindChange(d.client, 'user', 'lead', { ...change, field: 'org_id' })).rejects.toThrow('Invalid');
+  await expect(undoDeepFindChange(d.client, 'user', 'lead', { ...change, table: 'leads', id: 'other', field: 'website' })).rejects.toThrow('Invalid');
+  expect(d.update).not.toHaveBeenCalled();
+});
+it('compares a complete archived-websites array using a Postgres array literal', async () => {
+  const d = db();
+  await undoDeepFindChange(d.client, 'user', 'lead', { table: 'leads', id: 'lead', field: 'additional_websites', before: null, after: ['old.com', 'https://example.com/?q="x"'] });
+  expect(d.filters).toContainEqual(['additional_websites', '{"old.com","https://example.com/?q=\\"x\\""}']);
+  expect(d.update).toHaveBeenCalledWith({ additional_websites: null });
+});

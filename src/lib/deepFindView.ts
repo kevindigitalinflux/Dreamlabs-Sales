@@ -1,6 +1,7 @@
 import type { DeepFindLeadRow } from '../types';
 import { registrySkipReason, visibleSuggestions } from '../../supabase/functions/_shared/deepFindSuggestions';
 import type { ReviewLead, ReviewContact } from '../../supabase/functions/_shared/deepFindSuggestions';
+import { readAutoApplied, type AutoApplied } from '../../supabase/functions/_shared/deepFindAutoApply';
 
 /** Defaults and limits shown in the Deep find confirm step (the server enforces the same). */
 export const DEEP_FIND_DEFAULT_CAPS = { hunter: 60, ai: 25 } as const;
@@ -19,6 +20,7 @@ export interface DeepFindNamed { name: string; role: string | null }
 
 /** The engine's per-lead details, read defensively (the JSON is engine-written but typed as unknown). */
 export interface DeepFindDetails {
+  autoApplied: AutoApplied[];
   domains: DeepFindDomain[];
   namedByWeb: DeepFindNamed[];
   namedOnSite: DeepFindNamed[];
@@ -40,7 +42,7 @@ export interface DeepFindDetails {
 }
 
 /** One address offered to check, with where it came from (a fixed label). */
-export interface DeepFindSuggestion { name: string; value: string; label: string }
+export interface DeepFindSuggestion { name: string; value: string; label: string; field?: string }
 
 /** One Companies House company offered with "Use this company". */
 export interface DeepFindCompanyCandidate { company_number: string; name: string; address: string | null; status: string | null; why?: string }
@@ -94,10 +96,11 @@ export function readDeepFindDetails(value: unknown): DeepFindDetails {
     const x = (typeof s === 'object' && s !== null ? s : {}) as Record<string, unknown>;
     const name = text(x.name, 80);
     const value = text(x.value, 200);
-    const label = text(x.label, 120);
-    return name && value && label && x.field === 'email' ? [{ name, value, label }] : [];
+    const label = text(x.label, 500);
+    return name && value && label && (x.field === 'email' || x.field === 'linkedin_url') ? [{ name, value, label, ...(x.field === 'linkedin_url' ? { field: x.field } : {}) }] : [];
   });
   return {
+    autoApplied: readAutoApplied(o.auto_applied),
     domains, namedByWeb: named(o.named_by_web), namedOnSite: named(o.named_on_site), unverified: named(o.unverified_people),
     companyCandidates: number ? [] : companyCandidates(o.company_candidates), companyNumber: number, steps, people: peopleList(o.people),
     websiteSuspect: o.website_suspect === true,

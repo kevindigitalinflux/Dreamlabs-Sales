@@ -47,6 +47,12 @@ it('fills only a still-blank, non-dismissed contact email', async () => {
   await saveDeepFindReview(db.client, 'user', 'lead', { ...s, name: 'Jane Smith' }, 'add');
   expect(db.writes[0]).toMatchObject({ patch: { email: 'hello@example.com', include_in_sequences: false }, filters: [['id','c'],['lead_id','lead'],['dismissed_at',null],['email',null]] });
 });
+it('adds a LinkedIn suggestion through the session without changing email or sequences', async () => {
+  const db = database({ contacts: [{ id: 'c', first_name: 'Jane', last_name: 'Smith', email: 'saved@example.com', linkedin_url: '' }] });
+  const suggestion = { name: 'Jane Smith', field: 'linkedin_url', value: 'https://www.linkedin.com/in/jane', label: 'Evidence to check' };
+  expect(await saveDeepFindReview(db.client, 'user', 'lead', suggestion, 'add')).toBe('saved');
+  expect(db.writes).toEqual([{ table: 'decision_maker_candidates', operation: 'update', patch: { linkedin_url: suggestion.value }, filters: [['id','c'],['lead_id','lead'],['dismissed_at',null],['linkedin_url','']] }]);
+});
 it('appends company emails and never writes sequence tables', async () => {
   const db = database({ email: 'primary@example.com' });
   await saveDeepFindReview(db.client, 'user', 'lead', s, 'add');

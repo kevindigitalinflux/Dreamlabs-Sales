@@ -2,6 +2,20 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { deepFindErrorCode } from './deepFindErrors';
 import { planOwnerFromSuggestion, planTitleUpgrade, planSuggestionAdd, registrySkipReason, roleForPerson, suggestionKey } from '../../supabase/functions/_shared/deepFindSuggestions';
 import type { ReviewContact, ReviewLead, ReviewSuggestion } from '../../supabase/functions/_shared/deepFindSuggestions';
+import { readAutoApplied, type AutoApplied } from '../../supabase/functions/_shared/deepFindAutoApply';
+
+/** User-session RLS applies. The after-value filter makes concurrent edits a harmless no-op. */
+export async function undoDeepFindChange(client: SupabaseClient, userId: string | null, leadId: string, change: AutoApplied): Promise<string> {
+  if (!userId) throw new Error('Sign in to undo this change.');
+  if (!readAutoApplied([change]).length || (change.table === 'leads' && change.id !== leadId)) throw new Error('Invalid automatic change.');
+  let query = client.from(change.table).update({ [change.field]: change.before }).eq('id', change.id);
+  if (change.table === 'decision_maker_candidates') query = query.eq('lead_id', leadId);
+  // PostgREST text[] equality needs an array literal, not JavaScript's comma-joined array string.
+  const after = Array.isArray(change.after) ? `{${change.after.map((v) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}` : change.after;
+  const { data, error } = await query.eq(change.field, after).select('id');
+  if (error) throw failure(error, 'Could not undo this change. Refresh and try again.');
+  return data?.length ? 'Undone.' : 'Changed since, left as is';
+}
 
 export interface ReviewState { lead: ReviewLead & { id: string; updated_at: string }; contacts: ReviewContact[] }
 const FAILURE = 'Could not save this change. Refresh and try again.';
@@ -21,7 +35,7 @@ const failure = (error: unknown, message = FAILURE) => Object.assign(new Error(m
 export async function loadDeepFindReview(client: SupabaseClient, leadId: string): Promise<ReviewState> {
   const [lead, contacts] = await Promise.all([
     client.from('leads').select('id, email, additional_emails, dismissed_suggestions, country, registry_candidates_rejected, owner_name, updated_at').eq('id', leadId).single(),
-    client.from('decision_maker_candidates').select('id, first_name, last_name, title, email, dismissed_at').eq('lead_id', leadId),
+    client.from('decision_maker_candidates').select('id, first_name, last_name, title, email, dismissed_at, linkedin_url').eq('lead_id', leadId),
   ]);
   if (lead.error || contacts.error || !lead.data || !contacts.data) throw failure(lead.error ?? contacts.error, 'Could not load this lead’s review details. Refresh and try again.');
   return { lead: lead.data as ReviewState['lead'], contacts: contacts.data as ReviewContact[] };
@@ -47,6 +61,12 @@ export async function saveDeepFindReview(client: SupabaseClient, userId: string 
   if (plan.kind === 'none' && !newTitle) return 'none';
   if (plan.kind === 'lead_update') {
     const { error } = await client.from('leads').update(plan.patch).eq('id', leadId).eq('updated_at', state.lead.updated_at).select('id').single();
+    if (error) throw failure(error);
+  } else if (plan.kind === 'linkedin_update') {
+    const old = state.contacts.find((c) => c.id === plan.id)!;
+    let query = client.from('decision_maker_candidates').update(plan.patch).eq('id', plan.id).eq('lead_id', leadId).is('dismissed_at', null);
+    query = old.linkedin_url === null || old.linkedin_url === undefined ? query.is('linkedin_url', null) : query.eq('linkedin_url', old.linkedin_url);
+    const { error } = await query.select('id').single();
     if (error) throw failure(error);
   } else if (plan.kind === 'contact_update') {
     const old = state.contacts.find((c) => c.id === plan.id)!;

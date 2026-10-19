@@ -16,6 +16,7 @@ describe('readDeepFindDetails', () => {
       named_on_site: 'nope',
       unverified_people: [{ name: 'Tom Reed', role: 'Director', email: 'tom@x.com' }],
     })).toEqual({
+      autoApplied: [],
       domains: [{ domain: 'loveliving.uk', needs_check: false }, { domain: 'x.com', needs_check: true }],
       namedByWeb: [{ name: 'David Cox', role: 'Owner' }],
       namedOnSite: [],
@@ -23,6 +24,7 @@ describe('readDeepFindDetails', () => {
       companyCandidates: [], companyNumber: null, steps: [], people: [], websiteSuspect: false, websiteReasons: [], suggestions: [],
     });
     expect(readDeepFindDetails(null)).toEqual({
+      autoApplied: [],
       domains: [], namedByWeb: [], namedOnSite: [], unverified: [], companyCandidates: [], companyNumber: null, steps: [], people: [], websiteSuspect: false, websiteReasons: [], suggestions: [],
     });
   });

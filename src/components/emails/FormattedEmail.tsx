@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { parseEmail, type Inline } from '../../../supabase/functions/_shared/emailFormat';
+import { websiteHref } from '../../lib/websiteHref';
 
 interface FormattedEmailProps {
   /** Email body in the marker syntax (**bold**, "- " bullets, "## " headings, [text](url) links). */
@@ -13,8 +14,10 @@ function renderInline(pieces: Inline[]): ReactNode[] {
   return pieces.map((p, i) => {
     if (p.kind === 'bold') return <strong key={i} className="font-bold">{p.text}</strong>;
     if (p.kind === 'link') {
+      const href = websiteHref(p.href);
+      if (!href) return <span key={i}>{p.text}</span>;
       return (
-        <a key={i} href={p.href} target="_blank" rel="noopener noreferrer" className="break-all text-violet underline">
+        <a key={i} href={href} target="_blank" rel="noreferrer noopener" className="break-all text-violet underline">
           {p.text}
         </a>
       );

@@ -3,7 +3,7 @@ export function websiteHref(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const text = value.trim();
   if (!text || /[\s\\\u0000-\u001f\u007f]/.test(text) || text.startsWith('//')) return null;
-  const hasScheme = /^[a-z][a-z\d+.-]*:/i.test(text);
+  const hasScheme = /^[a-z][a-z\d+.-]*:/i.test(text) && !/^[^/?#:]+:\d+(?:[/?#]|$)/.test(text);
   if (hasScheme && !/^https?:\/\//i.test(text)) return null;
   try {
     const url = new URL(hasScheme ? text : `https://${text}`);

@@ -5,6 +5,7 @@ import { DeepFindCompanyChoice } from './DeepFindCompanyChoice';
 import { CompanyDomainsEditor } from './CompanyDomainsEditor';
 import { DeepFindSuggestions } from './DeepFindSuggestions';
 import { registrySkipReason } from '../../../supabase/functions/_shared/deepFindSuggestions';
+import { DeepFindAutoChanges } from './DeepFindAutoChanges';
 
 const STATUS_CLASSES: Record<DeepFindRowWithLead['status'], string> = {
   queued: 'bg-surface text-muted',
@@ -56,6 +57,7 @@ export function DeepFindLeadResult({ row }: { row: DeepFindRowWithLead }) {
         </ul>
       )}
       <CompanyDomainsEditor leadId={row.lead_id} domains={details.domains} />
+      {row.lead && <DeepFindAutoChanges key={`${row.id}:${row.updated_at}`} leadId={row.lead_id} changes={details.autoApplied} />}
       {row.reason && <p className="text-xs">{row.reason}</p>}
       {details.people.length > 0 && (
         <p className="text-xs text-muted">
