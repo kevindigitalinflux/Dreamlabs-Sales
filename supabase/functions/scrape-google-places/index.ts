@@ -8,7 +8,7 @@ import { scrapeWebsiteContact } from '../_shared/websiteContact.ts';
 
 interface IcpParams {
   industry: string | null; location: string | null; city: string | null;
-  country: 'GB' | 'US' | 'other'; min_staff: number | null;
+  country: 'GB' | 'IE' | 'US' | 'other'; min_staff: number | null;
   min_rating: number | null; max_rating: number | null; max_reviews: number | null;
   keywords: string[];
 }

@@ -40,9 +40,9 @@ Deno.serve(async (req) => {
 description of their ideal customer into structured JSON search parameters.
 
 Return ONLY valid JSON matching this exact shape, no other text:
-{"industry": string|null, "location": string|null, "city": string|null, "country": "GB"|"US"|"other", "min_staff": number|null, "min_rating": number|null, "max_rating": number|null, "max_reviews": number|null, "keywords": string[]}
+{"industry": string|null, "location": string|null, "city": string|null, "country": "GB"|"IE"|"US"|"other", "min_staff": number|null, "min_rating": number|null, "max_rating": number|null, "max_reviews": number|null, "keywords": string[]}
 
-"country" must be "GB" if the location is in the United Kingdom, "US" if in the United States, "other" otherwise.
+"country" must be "GB" if the location is in the United Kingdom, "IE" if in Ireland, "US" if in the United States, "other" otherwise.
 If the user gives a rating range, split it into min_rating/max_rating. If unspecified, use null.
 "keywords" is a short list of extra search terms useful for a location-based business search (e.g. the industry name, near-synonyms).
 

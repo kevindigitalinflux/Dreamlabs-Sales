@@ -411,6 +411,7 @@ export type ScrapeSource = 'google_places' | 'companies_house' | 'cro' | 'csv_up
 export interface ScrapeJob {
   id: string;
   org_id: string;
+  created_by: string | null;
   /** The customer profile this search was run for; approved leads inherit it. */
   icp_id: string | null;
   icp_raw_input: string | null;
@@ -457,12 +458,14 @@ export interface IcpParams {
   industry: string | null;
   location: string | null;
   city: string | null;
-  country: 'GB' | 'US' | 'other';
+  country: 'GB' | 'IE' | 'US' | 'other';
   min_staff: number | null;
   min_rating: number | null;
   max_rating: number | null;
   max_reviews: number | null;
   keywords: string[];
+  /** Shared search marker persisted in existing JSON; absent on legacy and Autopilot searches. */
+  scrape_group?: { id: string; sources: Array<'google_places' | 'companies_house' | 'cro'> };
 }
 
 export interface EmailReply {

@@ -8,10 +8,11 @@ import { runBounded } from '../_shared/concurrency.ts';
 import { searchCroCompanies, splitCroSecret } from '../_shared/cro.ts';
 import type { RegistryOfficer } from '../_shared/registryOfficers.ts';
 import { lookupCompanyContacts } from '../_shared/registryContacts.ts';
+import { readScrapeGroup, registryContactKey } from '../_shared/scrapeGroup.ts';
 
 interface IcpParams {
   industry: string | null; location: string | null; city: string | null;
-  country: 'GB' | 'US' | 'other'; keywords: string[];
+  country: 'GB' | 'IE' | 'US' | 'other'; keywords: string[];
 }
 
 async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: string, icp: IcpParams, creds: { email: string; apiKey: string }, cap: number) {
@@ -29,7 +30,7 @@ async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: strin
       return seen.some((s) => s.business_name.toLowerCase() === businessName.toLowerCase());
     }
 
-    const googlePlaces = await resolveOrgApiKey(service, orgId, 'google_places');
+    const googlePlaces = registryContactKey(icp, await resolveOrgApiKey(service, orgId, 'google_places'));
     const city = icp.city ?? null;
     const found = await runBounded(companies, 5, async (c) => {
       // CRO's open data may not expose directors: officers stays [] (normal, not an error).
@@ -109,6 +110,10 @@ Deno.serve(async (req) => {
   if (!orgId || !body.icp_params) return json({ error: 'org_id and icp_params are required' }, 400, headers);
   // No country check: the ICP country union is GB | US | other (no Ireland), so this source is gated
   // on the explicit `cro` choice plus the org having a CRO key (checked below).
+  // Grouped browser searches now support IE explicitly. Keep legacy and cron requests unchanged.
+  if (!isCronCall && readScrapeGroup(body.icp_params) && body.icp_params.country !== 'IE') {
+    return json({ error: 'Irish CRO only covers Ireland searches' }, 400, headers);
+  }
 
   // A cron-triggered call is inherently org-scoped by the caller (run-autopilot
   // only ever passes the org_id of an autopilot_runs row it already fetched via

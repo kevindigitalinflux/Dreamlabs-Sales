@@ -2,32 +2,18 @@ import { useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import type { RawLead } from '../types';
+import { approveScrapeLead, rejectScrapeLead } from '../lib/approveScrapeLead';
 
 /** Approve/reject/skip a raw_leads row, plus the two paid enrichment actions. */
-export function useRawLeadActions(jobOrgId?: string, pipelineId?: string, jobIcpId?: string | null) {
+export function useRawLeadActions(jobOrgId?: string, pipelineId?: string, jobIcpId?: string | null, country?: string) {
   const { session } = useAuth();
 
   const approve = useCallback(async (lead: RawLead): Promise<string | null> => {
-    if (!jobOrgId) return 'Could not determine the organization for this lead';
-    if (!pipelineId) return 'Choose a pipeline before approving';
-    const { error: insertErr } = await supabase.from('leads').insert({
-      business_name: lead.business_name, owner_name: lead.owner_name, phone: lead.phone,
-      email: lead.email, website: lead.website, address: lead.address, city: lead.city,
-      postcode: lead.postcode, google_rating: lead.google_rating, review_count: lead.review_count,
-      vertical: lead.vertical, stage: 'new_lead', org_id: jobOrgId, pipeline_id: pipelineId,
-      icp_id: jobIcpId ?? null, // inherited from the search this lead was found by
-      created_by: session?.user.id, raw_lead_id: lead.id,
-    });
-    if (insertErr) return insertErr.message;
-    const { error: updateErr } = await supabase.from('raw_leads').update({
-      status: 'approved', approved_by: session?.user.id, approved_at: new Date().toISOString(),
-    }).eq('id', lead.id);
-    return updateErr ? updateErr.message : null;
-  }, [jobOrgId, pipelineId, jobIcpId, session]);
+    return approveScrapeLead(supabase, lead, { orgId: jobOrgId, pipelineId, icpId: jobIcpId, userId: session?.user.id, country });
+  }, [jobOrgId, pipelineId, jobIcpId, session, country]);
 
   const reject = useCallback(async (lead: RawLead): Promise<string | null> => {
-    const { error } = await supabase.from('raw_leads').update({ status: 'rejected' }).eq('id', lead.id);
-    return error ? error.message : null;
+    return rejectScrapeLead(supabase, lead);
   }, []);
 
   const skip = useCallback(async (): Promise<string | null> => {

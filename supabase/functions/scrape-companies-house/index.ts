@@ -7,10 +7,11 @@ import { loadIcp } from '../_shared/icp.ts';
 import { runBounded } from '../_shared/concurrency.ts';
 import { fetchActiveOfficers } from '../_shared/companiesHouse.ts';
 import { lookupCompanyContacts } from '../_shared/registryContacts.ts';
+import { registryContactKey } from '../_shared/scrapeGroup.ts';
 
 interface IcpParams {
   industry: string | null; location: string | null; city: string | null;
-  country: 'GB' | 'US' | 'other'; keywords: string[];
+  country: 'GB' | 'IE' | 'US' | 'other'; keywords: string[];
 }
 
 interface CHCompany {
@@ -38,7 +39,7 @@ async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: strin
       return seen.some((s) => s.business_name.toLowerCase() === businessName.toLowerCase());
     }
 
-    const googlePlaces = await resolveOrgApiKey(service, orgId, 'google_places');
+    const googlePlaces = registryContactKey(icp, await resolveOrgApiKey(service, orgId, 'google_places'));
     const city = icp.city ?? null;
     const found = await runBounded(companies, 5, async (c) => {
       const [officers, contacts] = await Promise.all([
