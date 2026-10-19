@@ -6,6 +6,7 @@ import { startDeepFind } from '../../lib/deepFind';
 import { DEEP_FIND_CAP_LIMITS, DEEP_FIND_DEFAULT_CAPS, DEEP_FIND_MAX_LEADS, parseCap } from '../../lib/deepFindView';
 import { DeepFindConfirm } from './DeepFindConfirm';
 import { DeepFindProgress } from './DeepFindProgress';
+import { effortTotals, type Effort } from '../../../supabase/functions/_shared/deepFindEffort';
 
 interface DeepFindModalProps {
   open: boolean;
@@ -17,6 +18,7 @@ interface DeepFindModalProps {
 
 /** Confirm step (what it does, editable caps), then the live progress view for the run it started. */
 export function DeepFindModal({ open, leadIds, onClose, onStarted }: DeepFindModalProps) {
+  const [effort, setEffort] = useState<Effort>('medium');
   const [hunterCap, setHunterCap] = useState(String(DEEP_FIND_DEFAULT_CAPS.hunter));
   const [aiCap, setAiCap] = useState(String(DEEP_FIND_DEFAULT_CAPS.ai));
   const [runId, setRunId] = useState<string | null>(null);
@@ -27,11 +29,13 @@ export function DeepFindModal({ open, leadIds, onClose, onStarted }: DeepFindMod
   useEffect(() => {
     if (!open) return;
     setRunId(null); setError(null); setNotice(null); setStarting(false);
+    setEffort('medium');
     setHunterCap(String(DEEP_FIND_DEFAULT_CAPS.hunter)); setAiCap(String(DEEP_FIND_DEFAULT_CAPS.ai));
   }, [open]);
 
-  const hunter = parseCap(hunterCap, DEEP_FIND_CAP_LIMITS.hunter);
-  const ai = parseCap(aiCap, DEEP_FIND_CAP_LIMITS.ai);
+  const totals = effort === 'custom' ? null : effortTotals(effort, leadIds.length);
+  const hunter = totals?.hunter ?? parseCap(hunterCap, DEEP_FIND_CAP_LIMITS.hunter);
+  const ai = totals?.ai ?? parseCap(aiCap, DEEP_FIND_CAP_LIMITS.ai);
   const capError = hunter === null || ai === null ? 'Enter whole numbers within the limits shown.' : null;
   const tooMany = leadIds.length > DEEP_FIND_MAX_LEADS;
 
@@ -39,7 +43,7 @@ export function DeepFindModal({ open, leadIds, onClose, onStarted }: DeepFindMod
     if (hunter === null || ai === null || tooMany || leadIds.length === 0) return;
     setStarting(true);
     setError(null);
-    const res = await startDeepFind(leadIds, { hunter, ai });
+    const res = await startDeepFind(leadIds, { hunter, ai }, effort);
     setStarting(false);
     if ('error' in res) { setError(res.error); return; }
     if (res.alreadyRunning > 0) setNotice(`${res.alreadyRunning} of the leads were already being searched, so they were left out.`);
@@ -64,6 +68,7 @@ export function DeepFindModal({ open, leadIds, onClose, onStarted }: DeepFindMod
           <DeepFindConfirm
             leadCount={leadIds.length} hunterCap={hunterCap} aiCap={aiCap}
             onHunterCap={setHunterCap} onAiCap={setAiCap} capError={capError}
+            effort={effort} onEffort={setEffort}
           />
           {error && <p role="alert" className="text-sm text-danger">{error}</p>}
           <div className="flex justify-end gap-2">

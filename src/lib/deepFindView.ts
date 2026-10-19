@@ -57,7 +57,7 @@ function companyCandidates(list: unknown): DeepFindCompanyCandidate[] {
     const o = (typeof c === 'object' && c !== null ? c : {}) as Record<string, unknown>;
     const number = typeof o.company_number === 'string' && COMPANY_NUMBER_RE.test(o.company_number) ? o.company_number : null;
     const name = text(o.name, 160);
-    const why = text(o.why, 120);
+    const why = text(o.why, 600);
     return number && name ? [{ company_number: number, name, address: text(o.address, 200), status: text(o.status, 40), ...(why ? { why } : {}) }] : [];
   });
 }

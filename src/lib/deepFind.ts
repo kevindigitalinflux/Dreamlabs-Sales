@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { readableInvokeError } from './invokeError';
+import type { Effort } from '../../supabase/functions/_shared/deepFindEffort';
 
 /** Result of starting a Deep find: the run id, or a readable error. */
 export type StartDeepFindResult = { runId: string; queued: number; alreadyRunning: number } | { error: string };
@@ -8,8 +9,8 @@ export type StartDeepFindResult = { runId: string; queued: number; alreadyRunnin
  * Starts a Deep find for up to 25 leads with the given credit caps. The server checks every lead belongs to the
  * caller's organisation and that the caller can edit it, then works through them in the background.
  */
-export async function startDeepFind(leadIds: string[], caps: { hunter: number; ai: number }): Promise<StartDeepFindResult> {
-  const { data, error } = await supabase.functions.invoke('run-deep-find', { body: { action: 'create', lead_ids: leadIds, caps } });
+export async function startDeepFind(leadIds: string[], caps: { hunter: number; ai: number }, effort: Effort = 'custom'): Promise<StartDeepFindResult> {
+  const { data, error } = await supabase.functions.invoke('run-deep-find', { body: { action: 'create', lead_ids: leadIds, caps, effort } });
   if (error) return { error: await readableInvokeError(error) };
   const d = (data ?? {}) as { run_id?: unknown; queued?: unknown; already_running?: unknown; error?: unknown };
   if (typeof d.error === 'string') return { error: d.error };
@@ -80,8 +81,8 @@ export async function fetchHunterAllowance(orgId: string): Promise<HunterAllowan
 /** The plain sentence for the allowance, e.g. "Hunter: 5 searches left this month." */
 export function hunterAllowanceText(a: HunterAllowance | null): string | null {
   if (!a) return null;
-  if (!a.configured) return 'No Hunter key is set, so Deep find will only use the free steps.';
-  if (a.usedUp) return 'Hunter says this account\'s searches for the month are used up. Deep find will still run the free steps (Companies House, website and DNS checks, web search).';
+  if (!a.configured) return 'No Hunter key is set, so Hunter steps will be skipped. Other configured services can still run within your effort level.';
+  if (a.usedUp) return 'Hunter says this account\'s searches for the month are used up. Free steps continue; other configured services follow your effort level.';
   if (a.searchesLeft !== null) return `Hunter: ${a.searchesLeft} ${a.searchesLeft === 1 ? 'search' : 'searches'} left this month.`;
   if (a.creditsLeft !== null) return `Hunter: ${a.creditsLeft} ${a.creditsLeft === 1 ? 'credit' : 'credits'} left this month.`;
   return null;

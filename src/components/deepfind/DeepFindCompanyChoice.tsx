@@ -58,14 +58,15 @@ export function DeepFindCompanyChoice({ leadId, candidates }: { leadId: string; 
         <Button variant="secondary" disabled={busy !== null} onClick={() => void reject()}>Save country choice</Button>
       </div>}
       <ul className="flex flex-col gap-1.5">
-        {candidates.map((c) => (
+        {candidates.map((c, index) => (
           <li key={c.company_number} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface/40 p-2 text-xs">
             <span className="min-w-0 flex-1">
+              {index === 0 && c.status === 'active' && <span className="block font-semibold">Most likely — please check the evidence</span>}
               <span className="font-semibold">{c.name}</span> ({c.company_number}{c.status ? `, ${c.status}` : ''})
               {c.address && <span className="block text-muted">{c.address}</span>}
               {c.why && <span className="block text-muted">Why: {c.why}</span>}
             </span>
-            <Button variant="secondary" onClick={() => void choose(c.company_number)} loading={busy === c.company_number} disabled={busy !== null}>
+            <Button variant="secondary" onClick={() => void choose(c.company_number)} loading={busy === c.company_number} disabled={busy !== null || c.status !== 'active'}>
               Use this company
             </Button>
           </li>
