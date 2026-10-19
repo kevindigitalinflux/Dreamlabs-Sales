@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Building2, Sparkles } from 'lucide-react';
 import { formatCurrency, packageLabel, stageInfo } from '../../lib/utils';
 import { splitContactPatch } from '../../lib/dreamAgentActions';
 import { ContactActionRow } from './ContactActionRow';
+import { DismissedRow } from './DismissedRow';
+import { dismissedTitle, isDismissed } from '../../lib/dreamAgentDismissed';
 import { Button } from '../ui/Button';
 import { SelectField, Textarea } from '../ui/Input';
 import type { ActionResolution } from '../../hooks/useDreamAgentSession';
@@ -64,7 +66,7 @@ function patchRows(patch: DreamAgentUpdatePatch, lead: Lead | undefined, include
  * a candidate picker plus "this is someone new", which itself becomes a create-like
  * picker step rather than guessing a pipeline; `update_company_context` shows an
  * editable textarea pre-filled with the AI's proposed merge. */
-export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipelineId, needsPipelinePicker, isOrgAdmin, onResolve, onPickLead, icpNames = {}, contactsByLead = {}, messages = [] }: ActionRowProps) {
+function ActionCard({ action, resolution, leadsById, pipelines, scopedPipelineId, needsPipelinePicker, isOrgAdmin, onResolve, onPickLead, icpNames = {}, contactsByLead = {}, messages = [] }: ActionRowProps) {
   const [promotedToNew, setPromotedToNew] = useState(false);
   const [editedContext, setEditedContext] = useState(
     action.type === 'update_company_context' ? action.proposed_context : '',
@@ -226,5 +228,30 @@ export function ActionRow({ action, resolution, leadsById, pipelines, scopedPipe
         </Button>
       </div>
     </div>
+  );
+}
+
+/** Renders the full card, or a compact "Dismissed" row with Undo once dismissed.
+ * The card stays mounted (hidden) so edits survive an Undo. */
+export function ActionRow(props: ActionRowProps) {
+  const { action, resolution, leadsById, contactsByLead = {}, onResolve } = props;
+  const dismissed = isDismissed(resolution);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const wasDismissed = useRef(false);
+  useEffect(() => {
+    if (wasDismissed.current && !dismissed) cardRef.current?.querySelector<HTMLElement>('button, input, select, textarea')?.focus();
+    wasDismissed.current = dismissed;
+  }, [dismissed]);
+  let contactName: string | undefined;
+  if (action.type === 'update_contact') {
+    const c = (contactsByLead[action.lead_id] ?? []).find((x) => x.id === action.contact_id);
+    contactName = (c && ([c.first_name, c.last_name].filter(Boolean).join(' ') || c.label)) || undefined;
+  }
+  const title = dismissedTitle(action, { leadName: 'lead_id' in action ? leadsById[action.lead_id]?.business_name : undefined, contactName });
+  return (
+    <>
+      {dismissed && <DismissedRow title={title} onUndo={() => onResolve({ status: 'pending' })} />}
+      <div ref={cardRef} hidden={dismissed}><ActionCard {...props} /></div>
+    </>
   );
 }
