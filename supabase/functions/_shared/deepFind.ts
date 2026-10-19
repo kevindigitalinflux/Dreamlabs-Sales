@@ -10,7 +10,7 @@ import { registryStep, resolveRegistry } from './deepFindRegistry.ts';
 import { lookUpPeople } from './deepFindPeople.ts';
 import { discoverLeadDomains } from './domainDiscoveryLookup.ts';
 import { DOMAIN_CHECKS, savedDomains } from './domainChecks.ts';
-import { hunterAccount, hunterDomainList, hunterVerifyEmail, readCompanyPages } from './knownPersonLookup.ts';
+import { hunterAccount, hunterDomainList, hunterVerifyEmail, readCompanyPages, webSearchForPerson, type LookupResult, type WebSearchPerson } from './knownPersonLookup.ts';
 import { guessLabel, inferDomainPattern, patternGuess, patternLine, type PatternSample } from './domainPattern.ts';
 import { hunterAccountEmpty, hunterAccountLine, type HunterAccount } from './hunterLimits.ts';
 import { cleanEmail, cleanLinkedinProfile, emailDomain, extractWebsiteFindings, pickWebsiteFindings } from './knownPersonWide.ts';
@@ -30,8 +30,9 @@ import { commonEmailCandidates, GuessChecks, optionalPeopleBudget, canStartGuess
 import { makeFirecrawlClient } from './firecrawlClient.ts';
 import { FIRECRAWL_DAILY_PAGES, firecrawlDomainFor } from './firecrawlRules.ts';
 import { classifyDeepFindCheckpoint, DeepFindAuthorisationLost } from './deepFindCheckpoint.ts';
-import { visibleSuggestions } from './deepFindSuggestions.ts';
+import { isOwnerRole, roleForPerson, visibleSuggestions } from './deepFindSuggestions.ts';
 import type { ReviewLead } from './deepFindSuggestions.ts';
+import { linkedinMatch, planWebsiteAutoUpdate, type AutoApplied } from './deepFindAutoApply.ts';
 
 export const WALL_BUDGET_MS = 130_000;
 /** A lead is only started when at least this much of the invocation is left. */
@@ -165,8 +166,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   /** Contacts this run created or filled, the only ones whose LinkedIn link is captured. */
   const touched = new Set<string>();
   const suggestions: { name: string; field: string; value: string; label: string }[] = [];
+  const autoApplied: AutoApplied[] = [];
   /** Plain-English step lines shown with the results. */
   const steps: string[] = [];
+  if (!geminiKey) steps.push('LinkedIn search skipped: no Gemini key is configured.');
   const all = () => [...rows, ...created];
 
   // Hunter's free account check (no search credits): how many searches are left, and stop early when none are.
@@ -216,7 +219,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const siteBlocked = !!siteDomain && savedDomains(lead.blocked_domains).includes(siteDomain);
   if (siteBlocked) steps.push('The lead\'s website domain was marked as not theirs, so the website was not used.');
   const siteReadable = !!siteDomain && !siteBlocked && DOMAIN_CHECKS.usable(siteDomain);
-  const sitePages = siteReadable && left() > 30_000 ? await readCompanyPages(str(lead.website)!, 12_000) : [];
+  const siteChecked = siteReadable && left() > 30_000;
+  const sitePages = siteChecked ? await readCompanyPages(str(lead.website)!, 12_000) : [];
   // A website that shows clear signs of another company is only a weak signal: not read for people or other domains.
   const suspicion = websiteSuspicion(sitePages, [str(lead.business_name) ?? '', registry.name ?? ''].filter(Boolean), lead.country);
   if (suspicion.suspect) steps.push(`This website may belong to a different company: ${suspicion.reasons.join(' ')}`);
@@ -498,11 +502,35 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // but do not become Hunter contacts merely because the optional team reader found them.
   const people = peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers);
   const verifiedDomains = domains.filter((d) => verified.has(d)).slice(0, 4);
+  // Share the exact same grounded search with wide email lookups: never search twice for one person in a run.
+  const personKey = (first: string, last: string) => `${first} ${last}`.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const searches = new Map<string, Promise<LookupResult>>();
+  const owner = parseLeadPersonName(lead.owner_name);
+  const ownerKey = owner ? personKey(owner.first, owner.last) : null;
+  const roles = [...webPeople, ...pages.flatMap((html) => extractTeamMembers(html)), ...extraSitePeople];
+  const ownerLike = (p: WebSearchPerson) => isOwnerRole(p.title) || personKey(p.first, p.last) === ownerKey
+    || isOwnerRole(roleForPerson(`${p.first} ${p.last}`, roles, all()));
+  const searchRaw = (p: WebSearchPerson, timeout: number): Promise<LookupResult> => {
+    const key = personKey(p.first, p.last);
+    const cached = searches.get(key);
+    if (cached) return cached;
+    const result = (async (): Promise<LookupResult> => {
+      if (!geminiKey || !await spend.ai('people')) return { ok: false, failure: 429 };
+      return webSearchForPerson({ ...p, includeEvidence: true }, geminiKey, Math.min(timeout, Math.max(1, left() - 2_000)));
+    })();
+    searches.set(key, result);
+    return result;
+  };
   const peopleOut = await lookUpPeople({
     service, run, lead: { id: lead.id, website: str(lead.website), business_name: str(lead.business_name) }, people,
     contacts: all, domains: verifiedDomains, website: usableSite ? str(lead.website) : null,
     websiteDirectory: !!siteDomain && isDirectoryDomain(siteDomain), lists, keys: { hunterKey, geminiKey },
     spend: { hunter: () => spend.hunter('people'), ai: () => spend.ai('people'), stopHunter: () => spend.stopHunter() }, left,
+    searchPerson: async (p, timeout) => {
+      const result = await searchRaw(p, timeout);
+      // Owner LinkedIn matches are applied below only after the evidence check, with their own CAS and Undo record.
+      return result.ok && ownerLike(p) ? { ...result, found: { ...result.found, linkedin_url: null } } : result;
+    },
   });
   created.push(...peopleOut.created);
   for (const c of peopleOut.touched) touched.add(c.id);
@@ -540,6 +568,53 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const namedOnSite = visibleSuggestions(sitePeople.filter((p) => !namedPersonIsStored(p.name, all())), lead, all()).slice(0, 10);
   const namedByWeb = visibleSuggestions(webPeople.filter((p) => !namedPersonIsStored(p.name, all())), lead, all()).slice(0, 10)
     .map((p) => ({ ...p, also_on_site: namedOnSite.some((s) => s.name.toLowerCase() === p.name.toLowerCase()) }));
+  // Owner-like contacts are searched even when an email is already saved. Names without a contact remain reviewable.
+  const linkedinPeople: WebSearchPerson[] = [];
+  const addLinkedinPerson = (p: WebSearchPerson) => {
+    if (!p.first || !p.last || !ownerLike(p) || linkedinPeople.some((x) => personKey(x.first, x.last) === personKey(p.first, p.last))) return;
+    const contact = findSamePerson(all(), p.first, p.last);
+    if (contact?.dismissed_at || str(contact?.linkedin_url)) return;
+    linkedinPeople.push(p);
+  };
+  for (const c of all()) if (c.kind !== 'general' && !c.dismissed_at) addLinkedinPerson({ first: str(c.first_name) ?? '', last: str(c.last_name) ?? '', title: str(c.title), company: str(lead.business_name), domains: verifiedDomains });
+  if (owner) addLinkedinPerson({ ...owner, company: str(lead.business_name), domains: verifiedDomains });
+  for (const p of roles) {
+    const name = parseLeadPersonName(p.name);
+    if (name) addLinkedinPerson({ ...name, title: p.role, company: str(lead.business_name), domains: verifiedDomains });
+  }
+  if (geminiKey) for (const p of linkedinPeople) {
+    const name = `${p.first} ${p.last}`;
+    if (!searches.has(personKey(p.first, p.last)) && left() < 7_000) { steps.push(`LinkedIn search for ${name} skipped: not enough time left. Try Deep find again.`); continue; }
+    const result = await searchRaw(p, 8_000);
+    if (!result.ok) { steps.push(`LinkedIn search for ${name} gave no answer${spend.aiHit ? ': the AI-call limit was reached' : ''}.`); continue; }
+    const match = linkedinMatch(result.found.linkedin_url, result.evidence, name, [str(lead.business_name) ?? '', registry.name ?? ''].filter(Boolean), verifiedDomains);
+    if (!match) { steps.push(`No supported LinkedIn profile found for ${name}.`); continue; }
+    const contact = findSamePerson(all(), p.first, p.last);
+    if (match.high && contact && !contact.dismissed_at && !str(contact.linkedin_url)) {
+      const before = typeof contact.linkedin_url === 'string' ? contact.linkedin_url : null;
+      let query = service.from('decision_maker_candidates').update({ linkedin_url: match.url, updated_at: nowIso() }).eq('id', contact.id).eq('lead_id', lead.id).is('dismissed_at', null);
+      query = before === null ? query.is('linkedin_url', null) : query.eq('linkedin_url', before);
+      const { data, error } = await query.select('id');
+      if (error) { console.error('deep find: LinkedIn save failed'); steps.push(`Could not save the LinkedIn profile for ${name}.`); }
+      else if (data?.length) {
+        contact.linkedin_url = match.url; touched.add(contact.id);
+        autoApplied.push({ table: 'decision_maker_candidates', id: contact.id, field: 'linkedin_url', before, after: match.url });
+      }
+    } else suggestions.push({ name, field: 'linkedin_url', value: match.url, label: match.evidence });
+  }
+  // Apply website changes only after all searches, guarding both the old URL and the array snapshot.
+  const websitePatch = planWebsiteAutoUpdate(lead, discovery.domains, { checked: siteChecked, reachable: sitePages.length > 0, suspect: suspicion.suspect });
+  if (websitePatch) {
+    let query = service.from('leads').update({ ...websitePatch, updated_at: nowIso() }).eq('id', lead.id).eq('org_id', run.org_id);
+    query = lead.website == null ? query.is('website', null) : query.eq('website', lead.website);
+    if (typeof lead.updated_at === 'string') query = query.eq('updated_at', lead.updated_at);
+    const { data, error } = await query.select('id');
+    if (error) { console.error('deep find: website save failed'); steps.push('Could not save the confirmed company website.'); }
+    else if (data?.length) for (const [field, after] of Object.entries(websitePatch)) {
+      const before = lead[field] ?? null;
+      if (JSON.stringify(before) !== JSON.stringify(after)) autoApplied.push({ table: 'leads', id: lead.id, field, before: before as string | string[] | null, after });
+    }
+  }
   stats.namedOnSite = namedOnSite.length;
   stats.namedByWeb = namedByWeb.length;
   stats.hunterCapHit = spend.hunterHit;
@@ -566,6 +641,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     reason: deepFindSummary(stats),
     people_found: stats.hunterPeople + stats.officersAdded,
     domains: {
+      auto_applied: autoApplied,
       domains: discovery.domains,
       named_by_web: namedByWeb,
       named_on_site: namedOnSite,

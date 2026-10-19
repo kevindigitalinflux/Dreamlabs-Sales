@@ -120,6 +120,17 @@ describe('webSearchForPerson', () => {
     stubFetch(() => gemini('Listed as john.sipple@x.com on the team page. {"email":"john.sipple@x.com","linkedin_url":"https://evil.com/in/x"}'));
     expect(await webSearchForPerson(person, KEY)).toEqual({ ok: true, found: { email: 'john.sipple@x.com' } });
   });
+  it('returns evidence for automatic matching and refuses HTTP or regional LinkedIn variants on that path', async () => {
+    const url = 'https://www.linkedin.com/in/john-sipple';
+    const evidence = `John Sipple works at Lovely Living: ${url}`;
+    stubFetch(() => gemini(`${evidence}\n{"email":null,"linkedin_url":"${url}"}`));
+    expect(await webSearchForPerson({ ...person, includeEvidence: true }, KEY)).toEqual({ ok: true, found: { linkedin_url: url }, evidence: `${evidence}\n{"email":null,"linkedin_url":"${url}"}` });
+    for (const variant of ['http://www.linkedin.com/in/john-sipple', 'https://uk.linkedin.com/in/john-sipple']) {
+      stubFetch(() => gemini(`John Sipple at Lovely Living: ${variant}\n{"email":null,"linkedin_url":"${variant}"}`));
+      const result = await webSearchForPerson({ ...person, includeEvidence: true }, KEY);
+      expect(result.ok && result.found.linkedin_url).toBeUndefined();
+    }
+  });
 
   it('returns only a status for a Gemini error', async () => {
     stubFetch(() => json({ error: { message: `bad key ${KEY}` } }, 403));

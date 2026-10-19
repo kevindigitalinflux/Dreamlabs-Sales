@@ -6,6 +6,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import {
   hunterDomainList, hunterFindEmail, hunterVerifyEmail, scanWebsiteForPerson, webSearchForPerson,
 } from './knownPersonLookup.ts';
+import type { LookupResult, WebSearchPerson } from './knownPersonLookup.ts';
 import { mergeFoundIntoPerson, type FoundFields } from './knownPerson.ts';
 import { runWideLookup, type KnownAddress } from './knownPersonWideRun.ts';
 import { STEP_DETAILS, type StepId } from './knownPersonWide.ts';
@@ -45,6 +46,8 @@ export interface PeopleContext {
   spend: SpendGate;
   /** Milliseconds left in the lead's budget. */
   left: () => number;
+  /** Shared per-person grounded-search cache; owns its AI reservation when supplied. */
+  searchPerson?: (person: WebSearchPerson, timeoutMs: number) => Promise<LookupResult>;
 }
 
 /** One person's line in the results. */
@@ -129,7 +132,9 @@ export async function lookUpPeople(ctx: PeopleContext): Promise<PeopleOutcome> {
       },
       hunterVerify: async (e, t) => (await gate(ctx.spend.hunter()) ? watchHunter(ctx.spend, await hunterVerifyEmail(e, hunterKey ?? '', t)) : { ok: false, failure: 429 }),
       scanWebsite: (w, d, f, l, t) => scanWebsiteForPerson(w, d, f, l, t),
-      webSearch: async (t) => (await gate(ctx.spend.ai())
+      webSearch: async (t) => ctx.searchPerson
+        ? ctx.searchPerson({ first: person.first, last: person.last, title: person.title, company: ctx.lead.business_name, domains: ctx.domains }, t)
+        : (await gate(ctx.spend.ai())
         ? webSearchForPerson({ first: person.first, last: person.last, title: person.title, company: ctx.lead.business_name, domains: ctx.domains }, geminiKey ?? '', t)
         : { ok: false, failure: 429 }),
       apolloMatch: async () => ({ ok: false, failure: 403 }),
