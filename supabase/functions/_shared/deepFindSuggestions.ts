@@ -11,6 +11,7 @@ export interface ReviewContact {
 const norm = (v: unknown): string => typeof v === 'string' ? v.trim().toLowerCase().replace(/\s+/g, ' ') : '';
 const strings = (v: unknown): string[] => Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [];
 const validEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+export const isReviewPhone = (value: unknown): boolean => typeof value === 'string' && value.replace(/\D/g, '').length >= 7 && value.replace(/\D/g, '').length <= 25;
 const nameOf = (c: ReviewContact) => norm(`${norm(c.first_name)} ${norm(c.last_name)}`);
 const ROLE_MAILBOXES = new Set(['privacy','gdpr','dpo','legal','compliance','careers','jobs','recruitment','press','media','abuse','postmaster','webmaster','noreply','no-reply','donotreply','unsubscribe']);
 
@@ -38,6 +39,7 @@ export function visibleSuggestions<T extends ReviewSuggestion>(suggestions: T[],
     if (s.field === 'phone' || s.field === 'owner_name' || s.field === 'website') {
       const key = suggestionKey(s);
       if (!norm(s.value) || norm(lead[s.field]) || seen.has(key)) return false;
+      if (s.field === 'phone' && !isReviewPhone(s.value)) return false;
       if (s.field === 'website' && !/^https?:\/\/[^\s/]+(?:\/[^\s]*)?$/i.test(s.value ?? '')) return false;
       seen.add(key);
       return true;

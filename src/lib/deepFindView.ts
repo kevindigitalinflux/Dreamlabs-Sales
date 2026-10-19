@@ -1,5 +1,5 @@
 import type { DeepFindLeadRow } from '../types';
-import { registrySkipReason, visibleSuggestions } from '../../supabase/functions/_shared/deepFindSuggestions';
+import { isReviewPhone, registrySkipReason, visibleSuggestions } from '../../supabase/functions/_shared/deepFindSuggestions';
 import type { ReviewLead, ReviewContact } from '../../supabase/functions/_shared/deepFindSuggestions';
 import { readAutoApplied, type AutoApplied } from '../../supabase/functions/_shared/deepFindAutoApply';
 
@@ -97,6 +97,7 @@ export function readDeepFindDetails(value: unknown): DeepFindDetails {
     const name = text(x.name, 80);
     const value = text(x.value, 200);
     const label = text(x.label, 500);
+    if (x.field === 'phone' && !isReviewPhone(value)) return [];
     return name && value && label && ['email', 'linkedin_url', 'phone', 'owner_name', 'website', 'title'].includes(String(x.field)) ? [{ name, value, label, ...(x.field !== 'email' ? { field: String(x.field) } : {}) }] : [];
   });
   return {

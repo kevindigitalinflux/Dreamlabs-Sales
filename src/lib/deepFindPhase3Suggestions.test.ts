@@ -18,3 +18,9 @@ it('offers uncertain provider titles only for an existing blank, non-dismissed c
   expect(visibleSuggestions([s], {}, [{ ...c, title: 'Director' }])).toEqual([]);
   expect(visibleSuggestions([s], {}, [{ ...c, dismissed_at: 'date' }])).toEqual([]);
 });
+
+it.each(['1', 'not a number'])('drops malformed phone proposal %s before offering a write', (value) => {
+  const s = { name: 'Company contact', field: 'phone', value, label: 'Provider phone' };
+  expect(readDeepFindDetails({ suggestions: [s] }).suggestions).toEqual([]);
+  expect(planSuggestionAdd(s, {}, [])).toEqual({ kind: 'none' });
+});
