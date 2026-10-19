@@ -2,24 +2,14 @@ import { useCallback, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { readableInvokeError } from '../lib/invokeError';
 import type { KnownPersonInput, KnownPersonResult } from '../types';
-import { createLookupJob, type LookupStarted } from '../lib/lookupJobs';
 
 /**
- * Queues the generic decision-maker search for Jobs. Known-person lookup remains
+ * Generic decision-maker search now uses Deep find. Known-person lookup remains
  * synchronous: that is a separate, explicitly reviewed action on a named contact.
  */
 export function useDecisionMakers() {
-  const [searching, setSearching] = useState(false);
   const [lookingUp, setLookingUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const runSearch = useCallback(async (leadIds: string[]): Promise<LookupStarted | null> => {
-    setSearching(true);
-    setError(null);
-    try { return await createLookupJob('decision_makers', leadIds); }
-    catch (err) { setError(err instanceof Error ? err.message : 'Could not start the lookup.'); return null; }
-    finally { setSearching(false); }
-  }, []);
 
   /**
    * Looks up ONE person the user already knows, on ONE lead. The server saves the
@@ -48,5 +38,5 @@ export function useDecisionMakers() {
 
   const clearError = useCallback(() => setError(null), []);
 
-  return { searching, lookingUp, error, runSearch, lookupKnownPerson, lookupKnownPersonDetailed, clearError };
+  return { lookingUp, error, lookupKnownPerson, lookupKnownPersonDetailed, clearError };
 }

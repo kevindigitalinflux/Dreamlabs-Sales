@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
-import { CheckCircle2, XCircle, SkipForward, Sparkles, Mail } from 'lucide-react';
+import { CheckCircle2, XCircle, SkipForward } from 'lucide-react';
 import { useScrapeJob } from '../hooks/useScrapeJob';
 import { isScrapeJobFinished, isScrapeJobTimedOut } from '../lib/scrapeJobState';
 import { useRawLeadActions } from '../hooks/useRawLeadActions';
-import { useOrgApiSettings } from '../hooks/useOrgApiSettings';
+import { supabase } from '../lib/supabase';
+import { scrapeDeepFindLeadId } from '../lib/scrapeDeepFind';
+import { DeepFindModal } from '../components/deepfind/DeepFindModal';
 import { usePipeline } from '../hooks/usePipeline';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -33,8 +35,8 @@ export function ScraperJob() {
   const { job, jobs, rawLeads, loading, error, refresh } = useScrapeJob(id!);
   const { pipelines } = usePipeline();
   const [pipelineId, setPipelineId] = useState('');
-  const { approve, reject, skip, enrichWithApollo, enrichWithHunter } = useRawLeadActions(job?.org_id, pipelineId, job?.icp_id, job?.icp_params?.country);
-  const { settings } = useOrgApiSettings();
+  const { approve, reject, skip } = useRawLeadActions(job?.org_id, pipelineId, job?.icp_id, job?.icp_params?.country);
+  const [deepFindLead, setDeepFindLead] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -51,8 +53,15 @@ export function ScraperJob() {
     });
   }, [job, pipelines]);
 
-  const apolloConfigured = settings.find((s) => s.provider === 'apollo')?.is_configured ?? false;
-  const hunterConfigured = settings.find((s) => s.provider === 'hunter')?.is_configured ?? false;
+  async function openDeepFind(raw: RawLead) {
+    if (!job) return;
+    setBusyId(raw.id); setRowError(null);
+    try { setDeepFindLead(await scrapeDeepFindLeadId(supabase, raw, job.org_id)); }
+    catch (error) {
+      console.error('scraper: could not open Deep find');
+      setRowError({ id: raw.id, text: error instanceof Error ? error.message : 'Could not open Deep find.' });
+    } finally { setBusyId(null); }
+  }
 
   async function runAction(lead: RawLead, fn: (l: RawLead) => Promise<string | null>) {
     setBusyId(lead.id); setRowError(null);
@@ -148,6 +157,7 @@ export function ScraperJob() {
       {missing.map((s) => <p key={s} role="status" className="text-sm text-danger">{SOURCE_NAMES[s]} has not returned a job. Results from other sources are still available.</p>)}
       {running && <p role="status" className="text-sm text-muted">{rawLeads.length} businesses found so far. Review opens when all started sources finish.</p>}
       {timedOut && <p role="status" className="text-sm text-warning">One source did not finish. You can review what arrived.</p>}
+      <p className="text-sm text-muted">Approve a result into a pipeline before using Deep find.</p>
 
       <div className="overflow-x-auto rounded-xl border border-line">
         <table className="block w-full text-left text-sm sm:table">
@@ -166,10 +176,10 @@ export function ScraperJob() {
             </tr>
           </thead>
           <tbody className="block sm:table-row-group">
-            {pending.map((lead) => (
+            {rawLeads.filter((lead) => lead.status !== 'rejected').map((lead) => (
               <tr key={lead.id} className={`grid grid-cols-2 border-b border-line sm:table-row ${lead.status === 'duplicate' ? 'bg-amber-500/10' : ''}`}>
                 <td className="p-3">
-                  <input type="checkbox" checked={selected.has(lead.id)} disabled={reviewDisabled} onChange={() => toggleSelected(lead.id)} className="h-4 w-4 accent-violet-500" aria-label={`Select ${lead.business_name}`} />
+                  <input type="checkbox" checked={selected.has(lead.id)} disabled={reviewDisabled || lead.status === 'approved'} onChange={() => toggleSelected(lead.id)} className="h-4 w-4 accent-violet-500" aria-label={`Select ${lead.business_name}`} />
                 </td>
                 <td className="min-w-0 break-words p-3 font-semibold">
                   {lead.business_name}
@@ -195,6 +205,7 @@ export function ScraperJob() {
                 <td className="min-w-0 break-words p-3">{lead.sources.map((s) => SOURCE_NAMES[s]).join(' + ')}</td>
                 <td className="col-span-2 p-3">
                   <div className="flex flex-wrap items-center gap-2">
+                    {lead.status !== 'approved' && <>
                     <Button variant="secondary" onClick={() => void runAction(lead, approve)} disabled={reviewDisabled || !pipelineId} loading={busyId === lead.id} title="Approve" aria-label={`Approve ${lead.business_name}`}>
                       <CheckCircle2 className="h-4 w-4" aria-hidden />
                     </Button>
@@ -204,16 +215,9 @@ export function ScraperJob() {
                     <Button variant="ghost" onClick={() => void runAction(lead, skip)} disabled={reviewDisabled} loading={busyId === lead.id} title="Skip" aria-label={`Skip ${lead.business_name}`}>
                       <SkipForward className="h-4 w-4" aria-hidden />
                     </Button>
-                    {apolloConfigured && lead.website && (
-                      <Button variant="ghost" onClick={() => void runAction(lead, enrichWithApollo)} disabled={reviewDisabled} loading={busyId === lead.id} title="Enrich with Apollo — uses 1 Apollo credit" aria-label={`Enrich ${lead.business_name} with Apollo — uses 1 credit`}>
-                        <Sparkles className="h-4 w-4" aria-hidden />
-                      </Button>
-                    )}
-                    {hunterConfigured && lead.website && !lead.email && (
-                      <Button variant="ghost" onClick={() => void runAction(lead, enrichWithHunter)} disabled={reviewDisabled} loading={busyId === lead.id} title="Find email with Hunter — uses 1 Hunter credit" aria-label={`Find email for ${lead.business_name} with Hunter — uses 1 credit`}>
-                        <Mail className="h-4 w-4" aria-hidden />
-                      </Button>
-                    )}
+                    </>}
+                    {lead.status === 'approved' && <Badge>Approved</Badge>}
+                    <Button variant="ghost" onClick={() => void openDeepFind(lead)} disabled={reviewDisabled || lead.status !== 'approved'} title={lead.status !== 'approved' ? 'Approve into a pipeline before using Deep find' : 'Deep find'} aria-label={`Deep find for ${lead.business_name}`}>Deep find</Button>
                   </div>
                   {rowError?.id === lead.id && <p role="alert" className="mt-1 text-xs text-danger">{rowError.text}</p>}
                 </td>
@@ -225,6 +229,7 @@ export function ScraperJob() {
           <p className="p-6 text-center text-sm text-muted">All results have been reviewed.</p>
         )}
       </div>
+      <DeepFindModal open={deepFindLead !== null} leadIds={deepFindLead ? [deepFindLead] : []} onClose={() => setDeepFindLead(null)} />
     </div>
   );
 }

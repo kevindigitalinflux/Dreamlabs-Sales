@@ -21,7 +21,7 @@ const PROVIDERS: {
   {
     key: 'firecrawl', label: 'Firecrawl (optional team-page lookup)', url: 'https://www.firecrawl.dev/app/api-keys',
     ctaLabel: 'Get your Firecrawl API key',
-    freeText: 'Optional: reads one company team or about page when Deep find or Fill in missing details cannot find people. Uses your organisation’s own Firecrawl credits, up to 100 page requests a day. Found details are shown for review.',
+    freeText: 'Optional: reads one company team or about page when Deep find cannot find people. Uses your organisation’s own Firecrawl credits, up to 100 page requests a day. Found details are shown for review.',
   },
   {
     key: 'gemini',

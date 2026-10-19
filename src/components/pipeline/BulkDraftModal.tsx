@@ -171,7 +171,7 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
           <span className="py-2.5">
             Also write to decision-makers and other contacts
             <span className="block text-xs text-muted">
-              {otherCount === 0 ? 'None found for the selected leads yet. Use Find decision maker first.' : `${otherCount} found. Each gets their own email, written for them.`}
+              {otherCount === 0 ? 'None found for the selected leads yet. Use Deep find first.' : `${otherCount} found. Each gets their own email, written for them.`}
             </span>
           </span>
         </label>

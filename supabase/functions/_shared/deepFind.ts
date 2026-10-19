@@ -175,6 +175,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const applyLead = (field: string, value: string) => field === 'owner_name' && ownerSuppressed(value) ? Promise.resolve(false)
     : applyDeepFindBlank(service, scope, 'leads', lead, field, value, autoApplied, checkpoint);
   const checkedEmails = new Map<string, Awaited<ReturnType<typeof worker.verifyEmail>>>();
+  const reviewableSuggestions = () => visibleSuggestions(suggestions.filter((s) => {
+    const checked = s.field === 'email' ? checkedEmails.get(s.value.toLowerCase()) : null;
+    return !checked?.ok || checked.value.status !== 'invalid';
+  }), lead, all());
   const checkEmail = async (email: string) => {
     const key = email.toLowerCase();
     const cached = checkedEmails.get(key);
@@ -262,6 +266,13 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       await checkpoint();
       const name = await lookupOpenCorporatesOfficer(str(lead.business_name) ?? '', ocKey);
       if (name) suggestions.push({ name, field: 'owner_name', value: name, label: 'OpenCorporates officer match; check company and ownership before adding.' });
+    }
+  }
+  for (const officer of officers.filter((o) => isOwnerRole(o.title))) {
+    if (!officer.first_name || !officer.last_name) continue;
+    const contact = findSamePerson(all(), officer.first_name, officer.last_name);
+    if (contact && !ownerSuppressed(`${officer.first_name} ${officer.last_name}`)) {
+      await applyDeepFindBlank(service, scope, 'decision_maker_candidates', contact, 'title', officer.title!, autoApplied, checkpoint);
     }
   }
   if (registry.number) steps.push(`Companies House officers: ${officers.length} active, ${stats.officersAdded} added as contacts.`);
@@ -750,7 +761,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       domains: discovery.domains,
       named_by_web: namedByWeb,
       named_on_site: namedOnSite,
-      suggestions: visibleSuggestions(suggestions, lead, all()).slice(0, 10),
+      suggestions: reviewableSuggestions().slice(0, 10),
       unverified_people: unverifiedPeople,
       registered_name: registry.name,
       website_suspect: suspicion.suspect,
@@ -769,7 +780,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (!(error instanceof DeepFindAuthorisationLost)) console.error('deep find: lead processing stopped');
     return { status: error instanceof DeepFindAuthorisationLost ? 'skipped' : 'failed',
       reason: error instanceof DeepFindAuthorisationLost ? error.message : 'Deep find could not finish. Saved changes are listed below with Undo.',
-      people_found: created.length, domains: { auto_applied: autoApplied, suggestions: visibleSuggestions(suggestions, lead, all()), steps } };
+      people_found: created.length, domains: { auto_applied: autoApplied, suggestions: reviewableSuggestions().slice(0, 10), steps } };
   }
 }
 

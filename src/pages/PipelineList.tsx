@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router';
-import { Download, Inbox, PenLine, Plus, Radar, Tag, Telescope, Trash2, UserSearch } from 'lucide-react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import { Download, Inbox, PenLine, Plus, Tag, Telescope, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLeads } from '../hooks/useLeads';
 import { useProfiles } from '../hooks/useProfiles';
-import { useLeadEnrichment } from '../hooks/useLeadEnrichment';
-import { useDecisionMakers } from '../hooks/useDecisionMakers';
 import { usePipeline } from '../hooks/usePipeline';
 import { filterLeads, sortLeads } from '../lib/leadFilters';
 import type { LeadFilters, SortKey } from '../lib/leadFilters';
@@ -50,10 +48,7 @@ export function PipelineList() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [openLead, setOpenLead] = useState<Lead | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const { running: enriching, error: enrichError, runEnrichment } = useLeadEnrichment();
   const [draftModalOpen, setDraftModalOpen] = useState(false);
-  const { searching: findingDecisionMakers, error: decisionMakerError, runSearch } = useDecisionMakers();
-  const [lookupNotice, setLookupNotice] = useState<string | null>(null);
   const [deepFindOpen, setDeepFindOpen] = useState(false);
   const deepFind = useDeepFindActivity(currentPipeline?.org_id ?? null);
   const [moveTargetId, setMoveTargetId] = useState('');
@@ -73,7 +68,6 @@ export function PipelineList() {
   useEffect(() => {
     setSelected(new Set());
     setBulkError(null);
-    setLookupNotice(null);
   }, [filters, currentPipeline?.id]);
 
   // Arrives via navigate(..., { state: { selectAllOnLoad: true } }) — e.g. Pipeline
@@ -112,18 +106,6 @@ export function PipelineList() {
 
   function toggleSelectAll() {
     setSelected((prev) => (prev.size === visible.length ? new Set() : new Set(visible.map((l) => l.id))));
-  }
-
-  async function handleFillMissingDetails() {
-    setLookupNotice(null);
-    const job = await runEnrichment([...selected]);
-    if (job) setLookupNotice(`Started: ${job.queued} ${job.queued === 1 ? 'lead' : 'leads'}. Follow it in Jobs.`);
-  }
-
-  async function handleFindDecisionMaker() {
-    setLookupNotice(null);
-    const job = await runSearch([...selected]);
-    if (job) setLookupNotice(`Started: ${job.queued} ${job.queued === 1 ? 'lead' : 'leads'}. Follow it in Jobs.`);
   }
 
   function handleExportCsv() {
@@ -208,10 +190,6 @@ export function PipelineList() {
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface/40 p-3">
           <span className="text-sm font-semibold">{selected.size} selected</span>
-          <Button variant="secondary" onClick={() => void handleFillMissingDetails()} disabled={enriching || selected.size > 50} loading={enriching} title={selected.size > 50 ? 'Choose up to 50 leads per lookup' : undefined}>
-            <Radar className="h-4 w-4" aria-hidden />
-            {enriching ? 'Starting…' : 'Fill missing details'}
-          </Button>
           <Button variant="secondary" onClick={() => setDraftModalOpen(true)}>
             <PenLine className="h-4 w-4" aria-hidden />
             Draft emails
@@ -222,10 +200,6 @@ export function PipelineList() {
               Customer profile
             </Button>
           )}
-          <Button variant="secondary" onClick={() => void handleFindDecisionMaker()} disabled={findingDecisionMakers || selected.size > 50} loading={findingDecisionMakers} title={selected.size > 50 ? 'Choose up to 50 leads per lookup' : undefined}>
-            <UserSearch className="h-4 w-4" aria-hidden />
-            {findingDecisionMakers ? 'Starting…' : 'Find decision maker'}
-          </Button>
           <Button variant="secondary" onClick={() => setDeepFindOpen(true)} disabled={selected.size > DEEP_FIND_MAX_LEADS}
             title={selected.size > DEEP_FIND_MAX_LEADS ? `Deep find works on ${DEEP_FIND_MAX_LEADS} leads or fewer at a time` : undefined}>
             <Telescope className="h-4 w-4" aria-hidden />
@@ -263,9 +237,6 @@ export function PipelineList() {
       {loading && <Skeleton className="h-64 w-full" />}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {bulkError && <p role="alert" className="text-sm text-danger">{bulkError}</p>}
-      {lookupNotice && <p role="status" className="text-sm text-success">{lookupNotice} <Link to="/jobs" className="underline">View Jobs</Link></p>}
-      {enrichError && <p role="alert" className="text-sm text-danger">{enrichError}</p>}
-      {decisionMakerError && <p role="alert" className="text-sm text-danger">{decisionMakerError}</p>}
       {!loading && !error && visible.length === 0 && (
         <EmptyState
           icon={Inbox}

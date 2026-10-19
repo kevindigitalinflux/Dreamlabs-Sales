@@ -59,7 +59,7 @@ export function ContactRow({ contact, lead, isMain, busy, error, onMakeMain, onT
         ) : <span className="text-muted">{contact.linkedin_url}</span>)}
       </div>
       {isRegistrySource(contact.source) && hasNoContactDetails(contact) && (
-        <p className="mt-1 text-xs text-muted">No contact details found yet. Use "Find decision maker" to look them up.</p>
+        <p className="mt-1 text-xs text-muted">No contact details found yet. Use "Deep find" to look them up.</p>
       )}
       <ContactRevealButtons contact={contact} lead={lead} busy={busy} onReveal={onReveal} onAddToLead={onAddToLead} />
       <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">

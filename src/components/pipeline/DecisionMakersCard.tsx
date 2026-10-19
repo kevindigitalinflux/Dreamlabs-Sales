@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { readableInvokeError } from '../../lib/invokeError';
 import type { LeadPatch } from '../../lib/leadUpdates';
@@ -35,10 +35,9 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
-  const [finding, setFinding] = useState(false);
   const flow = useKnownPersonFlow(leadId, hook.refresh);
 
-  useEffect(() => { setAdding(null); setFinding(false); setBusyId(null); setErrors({}); setNotice(null); }, [leadId]);
+  useEffect(() => { setAdding(null); setBusyId(null); setErrors({}); setNotice(null); }, [leadId]);
 
   function report(id: string, error: string | null) {
     setErrors((prev) => {
@@ -94,7 +93,7 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
   return (
     <div className="flex flex-col gap-2">
       {contacts.length === 0 && (
-        <p className="text-sm text-muted">No contacts yet. Add one below, or use "Find decision maker" from the Pipeline list to search.</p>
+        <p className="text-sm text-muted">No contacts yet. Add one below, or use Deep find to search.</p>
       )}
       {noFollowUps && <p role="status" className="text-sm text-danger">No contact is set to receive follow-ups. Turn on "Include in sequences" for one with an email.</p>}
       {followUpsToLeadEmail && <p className="text-xs text-muted">Follow-ups go to the lead's main email</p>}
@@ -118,7 +117,7 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
         ))}
       </ul>
       <KnownPersonArea
-        leadId={leadId} flow={flow} contacts={contacts} finding={finding} onCloseFinding={() => setFinding(false)}
+        flow={flow} contacts={contacts}
         addContact={hook.addContact} updateContact={hook.updateContact}
         setIncludeInSequences={hook.setIncludeInSequences}
       />
@@ -134,7 +133,6 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => setAdding('person')}><Plus className="h-4 w-4" aria-hidden /> Add person</Button>
           <Button variant="secondary" onClick={() => setAdding('general')}><Plus className="h-4 w-4" aria-hidden /> Add general email</Button>
-          <Button variant="secondary" onClick={() => setFinding(true)} disabled={finding}><Search className="h-4 w-4" aria-hidden /> Find decision maker</Button>
         </div>
       )}
       <DeepFindLeadControls lead={lead} />

@@ -175,3 +175,18 @@ it('starts no Hunter list request when the existing run cap refuses a reservatio
   resolveOrgApiKey.mockImplementation(async (_s,_o,p) => p === 'hunter' ? 'fake' : null); aiAllowed = false;
   await run(); expect(hunterDomainList).not.toHaveBeenCalled();
 });
+it('records registry owner-like name/title fills and respects dismissed ownership', async () => {
+  lead.owner_name = null; lead.company_number = '01234567'; contacts[0].title = null;
+  resolveOrgApiKey.mockImplementation(async (_s,_o,p) => p === 'companies_house' ? 'fake' : null);
+  fetchActiveOfficers.mockResolvedValue([{ first_name: 'Jane', last_name: 'Smith', title: 'Founder' }]);
+  const out = await run();
+  expect(out.domains.auto_applied.filter(c => ['owner_name','title'].includes(c.field))).toHaveLength(2);
+  lead.owner_name = null; lead.dismissed_suggestions = ['owner_name:jane smith'];
+  await run(); expect(lead.owner_name).toBeNull();
+});
+it('does not build guesses or search LinkedIn for Apollo obfuscated names', async () => {
+  contacts = [{ id: 'c', first_name: 'Jane', last_name: 'S', name_obfuscated: true, title: 'CEO', email: null }];
+  await run();
+  expect(lookUpPeople.mock.calls[0][0].people).toEqual([]);
+  expect(webSearchForPerson).not.toHaveBeenCalled();
+});

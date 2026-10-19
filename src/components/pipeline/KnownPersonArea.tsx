@@ -4,16 +4,11 @@ import type { ContactResult } from '../../hooks/useLeadContacts';
 import type { useKnownPersonFlow } from '../../hooks/useKnownPersonFlow';
 import { planSuggestionUse } from '../../lib/knownPersonForm';
 import type { DecisionMakerCandidate, KnownPersonSuggestion } from '../../types';
-import { FindDecisionMakerPanel } from './FindDecisionMakerPanel';
 import { KnownPersonResult } from './KnownPersonResult';
 
 interface KnownPersonAreaProps {
-  leadId: string;
   flow: ReturnType<typeof useKnownPersonFlow>;
   contacts: DecisionMakerCandidate[];
-  /** True while the "Find decision maker" panel is open. */
-  finding: boolean;
-  onCloseFinding: () => void;
   addContact: (form: ContactFormValues) => Promise<ContactResult>;
   /** The normal contact edit path (useLeadContacts.updateContact). */
   updateContact: (contact: DecisionMakerCandidate, form: ContactFormValues) => Promise<ContactResult>;
@@ -21,13 +16,13 @@ interface KnownPersonAreaProps {
 }
 
 /**
- * The Find decision maker panel (generic searches now go to Jobs) and known-person results.
+ * Known-person results from the Add person flow; generic searches now use Deep find.
  * The "alternative email" button saves the extra address as a general contact; a
  * duplicate shows the usual "already on this lead" message. "Use this" on a suggestion fills
  * the person's blank field through the normal contact edit, with follow-ups left off for an email.
  */
 export function KnownPersonArea({
-  leadId, flow, contacts, finding, onCloseFinding, addContact, updateContact, setIncludeInSequences,
+  flow, contacts, addContact, updateContact, setIncludeInSequences,
 }: KnownPersonAreaProps) {
   const outcome = flow.outcome;
 
@@ -55,15 +50,6 @@ export function KnownPersonArea({
           onAddExtraEmail={async (email, label) => (await addContact({ ...emptyContactForm('general'), label, email })).error}
           onUseSuggestion={(sg) => applySuggestion(outcome.result.contact_id, sg)}
           onClose={flow.clear}
-        />
-      )}
-      {finding && (
-        <FindDecisionMakerPanel
-          key={leadId}
-          leadId={leadId}
-          lookingUp={flow.lookingUp}
-          onLookup={flow.lookup}
-          onClose={onCloseFinding}
         />
       )}
     </>

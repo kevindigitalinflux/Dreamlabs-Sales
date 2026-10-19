@@ -28,6 +28,17 @@ function setup() {
 }
 
 describe('combined results review view', () => {
+  it('offers one Deep find action after approval, with no legacy enrichment buttons', () => {
+    setup();
+    let html = renderToStaticMarkup(createElement(Results));
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Deep find for ACME LIMITED"/);
+    state.rows.forEach((r) => { r.status = 'approved'; });
+    html = renderToStaticMarkup(createElement(Results));
+    expect(html).toMatch(/<button(?![^>]*disabled="")[^>]*aria-label="Deep find for ACME LIMITED"/);
+    expect(html).not.toContain('Enrich with Apollo');
+    expect(html).not.toContain('Find email with Hunter');
+    expect(html).not.toContain('aria-label="Approve ');
+  });
   it('shows one review row with both sources, registry number and safe merged website', () => {
     setup();
     const html = renderToStaticMarkup(createElement(Results));

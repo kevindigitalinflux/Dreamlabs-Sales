@@ -65,7 +65,7 @@ const deepFind: JobSource = {
     const byRun = new Map<string, DeepFindLeadInput[]>();
     for (const ids of chunk(runs.map((r) => r.id), 20)) {
       const { data, error: leadErr } = await supabase.from('deep_find_leads')
-        .select('run_id, status, people_found, domains, lead:leads(business_name, company_number, country, registry_candidates_rejected, dismissed_suggestions, email, additional_emails, contacts:decision_maker_candidates(id, first_name, last_name, email, dismissed_at))')
+        .select('run_id, status, people_found, domains, lead:leads(business_name, company_number, country, registry_candidates_rejected, dismissed_suggestions, owner_name, phone, website, email, additional_emails, contacts:decision_maker_candidates(id, first_name, last_name, title, linkedin_url, email, dismissed_at))')
         .in('run_id', ids).limit(1000);
       if (leadErr) fail('deep find leads', leadErr.message);
       for (const row of (data as unknown as DeepFindLeadRow[] | null) ?? []) {
