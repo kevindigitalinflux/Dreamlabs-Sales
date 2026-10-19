@@ -50,6 +50,8 @@ export interface PeopleContext {
   searchPerson?: (person: WebSearchPerson, timeoutMs: number) => Promise<LookupResult>;
   /** The engine owns checker validation, authorization, blank fills and Undo records. */
   saveContact?: (contact: Contact, patch: Record<string, string>) => Promise<Contact | null>;
+  /** Fresh dismissal checks before inserting any provider fields. Null means skip the row. */
+  prepareContact?: (row: Record<string, unknown>) => Promise<Record<string, unknown> | null>;
   checkpoint?: () => Promise<void>;
 }
 
@@ -163,11 +165,14 @@ export async function lookUpPeople(ctx: PeopleContext): Promise<PeopleOutcome> {
       if (saved) { Object.assign(contact, saved); out.touched.push(contact); emailFound = !!patch.email; }
     } else if (!contact && patch.email && emailStep && HUNTER_EMAIL_STEPS.includes(emailStep)) {
       await ctx.checkpoint?.();
-      const { data, error } = await ctx.service.from('decision_maker_candidates').upsert({
+      const proposal = {
         lead_id: ctx.lead.id, source: 'hunter', kind: 'person', first_name: person.first, last_name: person.last, title: person.title,
         email: ctx.saveContact ? null : patch.email, email_revealed: !ctx.saveContact, name_obfuscated: false, linkedin_url: ctx.saveContact ? null : patch.linkedin_url ?? null,
         include_in_sequences: false, is_primary: false, created_by: ctx.run.created_by,
-      }, { onConflict: 'lead_id,dedupe_key', ignoreDuplicates: true }).select('*');
+      };
+      const prepared = ctx.prepareContact ? await ctx.prepareContact(proposal) : proposal;
+      if (!prepared) continue;
+      const { data, error } = await ctx.service.from('decision_maker_candidates').upsert(prepared, { onConflict: 'lead_id,dedupe_key', ignoreDuplicates: true }).select('*');
       if (!error && data && data.length > 0) {
         const added = data[0] as Contact;
         if (ctx.saveContact) await ctx.saveContact(added, patch);

@@ -35,7 +35,7 @@ it('keeps the original path when no fallback is provided', async () => {
   expect(await enrichOneLead(lead, keys)).toBeNull();
 });
 it('never sends a Google Places website proposal to the worker', async () => {
-  vi.mocked(lookupPlaceContact).mockResolvedValue({ website: 'https://suggested.example.com', phone: null });
+  vi.mocked(lookupPlaceContact).mockResolvedValue({ website: 'https://suggested.example.com', phone: null, name: 'Example', address: '', strength: 2, cityMatches: false });
   const fallback = vi.fn().mockResolvedValue(null);
   const result = await enrichOneLead({ ...lead, website: null }, { ...keys, googlePlaces: 'test' }, { siteFallback: fallback });
   expect(result?.proposed.website).toBe('https://suggested.example.com');
@@ -54,7 +54,7 @@ it('uses a team fallback after the worker and before paid sources, proposing onl
 it('skips the team fallback when owner is present, or a website is only proposed', async () => {
   const teamFallback = vi.fn();
   await enrichOneLead({ ...lead, owner_name: 'Jane Smith' }, keys, { teamFallback });
-  vi.mocked(lookupPlaceContact).mockResolvedValue({ website: 'https://proposed.example.com', phone: null });
+  vi.mocked(lookupPlaceContact).mockResolvedValue({ website: 'https://proposed.example.com', phone: null, name: 'Example', address: '', strength: 2, cityMatches: false });
   await enrichOneLead({ ...lead, website: null }, { ...keys, googlePlaces: 'test' }, { teamFallback });
   expect(teamFallback).not.toHaveBeenCalled();
 });

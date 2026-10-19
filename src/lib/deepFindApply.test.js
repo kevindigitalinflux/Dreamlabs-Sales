@@ -11,7 +11,11 @@ function database(beforeWrite = () => {}, error = null) {
       const match = filters.every(([k,v]) => row[k] === v);
       return { data: match && !error ? [{ id: row.id }] : [], error };
     } };
-  return { row, writes, filters, service: { from: vi.fn(() => q) } };
+  return { row, writes, filters, service: { from: vi.fn(table => {
+    if (table !== 'leads') return q;
+    const read = { select: () => read, eq: () => read, maybeSingle: async () => ({ data: { dismissed_suggestions: [] }, error: null }) };
+    return read;
+  }) } };
 }
 const scope = { leadId: 'lead', orgId: 'org' };
 it.each([null, '', '  '])('preserves the exact blank %j in Undo and disables contact follow-ups', async (blank) => {
@@ -37,4 +41,10 @@ it('starts no write after authorization loss and refuses nonblank/dismissed/unsu
     expect(await applyDeepFindBlank(db.service, scope, 'decision_maker_candidates', row, 'email', 'jane@acme.com', [], checkpoint)).toBe(false);
   }
   expect(await applyDeepFindBlank(db.service, scope, 'decision_maker_candidates', db.row, 'include_in_sequences', 'true', [], checkpoint)).toBe(false);
+});
+it('stops automatic writes before the Undo history reaches its 100-entry bound', async () => {
+  const db = database();
+  const changes = Array.from({ length: 100 }, () => ({ table: 'leads', id: 'lead', field: 'phone', before: null, after: '+442079460958' }));
+  expect(await applyDeepFindBlank(db.service, scope, 'decision_maker_candidates', db.row, 'email', 'jane@acme.com', changes, async () => {})).toBe(false);
+  expect(changes).toHaveLength(100); expect(db.writes).toEqual([]);
 });

@@ -6,6 +6,7 @@ import { isScrapeJobFinished, isScrapeJobTimedOut } from '../lib/scrapeJobState'
 import { useRawLeadActions } from '../hooks/useRawLeadActions';
 import { supabase } from '../lib/supabase';
 import { scrapeDeepFindLeadId } from '../lib/scrapeDeepFind';
+import { reviewRawIds } from '../lib/approveScrapeLead';
 import { DeepFindModal } from '../components/deepfind/DeepFindModal';
 import { usePipeline } from '../hooks/usePipeline';
 import { Button } from '../components/ui/Button';
@@ -40,7 +41,10 @@ export function ScraperJob() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+
+  useEffect(() => { setSkipped(new Set()); }, [id]);
 
   useEffect(() => {
     if (!job) return;
@@ -73,6 +77,15 @@ export function ScraperJob() {
       console.error('Scrape review failed', err instanceof Error ? err.name : 'unknown');
       setRowError({ id: lead.id, text: 'Could not finish this action. Refresh and try again.' });
     } finally { setBusyId(null); }
+  }
+
+  async function skipForSession(lead: RawLead): Promise<string | null> {
+    const error = await skip();
+    if (!error) {
+      setSkipped(previous => new Set([...previous, ...reviewRawIds(lead)]));
+      setSelected(previous => new Set([...previous].filter(id => id !== lead.id)));
+    }
+    return error;
   }
 
   function toggleSelected(id: string) {
@@ -119,7 +132,8 @@ export function ScraperJob() {
   if (loading) return <Skeleton className="h-96 w-full" />;
   if (!job) return <p role="alert" className="text-sm text-danger">{error ?? 'Job not found.'}</p>;
 
-  const pending = rawLeads.filter((l) => l.status === 'pending' || l.status === 'duplicate');
+  const visible = rawLeads.filter(lead => !lead.rawIds.some(id => skipped.has(id)) && lead.status !== 'rejected');
+  const pending = visible.filter((l) => l.status === 'pending' || l.status === 'duplicate');
   const now = Date.now();
   const running = jobs.some((j) => !isScrapeJobFinished(j, now));
   const timedOut = jobs.some((j) => isScrapeJobTimedOut(j, now));
@@ -176,7 +190,7 @@ export function ScraperJob() {
             </tr>
           </thead>
           <tbody className="block sm:table-row-group">
-            {rawLeads.filter((lead) => lead.status !== 'rejected').map((lead) => (
+            {visible.map((lead) => (
               <tr key={lead.id} className={`grid grid-cols-2 border-b border-line sm:table-row ${lead.status === 'duplicate' ? 'bg-amber-500/10' : ''}`}>
                 <td className="p-3">
                   <input type="checkbox" checked={selected.has(lead.id)} disabled={reviewDisabled || lead.status === 'approved'} onChange={() => toggleSelected(lead.id)} className="h-4 w-4 accent-violet-500" aria-label={`Select ${lead.business_name}`} />
@@ -212,7 +226,7 @@ export function ScraperJob() {
                     <Button variant="danger" onClick={() => void runAction(lead, reject)} disabled={reviewDisabled} loading={busyId === lead.id} title="Reject" aria-label={`Reject ${lead.business_name}`}>
                       <XCircle className="h-4 w-4" aria-hidden />
                     </Button>
-                    <Button variant="ghost" onClick={() => void runAction(lead, skip)} disabled={reviewDisabled} loading={busyId === lead.id} title="Skip" aria-label={`Skip ${lead.business_name}`}>
+                    <Button variant="ghost" onClick={() => void runAction(lead, skipForSession)} disabled={reviewDisabled} loading={busyId === lead.id} title="Skip" aria-label={`Skip ${lead.business_name}`}>
                       <SkipForward className="h-4 w-4" aria-hidden />
                     </Button>
                     </>}

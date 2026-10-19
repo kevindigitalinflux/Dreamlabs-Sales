@@ -316,7 +316,7 @@ it('stops on confirmed cancellation even if a subsequent edit-rights read would 
 });
 
 it('retains contacts written before authorisation was lost', async () => {
-  pendingPaidAndContactWork(); contacts = []; accessLostAt = 2;
+  pendingPaidAndContactWork(); contacts = []; accessLostAt = 3; // Includes the new pre-insert dismissal checkpoint.
   vi.mocked(resolveOrgApiKey).mockImplementation(async (_s, _o, provider) => ['hunter', 'firecrawl', 'companies_house'].includes(provider) ? 'fake-key' : null);
   vi.mocked(resolveRegistry).mockResolvedValue({ number: '12345678', name: 'Example', address: null, candidates: [] });
   vi.mocked(fetchActiveOfficers).mockResolvedValue([{ first_name: 'Jane', last_name: 'Smith', title: null }]);

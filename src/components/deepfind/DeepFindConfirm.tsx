@@ -34,7 +34,7 @@ export function DeepFindConfirm({ leadCount, hunterCap, aiCap, onHunterCap, onAi
         <Input label={`AI calls (max ${DEEP_FIND_CAP_LIMITS.ai})`} inputMode="numeric" value={aiCap} onChange={(e) => onAiCap(e.target.value)} />
       </div>
       <p className="text-xs text-muted">The caps cover the whole run. Each Hunter search uses about one Hunter credit. When a cap is reached, Deep find stops using that service and says so.</p>
-      <p className="text-xs text-muted">The limits above cover Hunter and AI calls. Google Places and Apollo use your configured accounts and their provider limits.</p>
+      <p className="text-xs text-muted">The limits above cover Hunter and AI calls. Google Places is capped at 300 business lookups and Apollo company phone at 100 organisation enrichments per organisation per day, shared across runs. They use your configured provider accounts. Apollo decision-maker search does not reveal personal emails or phones. Phone lookups stop when a phone is already saved or Places supplies one.</p>
       {capError && <p role="alert" className="text-sm text-danger">{capError}</p>}
     </div>
   );

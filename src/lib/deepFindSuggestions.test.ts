@@ -63,8 +63,8 @@ describe('country rules', () => {
 });
 import { isOwnerRole, roleForPerson, planOwnerFromSuggestion } from '../../supabase/functions/_shared/deepFindSuggestions';
 describe('owner from suggestion', () => {
-  it.each(['Owner', 'Founder', 'co-founder', 'Co Founder', 'Founder and CEO', 'CEO', 'Chief Executive Officer', 'Managing Director', 'Proprietor', 'Principal', 'Owner/Director'])('%s is owner-like', (r) => expect(isOwnerRole(r)).toBe(true));
-  it.each(['Director', 'Marketing Manager', 'Head of Sales', 'Founders club coordinator', 'Office manager', '', null, undefined])('%j is not owner-like', (r) => expect(isOwnerRole(r)).toBe(false));
+  it.each(['Owner', 'Founder', 'co-founder', 'Co Founder', 'Founder and CEO', 'CEO', 'Chief Executive Officer', 'Managing Director', 'Proprietor', 'Owner/Director'])('%s is owner-like', (r) => expect(isOwnerRole(r)).toBe(true));
+  it.each(['Principal', 'Director', 'Marketing Manager', 'Head of Sales', 'Founders club coordinator', 'Office manager', '', null, undefined])('%j is not owner-like', (r) => expect(isOwnerRole(r)).toBe(false));
   it('matches a name to a role ignoring case, accents and spacing', () => {
     expect(roleForPerson('valentina  ANTUNOVIC', [{ name: 'Valentína Antunovic', role: ' Founder ' }])).toBe('Founder');
     expect(roleForPerson('Jo', [{ name: 'Jane', role: 'CEO' }])).toBeNull();

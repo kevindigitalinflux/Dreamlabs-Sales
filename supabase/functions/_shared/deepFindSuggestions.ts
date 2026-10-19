@@ -11,15 +11,55 @@ export interface ReviewContact {
 const norm = (v: unknown): string => typeof v === 'string' ? v.trim().toLowerCase().replace(/\s+/g, ' ') : '';
 const strings = (v: unknown): string[] => Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [];
 const validEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-export const isReviewPhone = (value: unknown): boolean => typeof value === 'string' && value.replace(/\D/g, '').length >= 7 && value.replace(/\D/g, '').length <= 25;
+/** Accept phone shapes only, never arbitrary numbers extracted from page text. */
+export function isReviewPhone(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const raw = value.trim();
+  if (!/^\+?[\d\s().-]+$/.test(raw) || /\d{4}-\d{2}-\d{2}|^\d{4}-\d{4}$/.test(raw)) return false;
+  let digits = raw.replace(/\D/g, '');
+  if (/^(\d)\1+$/.test(digits) || /(\d)\1{6}/.test(digits)) return false;
+  if (raw.startsWith('+44')) {
+    digits = digits.slice(2).replace(/^0/, '');
+    return /^[12378]\d{9}$/.test(digits);
+  }
+  if (raw.startsWith('+353')) return /^[1-9]\d{7,9}$/.test(digits.slice(3).replace(/^0/, ''));
+  if (raw.startsWith('+')) return /^[1-9]\d{7,14}$/.test(digits);
+  return /^0[12378]\d{8,9}$/.test(digits) || /^0[1-9]\d{6,8}$/.test(digits);
+}
 const nameOf = (c: ReviewContact) => norm(`${norm(c.first_name)} ${norm(c.last_name)}`);
 const ROLE_MAILBOXES = new Set(['privacy','gdpr','dpo','legal','compliance','careers','jobs','recruitment','press','media','abuse','postmaster','webmaster','noreply','no-reply','donotreply','unsubscribe']);
 
+/** Canonical keys shared by review, automatic fills and Undo. */
 export function suggestionKey(s: ReviewSuggestion): string {
-  if (s.field === 'title') return `title:${norm(s.name)}:${norm(s.value)}`;
-  if (['phone', 'owner_name', 'website'].includes(s.field ?? '')) return `${s.field}:${norm(s.value)}`;
-  if (s.field === 'linkedin_url') return `linkedin_url:${norm(s.name)}:${norm(s.value)}`;
-  return s.value ? `email:${norm(s.value)}` : `person:${norm(s.name)}`;
+  const value = norm(s.value);
+  if (s.field === 'title') return 'title:' + norm(s.name);
+  if (s.field === 'owner_name') return 'owner:' + value;
+  if (s.field === 'phone') return 'phone:' + value.replace(/\D/g, '');
+  if (s.field === 'website' || s.field === 'additional_websites') {
+    try { return 'website:' + new URL(/^https?:\/\//.test(value) ? value : 'https://' + value).hostname.replace(/^www\./, ''); }
+    catch { return 'website:' + value; }
+  }
+  if (s.field === 'linkedin_url') return 'linkedin:' + value.replace(/\/$/, '');
+  return s.value ? 'email:' + value : 'person:' + norm(s.name);
+}
+
+/** Older saved keys retain their dismissal meaning after canonicalisation. */
+export function isSuggestionDismissed(s: ReviewSuggestion, lead: ReviewLead): boolean {
+  const keys = strings(lead.dismissed_suggestions).map(key => {
+    const raw = norm(key);
+    if (raw.startsWith('website:')) return suggestionKey({ name: '', field: 'website', value: raw.slice(8) });
+    if (raw.startsWith('phone:')) return suggestionKey({ name: '', field: 'phone', value: raw.slice(6) });
+    if (raw.startsWith('owner_name:')) return 'owner:' + raw.slice(11);
+    if (raw.startsWith('title:')) return raw.split(':').slice(0, 2).join(':');
+    if (raw.startsWith('linkedin_url:')) return 'linkedin:' + raw.slice(raw.indexOf('https://')).replace(/\/$/, '');
+    return raw;
+  });
+  const legacy = s.field === 'owner_name' ? 'owner_name:' + norm(s.value)
+    : s.field === 'title' ? 'title:' + norm(s.name) + ':' + norm(s.value)
+    : s.field === 'linkedin_url' ? 'linkedin_url:' + norm(s.name) + ':' + norm(s.value)
+    : (s.field ?? 'email') + ':' + norm(s.value);
+  return keys.includes(suggestionKey(s)) || keys.includes(legacy)
+    || ((s.field === 'owner_name' || s.field === 'title') && keys.includes('person:' + norm(s.field === 'owner_name' ? s.value : s.name)));
 }
 export function isRoleMailbox(email: string | undefined): boolean {
   return ROLE_MAILBOXES.has(norm(email).split('@')[0]!);
@@ -29,7 +69,9 @@ export function isRoleMailbox(email: string | undefined): boolean {
 export function visibleSuggestions<T extends ReviewSuggestion>(suggestions: T[], lead: ReviewLead, contacts: ReviewContact[]): T[] {
   const seen = new Set(strings(lead.dismissed_suggestions).map(norm));
   const emails = new Set([norm(lead.email), ...strings(lead.additional_emails).map(norm), ...contacts.map((c) => norm(c.email))].filter(Boolean));
-  return suggestions.filter((s) => {
+  const priority = (s: ReviewSuggestion) => s.field === 'owner_name' || ((!s.field || s.field === 'email') && !!s.value && s.name !== 'Company contact') ? 0 : 1;
+  return [...suggestions].sort((a, b) => priority(a) - priority(b) || Number(isRoleMailbox(a.value)) - Number(isRoleMailbox(b.value))).filter((s) => {
+    if (isSuggestionDismissed(s, lead)) return false;
     if (s.field === 'title') {
       const same = contacts.find((c) => nameOf(c) === norm(s.name));
       const key = suggestionKey(s);
@@ -58,7 +100,7 @@ export function visibleSuggestions<T extends ReviewSuggestion>(suggestions: T[],
     seen.add(key);
     const same = contacts.find((c) => nameOf(c) === norm(s.name));
     return s.value ? !emails.has(norm(s.value)) && !(same && (same.dismissed_at || norm(same.email))) : !same;
-  }).sort((a, b) => Number(isRoleMailbox(a.value)) - Number(isRoleMailbox(b.value)));
+  });
 }
 
 export type SuggestionAddPlan =
@@ -109,12 +151,13 @@ export function countryPhoneMismatch(text: string, country: unknown): boolean {
   return phones.length > 0 && !localIrish && !phones.some((p) => country === 'IE' ? p.startsWith('353') : p.startsWith('1'));
 }
 
-const OWNER_ROLE = /\b(owner|founder|ceo|chief executive|managing director|proprietor|principal)\b/;
 const plain = (v: unknown): string => typeof v === 'string' ? v.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim() : '';
 
 /** Owner-like titles only. Plain director, manager and head-of roles do not make someone the owner. */
 export function isOwnerRole(role: unknown): boolean {
-  return OWNER_ROLE.test(plain(role).replace(/[-/&,]/g, ' '));
+  const title = plain(role).replace(/[-/&,]/g, ' ');
+  if (/\b(founder|ceo|chief executive|managing director|proprietor)\b/.test(title)) return true;
+  return /\bowner\b/.test(title) && !/\b(product|scrum|process|account|service|system|data|technical|platform|project|risk)\s+owner\b/.test(title);
 }
 
 /** Role for a person from Deep find result entries (matched by accent-free name), else the contact's saved title. */

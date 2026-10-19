@@ -4,10 +4,43 @@ import { planOwnerFromSuggestion, planTitleUpgrade, planSuggestionAdd, registryS
 import type { ReviewContact, ReviewLead, ReviewSuggestion } from '../../supabase/functions/_shared/deepFindSuggestions';
 import { arrayEquality, readAutoApplied, type AutoApplied } from '../../supabase/functions/_shared/deepFindAutoApply';
 
+/** Append independently of the field's CAS. Retry array races without losing other dismissals. */
+async function suppressAutomaticChange(client: SupabaseClient, leadId: string, change: AutoApplied): Promise<boolean> {
+  const previous = change.before;
+  const values = Array.isArray(change.after) ? change.after.filter(v => !Array.isArray(previous) || !previous.includes(v)) : [change.after];
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { data, error } = await client.from('leads').select('dismissed_suggestions').eq('id', leadId).maybeSingle();
+    if (error) throw failure(error, 'Could not remember Undo. Refresh and try again.');
+    if (!data) return false;
+    const original = data.dismissed_suggestions as string[] | null;
+    const keys = Array.isArray(original) ? original : [];
+    // Title keys need the saved person's full name, not the title text.
+    let name = '';
+    if (change.field === 'title') {
+      const contact = await client.from('decision_maker_candidates').select('first_name, last_name').eq('id', change.id).eq('lead_id', leadId).maybeSingle();
+      if (contact.error || !contact.data) throw failure(contact.error, 'Could not remember Undo. Refresh and try again.');
+      name = `${contact.data.first_name ?? ''} ${contact.data.last_name ?? ''}`.trim();
+    }
+    const merged = [...new Set([...keys, ...values.map(value => suggestionKey({ name, field: change.field, value: value ?? undefined }))])];
+    if (JSON.stringify(merged) === JSON.stringify(keys)) return true;
+    let query = client.from('leads').update({ dismissed_suggestions: merged }).eq('id', leadId);
+    query = original == null ? query.is('dismissed_suggestions', null) : query.eq('dismissed_suggestions', arrayEquality(keys));
+    const saved = await query.select('id');
+    if (saved.error) throw failure(saved.error, 'Could not remember Undo. Refresh and try again.');
+    if (saved.data?.length) return true;
+    const current = await client.from('leads').select('dismissed_suggestions').eq('id', leadId).maybeSingle();
+    if (current.error) throw failure(current.error, 'Could not remember Undo. Refresh and try again.');
+    if (!current.data || JSON.stringify(current.data.dismissed_suggestions ?? null) === JSON.stringify(original ?? null)) return false;
+  }
+  throw new Error('Could not remember Undo because this lead changed. Refresh and try again.');
+}
+
 /** User-session RLS applies. The after-value filter makes concurrent edits a harmless no-op. */
 export async function undoDeepFindChange(client: SupabaseClient, userId: string | null, leadId: string, change: AutoApplied): Promise<string> {
   if (!userId) throw new Error('Sign in to undo this change.');
   if (!readAutoApplied([change]).length || (change.table === 'leads' && change.id !== leadId)) throw new Error('Invalid automatic change.');
+  // Persist suppression before restoring the field: a rerun must never refill an undone value.
+  if (!await suppressAutomaticChange(client, leadId, change)) return 'You cannot change this lead';
   const scoped = async () => {
     let query = client.from(change.table).select(change.field === 'website' ? 'website, additional_websites' : change.field).eq('id', change.id);
     if (change.table === 'decision_maker_candidates') query = query.eq('lead_id', leadId);

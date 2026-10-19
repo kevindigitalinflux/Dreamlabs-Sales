@@ -78,3 +78,5 @@ Process: Kevin approved the Stage 2 spec/build and supplied Claude's rulings on 
 - [ ] Phase 3d/e remains separate and unbuilt: readiness migration/badge, smart depth and concurrency. No SQL is required or authorized for Phase 3a-c.
 
 Phase 3a-c gates at `2877d787d90e3a921a293ea1365accbb3239e2c5`: TypeScript 0 diagnostics; 119 files / 1,796 tests / 0 failures; build 0 errors. The checklist remains unchecked because independent review is pending.
+
+- [x] Phase 3a-c Fix round 1: I1–I5, M1–M5 and M7 fixed locally on `codex/deepfind-phase3a` from `7892d0f`; M6/M8 skipped as requested. Implementation complete; independent rereview and publication remain pending. See HANDOFF for limits and final gates.

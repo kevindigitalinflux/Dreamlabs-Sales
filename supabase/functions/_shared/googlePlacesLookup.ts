@@ -2,7 +2,13 @@
 import { fetchWithTimeout } from './fetchWithTimeout.ts';
 import { isFuzzyNameMatch } from './fuzzyMatch.ts';
 
-export interface PlaceContact { website: string | null; phone: string | null }
+export interface PlaceContact { website: string | null; phone: string | null; name: string; address: string; strength: 0 | 1 | 2; cityMatches: boolean }
+
+/** Exact returned locality/postal town, never a street name or the search query. */
+export function placeCityMatches(city: string | null, placeCity: string): boolean {
+  const words = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return !!city?.trim() && words(placeCity) === words(city);
+}
 
 // Words too common in business names to prove two names are the same business.
 const GENERIC_TOKENS = new Set([
@@ -68,14 +74,18 @@ export async function lookupPlaceContact(businessName: string, city: string | nu
     if (!match?.place_id) return null;
 
     const detailsRes = await fetchWithTimeout(
-      `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(match.place_id)}&fields=website,formatted_phone_number&key=${apiKey}`,
+      `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(match.place_id)}&fields=name,formatted_address,address_components,website,formatted_phone_number&key=${apiKey}`,
     );
     if (!detailsRes.ok) { console.warn(`places details HTTP ${detailsRes.status} for "${match.name}"`); return null; }
-    const details = await detailsRes.json() as { status?: string; result?: { website?: string; formatted_phone_number?: string } };
+    const details = await detailsRes.json() as { status?: string; result?: { name?: string; formatted_address?: string; address_components?: { long_name?: string; types?: string[] }[]; website?: string; formatted_phone_number?: string } };
     const website = details.result?.website ?? null;
     const phone = details.result?.formatted_phone_number ?? null;
     console.log(`places details "${match.name}": status=${details.status ?? '?'} website=${website ? 'yes' : 'no'} phone=${phone ? 'yes' : 'no'}`);
-    return website || phone ? { website, phone } : null;
+    const name = details.result?.name ?? match.name!;
+    const address = details.result?.formatted_address ?? '';
+    const cityMatches = (details.result?.address_components ?? []).some(c =>
+      c.types?.some(type => type === 'locality' || type === 'postal_town') && placeCityMatches(city, c.long_name ?? ''));
+    return website || phone ? { website, phone, name, address, strength: placeMatchStrength(businessName, name), cityMatches } : null;
   } catch {
     // Never log the error text: Deno network errors can include the request URL, which carries the API key.
     console.warn('places lookup failed (network error or timeout)');

@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 import type { RawLead, ScrapeJob } from '../types';
 import { mergeScrapeLeads } from './scrapeMerge';
 
-const state = vi.hoisted(() => ({ jobs: [] as ScrapeJob[], rows: [] as RawLead[], error: null as string | null }));
+const state = vi.hoisted(() => ({ jobs: [] as ScrapeJob[], rows: [] as RawLead[], error: null as string | null, skipped: [] as string[] }));
+vi.mock('react', async importOriginal => {
+  const actual = await importOriginal<typeof import('react')>();
+  return { ...actual, useState: <T,>(initial: T | (() => T)) => actual.useState(initial instanceof Set ? new Set(state.skipped) as T : initial) };
+});
 vi.mock('react-router', () => ({ useParams: () => ({ id: 'job' }) }));
 vi.mock('../hooks/useScrapeJob', () => ({ useScrapeJob: () => ({ job: state.jobs[0], jobs: state.jobs,
   rawLeads: mergeScrapeLeads(state.rows), loading: false, error: state.error, refresh: vi.fn() }) }));
@@ -15,7 +19,7 @@ import { ScraperJob as Results } from '../pages/ScraperJob';
 
 const group = { id: '12345678-1234-4234-8234-123456789abc', sources: ['google_places', 'companies_house'] as const };
 function setup() {
-  state.error = null;
+  state.error = null; state.skipped = [];
   state.jobs = [
     { id: 'job', org_id: 'org', status: 'completed', sources: ['google_places'], icp_params: { scrape_group: group } },
     { id: 'registry', org_id: 'org', status: 'completed', sources: ['companies_house'], icp_params: { scrape_group: group } },
@@ -28,6 +32,12 @@ function setup() {
 }
 
 describe('combined results review view', () => {
+  it('keeps skipped rows hidden without Approve buttons', () => {
+    setup(); state.skipped = ['place', 'company'];
+    const html = renderToStaticMarkup(createElement(Results));
+    expect(html).not.toContain('aria-label="Approve ');
+    expect(html).not.toContain('aria-label="Deep find for ');
+  });
   it('offers one Deep find action after approval, with no legacy enrichment buttons', () => {
     setup();
     let html = renderToStaticMarkup(createElement(Results));

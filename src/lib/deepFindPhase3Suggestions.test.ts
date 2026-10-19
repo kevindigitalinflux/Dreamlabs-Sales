@@ -24,3 +24,8 @@ it.each(['1', 'not a number'])('drops malformed phone proposal %s before offerin
   expect(readDeepFindDetails({ suggestions: [s] }).suggestions).toEqual([]);
   expect(planSuggestionAdd(s, {}, [])).toEqual({ kind: 'none' });
 });
+
+it('reads all 25 ordered suggestions from a run', () => {
+  const suggestions = Array.from({ length: 26 }, (_, i) => ({ name: `Person ${i}`, field: 'email', value: `person${i}@acme.com`, label: 'Review' }));
+  expect(readDeepFindDetails({ suggestions }).suggestions).toEqual(suggestions.slice(0, 25).map(s => ({ name: s.name, value: s.value, label: s.label })));
+});

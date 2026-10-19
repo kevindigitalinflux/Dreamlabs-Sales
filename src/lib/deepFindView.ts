@@ -92,7 +92,7 @@ export function readDeepFindDetails(value: unknown): DeepFindDetails {
   });
   const number = typeof o.company_number === 'string' && COMPANY_NUMBER_RE.test(o.company_number) ? o.company_number : null;
   const steps = (Array.isArray(o.steps) ? o.steps : []).slice(0, 40).flatMap((s) => { const t = text(s, 300); return t ? [t] : []; });
-  const suggestions = (Array.isArray(o.suggestions) ? o.suggestions : []).slice(0, 10).flatMap((s) => {
+  const suggestions = (Array.isArray(o.suggestions) ? o.suggestions : []).slice(0, 25).flatMap((s) => {
     const x = (typeof s === 'object' && s !== null ? s : {}) as Record<string, unknown>;
     const name = text(x.name, 80);
     const value = text(x.value, 200);

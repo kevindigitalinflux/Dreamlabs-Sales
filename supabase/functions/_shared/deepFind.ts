@@ -30,7 +30,7 @@ import { commonEmailCandidates, GuessChecks, optionalPeopleBudget, canStartGuess
 import { makeFirecrawlClient } from './firecrawlClient.ts';
 import { FIRECRAWL_DAILY_PAGES, firecrawlDomainFor } from './firecrawlRules.ts';
 import { classifyDeepFindCheckpoint, DeepFindAuthorisationLost } from './deepFindCheckpoint.ts';
-import { isOwnerRole, roleForPerson, visibleSuggestions } from './deepFindSuggestions.ts';
+import { isOwnerRole, isReviewPhone, isSuggestionDismissed, roleForPerson, visibleSuggestions } from './deepFindSuggestions.ts';
 import type { ReviewLead } from './deepFindSuggestions.ts';
 import { applyDeepFindBlank } from './deepFindApply.ts';
 import { lookupPlaceContact } from './googlePlacesLookup.ts';
@@ -172,8 +172,39 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     return dismissed.includes('person:' + key) || dismissed.includes('owner_name:' + key)
       || !!(parsed && findSamePerson(all(), parsed.first, parsed.last)?.dismissed_at);
   };
-  const applyLead = (field: string, value: string) => field === 'owner_name' && ownerSuppressed(value) ? Promise.resolve(false)
-    : applyDeepFindBlank(service, scope, 'leads', lead, field, value, autoApplied, checkpoint);
+  const applyLead = async (field: string, value: string) => {
+    if (field === 'owner_name' && ownerSuppressed(value)) return false;
+    const saved = await applyDeepFindBlank(service, scope, 'leads', lead, field, value, autoApplied, checkpoint);
+    if (field === 'website' && !saved) {
+      const { data: current } = await service.from('leads').select('website').eq('id', lead.id).eq('org_id', run.org_id).maybeSingle();
+      if (current && current.website !== lead.website) steps.push('The saved website changed while Deep find ran, so it was left as is.');
+    }
+    return saved;
+  };
+  const exactContact = (first: string, last: string) => {
+    const normal = (v: unknown) => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+    if (normal(first).length < 2 || normal(last).length < 2) return null;
+    const hits = all().filter(c => c.name_obfuscated !== true && normal(c.first_name) === normal(first) && normal(c.last_name) === normal(last));
+    return hits.length === 1 ? hits[0] : null;
+  };
+  const prepareContact = async (row: Record<string, unknown>): Promise<Record<string, unknown> | null> => {
+    await checkpoint();
+    const { data: current, error } = await service.from('leads').select('dismissed_suggestions').eq('id', lead.id).eq('org_id', run.org_id).maybeSingle();
+    if (error || !current) return null;
+    const name = (String(row.first_name ?? '') + ' ' + String(row.last_name ?? '')).trim();
+    if (isSuggestionDismissed({ name }, current)) return null;
+    const prepared = { ...row };
+    for (const field of ['title', 'email', 'phone', 'linkedin_url']) {
+      const value = str(prepared[field]);
+      if (value && isSuggestionDismissed({ name, field, value }, current)) prepared[field] = null;
+    }
+    return prepared;
+  };
+  const prepareContacts = async (proposals: Record<string, unknown>[]) => {
+    const prepared: Record<string, unknown>[] = [];
+    for (const proposal of proposals) { const row = await prepareContact(proposal); if (row) prepared.push(row); }
+    return prepared;
+  };
   const checkedEmails = new Map<string, Awaited<ReturnType<typeof worker.verifyEmail>>>();
   const reviewableSuggestions = () => visibleSuggestions(suggestions.filter((s) => {
     const checked = s.field === 'email' ? checkedEmails.get(s.value.toLowerCase()) : null;
@@ -208,16 +239,6 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     return changed ? contact : null;
   };
   try {
-  // Reuse the existing name-only Places lookup before every step that needs a website.
-  if (placesKey && (!str(lead.website) || !str(lead.phone)) && left() > 30_000) {
-    await checkpoint();
-    const place = await lookupPlaceContact(str(lead.business_name) ?? '', str(lead.city), placesKey);
-    const domain = domainFromWebsite(place?.website ?? null);
-    if (place?.website && domain && DOMAIN_CHECKS.usable(domain) && !savedDomains(lead.blocked_domains).includes(domain)) await applyLead('website', place.website);
-    if (place?.phone) await applyLead('phone', place.phone);
-    steps.push(place ? 'Checked Google Places for missing website and phone.' : 'Google Places found no matching contact details.');
-  }
-
   // Hunter's free account check (no search credits): how many searches are left, and stop early when none are.
   let hunterAccountInfo: HunterAccount | null = null;
   if (hunterKey) {
@@ -254,13 +275,18 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }
   if (officerRows.length > 0) {
     await checkpoint();
-    const { data, error } = await service.from('decision_maker_candidates').insert(officerRows.map((r) => ({ ...r, include_in_sequences: false }))).select('*');
+    const { data, error } = await service.from('decision_maker_candidates').insert(await prepareContacts(officerRows.map((r) => ({ ...r, include_in_sequences: false })))).select('*');
     if (error) problems.push({ step: 'save', target: 'the Companies House officers', failure: 'network' });
     else { created.push(...((data ?? []) as Contact[])); stats.officersAdded = (data ?? []).length; }
   }
   if (!str(lead.owner_name)) {
     const officer = officers.find((o) => isOwnerRole(o.title));
-    if (officer) await applyLead('owner_name', `${officer.first_name} ${officer.last_name}`.trim());
+    if (officer) {
+      const name = (officer.first_name + ' ' + officer.last_name).trim();
+      const exact = exactContact(officer.first_name, officer.last_name);
+      if (exact && !exact.dismissed_at) await applyLead('owner_name', name);
+      else suggestions.push({ name, field: 'owner_name', value: name, label: 'Registry owner role; review the full name before adding.' });
+    }
     else for (const o of officers.slice(0, 5)) suggestions.push({ name: `${o.first_name} ${o.last_name}`.trim(), field: 'owner_name', value: `${o.first_name} ${o.last_name}`.trim(), label: `Companies House: ${o.title ?? 'officer'}. Check ownership before adding.` });
     if (!officers.length && ocKey && left() > 30_000) {
       await checkpoint();
@@ -270,7 +296,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }
   for (const officer of officers.filter((o) => isOwnerRole(o.title))) {
     if (!officer.first_name || !officer.last_name) continue;
-    const contact = findSamePerson(all(), officer.first_name, officer.last_name);
+    const contact = exactContact(officer.first_name, officer.last_name);
     if (contact && !ownerSuppressed(`${officer.first_name} ${officer.last_name}`)) {
       await applyDeepFindBlank(service, scope, 'decision_maker_candidates', contact, 'title', officer.title!, autoApplied, checkpoint);
     }
@@ -323,6 +349,33 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   for (const d of discovery.domains.slice(0, 6)) {
     const how = d.sources.map((x) => DOMAIN_SOURCE_LABELS[x]).join(', ');
     steps.push(d.needs_check ? `Domain ${d.domain}: not confirmed (${how}), used for searching only.` : `Domain ${d.domain}: confirmed (${how}).`);
+  }
+
+  // Confirmed own-site discovery takes precedence over Places.
+  const websitePatch = !str(lead.website) ? planWebsiteAutoUpdate(lead, discovery.domains, { checked: siteChecked, reachable: sitePages.length > 0, suspect: suspicion.suspect }) : null;
+  if (websitePatch) await applyLead('website', websitePatch.website);
+  let placesSuppliedPhone = false;
+  if (placesKey && !str(lead.phone) && left() > 30_000) {
+    await checkpoint();
+    if (!await checkRateLimit(service, 'places-lookups:' + run.org_id, 300, 1440, true)) {
+      steps.push("Google Places lookups reached today's limit for this organisation.");
+    } else {
+      const place = await lookupPlaceContact(str(lead.business_name) ?? '', str(lead.city), placesKey);
+      const automatic = !!str(lead.city) && place?.strength === 2 && place.cityMatches === true;
+      const label = 'Google Places: ' + (place?.name ?? 'business match') + ', ' + (place?.address ?? 'address unavailable') + '. Review the match before adding.';
+      const domain = domainFromWebsite(place?.website ?? null);
+      const confirmedOwnSite = discovery.domains.some(d => !d.needs_check && d.sources.includes('site_confirms'));
+      if (place?.website && !str(lead.website) && !confirmedOwnSite && domain && DOMAIN_CHECKS.usable(domain) && !savedDomains(lead.blocked_domains).includes(domain)) {
+        if (automatic) await applyLead('website', place.website);
+        else suggestions.push({ name: 'Company contact', field: 'website', value: place.website, label });
+      }
+      if (place?.phone && isReviewPhone(place.phone)) {
+        placesSuppliedPhone = true;
+        if (automatic) await applyLead('phone', place.phone);
+        else suggestions.push({ name: 'Company contact', field: 'phone', value: place.phone, label });
+      }
+      steps.push(place ? 'Checked Google Places for missing website and phone.' : 'Google Places found no matching contact details.');
+    }
   }
 
   // (1b) free team scan on discovered domains whose OWN website confirmed them: emails written literally on the
@@ -546,9 +599,12 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }
   // Reuse paid domain lists for the old Fill-details company-email fallback; no second Hunter call.
   for (const [domain, list] of lists) if (verified.has(domain)) {
+    const named = hunterPeople(list.emails, domain, cleanEmail, cleanLinkedinProfile);
+    const personal = new Set(named.map(p => p.email.toLowerCase()));
+    for (const person of named) suggestions.push({ name: person.first_name + ' ' + person.last_name, field: 'email', value: person.email, label: 'Hunter named-person address; review before adding.' });
     for (const raw of list.emails.slice(0, 10)) {
       const email = raw && typeof raw === 'object' ? cleanEmail((raw as Record<string, unknown>).value) : null;
-      if (email && emailDomain(email) === domain && !emailOnLead(all(), email)) suggestions.push({ name: 'Company contact', field: 'email', value: email, label: 'Hunter company-list address; review before adding.' });
+      if (email && !personal.has(email.toLowerCase()) && emailDomain(email) === domain && !emailOnLead(all(), email)) suggestions.push({ name: 'Company contact', field: 'email', value: email, label: 'Hunter company-list address; review before adding.' });
     }
   }
   const listed = [...lists.entries()].flatMap(([d, l]) => hunterPeople(l.emails, d, cleanEmail, cleanLinkedinProfile).map((p) => ({ ...p, domain: d })));
@@ -577,7 +633,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     });
   }
   if (toInsert.length) await checkpoint();
-  const insertedHunter = await insertContacts(service, toInsert.map((r) => ({ ...r, email: null, email_revealed: false, linkedin_url: null })));
+  const insertedHunter = await insertContacts(service, await prepareContacts(toInsert.map((r) => ({ ...r, email: null, email_revealed: false, linkedin_url: null }))));
   created.push(...insertedHunter);
   for (const c of insertedHunter) {
     const proposal = toInsert.find((p) => p.first_name === c.first_name && p.last_name === c.last_name);
@@ -615,7 +671,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     contacts: all, domains: verifiedDomains, website: usableSite ? str(lead.website) : null,
     websiteDirectory: !!siteDomain && isDirectoryDomain(siteDomain), lists, keys: { hunterKey, geminiKey },
     spend: { hunter: () => spend.hunter('people'), ai: () => spend.ai('people'), stopHunter: () => spend.stopHunter() }, left,
-    saveContact, checkpoint,
+    saveContact, checkpoint, prepareContact,
     searchPerson: async (p, timeout) => {
       const result = await searchRaw(p, timeout);
       // Owner LinkedIn matches are applied below only after the evidence check, with their own CAS and Undo record.
@@ -662,8 +718,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   for (const person of trustedOwnerPeople.filter((p) => isOwnerRole(p.role))) {
     const parsed = parseLeadPersonName(person.name);
     if (!parsed || ownerSuppressed(person.name)) continue;
-    const contact = findSamePerson(all(), parsed.first, parsed.last);
-    if (contact?.dismissed_at) continue;
+    const contact = exactContact(parsed.first, parsed.last);
+    if (!contact || contact.dismissed_at) {
+      suggestions.push({ name: person.name, field: 'owner_name', value: person.name, label: 'Own-site owner role; review the full name before adding.' });
+      continue;
+    }
     await applyLead('owner_name', person.name);
     if (contact) await applyDeepFindBlank(service, scope, 'decision_maker_candidates', contact, 'title', person.role!, autoApplied, checkpoint);
   }
@@ -673,12 +732,12 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     await checkpoint();
     const candidates = await searchApolloDecisionMakers(apolloDomain, apolloKey, 3);
     await checkpoint();
-    const added = await insertContacts(service, candidates.map((p) => ({
+    const added = await insertContacts(service, await prepareContacts(candidates.map((p) => ({
       lead_id: lead.id, source: 'apollo', apollo_person_id: p.apolloPersonId,
       first_name: p.firstName, last_name: p.lastNameObfuscated, title: p.title,
       name_obfuscated: true, email_revealed: false, include_in_sequences: false,
       linkedin_url: null, created_by: run.created_by,
-    })));
+    }))));
     created.push(...added);
     for (const p of candidates) {
       const url = cleanLinkedinProfile(p.linkedinUrl);
@@ -686,10 +745,12 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     }
     apolloPeople = added.length;
     steps.push(`Apollo decision-maker search: ${added.length} new contacts. Names may be hidden until reviewed and revealed.`);
-    if (!str(lead.phone) && left() > 15_000) {
+    if (!str(lead.phone) && !placesSuppliedPhone && left() > 15_000) {
       await checkpoint();
-      const phone = await lookupApolloPhone('https://' + apolloDomain, apolloKey);
-      if (phone) suggestions.push({ name: 'Company contact', field: 'phone', value: phone, label: 'Apollo company phone; review before adding.' });
+      const allowed = await checkRateLimit(service, 'apollo-company-phone:' + run.org_id, 100, 1440, true);
+      if (!allowed) steps.push("Apollo company phone lookups reached today's limit for this organisation.");
+      const phone = allowed ? await lookupApolloPhone('https://' + apolloDomain, apolloKey) : null;
+      if (phone && isReviewPhone(phone)) suggestions.push({ name: 'Company contact', field: 'phone', value: phone, label: 'Apollo company phone; review before adding.' });
     }
   }
   // Owner-like contacts are searched even when an email is already saved. Names without a contact remain reviewable.
@@ -715,21 +776,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (!match) { steps.push(`No supported LinkedIn profile found for ${name}.`); continue; }
     const contact = findSamePerson(all(), p.first, p.last);
     if (match.high && contact && !contact.dismissed_at && !str(contact.linkedin_url)) {
-      const before = typeof contact.linkedin_url === 'string' ? contact.linkedin_url : null;
-      await checkpoint();
-      let query = service.from('decision_maker_candidates').update({ linkedin_url: match.url, updated_at: nowIso() }).eq('id', contact.id).eq('lead_id', lead.id).is('dismissed_at', null);
-      query = before === null ? query.is('linkedin_url', null) : query.eq('linkedin_url', before);
-      const { data, error } = await query.select('id');
-      if (error) { console.error('deep find: LinkedIn save failed'); steps.push(`Could not save the LinkedIn profile for ${name}.`); }
-      else if (data?.length) {
-        contact.linkedin_url = match.url; touched.add(contact.id);
-        autoApplied.push({ table: 'decision_maker_candidates', id: contact.id, field: 'linkedin_url', before, after: match.url });
-      }
+      const saved = await applyDeepFindBlank(service, scope, 'decision_maker_candidates', contact, 'linkedin_url', match.url, autoApplied, checkpoint);
+      if (saved) touched.add(contact.id);
     } else suggestions.push({ name, field: 'linkedin_url', value: match.url, label: match.evidence });
   }
-  // Apply website changes only after all searches, guarding both the old URL and the array snapshot.
-  const websitePatch = !str(lead.website) ? planWebsiteAutoUpdate(lead, discovery.domains, { checked: siteChecked, reachable: sitePages.length > 0, suspect: suspicion.suspect }) : null;
-  if (websitePatch) await applyLead('website', websitePatch.website);
   stats.namedOnSite = namedOnSite.length;
   stats.namedByWeb = namedByWeb.length;
   stats.hunterCapHit = spend.hunterHit;
@@ -757,11 +807,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     reason: (apolloPeople ? `Apollo added ${apolloPeople} decision-maker contacts. ` : '') + deepFindSummary(stats),
     people_found: stats.hunterPeople + stats.officersAdded + apolloPeople,
     domains: {
-      auto_applied: autoApplied,
+      auto_applied: autoApplied.slice(0, 100),
       domains: discovery.domains,
       named_by_web: namedByWeb,
       named_on_site: namedOnSite,
-      suggestions: reviewableSuggestions().slice(0, 10),
+      suggestions: reviewableSuggestions().slice(0, 25),
       unverified_people: unverifiedPeople,
       registered_name: registry.name,
       website_suspect: suspicion.suspect,
@@ -777,10 +827,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     },
   };
   } catch (error) {
-    if (!(error instanceof DeepFindAuthorisationLost)) console.error('deep find: lead processing stopped');
+    if (!(error instanceof DeepFindAuthorisationLost)) console.error('deep find: lead processing stopped', error instanceof Error && ['Error', 'TypeError', 'RangeError', 'SyntaxError', 'AbortError'].includes(error.name) ? error.name : 'UnknownError', 'Unexpected failure while processing a lead; provider payload omitted.');
     return { status: error instanceof DeepFindAuthorisationLost ? 'skipped' : 'failed',
       reason: error instanceof DeepFindAuthorisationLost ? error.message : 'Deep find could not finish. Saved changes are listed below with Undo.',
-      people_found: created.length, domains: { auto_applied: autoApplied, suggestions: reviewableSuggestions().slice(0, 10), steps } };
+      people_found: created.length, domains: { auto_applied: autoApplied.slice(0, 100), suggestions: reviewableSuggestions().slice(0, 25), steps } };
   }
 }
 
