@@ -4,6 +4,33 @@ import {
   type CampaignRunInput, type DeepFindLeadInput, type DeepFindRunInput, type ScrapeJobInput, type SelectedLeadInput, type SelectedRunInput,
 } from './model';
 
+describe('combined scrape search labels', () => {
+  it('gives source jobs a shared search marker and keeps source-specific links and counts', () => {
+    const base: ScrapeJobInput = { id: 'p', status: 'completed', icp_raw_input: 'Cleaners in London',
+      results_count: 2, approved_count: 0, created_by: 'user', started_at: null, completed_at: null, created_at: '2026-10-19',
+      icp_params: { scrape_group: { id: '12345678-1234-4234-8234-123456789abc', sources: ['google_places', 'companies_house'] } }, sources: ['google_places'] };
+    const places = mapScrape(base, 2, 0);
+    const registry = mapScrape({ ...base, id: 'r', sources: ['companies_house'] }, 1, 0);
+    expect(places.title).toContain('Search 12345678');
+    expect(registry.title).toContain('Search 12345678');
+    expect(places.title).toContain('Google Places');
+    expect(registry.title).toContain('Companies House');
+    expect(places.detail).toContain('combined search');
+    expect(places.needsYou).toBe(2);
+    expect(registry.href).toBe('/scraper/jobs/r');
+    expect(mapScrape({ ...base, created_by: null }, 2, 0).title).toBe('Cleaners in London');
+  });
+  it('keeps partial results reviewable after a grouped source fails', () => {
+    const result = mapScrape({ id: 'r', status: 'failed', icp_raw_input: 'Cleaners', results_count: 0,
+      approved_count: 0, created_by: 'user', started_at: null, completed_at: null, created_at: '2026-10-19',
+      icp_params: { scrape_group: { id: '12345678-1234-4234-8234-123456789abc', sources: ['companies_house'] } },
+      sources: ['companies_house'] }, 2, 0);
+    expect(result.state).toBe('needs_you');
+    expect(result.needsYou).toBe(2);
+    expect(result.detail).toContain('source stopped early');
+  });
+});
+
 describe('nameLeads', () => {
   it('names zero, one, two and many leads', () => {
     expect(nameLeads([])).toBe('No leads yet');

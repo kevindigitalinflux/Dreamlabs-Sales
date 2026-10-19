@@ -4,6 +4,9 @@
 import { needsAttention } from '../deepFindView';
 import type { DeepFindActivityRow } from '../deepFindView';
 import { countOpenNeedsInput } from '../runLeadGroups';
+import { readScrapeGroup } from '../../../supabase/functions/_shared/scrapeGroup';
+import { SOURCE_NAMES } from '../scrapeMerge';
+import type { ScrapeSource } from '../../types';
 
 export type JobKind = 'deep_find' | 'selected_outreach' | 'scrape' | 'campaign' | 'lookup';
 
@@ -136,6 +139,8 @@ export interface ScrapeJobInput {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
+  icp_params?: unknown;
+  sources?: ScrapeSource[];
 }
 
 /**
@@ -145,11 +150,12 @@ export interface ScrapeJobInput {
 export function mapScrape(job: ScrapeJobInput, pendingCount: number, approvedCount?: number): JobItem {
   const startedAt = job.started_at ?? job.created_at;
   const byAutopilot = job.created_by === null;
+  const group = byAutopilot ? null : readScrapeGroup(job.icp_params);
   const pending = byAutopilot ? 0 : pendingCount;
   const finished = job.status === 'completed' || job.status === 'failed';
   const hasApproved = approvedCount !== undefined && approvedCount > 0;
   const canDelete = finished && !hasApproved;
-  const state: JobState = job.status === 'failed' ? 'failed'
+  const state: JobState = group && finished && pending > 0 ? 'needs_you' : job.status === 'failed' ? 'failed'
     : job.status === 'completed' ? (pending > 0 ? 'needs_you' : 'done') : 'running';
   const results = `${job.results_count} ${plural(job.results_count, 'result', 'results')}`;
   const detail = state === 'running' ? 'Searching for leads…'
@@ -163,8 +169,9 @@ export function mapScrape(job: ScrapeJobInput, pendingCount: number, approvedCou
     : 'Leads you approved stay in your pipeline.';
   return {
     id: `scrape:${job.id}`, kind: 'scrape', sourceId: job.id,
-    title: shorten(job.icp_raw_input ?? '', 60) || 'Lead search',
-    detail, state, progress: null, needsYou: state === 'needs_you' ? pending : 0,
+    title: group ? `Search ${group.id.slice(0, 8)} · ${shorten(job.icp_raw_input ?? 'Lead search', 40)} · ${(job.sources ?? []).map((s) => SOURCE_NAMES[s]).join(', ')}`
+      : shorten(job.icp_raw_input ?? '', 60) || 'Lead search',
+    detail: group ? `Part of a combined search · ${detail}${job.status === 'failed' && pending > 0 ? ' · This source stopped early' : ''}` : detail, state, progress: null, needsYou: state === 'needs_you' ? pending : 0,
     startedAt, finishedAt: finished ? (job.completed_at ?? startedAt) : null,
     href: `/scraper/jobs/${job.id}`,
     canStop: false, canDelete, deleteWarning,

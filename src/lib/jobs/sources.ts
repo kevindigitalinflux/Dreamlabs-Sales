@@ -5,6 +5,7 @@ import { supabase } from '../supabase';
 import { mapLookupJob, type LookupJobInput, type LookupRowInput } from './lookup';
 import { fetchLogStatuses } from '../../hooks/useDraftStatuses';
 import type { DeepFindActivityRow } from '../deepFindView';
+import { readScrapeGroup } from '../../../supabase/functions/_shared/scrapeGroup';
 import {
   mapCampaign, mapDeepFind, mapScrape, mapSelectedOutreach,
   type DeepFindLeadInput, type DeepFindRunInput, type JobItem, type JobKind, type SelectedLeadInput, type SelectedRunInput, type ScrapeJobInput, type CampaignRunInput,
@@ -122,18 +123,19 @@ const scrape: JobSource = {
   watch: [{ table: 'scrape_jobs', byOrg: true }, { table: 'raw_leads', byOrg: false }],
   async load(orgId) {
     const { data, error } = await supabase.from('scrape_jobs')
-      .select('id, status, icp_raw_input, results_count, approved_count, created_by, started_at, completed_at, created_at')
+      .select('id, status, icp_raw_input, icp_params, sources, results_count, approved_count, created_by, started_at, completed_at, created_at')
       .eq('org_id', orgId).gte('created_at', sinceIso()).order('created_at', { ascending: false }).limit(MAX_JOBS);
     if (error) fail('scraper jobs', error.message);
     const jobs = (data as ScrapeJobInput[] | null) ?? [];
     // Count real results per job for the 40 most recent finished searches with results: approved for all, pending only for
     // searches a person started (Autopilot's daily searches never need the user). Older jobs get an unknown approved count.
-    const candidates = jobs.filter((j) => j.status === 'completed' && j.results_count > 0).slice(0, 40);
+    const candidates = jobs.filter((j) => (j.status === 'completed' && j.results_count > 0)
+      || (readScrapeGroup(j.icp_params) && (j.status === 'completed' || j.status === 'failed'))).slice(0, 40);
     const pending = new Map<string, number>();
     const approved = new Map<string, number>();
     const countRows = async (jobId: string, status: 'pending' | 'approved'): Promise<number> => {
       const { count, error: countErr } = await supabase.from('raw_leads')
-        .select('id', { count: 'exact', head: true }).eq('scrape_job_id', jobId).eq('status', status);
+        .select('id', { count: 'exact', head: true }).eq('scrape_job_id', jobId).in('status', status === 'pending' ? ['pending', 'duplicate'] : ['approved']);
       if (countErr) fail('scraper results', countErr.message);
       return count ?? 0;
     };

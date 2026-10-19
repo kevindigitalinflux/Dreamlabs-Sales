@@ -14,7 +14,10 @@ import { Badge } from '../components/ui/Badge';
 import { IcpSelect } from '../components/emails/IcpSelect';
 import { useIcps } from '../hooks/useIcps';
 import { searchTextFromIcp } from '../lib/icp';
-import type { IcpParams, ScrapeSource } from '../types';
+import type { IcpParams } from '../types';
+import { SOURCE_NAMES, sourceAvailability, type SearchSource } from '../lib/scrapeMerge';
+import { startScrapeSearch } from '../lib/scrapeSearch';
+import { ScrapeSourceChoices } from '../components/scraper/ScrapeSourceChoices';
 
 const TOTAL_STEPS = 4;
 
@@ -31,7 +34,7 @@ export function Scraper() {
   const [icp, setIcp] = useState<IcpParams | null>(null);
   const { icps } = useIcps();
   const [icpId, setIcpId] = useState<string | null>(null);
-  const [source, setSource] = useState<ScrapeSource>('google_places');
+  const [sources, setSources] = useState<SearchSource[]>(['google_places', 'companies_house']);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pipelineChoice, setPipelineChoice] = useState<'existing' | 'new'>(() => ((location.state as { newPipeline?: boolean } | null)?.newPipeline ? 'new' : 'existing'));
@@ -41,6 +44,8 @@ export function Scraper() {
   const placesConfigured = settings.find((s) => s.provider === 'google_places')?.is_configured ?? false;
   const chConfigured = settings.find((s) => s.provider === 'companies_house')?.is_configured ?? false;
   const croConfigured = settings.find((s) => s.provider === 'cro')?.is_configured ?? false;
+  const configured = { google_places: placesConfigured, companies_house: chConfigured, cro: croConfigured };
+  const selectedSources = sources.filter((s) => !sourceAvailability(s, icp?.country, configured[s]));
 
   async function parseIcp() {
     if (!currentOrg || !rawInput.trim()) return;
@@ -54,33 +59,32 @@ export function Scraper() {
     if (result.error) return setError(result.error);
     if (result.params) {
       setIcp(result.params);
-      if (result.params.country !== 'GB' && source === 'companies_house') setSource('google_places');
       setStep(2);
     }
   }
 
   async function runScrape() {
     if (!currentOrg || !icp) return;
+    if (!selectedSources.length) { setError('Choose at least one configured source'); return; }
     setBusy(true); setError(null);
-    let targetPipelineId = pipelineId;
-    if (pipelineChoice === 'new') {
-      const { error: createErr, pipeline } = await createPipeline(newPipelineName);
-      if (createErr || !pipeline) { setBusy(false); setError(createErr ?? 'Could not create pipeline'); return; }
-      targetPipelineId = pipeline.id;
-    }
-    const functionName = source === 'google_places' ? 'scrape-google-places' : source === 'cro' ? 'scrape-cro' : 'scrape-companies-house';
-    const { data, error: err } = await supabase.functions.invoke(functionName, {
-      body: { org_id: currentOrg.id, icp_raw_input: rawInput, icp_params: icp, pipeline_id: targetPipelineId || null, icp_id: icpId },
-    });
-    setBusy(false);
-    if (err) return setError(err.message);
-    const result = data as { job_id?: string; error?: string };
-    if (result.error) return setError(result.error);
-    if (result.job_id) navigate(`/scraper/jobs/${result.job_id}`);
+    try {
+      let targetPipelineId = pipelineId;
+      if (pipelineChoice === 'new') {
+        const { error: createErr, pipeline } = await createPipeline(newPipelineName);
+        if (createErr || !pipeline) { setError(createErr ?? 'Could not create pipeline'); return; }
+        targetPipelineId = pipeline.id;
+      }
+      const result = await startScrapeSearch(selectedSources, {
+        org_id: currentOrg.id, icp_raw_input: rawInput, icp_params: icp,
+        pipeline_id: targetPipelineId || null, icp_id: icpId,
+      }, crypto.randomUUID(), (name, options) => supabase.functions.invoke(name, options));
+      if (result.jobIds.length) navigate(`/scraper/jobs/${result.jobIds[0]}`);
+      else setError(result.notes.join(' '));
+    } catch (err) {
+      console.error('Could not start lead search', err instanceof Error ? err.name : 'unknown');
+      setError('Could not start the search. Please try again.');
+    } finally { setBusy(false); }
   }
-
-  const sourceUnavailable =
-    source === 'google_places' ? !placesConfigured : source === 'cro' ? !croConfigured : icp?.country !== 'GB' || !chConfigured;
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
@@ -120,6 +124,7 @@ export function Scraper() {
           <div className="flex flex-col gap-3">
             <p className="font-semibold">Here's what I picked up</p>
             <div className="flex flex-wrap gap-2">
+              <Badge className="bg-violet/15 text-violet">Country: {icp.country === 'GB' ? 'United Kingdom' : icp.country === 'IE' ? 'Ireland' : icp.country === 'US' ? 'United States' : 'Other'}</Badge>
               {icp.location && <Badge className="bg-violet/15 text-violet">Location: {icp.location}</Badge>}
               {icp.industry && <Badge className="bg-violet/15 text-violet">Industry: {icp.industry}</Badge>}
               {icp.min_staff != null && <Badge className="bg-violet/15 text-violet">Min staff: {icp.min_staff}</Badge>}
@@ -128,6 +133,10 @@ export function Scraper() {
               )}
               {icp.max_reviews != null && <Badge className="bg-violet/15 text-violet">Max reviews: {icp.max_reviews}</Badge>}
             </div>
+            <SelectField label="Search country" value={icp.country} onChange={(e) => setIcp({ ...icp, country: e.target.value as IcpParams['country'] })}>
+              <option value="GB">United Kingdom</option><option value="IE">Ireland</option>
+              <option value="US">United States</option><option value="other">Other</option>
+            </SelectField>
             <div className="flex justify-between">
               <Button variant="secondary" onClick={() => setStep(1)}>Back</Button>
               <Button onClick={() => setStep(3)}>Looks right</Button>
@@ -139,24 +148,10 @@ export function Scraper() {
       {step === 3 && icp && (
         <Card>
           <div className="flex flex-col gap-3">
-            <p className="font-semibold">Choose one data source</p>
-            <p className="text-sm text-muted">Each search runs against a single source — pick the one that fits this ICP.</p>
-            <label className="flex min-h-11 items-center gap-2">
-              <input type="radio" name="scrape-source" checked={source === 'google_places'} onChange={() => setSource('google_places')} disabled={!placesConfigured} className="h-4 w-4 accent-violet-500" />
-              Google Places {!placesConfigured && <span className="text-xs text-muted">(no key configured — see Settings)</span>}
-            </label>
-            <label className="flex min-h-11 items-center gap-2">
-              <input type="radio" name="scrape-source" checked={source === 'companies_house'} onChange={() => setSource('companies_house')} disabled={icp.country !== 'GB' || !chConfigured} className="h-4 w-4 accent-violet-500" />
-              Companies House {icp.country !== 'GB' && <span className="text-xs text-muted">(UK only)</span>}
-              {icp.country === 'GB' && !chConfigured && <span className="text-xs text-muted">(no key configured — see Settings)</span>}
-            </label>
-            <label className="flex min-h-11 items-center gap-2">
-              <input type="radio" name="scrape-source" checked={source === 'cro'} onChange={() => setSource('cro')} disabled={!croConfigured} className="h-4 w-4 accent-violet-500" />
-              CRO (Ireland) {!croConfigured && <span className="text-xs text-muted">(no key configured, see Settings)</span>}
-            </label>
+            <ScrapeSourceChoices country={icp.country} sources={sources} configured={configured} onChange={setSources} />
             <div className="flex justify-between">
               <Button variant="secondary" onClick={() => setStep(2)}>Back</Button>
-              <Button onClick={() => setStep(4)} disabled={sourceUnavailable}>Continue</Button>
+              <Button onClick={() => setStep(4)} disabled={!selectedSources.length}>Continue</Button>
             </div>
           </div>
         </Card>
@@ -165,7 +160,7 @@ export function Scraper() {
       {step === 4 && (
         <Card>
           <div className="flex flex-col gap-3">
-            <p className="font-semibold">Ready to search {source === 'google_places' ? 'Google Places' : source === 'cro' ? 'CRO (Ireland)' : 'Companies House'}</p>
+            <p className="font-semibold">Ready to search {selectedSources.map((s) => SOURCE_NAMES[s]).join(' and ')}</p>
             <p className="text-sm text-muted">This runs in the background — you'll be taken to a live results page.</p>
             <label className="flex min-h-11 items-center gap-2">
               <input type="radio" name="pipeline-choice" checked={pipelineChoice === 'existing'} onChange={() => setPipelineChoice('existing')} className="h-4 w-4 accent-violet-500" />
@@ -188,7 +183,7 @@ export function Scraper() {
               <Button variant="secondary" onClick={() => setStep(3)}>Back</Button>
               <Button
                 onClick={() => void runScrape()}
-                disabled={busy || (pipelineChoice === 'existing' && !pipelineId) || (pipelineChoice === 'new' && !newPipelineName.trim())}
+                disabled={busy || !selectedSources.length || (pipelineChoice === 'existing' && !pipelineId) || (pipelineChoice === 'new' && !newPipelineName.trim())}
                 loading={busy}
               >
                 {busy ? 'Starting…' : 'Find leads'}

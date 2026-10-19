@@ -10,6 +10,9 @@ import { Badge } from '../components/ui/Badge';
 import { Skeleton } from '../components/ui/Skeleton';
 import { SelectField } from '../components/ui/Input';
 import { toCsv } from '../lib/csv';
+import { SOURCE_NAMES } from '../lib/scrapeMerge';
+import { readScrapeGroup } from '../../supabase/functions/_shared/scrapeGroup';
+import { websiteHref } from '../lib/websiteHref';
 import type { RawLead } from '../types';
 
 function statusBadge(job: { status: string } | null) {
@@ -26,10 +29,10 @@ function statusBadge(job: { status: string } | null) {
 /** Scrape-job results review table (SPEC.md §5 "Approval Flow"). */
 export function ScraperJob() {
   const { id } = useParams<{ id: string }>();
-  const { job, rawLeads, loading, refresh } = useScrapeJob(id!);
+  const { job, jobs, rawLeads, loading, error, refresh } = useScrapeJob(id!);
   const { pipelines } = usePipeline();
   const [pipelineId, setPipelineId] = useState('');
-  const { approve, reject, skip, enrichWithApollo, enrichWithHunter } = useRawLeadActions(job?.org_id, pipelineId, job?.icp_id);
+  const { approve, reject, skip, enrichWithApollo, enrichWithHunter } = useRawLeadActions(job?.org_id, pipelineId, job?.icp_id, job?.icp_params?.country);
   const { settings } = useOrgApiSettings();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null);
@@ -52,10 +55,14 @@ export function ScraperJob() {
 
   async function runAction(lead: RawLead, fn: (l: RawLead) => Promise<string | null>) {
     setBusyId(lead.id); setRowError(null);
-    const err = await fn(lead);
-    setBusyId(null);
-    if (err) setRowError({ id: lead.id, text: err });
-    else void refresh();
+    try {
+      const err = await fn(lead);
+      if (err) setRowError({ id: lead.id, text: err });
+      await refresh();
+    } catch (err) {
+      console.error('Scrape review failed', err instanceof Error ? err.name : 'unknown');
+      setRowError({ id: lead.id, text: 'Could not finish this action. Refresh and try again.' });
+    } finally { setBusyId(null); }
   }
 
   function toggleSelected(id: string) {
@@ -72,21 +79,25 @@ export function ScraperJob() {
 
   async function approveSelected(leads: RawLead[]) {
     setBulkBusy(true);
-    for (const lead of leads) {
-      if (!selected.has(lead.id)) continue;
-      const err = await approve(lead);
-      if (err) setRowError({ id: lead.id, text: err });
+    try {
+      for (const lead of leads) {
+        if (!selected.has(lead.id)) continue;
+        const err = await approve(lead);
+        if (err) { setRowError({ id: lead.id, text: err }); break; }
+      }
+    } catch (err) {
+      console.error('Scrape review failed', err instanceof Error ? err.name : 'unknown');
+      setRowError({ id: '', text: 'Could not finish approval. Refresh and try again.' });
+    } finally {
+      setBulkBusy(false); setSelected(new Set()); void refresh();
     }
-    setBulkBusy(false);
-    setSelected(new Set());
-    void refresh();
   }
 
   function exportCsv() {
-    const headers = ['Business', 'Phone', 'Email', 'City', 'Rating', 'Reviews', 'Source', 'Status'];
+    const headers = ['Business', 'Website', 'Company number', 'Owner', 'Phone', 'Email', 'City', 'Rating', 'Reviews', 'Source', 'Status'];
     const rows = rawLeads.map((l) => [
-      l.business_name, l.phone ?? '', l.email ?? '', l.city ?? '',
-      l.google_rating?.toString() ?? '', l.review_count?.toString() ?? '', l.source, l.status,
+      l.business_name, l.website ?? '', l.companyNumber ?? '', l.owner_name ?? '', l.phone ?? '', l.email ?? '', l.city ?? '',
+      l.google_rating?.toString() ?? '', l.review_count?.toString() ?? '', l.sources.map((s) => SOURCE_NAMES[s]).join('; '), l.status,
     ]);
     const blob = new Blob([toCsv(headers, rows)], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -96,18 +107,23 @@ export function ScraperJob() {
   }
 
   if (loading) return <Skeleton className="h-96 w-full" />;
-  if (!job) return <p role="alert" className="text-sm text-danger">Job not found.</p>;
+  if (!job) return <p role="alert" className="text-sm text-danger">{error ?? 'Job not found.'}</p>;
 
   const pending = rawLeads.filter((l) => l.status === 'pending' || l.status === 'duplicate');
+  const running = jobs.some((j) => j.status === 'pending' || j.status === 'running');
+  const reviewDisabled = running || !!error || busyId !== null || bulkBusy;
+  const group = readScrapeGroup(job.icp_params);
+  const missing = group?.sources.filter((s) => !jobs.some((j) => j.sources.includes(s))) ?? [];
+  const status = running ? 'running' : jobs.every((j) => j.status === 'failed') ? 'failed' : 'completed';
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+    <div className="flex min-w-0 flex-col gap-4">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-[28px] font-extrabold">Scrape results</h1>
-          {statusBadge(job)}
+          {statusBadge({ status })}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <SelectField label="Approve into" value={pipelineId} onChange={(e) => setPipelineId(e.target.value)}>
             <option value="">Choose pipeline…</option>
             {pipelines.filter((p) => p.org_id === job.org_id).map((p) => (
@@ -115,24 +131,26 @@ export function ScraperJob() {
             ))}
           </SelectField>
           {selected.size > 0 && (
-            <Button onClick={() => void approveSelected(pending)} disabled={bulkBusy || !pipelineId} loading={bulkBusy}>
+            <Button onClick={() => void approveSelected(pending)} disabled={reviewDisabled || !pipelineId} loading={bulkBusy}>
               {bulkBusy ? 'Approving…' : `Approve selected (${selected.size})`}
             </Button>
           )}
           <Button variant="secondary" onClick={exportCsv} disabled={rawLeads.length === 0}>Download CSV</Button>
         </div>
       </header>
-      {job.status === 'failed' && <p role="alert" className="text-sm text-danger">{job.error_message}</p>}
-      {job.status !== 'completed' && job.status !== 'failed' && (
-        <p className="text-sm text-muted">{job.results_count} found so far — still running…</p>
-      )}
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      {rowError && !pending.some((l) => l.id === rowError.id) && <p role="alert" className="text-sm text-danger">{rowError.text}</p>}
+      {group && <p className="text-sm text-muted">Search {group.id.slice(0, 8)} · {group.sources.map((s) => SOURCE_NAMES[s]).join(' + ')}</p>}
+      {jobs.filter((j) => j.status === 'failed').map((j) => <p key={j.id} role="status" className="text-sm text-danger">{j.sources.map((s) => SOURCE_NAMES[s]).join(', ')} could not finish. Results from other sources are still available. Check Settings and try again.</p>)}
+      {missing.map((s) => <p key={s} role="status" className="text-sm text-danger">{SOURCE_NAMES[s]} has not returned a job. Results from other sources are still available.</p>)}
+      {running && <p role="status" className="text-sm text-muted">{rawLeads.length} businesses found so far. Review opens when all started sources finish.</p>}
 
       <div className="overflow-x-auto rounded-xl border border-line">
-        <table className="w-full text-left text-sm">
-          <thead>
+        <table className="block w-full text-left text-sm sm:table">
+          <thead className="hidden sm:table-header-group">
             <tr className="border-b border-line text-xs text-muted">
               <th className="p-3">
-                <input type="checkbox" checked={selected.size > 0 && selected.size === pending.length} onChange={() => toggleSelectAll(pending.map((l) => l.id))} className="h-4 w-4 accent-violet-500" aria-label="Select all" />
+                <input type="checkbox" checked={selected.size > 0 && selected.size === pending.length} disabled={reviewDisabled} onChange={() => toggleSelectAll(pending.map((l) => l.id))} className="h-4 w-4 accent-violet-500" aria-label="Select all" />
               </th>
               <th className="p-3">Business</th>
               <th className="p-3">Phone</th>
@@ -143,39 +161,52 @@ export function ScraperJob() {
               <th className="p-3">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="block sm:table-row-group">
             {pending.map((lead) => (
-              <tr key={lead.id} className={`border-b border-line ${lead.status === 'duplicate' ? 'bg-amber-500/10' : ''}`}>
+              <tr key={lead.id} className={`grid grid-cols-2 border-b border-line sm:table-row ${lead.status === 'duplicate' ? 'bg-amber-500/10' : ''}`}>
                 <td className="p-3">
-                  <input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggleSelected(lead.id)} className="h-4 w-4 accent-violet-500" aria-label={`Select ${lead.business_name}`} />
+                  <input type="checkbox" checked={selected.has(lead.id)} disabled={reviewDisabled} onChange={() => toggleSelected(lead.id)} className="h-4 w-4 accent-violet-500" aria-label={`Select ${lead.business_name}`} />
                 </td>
-                <td className="p-3 font-semibold">
+                <td className="min-w-0 break-words p-3 font-semibold">
                   {lead.business_name}
+                  {websiteHref(lead.website) && <a className="block break-all text-xs font-normal text-offwhite underline focus-visible:outline-2" href={websiteHref(lead.website)!} target="_blank" rel="noreferrer noopener">{lead.website}</a>}
+                  {lead.companyNumber && <span className="block text-xs font-normal">Company {lead.companyNumber}</span>}
+                  <details className="mt-2 text-xs font-normal">
+                    <summary className="cursor-pointer focus-visible:outline-2">Source details</summary>
+                    {lead.members.map((member) => <div key={member.id} className="mt-2 break-words">
+                      <p className="font-semibold">{SOURCE_NAMES[member.source]}</p>
+                      <p>{[member.business_name, member.website, member.phone, member.email, member.owner_name, member.address, member.postcode, member.city].filter(Boolean).join(' · ')}</p>
+                      {Array.isArray(member.raw_data?.officers) && member.raw_data.officers.map((officer, i) => {
+                        const person = officer as { first_name?: string; last_name?: string; title?: string };
+                        return <p key={i}>{[person.first_name, person.last_name, person.title].filter(Boolean).join(' ')}</p>;
+                      })}
+                    </div>)}
+                  </details>
                   {lead.status === 'duplicate' && <Badge className="ml-2 bg-amber-500/20 text-warning">Possible duplicate</Badge>}
                 </td>
-                <td className="p-3">{lead.phone ?? '—'}</td>
-                <td className="p-3">{lead.email ?? '—'}</td>
-                <td className="p-3">{lead.google_rating ? `${lead.google_rating} (${lead.review_count ?? 0})` : '—'}</td>
-                <td className="p-3">{lead.city ?? '—'}</td>
-                <td className="p-3">{lead.source}</td>
-                <td className="p-3">
+                <td className="min-w-0 break-words p-3"><span className="block text-xs text-muted sm:hidden">Phone</span>{lead.phone ?? '—'}</td>
+                <td className="min-w-0 break-words p-3"><span className="block text-xs text-muted sm:hidden">Email</span>{lead.email ?? '—'}</td>
+                <td className="p-3"><span className="block text-xs text-muted sm:hidden">Rating</span>{lead.google_rating ? `${lead.google_rating} (${lead.review_count ?? 0})` : '—'}</td>
+                <td className="min-w-0 break-words p-3"><span className="block text-xs text-muted sm:hidden">City</span>{lead.city ?? '—'}</td>
+                <td className="min-w-0 break-words p-3">{lead.sources.map((s) => SOURCE_NAMES[s]).join(' + ')}</td>
+                <td className="col-span-2 p-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="secondary" onClick={() => void runAction(lead, approve)} disabled={busyId === lead.id || !pipelineId} loading={busyId === lead.id} title="Approve">
+                    <Button variant="secondary" onClick={() => void runAction(lead, approve)} disabled={reviewDisabled || !pipelineId} loading={busyId === lead.id} title="Approve" aria-label={`Approve ${lead.business_name}`}>
                       <CheckCircle2 className="h-4 w-4" aria-hidden />
                     </Button>
-                    <Button variant="danger" onClick={() => void runAction(lead, reject)} disabled={busyId === lead.id} loading={busyId === lead.id} title="Reject">
+                    <Button variant="danger" onClick={() => void runAction(lead, reject)} disabled={reviewDisabled} loading={busyId === lead.id} title="Reject" aria-label={`Reject ${lead.business_name}`}>
                       <XCircle className="h-4 w-4" aria-hidden />
                     </Button>
-                    <Button variant="ghost" onClick={() => void runAction(lead, skip)} disabled={busyId === lead.id} loading={busyId === lead.id} title="Skip">
+                    <Button variant="ghost" onClick={() => void runAction(lead, skip)} disabled={reviewDisabled} loading={busyId === lead.id} title="Skip" aria-label={`Skip ${lead.business_name}`}>
                       <SkipForward className="h-4 w-4" aria-hidden />
                     </Button>
                     {apolloConfigured && lead.website && (
-                      <Button variant="ghost" onClick={() => void runAction(lead, enrichWithApollo)} disabled={busyId === lead.id} loading={busyId === lead.id} title="Enrich with Apollo — uses 1 Apollo credit">
+                      <Button variant="ghost" onClick={() => void runAction(lead, enrichWithApollo)} disabled={reviewDisabled} loading={busyId === lead.id} title="Enrich with Apollo — uses 1 Apollo credit" aria-label={`Enrich ${lead.business_name} with Apollo — uses 1 credit`}>
                         <Sparkles className="h-4 w-4" aria-hidden />
                       </Button>
                     )}
                     {hunterConfigured && lead.website && !lead.email && (
-                      <Button variant="ghost" onClick={() => void runAction(lead, enrichWithHunter)} disabled={busyId === lead.id} loading={busyId === lead.id} title="Find email with Hunter — uses 1 Hunter credit">
+                      <Button variant="ghost" onClick={() => void runAction(lead, enrichWithHunter)} disabled={reviewDisabled} loading={busyId === lead.id} title="Find email with Hunter — uses 1 Hunter credit" aria-label={`Find email for ${lead.business_name} with Hunter — uses 1 credit`}>
                         <Mail className="h-4 w-4" aria-hidden />
                       </Button>
                     )}
