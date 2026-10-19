@@ -1,14 +1,15 @@
 import { X } from 'lucide-react';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import type { Lead } from '../../types';
+import { websiteHref } from '../../lib/websiteHref';
 
 type Column = 'additional_emails' | 'additional_phones' | 'additional_websites' | 'additional_owners';
 
-const GROUPS: { column: Column; label: string; href?: (value: string) => string }[] = [
+const GROUPS: { column: Column; label: string; href?: (value: string) => string | null }[] = [
   { column: 'additional_emails', label: 'Additional emails', href: (v) => `mailto:${v}` },
   { column: 'additional_phones', label: 'Additional phones', href: (v) => `tel:${v}` },
   // Only ever http(s): a stored value could be anything a scraper or a person typed.
-  { column: 'additional_websites', label: 'Additional websites', href: (v) => (/^https?:\/\//i.test(v) ? v : `https://${v}`) },
+  { column: 'additional_websites', label: 'Additional websites', href: websiteHref },
   { column: 'additional_owners', label: 'Additional owners' },
 ];
 
@@ -30,8 +31,8 @@ export function AdditionalDetails({ lead, onSave }: { lead: Lead; onSave: (patch
           <ul className="flex flex-wrap gap-1.5">
             {g.values.map((value) => (
               <li key={value} className="flex items-center gap-1 rounded-full border border-line bg-card py-0.5 pl-2.5 pr-1 text-sm">
-                {g.href
-                  ? <a href={g.href(value)} target={g.column === 'additional_websites' ? '_blank' : undefined} rel="noreferrer" className="text-cyan hover:underline">{value}</a>
+                {g.href?.(value)
+                  ? <a href={g.href(value)!} target={g.column === 'additional_websites' ? '_blank' : undefined} rel="noreferrer noopener" className="text-cyan hover:underline">{value}</a>
                   : <span>{value}</span>}
                 <button
                   type="button"

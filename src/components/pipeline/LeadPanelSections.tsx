@@ -10,6 +10,7 @@ import { AdditionalDetails } from './AdditionalDetails';
 import { EditableNote } from './EditableNote';
 import { Input, SelectField } from '../ui/Input';
 import { Skeleton } from '../ui/Skeleton';
+import { websiteHref } from '../../lib/websiteHref';
 
 /** Label/value row used for the read-only (derived) fields. */
 export function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -84,6 +85,7 @@ export function ContactInfo({ lead, onSave }: EditableSectionProps) {
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
   const action = 'flex h-11 w-11 shrink-0 items-center justify-center self-end rounded-lg text-cyan hover:bg-surface';
+  const website = websiteHref(lead.website);
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-end gap-2">
@@ -96,7 +98,7 @@ export function ContactInfo({ lead, onSave }: EditableSectionProps) {
       </div>
       <div className="flex items-end gap-2">
         <Input label="Website" type="url" value={form.website} onChange={set('website')} onBlur={() => blurSave('website')} placeholder="https://" />
-        {lead.website && <a href={lead.website} target="_blank" rel="noreferrer" aria-label="Open website" className={action}><ExternalLink className="h-4 w-4" aria-hidden /></a>}
+        {website && <a href={website} target="_blank" rel="noreferrer noopener" aria-label="Open website" className={action}><ExternalLink className="h-4 w-4" aria-hidden /></a>}
       </div>
       <SelectField label="Country" value={lead.country ?? ''} disabled={status === 'saving'} onChange={(e) => void save({ country: (e.target.value || null) as Lead['country'] })}>
         <option value="">Not set</option><option value="GB">United Kingdom</option><option value="IE">Ireland</option><option value="US">United States</option><option value="OTHER">Other</option>
