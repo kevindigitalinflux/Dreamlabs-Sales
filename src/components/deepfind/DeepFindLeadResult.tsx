@@ -9,6 +9,8 @@ import { registrySkipReason } from '../../../supabase/functions/_shared/deepFind
 import { DeepFindAutoChanges } from './DeepFindAutoChanges';
 import { BlockedOwnDomainNotice } from './BlockedOwnDomainNotice';
 import { Heading } from './Heading';
+import { RestorePersonButton } from '../pipeline/RestorePersonButton';
+import { joinNames } from '../../lib/restoreDismissed';
 
 const STATUS_ICONS: Record<DeepFindRowWithLead['status'], ReactNode> = {
   queued: <Clock size={14} aria-hidden />,
@@ -72,6 +74,18 @@ export function DeepFindLeadResult({ row, level = 2 }: { row: DeepFindRowWithLea
           <AlertTriangle size={18} aria-hidden className="mt-0.5 shrink-0" />
           <span><span className="font-semibold">Check the website: </span>This website may belong to a different company. {details.websiteReasons.join(' ')}</span>
         </p>
+      )}
+      {details.dismissedPeople.length > 0 && (
+        <section className="flex flex-col gap-2 rounded-xl border-2 border-amber-500/60 bg-amber-500/10 p-3" aria-label="Dismissed people skipped">
+          <p className="flex items-start gap-2">
+            <AlertTriangle size={18} aria-hidden className="mt-0.5 shrink-0" />
+            <span><span className="font-semibold">{joinNames(details.dismissedPeople.map((p) => p.name))}</span> {details.dismissedPeople.length === 1 ? 'was' : 'were'} dismissed earlier, so Deep find skipped them.</span>
+          </p>
+          <ul className="flex flex-col gap-2">
+            {details.dismissedPeople.filter((p) => p.contactId).map((p) => <li key={p.contactId}><RestorePersonButton contactId={p.contactId as string} name={p.name} showStatus /></li>)}
+          </ul>
+          <p className="text-[13px]">Or run Deep find again with Start fresh.</p>
+        </section>
       )}
       {details.people.length > 0 && (
         <Section title="People" level={level + 1}>

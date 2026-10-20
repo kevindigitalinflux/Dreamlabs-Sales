@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { readableInvokeError } from './invokeError';
 import { planUnblock } from './domainBlock';
+import { startFreshBody } from './restoreDismissed';
 import type { Effort } from '../../supabase/functions/_shared/deepFindEffort';
 
 /** Result of starting a Deep find: the run id, or a readable error. */
@@ -10,8 +11,8 @@ export type StartDeepFindResult = { runId: string; queued: number; alreadyRunnin
  * Starts a Deep find for up to 25 leads with the given credit caps. The server checks every lead belongs to the
  * caller's organisation and that the caller can edit it, then works through them in the background.
  */
-export async function startDeepFind(leadIds: string[], caps: { hunter: number; ai: number }, effort: Effort = 'custom'): Promise<StartDeepFindResult> {
-  const { data, error } = await supabase.functions.invoke('run-deep-find', { body: { action: 'create', lead_ids: leadIds, caps, effort } });
+export async function startDeepFind(leadIds: string[], caps: { hunter: number; ai: number }, effort: Effort = 'custom', options: { startFresh?: boolean } = {}): Promise<StartDeepFindResult> {
+  const { data, error } = await supabase.functions.invoke('run-deep-find', { body: { action: 'create', lead_ids: leadIds, caps, effort, ...startFreshBody(options.startFresh === true) } });
   if (error) return { error: await readableInvokeError(error) };
   const d = (data ?? {}) as { run_id?: unknown; queued?: unknown; already_running?: unknown; error?: unknown };
   if (typeof d.error === 'string') return { error: d.error };

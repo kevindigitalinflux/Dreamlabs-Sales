@@ -690,3 +690,11 @@ Housekeeping: a separate worktree `C:\Users\kevin\Projects\dreamlabs-sales-ui` e
 - Deep find results: amber callout when the lead own website or email domain is blocked (BlockedOwnDomainNotice).
 - Engine step line now ends "You can restore it from the lead page." (text only; edge function needs a deploy to show it).
 - No SQL or migration changes.
+
+## Dismissed people UI
+
+Branch `claude/dismissed-people-ui` (UI only, not pushed). Engine contract: run request `start_fresh: boolean`; per-lead result `domains.dismissed_people: [{ name, contact_id? }]`.
+- Confirm dialog: "Start fresh" checkbox (default off) in `DeepFindConfirm.tsx`; `DeepFindModal.tsx` passes it to `startDeepFind(..., { startFresh })`, which adds `start_fresh: true` only when ticked.
+- Lead card: `DismissedPeople.tsx` ("Dismissed people (N)", only when N > 0) plus a helper line under the list; Restore uses `restoreDismissedContact` in `src/lib/restoreDismissed.ts` (RLS, compare-and-set on `dismissed_at`, coded error).
+- Deep find result: amber callout in `DeepFindLeadResult.tsx` with a Restore button per person that has a `contact_id`; people without one only get the "run again with Start fresh" hint (suggestion keys in `leads.dismissed_suggestions` are not restorable one by one here).
+- Older results without the field show nothing extra.

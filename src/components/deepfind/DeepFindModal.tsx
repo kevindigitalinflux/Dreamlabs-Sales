@@ -21,6 +21,7 @@ export function DeepFindModal({ open, leadIds, onClose, onStarted }: DeepFindMod
   const [effort, setEffort] = useState<Effort>('medium');
   const [hunterCap, setHunterCap] = useState(String(DEEP_FIND_DEFAULT_CAPS.hunter));
   const [aiCap, setAiCap] = useState(String(DEEP_FIND_DEFAULT_CAPS.ai));
+  const [startFresh, setStartFresh] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +30,7 @@ export function DeepFindModal({ open, leadIds, onClose, onStarted }: DeepFindMod
   useEffect(() => {
     if (!open) return;
     setRunId(null); setError(null); setNotice(null); setStarting(false);
-    setEffort('medium');
+    setEffort('medium'); setStartFresh(false);
     setHunterCap(String(DEEP_FIND_DEFAULT_CAPS.hunter)); setAiCap(String(DEEP_FIND_DEFAULT_CAPS.ai));
   }, [open]);
 
@@ -43,7 +44,7 @@ export function DeepFindModal({ open, leadIds, onClose, onStarted }: DeepFindMod
     if (hunter === null || ai === null || tooMany || leadIds.length === 0) return;
     setStarting(true);
     setError(null);
-    const res = await startDeepFind(leadIds, { hunter, ai }, effort);
+    const res = await startDeepFind(leadIds, { hunter, ai }, effort, { startFresh });
     setStarting(false);
     if ('error' in res) { setError(res.error); return; }
     if (res.alreadyRunning > 0) setNotice(`${res.alreadyRunning} of the leads were already being searched, so they were left out.`);
@@ -69,6 +70,7 @@ export function DeepFindModal({ open, leadIds, onClose, onStarted }: DeepFindMod
             leadCount={leadIds.length} hunterCap={hunterCap} aiCap={aiCap}
             onHunterCap={setHunterCap} onAiCap={setAiCap} capError={capError}
             effort={effort} onEffort={setEffort}
+            startFresh={startFresh} onStartFresh={setStartFresh}
           />
           {error && <p role="alert" className="text-sm text-danger-strong">{error}</p>}
           <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-col-reverse justify-end gap-2 border-t border-line bg-card px-6 py-3 sm:flex-row">

@@ -15,6 +15,8 @@ interface DeepFindConfirmProps {
   capError: string | null;
   effort?: Effort;
   onEffort?: (value: Effort) => void;
+  startFresh?: boolean;
+  onStartFresh?: (value: boolean) => void;
 }
 
 const EFFORT_COPY: Record<Exclude<Effort, 'custom'>, { line: string; best: string }> = {
@@ -29,9 +31,10 @@ function SpendChip({ icon, label, n }: { icon: ReactNode; label: string; n: numb
 }
 
 /** What Deep find will do and the editable credit caps, shown before it starts. */
-export function DeepFindConfirm({ leadCount, hunterCap, aiCap, onHunterCap, onAiCap, capError, effort = 'medium', onEffort }: DeepFindConfirmProps) {
+export function DeepFindConfirm({ leadCount, hunterCap, aiCap, onHunterCap, onAiCap, capError, effort = 'medium', onEffort, startFresh = false, onStartFresh }: DeepFindConfirmProps) {
   const uid = useId();
   const capErrorId = `${uid}-cap-error`;
+  const freshHintId = `${uid}-fresh-hint`;
   const [allowance, setAllowance] = useState<HunterAllowance | null>(null);
   const totals = effort === 'custom' ? { hunter: Number(hunterCap) || 0, ai: Number(aiCap) || 0, firecrawl: Math.min(leadCount, 100), scrapes: Math.min(leadCount, 100) } : effortTotals(effort, leadCount);
   const hunterLeft = hunterAllowanceLeft(allowance);
@@ -67,6 +70,13 @@ export function DeepFindConfirm({ leadCount, hunterCap, aiCap, onHunterCap, onAi
       <div className="rounded-xl border-2 border-cyan/60 bg-cyan/10 p-3.5">
         <p role="status" className="font-semibold">For {leadCount} {leadCount === 1 ? 'lead' : 'leads'}: up to {hunterTotal} Hunter credits, {totals.ai} AI calls, {totals.firecrawl} Firecrawl pages, {totals.scrapes} browser scrapes, and our email checker (free).</p>
       </div>
+      {onStartFresh && <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface/50 p-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-violet-line">
+        <input type="checkbox" checked={startFresh} onChange={(e) => onStartFresh(e.target.checked)} aria-describedby={freshHintId} className="mt-0.5 h-5 w-5 shrink-0 accent-violet-line" />
+        <span className="min-w-0">
+          <span className="block font-semibold">Start fresh: restore people and suggestions I dismissed earlier on these leads</span>
+          <span id={freshHintId} className="mt-1 block text-[13px]">Dismissed people are skipped by default. Tick this to let Deep find look at them again. Contacts you added yourself are never touched.</span>
+        </span>
+      </label>}
       <HunterAllowanceLine requested={totals.hunter} onAllowance={setAllowance} />
       <button type="button" aria-pressed={effort === 'custom'} className={`inline-flex min-h-11 items-center gap-1.5 self-start rounded-lg px-2 text-[13px] underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-violet-line ${effort === 'custom' ? 'font-bold' : ''}`} onClick={() => onEffort?.('custom')}><SlidersHorizontal size={14} aria-hidden />Custom</button>
       {effort === 'custom' && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
