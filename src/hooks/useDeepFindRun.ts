@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import type { DeepFindLeadRow, DeepFindRun } from '../types';
 
 /** A run row joined with the lead's name (null when the lead is not visible or was deleted). */
-export type DeepFindRowWithLead = DeepFindLeadRow & { lead: { id: string; business_name: string; company_number?: string | null; country?: string | null; registry_candidates_rejected?: boolean } | null };
+export type DeepFindRowWithLead = DeepFindLeadRow & { lead: { id: string; business_name: string; company_number?: string | null; country?: string | null; registry_candidates_rejected?: boolean; website?: string | null; email?: string | null; blocked_domains?: string[] } | null };
 
 const POLL_MS = 15_000;
 
@@ -30,7 +30,7 @@ export function useDeepFindRun(runId: string | null) {
     const load = async () => {
       const [r, l] = await Promise.all([
         supabase.from('deep_find_runs').select('*').eq('id', runId).maybeSingle(),
-        supabase.from('deep_find_leads').select('*, lead:leads(id, business_name, company_number, country, registry_candidates_rejected)').eq('run_id', runId).order('updated_at'),
+        supabase.from('deep_find_leads').select('*, lead:leads(id, business_name, company_number, country, registry_candidates_rejected, website, email, blocked_domains)').eq('run_id', runId).order('updated_at'),
       ]);
       if (!active) return;
       const err = r.error ?? l.error;

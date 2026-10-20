@@ -58,6 +58,8 @@ export interface Lead {
   additional_owners: string[];
   /** Other domains the company uses, found by domain discovery (migration 056; missing before it is applied). */
   email_domains?: string[];
+  /** Domains marked "Not their domain"; Deep find never uses them (migration 058). */
+  blocked_domains?: string[];
   /** Companies House number chosen for Deep find (migration 058; missing before it is applied). */
   company_number?: string | null;
   address: string | null;

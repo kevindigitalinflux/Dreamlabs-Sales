@@ -7,6 +7,7 @@ import { CompanyDomainsEditor } from './CompanyDomainsEditor';
 import { DeepFindSuggestions } from './DeepFindSuggestions';
 import { registrySkipReason } from '../../../supabase/functions/_shared/deepFindSuggestions';
 import { DeepFindAutoChanges } from './DeepFindAutoChanges';
+import { BlockedOwnDomainNotice } from './BlockedOwnDomainNotice';
 import { Heading } from './Heading';
 
 const STATUS_ICONS: Record<DeepFindRowWithLead['status'], ReactNode> = {
@@ -53,6 +54,7 @@ export function DeepFindLeadResult({ row, level = 2 }: { row: DeepFindRowWithLea
           <span className="inline-flex items-center rounded-full border border-line bg-surface px-2.5 py-1 text-xs font-semibold">{row.people_found === 1 ? '1 person added' : `${row.people_found} people added`}</span>
         )}
       </div>
+      {row.lead && <BlockedOwnDomainNotice leadId={row.lead_id} lead={row.lead} />}
       {row.reason && <p>{row.reason}</p>}
       {openChoice && (
         <section className="flex flex-col gap-2 rounded-xl border-2 border-violet-line bg-violet/10 p-3.5">

@@ -7,6 +7,7 @@ import { useOrgPackages } from '../../hooks/useOrgPackages';
 import { useIcps } from '../../hooks/useIcps';
 import { IcpSelect } from '../emails/IcpSelect';
 import { AdditionalDetails } from './AdditionalDetails';
+import { BlockedDomains } from './BlockedDomains';
 import { EditableNote } from './EditableNote';
 import { Input, SelectField } from '../ui/Input';
 import { Skeleton } from '../ui/Skeleton';
@@ -104,6 +105,7 @@ export function ContactInfo({ lead, onSave }: EditableSectionProps) {
         <option value="">Not set</option><option value="GB">United Kingdom</option><option value="IE">Ireland</option><option value="US">United States</option><option value="OTHER">Other</option>
       </SelectField>
       <AdditionalDetails lead={lead} onSave={onSave} />
+      <BlockedDomains lead={lead} />
       <Input label="Address" value={form.address} onChange={set('address')} onBlur={() => blurSave('address')} />
       <div className="flex gap-2">
         <Input label="City" value={form.city} onChange={set('city')} onBlur={() => blurSave('city')} />

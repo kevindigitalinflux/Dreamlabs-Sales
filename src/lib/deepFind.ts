@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { readableInvokeError } from './invokeError';
+import { planUnblock } from './domainBlock';
 import type { Effort } from '../../supabase/functions/_shared/deepFindEffort';
 
 /** Result of starting a Deep find: the run id, or a readable error. */
@@ -50,6 +51,33 @@ export async function blockDeepFindDomain(leadId: string, domain: string): Promi
   if (error) return readableInvokeError(error);
   const d = (data ?? {}) as { error?: unknown };
   return typeof d.error === 'string' ? d.error : null;
+}
+
+/** Whether the domain is in email_domains right now (a block removes it from there, so Undo can put it back). Null if unreadable. */
+export async function wasInEmailDomains(leadId: string, domain: string): Promise<boolean | null> {
+  const { data, error } = await supabase.from('leads').select('email_domains').eq('id', leadId).maybeSingle();
+  if (error || !data) return null;
+  return Array.isArray(data.email_domains) && data.email_domains.includes(domain);
+}
+
+/**
+ * Undo "Not their domain" / "Restore" with the user's session (RLS). Compare-and-set on the blocked_domains value just
+ * read, so a concurrent change is never overwritten. Returns a readable coded error or null.
+ */
+export async function unblockDeepFindDomain(leadId: string, domain: string, restoreToEmail = false): Promise<string | null> {
+  const { data, error } = await supabase.from('leads').select('blocked_domains, email_domains').eq('id', leadId).maybeSingle();
+  if (error) { console.error('unblock read failed', error); return 'Could not restore this domain (UB1). Please try again.'; }
+  if (!data) return 'You do not have permission to edit this lead (UB2).';
+  const blocked: string[] = Array.isArray(data.blocked_domains) ? data.blocked_domains : [];
+  if (!blocked.includes(domain)) return null;
+  const next = planUnblock({ blocked, email: Array.isArray(data.email_domains) ? data.email_domains : [] }, domain, restoreToEmail);
+  const patch: Record<string, string[]> = { blocked_domains: next.blocked };
+  if (restoreToEmail) patch.email_domains = next.email;
+  const { data: rows, error: wErr } = await supabase.from('leads').update(patch).eq('id', leadId)
+    .eq('blocked_domains', `{${blocked.map((d) => `"${d}"`).join(',')}}`).select('id');
+  if (wErr) { console.error('unblock write failed', wErr); return 'Could not restore this domain (UB3). Please try again.'; }
+  if (!rows || rows.length === 0) return 'This lead changed while you were restoring. Please try again (UB4).';
+  return null;
 }
 
 /** Hunter's allowance this month, as the server read it from Hunter's free account endpoint (numbers only). */

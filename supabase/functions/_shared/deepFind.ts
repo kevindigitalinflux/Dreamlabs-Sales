@@ -295,7 +295,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const siteDomain = domainFromWebsite(str(lead.website));
   // A website domain the user marked "Not their domain" is never read or searched.
   const siteBlocked = !!siteDomain && savedDomains(lead.blocked_domains).includes(siteDomain);
-  if (siteBlocked) steps.push('The lead\'s website domain was marked as not theirs, so the website was not used.');
+  if (siteBlocked) steps.push('The lead\'s website domain was marked as not theirs, so the website was not used. You can restore it from the lead page.');
   const siteReadable = !!siteDomain && !siteBlocked && DOMAIN_CHECKS.usable(siteDomain);
   const siteChecked = siteReadable && left() > 30_000;
   const sitePages = siteChecked ? await readCompanyPages(str(lead.website)!, 12_000) : [];
