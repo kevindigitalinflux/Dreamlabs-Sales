@@ -622,3 +622,12 @@ Next: Build B (readiness badge migration 065, smart depth finishing, parallel le
 ## Deep find UI pass
 
 Effort dialog is now four selectable cards (spend chips, Best for, Recommended on Medium), a summary strip and an amber allowance callout; the long explanations sit in a collapsed details. Result page is sectioned: lead header with outcome chip, "Needs your decision" card for the company choice, People cards, Suggestions, auto-changes with Undo, domains, and the step lines inside a collapsed "What Deep find did (N steps)". Body text uses the high-contrast text token (offwhite, or offwhite/80 for captions) instead of muted. Contrast check for both themes: `node scripts/deepfind-contrast.mjs` (all pairs >= 4.5:1). No behaviour, props or data flow changed.
+
+## Deep find UI a11y fix round
+
+- Modal (shared): focus moves to the title on open, Tab/Shift+Tab trapped (pure helper `src/lib/focusTrap.ts`, tested), focus restored to the opener on close, Escape ignored when already handled (the select listbox closes alone). Close button and radio-card rings use a visible focus style.
+- Deep find modal: Start/Cancel is a sticky footer; "Open this run on its own page" now closes the modal. Heading levels via a `level` prop: run page h1 > h2 lead > h3 sections; modal h3 title > h4 lead > h5 sections.
+- Contrast (`node scripts/deepfind-contrast.mjs`, 0 failures, new pairs added): new tokens `--color-danger-strong` (#C40A0A light) and `--color-violet-line` (lighter violet in dark) for outlines, selected borders and the radio fill; light `--color-muted` raised to 0.65 alpha (placeholder/labels/close button were about 4.1:1). `focus-within` replaced by `has-[:focus-visible]`; cyan focus outline replaced by the violet-line ring.
+- Focus/names: blocking a domain announces "Blocked X" in a live status and focuses it; company choice notice is focusable and focused. Buttons carry fuller accessible names (company, Add/Dismiss, Undo with before/after); radio cards use aria-labelledby/aria-describedby; "(default)" text dropped; duplicate per-row status removed; cap inputs get aria-invalid/aria-describedby.
+- Kept by owner ruling: the "None of these / not a UK company" button stays prominent.
+- Deferred: Custom as a fifth radio, restructuring the details block, Cancel placement in the progress view. Not checked in a real browser (keyboard/zoom/320px).
