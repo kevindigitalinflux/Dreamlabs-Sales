@@ -193,7 +193,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const ownerSuppressed = (name: string) => {
     const parsed = parseLeadPersonName(name);
     const contact = parsed ? findSamePerson(all(), parsed.first, parsed.last) : null;
-    const suppressed = isSuggestionDismissed({ name, field: 'owner_name', value: name }, lead) || !!contact?.dismissed_at;
+    const displayKey = displayPersonKey(name);
+    const keys = Array.isArray(lead.dismissed_suggestions) ? lead.dismissed_suggestions : [];
+    const namedDismissal = !!displayKey && keys.some(key => typeof key === 'string'
+      && /^(owner:|owner_name:|person:)/i.test(key.trim()) && displayPersonKey(key.slice(key.indexOf(':') + 1)) === displayKey);
+    const suppressed = namedDismissal || isSuggestionDismissed({ name, field: 'owner_name', value: name }, lead) || !!contact?.dismissed_at;
     if (suppressed) recordDismissed(name, contact?.id);
     return suppressed;
   };

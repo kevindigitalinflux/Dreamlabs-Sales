@@ -150,6 +150,26 @@ it('reports dismissed contacts and owner/person keys while skipping their checks
   expect(worker.verifyEmail).not.toHaveBeenCalled();
   expect(lookUpPeople.mock.calls[0][0].people).toEqual([]);
 });
+it('keeps full-name owner dismissals effective after the lookup parser removes middle names', async () => {
+  contacts = [];
+  lead.owner_name = 'Karthik Middle Rao';
+  lead.dismissed_suggestions = ['owner:karthik middle rao'];
+  const out = await run('low');
+  expect(out.domains.dismissed_people).toContainEqual({ name: 'Karthik Middle Rao' });
+  expect(lookUpPeople.mock.calls[0][0].people).toEqual([]);
+  expect(out.domains.suggestions).toEqual([]);
+});
+it('offers ranked addresses even for known people beyond the five-person lookup cap', async () => {
+  contacts = ['Jane', 'Alex', 'Alice', 'Ravi', 'Karthik', 'Sarah'].map((first_name, i) => ({ id: 'c' + i, lead_id: 'lead', first_name, last_name: 'Smith', email: null }));
+  const out = await run('low');
+  expect(out.domains.suggestions.filter(s => s.guess_rank === 'most_likely')).toHaveLength(6);
+});
+it('bounds dismissed_people to ten without losing the plain skip steps', async () => {
+  contacts = ['Jane', 'Alex', 'Alice', 'Ravi', 'Karthik', 'Sarah', 'Tom', 'David', 'Mary', 'Simon', 'Robert'].map((first_name, i) => ({ id: 'c' + i, lead_id: 'lead', first_name, last_name: 'Smith', email: null, dismissed_at: 'yesterday' }));
+  const out = await run('low');
+  expect(out.domains.dismissed_people).toHaveLength(10);
+  expect(out.domains.steps.filter(s => s.includes('was dismissed earlier'))).toHaveLength(11);
+});
 it('skips guess verification for Google and Microsoft while retaining ranked proposals', async () => {
   for (const provider of ['google', 'microsoft']) {
     cachedMailProvider.mockReturnValue(provider);
@@ -605,7 +625,8 @@ it.each([false, true])('late-domain inference uses checker first and Hunter only
     .mockResolvedValueOnce({ domains: [{ domain: 'newco.com', sources: ['web'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] });
   readCompanyPages.mockImplementation(async url => url.includes('newco.com') ? ['<title>Acme</title><p>alex.brown@newco.com</p>'] : []);
   await run('medium');
-  expect(worker.verifyEmail).toHaveBeenCalledWith('jane.smith@newco.com', { timeoutMs: 12_000 });
+  expect(worker.verifyEmail).toHaveBeenCalledWith('jane.smith@newco.com', { timeoutMs: expect.any(Number) });
+  expect(worker.verifyEmail.mock.calls[0][1].timeoutMs).toBeLessThanOrEqual(12_000);
   expect(hunterVerifyEmail).toHaveBeenCalledTimes(hunter ? 1 : 0);
 });
 

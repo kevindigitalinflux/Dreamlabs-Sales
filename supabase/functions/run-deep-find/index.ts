@@ -1,11 +1,4 @@
-// supabase/functions/run-de
-  if (!await checkRateLimit(service, `deep-find-create:${caller.id}`, 30, 24 * 60, true)) {
-    return json({ error: 'You have started a lot of Deep finds today. Try again tomorrow.' }, 429, headers);
-  }
-
-  const access = await authorizeDeepFindCreate(client, service, caller.id, parsed.leadIds);
-  if (!access.ok) return json(access.result.body, access.result.status, headers);
-  const orgId = access.orgId;ep-find/index.ts
+// supabase/functions/run-deep-find/index.ts
 // DEPLOY WITH verify_jwt = false (see supabase/config.toml): the pg_cron tick sends only x-cron-secret, no Authorization
 // header, so the gateway would answer 401. The function authenticates every action itself:
 //   create  signed-in user: validates the leads (RLS read, same org, caller is a member and can edit each one), max 25,
@@ -112,6 +105,13 @@ Deno.serve(async (req) => {
   // create
   const parsed = parseCreateRequest(body);
   if (!parsed.ok) return json({ error: parsed.error }, 400, headers);
+  const access = await authorizeDeepFindCreate(client, service, caller.id, parsed.leadIds);
+  if (!access.ok) return json(access.result.body, access.result.status, headers);
+  const orgId = access.orgId;
+  if (!await checkRateLimit(service, `deep-find-create:${caller.id}`, 30, 24 * 60, true)) {
+    return json({ error: 'You have started a lot of Deep finds today. Try again tomorrow.' }, 429, headers);
+  }
+
   const { count: activeRuns } = await service.from('deep_find_runs').select('id', { count: 'exact', head: true })
     .eq('org_id', orgId).eq('status', 'active');
   if ((activeRuns ?? 0) >= MAX_ACTIVE_RUNS_PER_ORG) {
@@ -119,6 +119,7 @@ Deno.serve(async (req) => {
   }
   const { data: busy } = await service.from('deep_find_leads').select('lead_id').in('lead_id', parsed.leadIds).in('status', ['queued', 'running']);
   const busyIds = new Set(((busy ?? []) as { lead_id: string }[]).map((b) => b.lead_id));
+  if (parsed.startFresh && busyIds.size > 0) return json({ error: 'Wait for the selected Deep finds to finish before using Start fresh' }, 409, headers);
   const leadIds = parsed.leadIds.filter((id) => !busyIds.has(id));
   if (leadIds.length === 0) return json({ error: 'Deep find is already working on these leads' }, 409, headers);
 
