@@ -49,6 +49,17 @@ export function DeepFindCompanyChoice({ leadId, candidates }: { leadId: string; 
   return (
     <div className="flex flex-col gap-3 text-offwhite">
       <p className="text-sm font-semibold">Which company is this? Companies House has more than one possible match:</p>
+      <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-3">
+        <p className="text-[13px]">Not a UK company, or your company is not listed?</p>
+        <Button variant="primary" className="w-full whitespace-normal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet" disabled={busy !== null} aria-expanded={rejecting} onClick={() => setRejecting((open) => !open)}>None of these / not a UK company</Button>
+        {rejecting && <div ref={countryChoice} className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-surface/50 p-3">
+          <SelectField label="Where is this company?" value={country} disabled={busy !== null} onChange={(e) => setCountry(e.target.value as typeof country)}>
+            <option value="IE">Ireland</option><option value="US">United States</option><option value="OTHER">Other country</option>
+            <option value="unlisted">It is a UK company, my company is not listed</option>
+          </SelectField>
+          <Button variant="secondary" disabled={busy !== null} onClick={() => void reject()}>Save country choice</Button>
+        </div>}
+      </div>
       <ul className="flex flex-col gap-2">
         {candidates.map((c, index) => {
           const likely = index === 0 && c.status === 'active';
@@ -68,17 +79,6 @@ export function DeepFindCompanyChoice({ leadId, candidates }: { leadId: string; 
           );
         })}
       </ul>
-      <div className="flex flex-col gap-2 border-t border-line pt-3">
-        <p className="text-[13px]">Not a UK company, or your company is not listed?</p>
-        <Button variant="primary" className="w-full whitespace-normal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet" disabled={busy !== null} aria-expanded={rejecting} onClick={() => setRejecting((open) => !open)}>None of these / not a UK company</Button>
-        {rejecting && <div ref={countryChoice} className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-surface/50 p-3">
-          <SelectField label="Where is this company?" value={country} disabled={busy !== null} onChange={(e) => setCountry(e.target.value as typeof country)}>
-            <option value="IE">Ireland</option><option value="US">United States</option><option value="OTHER">Other country</option>
-            <option value="unlisted">It is a UK company, my company is not listed</option>
-          </SelectField>
-          <Button variant="secondary" disabled={busy !== null} onClick={() => void reject()}>Save country choice</Button>
-        </div>}
-      </div>
       {error && <p role="alert" className="text-sm font-semibold text-danger">{error}</p>}
     </div>
   );
