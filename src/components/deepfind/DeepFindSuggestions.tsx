@@ -7,9 +7,10 @@ import { suggestionKey, visibleSuggestions } from '../../../supabase/functions/_
 import type { ReviewSuggestion } from '../../../supabase/functions/_shared/deepFindSuggestions';
 import { SuggestionRows } from './SuggestionRows';
 import { logDeepFindError } from '../../lib/deepFindErrors';
+import { Heading } from './Heading';
 
 /** Review actions always use the person's session and RLS, never an edge/service client. */
-export function DeepFindSuggestions({ leadId, suggestions, refreshKey, roles = [] }: { leadId: string; suggestions: ReviewSuggestion[]; refreshKey: string; roles?: { name: string; role?: string | null }[] }) {
+export function DeepFindSuggestions({ leadId, suggestions, refreshKey, roles = [], headingLevel = 3 }: { headingLevel?: number; leadId: string; suggestions: ReviewSuggestion[]; refreshKey: string; roles?: { name: string; role?: string | null }[] }) {
   const { session } = useAuth();
   const [state, setState] = useState<ReviewState | null>(null);
   const [hidden, setHidden] = useState<string[]>([]);
@@ -48,9 +49,10 @@ export function DeepFindSuggestions({ leadId, suggestions, refreshKey, roles = [
     } finally { saving.current = false; setBusy(false); }
   }
   const shown = state ? visibleSuggestions(suggestions, state.lead, state.contacts).filter((s) => !hidden.includes(suggestionKey(s))) : [];
-  return <div className="flex min-w-0 flex-col gap-2" aria-busy={busy}>
-    <p ref={status} tabIndex={-1} role="status" className="text-xs text-muted focus:outline focus:outline-cyan">{notice || (state ? 'Possible details. Review before adding.' : 'Loading review details…')}</p>
+  return <section className="flex min-w-0 flex-col gap-2" aria-busy={busy}>
+    <Heading level={headingLevel} className="font-heading text-sm font-bold">Suggestions to review</Heading>
+    <p ref={status} tabIndex={-1} role="status" className="text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-line">{notice || (state ? 'Possible details. Review before adding.' : 'Loading review details…')}</p>
     <SuggestionRows suggestions={shown} busy={busy} onAction={(s, action) => void act(s, action)} />
-    {error && <p role="alert" className="text-xs text-danger">{error}</p>}
-  </div>;
+    {error && <p role="alert" className="text-sm font-semibold text-danger-strong">{error}</p>}
+  </section>;
 }
