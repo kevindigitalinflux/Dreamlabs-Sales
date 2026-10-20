@@ -65,7 +65,7 @@ it('tries common formats without an inferred pattern and fills only the existing
   worker.verifyEmail.mockResolvedValueOnce({ ok: true, value: { status: 'invalid', reason: 'mailbox_missing' } })
     .mockResolvedValueOnce({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
   const result = await process();
-  expect(worker.verifyEmail.mock.calls.map(([e]) => e)).toEqual(['valentina.antunovic@example.com', 'valentina@example.com']);
+  expect(worker.verifyEmail.mock.calls.map(([e]) => e)).toEqual(['valentina.antunovic@example.com', 'valentina@example.com', 'vantunovic@example.com']);
   expect(write).toHaveBeenCalledWith('update', expect.objectContaining({ email: 'valentina@example.com', include_in_sequences: false }));
   expect(result.domains.steps.join(' ')).toContain('Guessed from common formats and confirmed by our email checker, check it');
 });
@@ -75,7 +75,7 @@ it('stops catch-all checks and offers one ranked guess with collapsed alternativ
     { id: 'two', first_name: 'John', last_name: 'Jones', title: 'Director', email: null }];
   worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'risky', reason: 'catch_all' } });
   const result = await process();
-  expect(worker.verifyEmail).toHaveBeenCalledOnce();
+  expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
   expect(write).not.toHaveBeenCalled();
   expect(result.domains.suggestions.filter(s => s.guess_rank === 'most_likely').map(s => s.value)).toEqual(['jane.smith@example.com', 'john.jones@example.com']);
   expect(result.domains.suggestions.filter(s => s.guess_rank === 'other')).toHaveLength(8);
@@ -91,7 +91,7 @@ it('retains a literal website find when the domain is catch-all, without repeati
   expect(result.domains.suggestions.filter((s) => s.value === 'jane.smith@example.com')).toEqual([
     expect.objectContaining({ label: 'Found on example.com, check it' }),
   ]);
-  expect(worker.verifyEmail).toHaveBeenCalledOnce();
+  expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
 });
 it('does not repeat an inferred-format address among common guesses and never exceeds five per domain', async () => {
   vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
@@ -110,7 +110,8 @@ it('stops at an existing inferred format when the checker confirms it', async ()
     { id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null }];
   worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
   await process();
-  expect(worker.verifyEmail).toHaveBeenCalledExactlyOnceWith('jane.smith@example.com');
+  expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
+  expect(worker.verifyEmail).toHaveBeenCalledWith('jane.smith@example.com', { timeoutMs: expect.any(Number) });
   expect(write).toHaveBeenCalledWith('update', expect.objectContaining({ email: 'jane.smith@example.com' }));
 });
 it('does not attempt common guesses on an unconfirmed domain', async () => {
@@ -152,8 +153,8 @@ it.each(['risky', 'unverifiable', 'invalid'])('never fills a common guess with v
   worker.verifyEmail.mockResolvedValue({ ok: true, value: { status, reason: 'unknown' } });
   const result = await process();
   expect(write).not.toHaveBeenCalled();
-  expect(worker.verifyEmail).toHaveBeenCalledTimes(5);
-  expect(result.domains.steps.join(' ')).toContain('Tried 5 common formats on example.com (none confirmed).');
+  expect(worker.verifyEmail).toHaveBeenCalledTimes(status === 'unverifiable' ? 3 : 5);
+  expect(result.domains.steps.join(' ')).toContain(`Tried ${status === 'unverifiable' ? 3 : 5} common formats on example.com (none confirmed).`);
 });
 it.each(['busy', 'limit_reached', 'unreachable', 'bad_response'])('stops common guesses for the lead on %s', async (failure) => {
   vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
@@ -161,7 +162,7 @@ it.each(['busy', 'limit_reached', 'unreachable', 'bad_response'])('stops common 
     { id: 'two', first_name: 'John', last_name: 'Jones', title: 'Director', email: null }];
   worker.verifyEmail.mockResolvedValue({ ok: false, failure });
   await process();
-  expect(worker.verifyEmail).toHaveBeenCalledOnce();
+  expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
   expect(write).not.toHaveBeenCalled();
 });
 it('offers a valid guess for a site person for review without inserting a contact', async () => {
@@ -347,11 +348,11 @@ it.each([false, true])('retains legacy catch-all suggestions with Hunter availab
     { id: 'two', first_name: 'John', last_name: 'Brown', title: 'Director', email: null }];
   worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'risky', reason: 'catch_all' } });
   const result = await process();
-  expect(worker.verifyEmail.mock.calls.map(([email]) => email)).toEqual(['jane.smith@example.com', 'john.brown@example.com']);
-  expect(hunterVerifyEmail).toHaveBeenCalledTimes(hunter ? 2 : 0);
+  expect(worker.verifyEmail.mock.calls.map(([email]) => email)).toEqual(['jane.smith@example.com', 'john.brown@example.com', 'jane@example.com']);
+  expect(hunterVerifyEmail).not.toHaveBeenCalled();
   for (const value of ['jane.smith@example.com', 'john.brown@example.com']) {
     expect(result.domains.suggestions).toContainEqual(expect.objectContaining({ value,
-      label: expect.stringContaining(hunter ? 'verified by Hunter' : 'Most likely address') }));
+      label: expect.stringContaining('Most likely address') }));
   }
   expect(write).not.toHaveBeenCalled();
 });

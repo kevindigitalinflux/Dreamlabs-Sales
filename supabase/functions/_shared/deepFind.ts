@@ -557,6 +557,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // otherwise they are only offered as "Guess, unverified" suggestions: never filled in, never in sequences.
   const ownerName = parseLeadPersonName(lead.owner_name);
   const checks = new GuessChecks(MAX_VERIFY_PER_LEAD);
+  for (const [email, checked] of checkedEmails) checks.record(email,
+    checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : '');
   const guessBudget = new GuessBudget(left, () => lookupPeople().length > 0);
   const patterns = new Map<string, ReturnType<typeof inferDomainPattern>>();
   let publicFormatSearchUsed = false;
@@ -610,7 +612,6 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       });
     }
     await guessBudget.run(jobs);
-    if (guessBudget.exhausted && !steps.includes('Email guess checks reached the 20 second limit for this lead. Remaining time was kept for people lookups.')) steps.push('Email guess checks reached the 20 second limit for this lead. Remaining time was kept for people lookups.');
     for (const d of checkDomains.slice(0, 4)) {
       const pattern = patterns.get(d);
       if (!pattern) continue;
@@ -700,6 +701,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       }
     }
 
+    if (guessBudget.exhausted && !steps.includes('Email guess checks reached the 20 second limit for this lead. Remaining time was kept for people lookups.')) steps.push('Email guess checks reached the 20 second limit for this lead. Remaining time was kept for people lookups.');
   };
   const discoverPublicFormat = async () => {
       if ((effort === 'high' || effort === 'extra_high') && geminiKey && !publicFormatSearchUsed && ![...checkedEmails.values()].some(c => c.ok && c.value.status === 'valid')) {

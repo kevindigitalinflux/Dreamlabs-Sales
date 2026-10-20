@@ -9,12 +9,11 @@ export const GUESS_CHECK_TIMEOUT_MS = 12_000;
 /** One wall-clock allowance shared by all guess paths and later domain batches for a lead. */
 export class GuessBudget {
   private deadline: number | null = null;
-  exhausted = false;
+  get exhausted(): boolean { return this.deadline !== null && Date.now() >= this.deadline; }
   constructor(private left: () => number, private hasPeople: () => boolean) {}
   timeout(maxMs = GUESS_CHECK_TIMEOUT_MS): number {
     if (this.deadline === null) this.deadline = Date.now() + GUESS_TOTAL_MS;
     const remaining = this.deadline - Date.now();
-    if (remaining <= 0) this.exhausted = true;
     const reserve = this.hasPeople() ? PEOPLE_RESERVE_MS + PEOPLE_LOOKUP_FLOOR_MS : 25_000;
     return Math.max(0, Math.min(maxMs, remaining, this.left() - reserve));
   }
@@ -32,7 +31,6 @@ export class GuessBudget {
     };
     await Promise.all([consume(), consume(), consume()]);
     if (failed) throw failure;
-    if (this.deadline !== null && Date.now() >= this.deadline) this.exhausted = true;
   }
 }
 export const CATCH_ALL_GUESS_LABEL = 'Guess, the mail server accepts any address so it cannot be confirmed';
