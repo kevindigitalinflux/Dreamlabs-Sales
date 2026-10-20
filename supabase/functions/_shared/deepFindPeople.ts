@@ -10,7 +10,7 @@ import type { LookupResult, WebSearchPerson } from './knownPersonLookup.ts';
 import { mergeFoundIntoPerson, type FoundFields } from './knownPerson.ts';
 import { runWideLookup, type KnownAddress } from './knownPersonWideRun.ts';
 import { STEP_DETAILS, type StepId } from './knownPersonWide.ts';
-import { emailOnLead, type ExistingContact, type PersonToLookUp } from './deepFindRules.ts';
+import { emailOnLead, findSamePerson, samePersonMatches, type ExistingContact, type PersonToLookUp } from './deepFindRules.ts';
 
 type Contact = ExistingContact & Record<string, unknown>;
 
@@ -112,7 +112,9 @@ export async function lookUpPeople(ctx: PeopleContext): Promise<PeopleOutcome> {
         : 'Not enough time left in this run, try Deep find again.';
       out.results.push({ name, role: person.title, source: person.source, email_found: false, reason }); continue;
     }
-    const contact = person.contactId ? ctx.contacts().find((c) => c.id === person.contactId) ?? null : null;
+    const matched = findSamePerson(ctx.contacts(), person.first, person.last);
+    const contact = matched && !matched.dismissed_at ? matched : null;
+    const ambiguous = !contact && samePersonMatches(ctx.contacts(), person.first, person.last).length > 0;
     const work: FoundFields = { email: null, phone: str(contact?.phone), linkedin_url: str(contact?.linkedin_url) };
     const patch: Record<string, string> = {};
     let emailStep: StepId | null = null;
@@ -160,7 +162,11 @@ export async function lookUpPeople(ctx: PeopleContext): Promise<PeopleOutcome> {
     }
     for (const s of wide.suggestions) out.suggestions.push({ name, field: s.field, value: s.value.slice(0, 200), label: s.label });
     let emailFound = false;
-    if (contact && Object.keys(patch).length > 0) {
+    if (ambiguous) {
+      for (const field of ['email', 'linkedin_url']) {
+        if (patch[field]) out.suggestions.push({ name, field: field as 'email' | 'linkedin_url', value: patch[field], label: 'Person match is ambiguous; review the full name before adding.' });
+      }
+    } else if (contact && Object.keys(patch).length > 0) {
       const saved = ctx.saveContact ? await ctx.saveContact(contact, patch) : await fillBlanks(ctx.service, contact, patch);
       if (saved) { Object.assign(contact, saved); out.touched.push(contact); emailFound = !!patch.email; }
     } else if (!contact && patch.email && emailStep && HUNTER_EMAIL_STEPS.includes(emailStep)) {

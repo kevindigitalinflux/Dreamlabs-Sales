@@ -2,7 +2,8 @@
 export function displayPersonKey(value: unknown): string {
   if (typeof value !== 'string') return '';
   const parts = value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
-    .replace(/[^a-z' -]/g, ' ').trim().replace(/^(?:(?:mr|mrs|ms|miss|dr|prof|sir|dame|lord|lady)\s+)+/, '').split(/\s+/);
+    .replace(/[^a-z' -]/g, ' ').trim().split(/\s+/)
+    .filter(p => !['jr', 'sr', 'ii', 'iii', 'iv', 'obe', 'mbe', 'cbe', 'phd', 'dr', 'mr', 'mrs', 'ms', 'miss', 'prof', 'sir', 'dame', 'lord', 'lady'].includes(p));
   if (parts.length < 2 || parts[0].length < 2 || parts.at(-1)!.length < 2) return '';
   return `${parts[0]} ${parts.at(-1)}`;
 }

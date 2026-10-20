@@ -6,6 +6,7 @@
 
 import { siteConfirmLine, siteConfirmsCompany } from './domainSiteCheck.ts';
 import { isDirectoryDomain } from './knownPerson.ts';
+import { isFreeMailDomain } from './knownPersonWide.ts';
 import { countryPhoneMismatch } from './deepFindSuggestions.ts';
 
 /** Where a domain came from, strongest first (see SOURCE_RANK). */
@@ -260,12 +261,13 @@ export function parseDohMx(json: unknown): 'mx' | 'none' | 'error' {
 
 /** Why the lead's website may belong to a different company. */
 /** Match whole company abbreviations, including UK + R + Management and UKR Mgmt. */
-function abbreviatedName(value: string, name: string): boolean {
+function abbreviatedName(value: string, name: string, contactProof = false): boolean {
+  if (typeof name !== 'string') return false;
   const words = name.toLowerCase().split(/[^a-z0-9]+/).filter(w => w && !['limited', 'ltd', 'llp', 'plc', 'the', 'and'].includes(w));
   if (words.length < 2) return false;
   const tokens = value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
   const initials = [words.map(w => w[0]).join(''), words.map(w => w.length <= 2 ? w : w[0]).join('')];
-  if (tokens.some(t => t.length >= 3 && initials.includes(t))) return true;
+  if (tokens.some(t => t.length >= (contactProof ? 3 : 4) && initials.includes(t))) return true;
   const choices = words.map(w => [w, ...(w.length > 2 ? [w[0]] : []), ...(w === 'management' ? ['mgmt'] : [])]);
   const variants = choices.reduce<string[]>((out, parts) => out.flatMap(prefix => parts.map(p => prefix + p)).slice(0, 128), ['']);
   return variants.some(v => v.length >= 4 && (tokens.includes(v) || tokens.join('') === v));
@@ -273,7 +275,7 @@ function abbreviatedName(value: string, name: string): boolean {
 
 interface SiteIdentity { phone?: unknown; postcode?: unknown; email?: unknown; website?: unknown }
 /** Saved values must occur on the site. Generic numbers and partial email/postcode matches provide no proof. */
-function siteContactEvidence(text: string, lead: SiteIdentity): string | null {
+function siteContactEvidence(text: string, lead: SiteIdentity, nameEvidence: boolean): string | null {
   const phoneKey = (s: string) => s.replace(/\D/g, '').replace(/^(?:0044|44)0?/, '').replace(/^0/, '');
   if (typeof lead.phone === 'string' && phoneKey(lead.phone).length >= 9) {
     for (const m of text.matchAll(/\+?\d[\d ().-]{7,}\d/g)) {
@@ -282,7 +284,7 @@ function siteContactEvidence(text: string, lead: SiteIdentity): string | null {
         && !/\b(company|registration|account|vat)\b/.test(before) && phoneKey(m[0]) === phoneKey(lead.phone)) return 'phone';
     }
   }
-  if (typeof lead.postcode === 'string') {
+  if (nameEvidence && typeof lead.postcode === 'string') {
     const pc = lead.postcode.toUpperCase().replace(/\s/g, '');
     if (/^[A-Z]{1,2}\d[A-Z\d]?\d[A-Z]{2}$/.test(pc) && new RegExp(`\\b${pc.slice(0, -3)}\\s*${pc.slice(-3)}\\b`, 'i').test(text)) return 'postcode';
   }
@@ -290,7 +292,7 @@ function siteContactEvidence(text: string, lead: SiteIdentity): string | null {
     const saved = lead.email.trim().toLowerCase();
     const domain = saved.split('@')[1];
     for (const m of text.matchAll(/[a-z0-9._%+-]+@([a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi)) {
-      if (m[0].toLowerCase() === saved || (domain && m[1].toLowerCase() === domain && !['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com'].includes(domain))) return 'email';
+      if (domain && !isFreeMailDomain(domain) && (m[0].toLowerCase() === saved || m[1].toLowerCase() === domain)) return 'email';
     }
   }
   return null;
@@ -324,20 +326,34 @@ export function websiteSuspicion(pages: string[], names: string[], country?: unk
   const carries = (s: string) => names.some((n) => {
     const d = distinctiveTokens(n);
     const w = brandTokens(s);
-    return (d.length > 0 && d.every((t) => w.includes(t) || w.join('').includes(t))) || abbreviatedName(s, n);
+    return d.length > 0 && d.every((t) => w.includes(t) || w.includes(d.join('')));
   });
-  let domainMatch = false;
+  let domainName = '';
   if (typeof lead.website === 'string') {
     try {
       const host = new URL(lead.website.includes('://') ? lead.website : `https://${lead.website}`).hostname.replace(/^www\./, '');
       if (isDirectoryDomain(host)) reasons.push('The website is a directory page, not the company’s own site.');
-      domainMatch = names.some(n => abbreviatedName(host.split('.')[0], n));
+      domainName = host.split('.')[0];
     } catch { /* Invalid URLs provide no name evidence. */ }
   }
-  const contact = siteContactEvidence(text, lead);
-  if (title.trim() && !carries(title) && !carries(footer) && !domainMatch && !contact) reasons.push('The website title and footer name a different business.');
+  const distinctive = names.flatMap(distinctiveTokens);
+  const realNameToken = [title, footer].some(s => brandTokens(s).some(t => distinctive.includes(t)));
+  // Contact-backed three-letter initials are allowed; a postcode still needs this name evidence.
+  const weakName = [title, footer, domainName].some(s => names.some(n => abbreviatedName(s, n, true)));
+  const contact = siteContactEvidence(text, lead, weakName || realNameToken);
+  const neutral = new Set(['welcome', 'home', 'homepage', 'official', 'website', 'site', 'copyright', 'all', 'rights', 'reserved', 'mgmt']);
+  const initialPrefix = (token: string) => token.length >= 2 && names.some(n => {
+    const parts = words(n).filter(w => !['limited', 'ltd', 'llp', 'plc', 'the', 'and'].includes(w));
+    return parts.map(w => w.length <= 2 ? w : w[0]).join('').startsWith(token);
+  });
+  const differentBusiness = [title, footer].some(s => !carries(s) && brandTokens(s).some(t =>
+    /[a-z]/.test(t) && !INDUSTRY_WORDS.has(t) && !neutral.has(t) && !distinctive.includes(t)
+    && !initialPrefix(t) && !names.some(n => abbreviatedName(t, n, true))));
+  const longWeakName = [title, footer, domainName].some(s => names.some(n => abbreviatedName(s, n)));
+  const weakAccepted = weakName && !differentBusiness && !!(contact || (longWeakName && realNameToken));
+  if ((title.trim() || footer.trim() || weakName) && !carries(title) && !carries(footer) && !weakAccepted && !(contact && !differentBusiness && !weakName)) reasons.push('The website title and footer name a different business.');
   const suspect = reasons.length > 0;
-  if (contact) reasons.push(`confirmed by ${contact} on the site`);
+  if (contact && !suspect) reasons.push(`Confirmed by ${contact} on the site.`);
   return { suspect, reasons };
 }
 

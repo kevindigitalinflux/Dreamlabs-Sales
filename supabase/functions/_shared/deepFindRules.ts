@@ -82,11 +82,19 @@ export interface ExistingContact {
  * removed person is never re-added. Null when there is none, or when two different people match (never guesses).
  */
 export function findSamePerson<T extends ExistingContact>(rows: T[], first: unknown, last: unknown): T | null {
+  const hits = samePersonMatches(rows, first, last);
+  const live = hits.filter(r => !r.dismissed_at);
+  const eligible = live.length ? live : hits;
+  const fullNames = new Set(eligible.map(r => nameKey(String(r.first_name ?? '') + ' ' + String(r.last_name ?? ''))));
+  if (fullNames.size > 1) return null;
+  return eligible[0] ?? null;
+}
+
+/** All display aliases, including ambiguous and dismissed matches. Never authorizes an automatic fill. */
+export function samePersonMatches<T extends ExistingContact>(rows: T[], first: unknown, last: unknown): T[] {
   const key = displayPersonKey(String(first ?? '') + ' ' + String(last ?? ''));
-  if (!key) return null;
-  const hits = rows.filter(r => r.kind !== 'general' && displayPersonKey(String(r.first_name ?? '') + ' ' + String(r.last_name ?? '')) === key);
-  return hits.sort((a, b) => Number(!!b.dismissed_at) - Number(!!a.dismissed_at)
-    || (String(b.first_name ?? '') + ' ' + String(b.last_name ?? '')).split(/\s+/).length - (String(a.first_name ?? '') + ' ' + String(a.last_name ?? '')).split(/\s+/).length)[0] ?? null;
+  if (!key) return [];
+  return rows.filter(r => r.kind !== 'general' && displayPersonKey(String(r.first_name ?? '') + ' ' + String(r.last_name ?? '')) === key);
 }
 
 /** True when any row (any kind or source, dismissed or not) already carries this email, ignoring case. */
@@ -314,8 +322,7 @@ export function peopleToLookUp(
       if ((p.first + ' ' + p.last).split(/\s+/).length > (existing.first + ' ' + existing.last).split(/\s+/).length) { existing.first = p.first; existing.last = p.last; }
     } else if (p.first && p.last && out.length < 12) out.push(p);
   };
-  const withEmail = contacts.filter((c) => typeof c.email === 'string' && c.email.trim() !== '');
-  const alreadyHasEmail = (first: string, last: string) => findSamePerson(withEmail, first, last) !== null;
+  const alreadyHasEmail = (first: string, last: string) => !!findSamePerson(contacts, first, last)?.email;
   for (const c of contacts) {
       if (c.kind === 'general' || c.name_obfuscated === true || c.dismissed_at || (typeof c.email === 'string' && c.email.trim() !== '')) continue;
     const first = cleanNamePart(c.first_name);
@@ -332,5 +339,5 @@ export function peopleToLookUp(
     const p = parseLeadPersonName(raw);
     if (p && !alreadyHasEmail(p.first, p.last)) add({ ...p, source: 'owner', contactId: null });
   }
-  return out;
+  return out.map(p => ({ ...p, contactId: findSamePerson(contacts, p.first, p.last)?.id ?? null }));
 }

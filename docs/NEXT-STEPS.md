@@ -92,3 +92,5 @@ Phase 3a-c gates at `2877d787d90e3a921a293ea1365accbb3239e2c5`: TypeScript 0 dia
 
 - [ ] All four approved A2 parts are built locally on `codex/deepfind-a2`; independent Claude review is pending. Gates: TypeScript 0 diagnostics; 130 files / 2,033 tests / 0 failures; build 0 errors. See HANDOFF **Deep find A2**. Leave unchecked until independently reviewed.
 - [ ] After review and separate publication authorization, verify real UKRM matching, provider/credit behavior, unverified Add/Dismiss, phone width and keyboard focus. Browser, Deno and live checks remain pending. No migration is needed or authorized.
+
+- [ ] A2 fix round 1: review domain/contact evidence, unique-person writes, Hunter labels and local main UI integration. Keep unchecked until Claude rereview; see HANDOFF **A2 fix round 1**.

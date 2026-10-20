@@ -18,7 +18,7 @@ import { DOMAIN_CHECKS, savedDomains } from './domainChecks.ts';
 import { webSearchDomainFormat, hunterAccount, hunterDomainList, hunterVerifyEmail, readCompanyPages, webSearchForPerson, type LookupResult, type WebSearchPerson } from './knownPersonLookup.ts';
 import { guessLabel, inferDomainPattern, patternGuess, patternLine, type PatternSample } from './domainPattern.ts';
 import { hunterAccountEmpty, hunterAccountLine, type HunterAccount } from './hunterLimits.ts';
-import { cleanEmail, cleanLinkedinProfile, emailDomain, extractWebsiteFindings, pickWebsiteFindings } from './knownPersonWide.ts';
+import { cleanEmail, cleanLinkedinProfile, emailDomain, extractWebsiteFindings, isFreeMailDomain, pickWebsiteFindings } from './knownPersonWide.ts';
 import { domainEmailsOnPages } from './domainSiteCheck.ts';
 import { extractPhone } from './websiteContact.ts';
 import { domainFromWebsite, isDirectoryDomain } from './knownPerson.ts';
@@ -26,7 +26,7 @@ import { rankPeople } from './peopleRanking.ts';
 import { DOMAIN_SOURCE_LABELS, safeFailure, websiteSuspicion, type KnownPersonName, type WebPerson } from './domainDiscovery.ts';
 import { creditLine, problemLines, type ProblemInput } from './deepFindProblems.ts';
 import {
-  MAX_HUNTER_PEOPLE_PER_LEAD, deepFindSummary, emailOnLead, extractTeamMembers, findSamePerson,
+  MAX_HUNTER_PEOPLE_PER_LEAD, deepFindSummary, emailOnLead, extractTeamMembers, findSamePerson, samePersonMatches,
   hunterPeople, namedPersonIsStored, parseLeadPersonName, peopleToLookUp, stuckAction, type ExistingContact, type LeadStats, type SitePerson,
 } from './deepFindRules.ts';
 import { makeWorkerClient } from './workerClient.ts';
@@ -241,6 +241,16 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const saveContact = async (contact: Contact, patch: Record<string, string>): Promise<Contact | null> => {
     let changed = false;
     const name = `${str(contact.first_name) ?? ''} ${str(contact.last_name) ?? ''}`.trim();
+    const candidates = all();
+    // A wide lookup can fill its newly inserted row before returning it to this engine.
+    if (!candidates.some(c => c.id === contact.id)) candidates.push(contact);
+    const unique = findSamePerson(candidates, contact.first_name, contact.last_name);
+    if (!unique || unique.dismissed_at || unique.id !== contact.id) {
+      for (const [field, value] of Object.entries(patch)) {
+        if (str(value)) suggestions.push({ name, field, value, label: 'Person match is ambiguous; review the full name before adding.' });
+      }
+      return null;
+    }
     for (const [field, value] of Object.entries(patch)) {
       if (str(contact[field]) || !str(value)) continue;
       if (field === 'email') {
@@ -315,7 +325,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     officers = fullestPeople(registry.number && chKey ? await fetchActiveOfficers(registry.number, chKey) : [], o => String(o.first_name ?? '') + ' ' + String(o.last_name ?? ''));
     const officerRows: Record<string, unknown>[] = [];
     for (const o of officers) {
-      if (!o.first_name || !o.last_name || findSamePerson(all(), o.first_name, o.last_name)) continue;
+      if (!o.first_name || !o.last_name || samePersonMatches(all(), o.first_name, o.last_name).length) continue;
       if (officerRows.some((r) => r.first_name === o.first_name && r.last_name === o.last_name)) continue;
       officerRows.push({ lead_id: lead.id, source: 'companies_house', first_name: o.first_name, last_name: o.last_name, title: o.title, created_by: run.created_by });
     }
@@ -360,7 +370,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       .flatMap((n) => { const p = parseLeadPersonName(n); return p ? [{ first: p.first, last: p.last }] : []; }),
   ].slice(0, 20);
 
-  const discoveryCap = companyDomainHunterCap(effort, !!(usableSite || str(lead.email) || savedDomains(lead.email_domains).length), run.credit_cap_hunter ?? 0, run.lead_count ?? 1);
+  const leadEmailDomain = emailDomain(str(lead.email));
+  const discoveryCap = companyDomainHunterCap(effort, !!(usableSite || (leadEmailDomain && !isFreeMailDomain(leadEmailDomain)) || savedDomains(lead.email_domains).some(d => !isFreeMailDomain(d))), run.credit_cap_hunter ?? 0, run.lead_count ?? 1);
   // (1) the company's domains
   const contactDomains = rows.map((r) => emailDomain(str(r.email))).filter((d): d is string => !!d);
   const discovery = await discoverLeadDomains(service, {
@@ -601,7 +612,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
           const saved = await saveContact(contact, { email: guess });
           if (saved) { Object.assign(contact, saved); touched.add(contact.id); stats.officerEmails++; }
         } else {
-          if (!checkerSaidValid) unverifiedGuesses.add(guess);
+          if (verdict !== 'verified') unverifiedGuesses.add(guess);
           suggestions.push({ name, field: 'email', value: guess, label });
         }
       }
@@ -787,6 +798,12 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   for (const p of found) {
     if (emailOnLead([...rows, ...created], p.email) || toInsert.some((r) => r.email === p.email)) continue;
     const same = findSamePerson([...rows, ...created], p.first_name, p.last_name);
+    if (!same && samePersonMatches(all(), p.first_name, p.last_name).length) {
+      const name = `${p.first_name} ${p.last_name}`;
+      suggestions.push({ name, field: 'email', value: p.email, label: 'Hunter found several possible people; review the full name before adding.' });
+      if (p.linkedin_url) suggestions.push({ name, field: 'linkedin_url', value: p.linkedin_url, label: 'Person match is ambiguous; review before adding.' });
+      continue;
+    }
     if (same) {
       // The same person is already on the lead (for example a registry officer): fill their blanks, never add twice.
       if (!same.dismissed_at && !str(same.email)) {

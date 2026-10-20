@@ -351,9 +351,50 @@ it.each([false, true])('retains legacy catch-all suggestions with Hunter availab
   expect(hunterVerifyEmail).toHaveBeenCalledTimes(hunter ? 2 : 0);
   for (const value of ['jane.smith@example.com', 'john.brown@example.com']) {
     expect(result.domains.suggestions).toContainEqual(expect.objectContaining({ value,
-      label: expect.stringContaining('Most likely address') }));
+      label: expect.stringContaining(hunter ? 'verified by Hunter' : 'Most likely address') }));
   }
   expect(write).not.toHaveBeenCalled();
+});
+it('keeps Hunter verification evidence when the checker is absent', async () => {
+  vi.mocked(resolveOrgApiKey).mockImplementation(async (_s, _o, provider) => provider === 'hunter' ? 'fake-key' : null);
+  contacts = [{ id: 'sample', first_name: 'Max', last_name: 'Jones', email: 'max.jones@example.com' },
+    { id: 'one', first_name: 'Jane', last_name: 'Smith', email: null }];
+  const result = await process();
+  expect(hunterVerifyEmail).toHaveBeenCalled();
+  expect(result.domains.suggestions).toContainEqual(expect.objectContaining({ value: 'jane.smith@example.com', label: expect.stringContaining('verified by Hunter') }));
+  expect(write).not.toHaveBeenCalled();
+});
+it('keeps checker-valid guesses as suggestions when live full names are ambiguous', async () => {
+  vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', email: null },
+    { id: 'two', first_name: 'Jane Alice', last_name: 'Smith', email: null }];
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
+  const result = await process();
+  expect(write).not.toHaveBeenCalled();
+  expect(result.domains.suggestions).toContainEqual(expect.objectContaining({ field: 'email', value: 'jane.smith@example.com' }));
+});
+it('offers Hunter data for ambiguous names without filling or adding a third contact', async () => {
+  vi.mocked(resolveOrgApiKey).mockImplementation(async (_s, _o, provider) => provider === 'hunter' ? 'fake-key' : null);
+  contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', email: null },
+    { id: 'two', first_name: 'Jane Alice', last_name: 'Smith', email: null }];
+  vi.mocked(hunterDomainList).mockResolvedValue({ ok: true, pattern: null, emails: [{ first_name: 'Jane', last_name: 'Smith', position: 'Director', value: 'jane.smith@example.com', linkedin: 'https://www.linkedin.com/in/jane-smith' }] });
+  const result = await process();
+  expect(write).not.toHaveBeenCalled();
+  expect(result.domains.suggestions).toContainEqual(expect.objectContaining({ field: 'email', value: 'jane.smith@example.com' }));
+});
+it('does not add an officer when existing live names are ambiguous', async () => {
+  contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', email: null },
+    { id: 'two', first_name: 'Jane Alice', last_name: 'Smith', email: null }];
+  vi.mocked(resolveOrgApiKey).mockImplementation(async (_s, _o, provider) => provider === 'companies_house' ? 'fake-key' : null);
+  vi.mocked(resolveRegistry).mockResolvedValue({ number: '12345678', name: 'Example', candidates: [] });
+  vi.mocked(fetchActiveOfficers).mockResolvedValue([{ first_name: 'Jane', last_name: 'Smith', title: null }]);
+  await process();
+  expect(write).not.toHaveBeenCalledWith('insert', expect.anything());
+});
+it('does not count a free-mail lead address as an own domain', async () => {
+  leadOverrides = { website: null, email: 'example@gmail.com' };
+  await processDeepFindLead(service, { id: 'run', org_id: 'org', created_by: 'user', status: 'active', credit_cap_hunter: 8, lead_count: 1 }, { id: 'row', lead_id: 'lead', org_id: 'org' });
+  expect(discoverLeadDomains.mock.calls[0][2].hunterCap).toBe(8);
 });
 it.each([false, true])('preserves wide person lookup at 26 seconds with legacy pattern %s', async (legacy) => {
   vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });

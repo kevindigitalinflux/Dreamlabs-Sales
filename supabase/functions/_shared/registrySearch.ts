@@ -100,7 +100,9 @@ export function strongLocationAgrees(c: Pick<CompanyCandidate, 'postcode' | 'loc
   const pc = postcodeKey(loc.postcode);
   if (pc && postcodeKey(c.postcode) === pc) return true;
   if (pc && postcodeKey(c.postcode) && postcodeKey(c.postcode) !== pc) return false;
-  const words = (v: string | null) => companyNameTokens(v).filter(w => !['unit', 'road', 'street', 'court', 'house', 'building', ...companyNameTokens(loc.city)].includes(w));
+  const addressWords = ['rd', 'st', 'suite', 'floor', 'office', 'unit', 'road', 'street', 'court', 'house', 'building'];
+  const stopWords = [...addressWords, ...addressWords.map(w => w + 's'), ...companyNameTokens(loc.city)];
+  const words = (v: string | null) => companyNameTokens(v).filter(w => !stopWords.includes(w));
   const street = words(loc.address);
   const target = words(c.address);
   return street.length >= 2 && street.filter(w => target.includes(w)).length >= 2;

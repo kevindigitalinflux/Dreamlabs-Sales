@@ -17,6 +17,21 @@ it('explains absent confirmed domains', async () => {
   const out = await lookUpPeople(context({ domains: [], left: () => 60_000 }));
   expect(out.results[0].reason).toBe('No company domain is confirmed.');
 });
+it.each([null, 'one'])('keeps ambiguous wide-lookup results reviewable with contactId %s', async contactId => {
+  const contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith' }, { id: 'two', first_name: 'Jane Alice', last_name: 'Smith' }];
+  vi.mocked(runWideLookup).mockImplementation(async (_input, deps) => {
+    deps.absorb({ email: 'jane@example.com', linkedin_url: 'https://www.linkedin.com/in/jane-smith' }, 'hunter_finder');
+    return { steps: [], suggestions: [] };
+  });
+  const saveContact = vi.fn();
+  const from = vi.fn(() => ({ upsert: () => ({ select: async () => ({ data: [], error: null }) }) }));
+  const out = await lookUpPeople(context({ people: [{ ...person, contactId }], contacts: () => contacts,
+    left: () => 60_000, saveContact, service: { from }, run: {} }));
+  expect(saveContact).not.toHaveBeenCalled();
+  expect(from).not.toHaveBeenCalled();
+  expect(out.suggestions).toContainEqual(expect.objectContaining({ field: 'email', value: 'jane@example.com' }));
+  expect(out.suggestions).toContainEqual(expect.objectContaining({ field: 'linkedin_url', value: 'https://www.linkedin.com/in/jane-smith' }));
+});
 it('replaces raw timeout detail with a fixed retry reason and says which steps ran', async () => {
   vi.mocked(runWideLookup).mockResolvedValue({ steps: [
     { id: 'website', status: 'not_found' }, { id: 'web', status: 'error', reason: 'timeout', label: 'Web search' },

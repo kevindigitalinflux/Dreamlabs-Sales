@@ -555,6 +555,32 @@ it('historical registry source alone does not prove an active decision maker', a
   expect((await run('medium')).domains.steps.join(' ')).toContain('a named decision maker, so deeper steps ran');
 });
 
+it('keeps supported LinkedIn profiles as suggestions when live full names are ambiguous', async () => {
+  contacts.push({ ...contacts[0], id: 'other', first_name: 'Jane Alice' });
+  const out = await run('high');
+  expect(webSearchForPerson).toHaveBeenCalled();
+  expect(writes.some(w => w.patch.linkedin_url)).toBe(false);
+  expect(out.domains.suggestions).toContainEqual(expect.objectContaining({ field: 'linkedin_url', value: profile }));
+});
+it('does not let a dismissed alias hide a unique live LinkedIn match', async () => {
+  contacts.unshift({ ...contacts[0], id: 'dismissed', dismissed_at: '2026-10-20' });
+  await run('high');
+  expect(contacts.find(c => c.id === 'c').linkedin_url).toBe(profile);
+  expect(contacts.find(c => c.id === 'dismissed').linkedin_url).toBeNull();
+});
+it('can check and fill a unique contact just created by the wide lookup', async () => {
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
+  lookUpPeople.mockImplementationOnce(async ctx => {
+    const added = { id: 'new-person', lead_id: 'lead', first_name: 'Alex', last_name: 'Brown', email: null, dismissed_at: null };
+    contacts.push(added);
+    await ctx.saveContact(added, { email: 'alex@acme.com' });
+    return { created: [added], touched: [], emailsFound: 1, suggestions: [], problems: [], results: [] };
+  });
+  await run('high');
+  expect(contacts.find(c => c.id === 'new-person').email).toBe('alex@acme.com');
+});
+
 it('late own-site reads preserve the downstream people and checker reserve', async () => {
   contacts[0].email = null;
   resolveOrgWorkerConfig.mockResolvedValue({});
