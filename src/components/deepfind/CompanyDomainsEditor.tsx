@@ -23,11 +23,11 @@ export function CompanyDomainsEditor({ leadId, domains }: { leadId: string; doma
   }
 
   return (
-    <div className="flex flex-col gap-1">
-      <p className="text-xs text-muted">Company domains (found automatically, check before emailing):</p>
+    <section className="flex flex-col gap-2 text-offwhite">
+      <h4 className="font-heading text-sm font-bold">Company domains <span className="font-body text-[13px] font-normal">(found automatically, check before emailing)</span></h4>
       <ul className="flex flex-wrap gap-1.5">
         {shown.map((d) => (
-          <li key={d.domain} className="flex items-center gap-1 rounded-full bg-surface/60 py-0.5 pl-2.5 pr-1 text-xs">
+          <li key={d.domain} className="flex items-center gap-1 rounded-full border border-line bg-surface/60 py-0.5 pl-2.5 pr-1 text-[13px]">
             <span>{d.domain}{d.needs_check ? ' (not confirmed)' : ''}</span>
             <button
               type="button"
@@ -35,7 +35,7 @@ export function CompanyDomainsEditor({ leadId, domains }: { leadId: string; doma
               disabled={busy !== null}
               aria-label={`Not their domain: ${d.domain}`}
               title="Not their domain"
-              className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-muted hover:bg-surface hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-offwhite/80 hover:bg-surface hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
             >
               <X className="h-3.5 w-3.5" aria-hidden />
             </button>
@@ -43,6 +43,6 @@ export function CompanyDomainsEditor({ leadId, domains }: { leadId: string; doma
         ))}
       </ul>
       {error && <p role="alert" className="text-xs text-danger">{error}</p>}
-    </div>
+    </section>
   );
 }

@@ -9,16 +9,16 @@ import { Button } from '../ui/Button';
 export function AutoChangeRows({ changes, busy, notices, onUndo }: {
   changes: AutoApplied[]; busy: boolean; notices: Record<number, string>; onUndo: (change: AutoApplied, index: number) => void;
 }) {
-  return <div className="flex min-w-0 flex-col gap-2">
-    <p className="text-sm font-semibold">Deep find changed these automatically</p>
+  return <section className="flex min-w-0 flex-col gap-2 text-offwhite">
+    <h4 className="font-heading text-sm font-bold">Deep find changed these automatically</h4>
     <ul className="flex min-w-0 flex-col gap-2">
-      {changes.map((change, index) => <li key={`${change.table}:${change.id}:${change.field}:${index}`} className="min-w-0 rounded-md border border-line p-2">
-        <p className="break-words text-xs">{change.table === 'leads' ? 'Lead' : 'Contact'} {change.field.replace(/_/g, ' ')}: {String(change.before ?? '') || 'blank'} → {String(change.after)}</p>
-        <Button variant="ghost" disabled={busy || !!notices[index]} aria-label={`Undo ${change.field.replace(/_/g, ' ')} change ${index + 1}`} onClick={() => onUndo(change, index)}>Undo</Button>
-        {notices[index] && <p role="status" className="text-xs text-muted">{notices[index]}</p>}
+      {changes.map((change, index) => <li key={`${change.table}:${change.id}:${change.field}:${index}`} className="flex min-w-0 flex-wrap items-center gap-2 rounded-lg border border-line bg-surface/50 p-3">
+        <p className="min-w-0 flex-1 break-words text-sm">{change.table === 'leads' ? 'Lead' : 'Contact'} {change.field.replace(/_/g, ' ')}: {String(change.before ?? '') || 'blank'} → {String(change.after)}</p>
+        <Button variant="secondary" disabled={busy || !!notices[index]} aria-label={`Undo ${change.field.replace(/_/g, ' ')} change ${index + 1}`} onClick={() => onUndo(change, index)}>Undo</Button>
+        {notices[index] && <p role="status" className="w-full text-[13px]">{notices[index]}</p>}
       </li>)}
     </ul>
-  </div>;
+  </section>;
 }
 
 /** Generic, session-only Undo shared by automatic website and contact changes. */
@@ -43,8 +43,8 @@ export function DeepFindAutoChanges({ leadId, changes }: { leadId: string; chang
   }
   if (!changes.length) return null;
   return <div aria-busy={busy} className="min-w-0">
-    <p ref={status} tabIndex={-1} role="status" className="text-xs text-muted focus:outline focus:outline-cyan">{busy ? 'Undoing…' : Object.values(notices).at(-1) ?? ''}</p>
+    <p ref={status} tabIndex={-1} role="status" className="text-[13px] focus:outline focus:outline-cyan">{busy ? 'Undoing…' : Object.values(notices).at(-1) ?? ''}</p>
     <AutoChangeRows changes={changes} busy={busy} notices={notices} onUndo={(change, index) => void undo(change, index)} />
-    {error && <p role="alert" className="text-xs text-danger">{error}</p>}
+    {error && <p role="alert" className="text-sm font-semibold text-danger">{error}</p>}
   </div>;
 }

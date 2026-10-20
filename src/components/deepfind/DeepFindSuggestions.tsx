@@ -48,9 +48,10 @@ export function DeepFindSuggestions({ leadId, suggestions, refreshKey, roles = [
     } finally { saving.current = false; setBusy(false); }
   }
   const shown = state ? visibleSuggestions(suggestions, state.lead, state.contacts).filter((s) => !hidden.includes(suggestionKey(s))) : [];
-  return <div className="flex min-w-0 flex-col gap-2" aria-busy={busy}>
-    <p ref={status} tabIndex={-1} role="status" className="text-xs text-muted focus:outline focus:outline-cyan">{notice || (state ? 'Possible details. Review before adding.' : 'Loading review details…')}</p>
+  return <section className="flex min-w-0 flex-col gap-2" aria-busy={busy}>
+    <h4 className="font-heading text-sm font-bold">Suggestions to review</h4>
+    <p ref={status} tabIndex={-1} role="status" className="text-[13px] focus:outline focus:outline-cyan">{notice || (state ? 'Possible details. Review before adding.' : 'Loading review details…')}</p>
     <SuggestionRows suggestions={shown} busy={busy} onAction={(s, action) => void act(s, action)} />
-    {error && <p role="alert" className="text-xs text-danger">{error}</p>}
-  </div>;
+    {error && <p role="alert" className="text-sm font-semibold text-danger">{error}</p>}
+  </section>;
 }
