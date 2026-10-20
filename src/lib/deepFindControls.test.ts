@@ -42,5 +42,5 @@ it('shows automatic changes with individual labelled Undo actions and a concurre
   expect(html.match(/>Undo<\/button>/g)).toHaveLength(2);
   expect(html).toContain('Changed since, left as is');
   expect(html.match(/disabled=""/g)).toHaveLength(1);
-  expect(html).toContain('aria-label="Undo website change 1"');
+  expect(html).toContain('aria-label="Undo website change: blank to https://acme.com"');
 });

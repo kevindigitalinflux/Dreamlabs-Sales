@@ -56,22 +56,22 @@ export function DeepFindModal({ open, leadIds, onClose, onStarted }: DeepFindMod
       {runId ? (
         <div className="flex flex-col gap-3">
           {notice && <p role="status" className="text-sm">{notice}</p>}
-          <DeepFindProgress runId={runId} />
-          <Link to={`/pipeline/deep-find/${runId}`} className="text-[13px] underline hover:text-offwhite">
+          <DeepFindProgress runId={runId} leadLevel={4} />
+          <Link to={`/pipeline/deep-find/${runId}`} onClick={onClose} className="text-[13px] underline hover:text-offwhite">
             Open this run on its own page (it stays in Deep find runs after you close this window)
           </Link>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
-          {tooMany && <p role="alert" className="text-sm text-danger">Choose {DEEP_FIND_MAX_LEADS} leads or fewer for one Deep find.</p>}
+          {tooMany && <p role="alert" className="text-sm text-danger-strong">Choose {DEEP_FIND_MAX_LEADS} leads or fewer for one Deep find.</p>}
           {leadIds.length === 0 && <p className="text-sm">Choose at least one lead.</p>}
           <DeepFindConfirm
             leadCount={leadIds.length} hunterCap={hunterCap} aiCap={aiCap}
             onHunterCap={setHunterCap} onAiCap={setAiCap} capError={capError}
             effort={effort} onEffort={setEffort}
           />
-          {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-          <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
+          {error && <p role="alert" className="text-sm text-danger-strong">{error}</p>}
+          <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-col-reverse justify-end gap-2 border-t border-line bg-card px-6 py-3 sm:flex-row">
             <Button variant="ghost" className="!text-offwhite" onClick={onClose}>Cancel</Button>
             <Button className="min-w-40" onClick={() => void handleStart()} loading={starting} disabled={starting || !!capError || tooMany || leadIds.length === 0}>
               {starting ? 'Starting…' : 'Start Deep find'}

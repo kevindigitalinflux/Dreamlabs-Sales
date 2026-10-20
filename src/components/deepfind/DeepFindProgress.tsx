@@ -7,7 +7,7 @@ import { deepFindProgress } from '../../lib/deepFindView';
 import { DeepFindLeadResult } from './DeepFindLeadResult';
 
 /** Live progress of one Deep find run: per-lead status and results, credits used, and a Cancel button. */
-export function DeepFindProgress({ runId }: { runId: string }) {
+export function DeepFindProgress({ runId, leadLevel = 2 }: { runId: string; leadLevel?: number }) {
   const { run, rows, loading, error, refresh } = useDeepFindRun(runId);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -21,7 +21,7 @@ export function DeepFindProgress({ runId }: { runId: string }) {
   }
 
   if (loading) return <Skeleton className="h-32 w-full" />;
-  if (error) return <p role="alert" className="text-sm text-danger">{error}</p>;
+  if (error) return <p role="alert" className="text-sm text-danger-strong">{error}</p>;
   if (!run) return <p className="text-sm">This Deep find could not be found.</p>;
 
   const p = deepFindProgress(rows);
@@ -40,8 +40,8 @@ export function DeepFindProgress({ runId }: { runId: string }) {
       </div>
       {active && <p className="text-[13px]">You can close this window: Deep find keeps going in the background.</p>}
       {rows.length === 0 && <p className="text-sm">No leads in this Deep find.</p>}
-      <ul className="flex flex-col gap-3">{rows.map((r) => <DeepFindLeadResult key={r.id} row={r} />)}</ul>
-      {cancelError && <p role="alert" className="text-sm text-danger">{cancelError}</p>}
+      <ul className="flex flex-col gap-3">{rows.map((r) => <DeepFindLeadResult key={r.id} row={r} level={leadLevel} />)}</ul>
+      {cancelError && <p role="alert" className="text-sm text-danger-strong">{cancelError}</p>}
       {active && (
         <Button variant="danger" onClick={() => void handleCancel()} loading={cancelling} disabled={cancelling}>
           {cancelling ? 'Stopping…' : 'Cancel Deep find'}
