@@ -338,9 +338,10 @@ export function websiteSuspicion(pages: string[], names: string[], country?: unk
   }
   const distinctive = names.flatMap(distinctiveTokens);
   const realNameToken = [title, footer].some(s => brandTokens(s).some(t => distinctive.includes(t)));
-  // Contact-backed three-letter initials are allowed; a postcode still needs this name evidence.
+  // Three-letter initials need contact proof, and a postcode may only back name evidence that is not a bare 3-letter initialism.
   const weakName = [title, footer, domainName].some(s => names.some(n => abbreviatedName(s, n, true)));
-  const contact = siteContactEvidence(text, lead, weakName || realNameToken);
+  const longWeakName = [title, footer, domainName].some(s => names.some(n => abbreviatedName(s, n)));
+  const contact = siteContactEvidence(text, lead, longWeakName || realNameToken);
   const neutral = new Set(['welcome', 'home', 'homepage', 'official', 'website', 'site', 'copyright', 'all', 'rights', 'reserved', 'mgmt']);
   const initialPrefix = (token: string) => token.length >= 2 && names.some(n => {
     const parts = words(n).filter(w => !['limited', 'ltd', 'llp', 'plc', 'the', 'and'].includes(w));
@@ -349,7 +350,6 @@ export function websiteSuspicion(pages: string[], names: string[], country?: unk
   const differentBusiness = [title, footer].some(s => !carries(s) && brandTokens(s).some(t =>
     /[a-z]/.test(t) && !INDUSTRY_WORDS.has(t) && !neutral.has(t) && !distinctive.includes(t)
     && !initialPrefix(t) && !names.some(n => abbreviatedName(t, n, true))));
-  const longWeakName = [title, footer, domainName].some(s => names.some(n => abbreviatedName(s, n)));
   const weakAccepted = weakName && !differentBusiness && !!(contact || (longWeakName && realNameToken));
   if ((title.trim() || footer.trim() || weakName) && !carries(title) && !carries(footer) && !weakAccepted && !(contact && !differentBusiness && !weakName)) reasons.push('The website title and footer name a different business.');
   const suspect = reasons.length > 0;

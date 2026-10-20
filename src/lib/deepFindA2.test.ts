@@ -98,3 +98,11 @@ it('does not treat common address tokens as strong E2 across towns', () => {
   expect(strongLocationAgrees({ address: 'Office 5 High Rd, Leeds', locality: 'Leeds', postcode: null },
     { address: 'Suite 2 High Rd', city: 'London', postcode: null })).toBe(false);
 });
+
+it('does not let a 3-letter initialism and a postcode prove each other (I-1)', () => {
+  const spm = ['Smith Property Management Ltd'];
+  expect(websiteSuspicion(['<title>SPM Home</title>TW3 3TT'], spm, 'GB', { postcode: 'TW3 3TT' }).suspect).toBe(true);
+  expect(websiteSuspicion(['<title>Welcome</title>TW3 3TT'], spm, 'GB', { postcode: 'TW3 3TT', website: 'https://spm-office.co.uk' }).suspect).toBe(true);
+  expect(websiteSuspicion(['<title>UKRM Home</title>TW3 3TT Call 020 8577 0450 info@ukrmanagement.com'], names, 'GB', lead).suspect).toBe(false);
+  expect(websiteSuspicion(['<title>SPM Home</title>Call 020 8577 0450'], spm, 'GB', lead).suspect).toBe(false);
+});
