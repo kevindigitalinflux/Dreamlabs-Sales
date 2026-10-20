@@ -39,7 +39,12 @@ export interface DeepFindDetails {
   websiteReasons: string[];
   /** Addresses found or built but not saved (site emails for non-contacts, email-format guesses): the user checks them. */
   suggestions: DeepFindSuggestion[];
+  /** People Deep find skipped because they were dismissed earlier (absent in older results). */
+  dismissedPeople: DeepFindDismissedPerson[];
 }
+
+/** A person skipped as dismissed; `contactId` is set when a dismissed contact row can be restored. */
+export interface DeepFindDismissedPerson { name: string; contactId?: string }
 
 /** One address offered to check, with where it came from (a fixed label). */
 export interface DeepFindSuggestion { guess_rank?: 'most_likely' | 'other'; name: string; value: string; label: string; field?: string }
@@ -107,6 +112,12 @@ export function readDeepFindDetails(value: unknown): DeepFindDetails {
     websiteSuspect: o.website_suspect === true,
     websiteReasons: (Array.isArray(o.website_reasons) ? o.website_reasons : []).slice(0, 3).flatMap((r) => { const t = text(r, 200); return t ? [t] : []; }),
     suggestions,
+    dismissedPeople: (Array.isArray(o.dismissed_people) ? o.dismissed_people : []).slice(0, 25).flatMap((p) => {
+      const x = (typeof p === 'object' && p !== null ? p : {}) as Record<string, unknown>;
+      const name = text(x.name, 80);
+      const contactId = text(x.contact_id, 64);
+      return name ? [{ name, ...(contactId ? { contactId } : {}) }] : [];
+    }),
   };
 }
 

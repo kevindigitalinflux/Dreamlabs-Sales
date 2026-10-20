@@ -719,3 +719,10 @@ Housekeeping: a separate worktree `C:\Users\kevin\Projects\dreamlabs-sales-ui` e
 - Test-first regressions reproduced the refund, domain-stop, duplicate-suggestion and output-cap findings. Targeted tests cover concurrency, reservation-day refund/retry, all unverifiable reasons, zero-time Hunter charging, dismissal recovery advice and bounded alternatives. Updated the old late-domain Hunter expectation to follow M2.
 - Final gates, once: TypeScript 0 diagnostics; Vitest 135/135 files, 2,121/2,121 tests, 0 failures; production build 0 errors (existing chunk-size warning). JSON reporting recovered totals from the same run; no full-suite rerun was needed. git diff --check passed.
 - Local commit hooks are disabled to prevent branch notes overwriting accepted main vault references. No vault write/sync ran. Deno/runtime, live-provider verification and independent architect review remain pending. Resume with Claude reviewing this fix commit; publication needs separate authorization.
+## Dismissed people UI
+
+Branch `claude/dismissed-people-ui` (UI only, not pushed). Engine contract: run request `start_fresh: boolean`; per-lead result `domains.dismissed_people: [{ name, contact_id? }]`.
+- Confirm dialog: "Start fresh" checkbox (default off) in `DeepFindConfirm.tsx`; `DeepFindModal.tsx` passes it to `startDeepFind(..., { startFresh })`, which adds `start_fresh: true` only when ticked.
+- Lead card: `DismissedPeople.tsx` ("Dismissed people (N)", only when N > 0) plus a helper line under the list; Restore uses `restoreDismissedContact` in `src/lib/restoreDismissed.ts` (RLS, compare-and-set on `dismissed_at`, coded error).
+- Deep find result: amber callout in `DeepFindLeadResult.tsx` with a Restore button per person that has a `contact_id`; people without one only get the "run again with Start fresh" hint (suggestion keys in `leads.dismissed_suggestions` are not restorable one by one here).
+- Older results without the field show nothing extra.

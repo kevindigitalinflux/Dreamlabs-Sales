@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { readableInvokeError } from '../../lib/invokeError';
@@ -17,6 +17,7 @@ import { Button } from '../ui/Button';
 import { ContactForm } from './ContactForm';
 import { ContactRow } from './ContactRow';
 import { KnownPersonArea } from './KnownPersonArea';
+import { DismissedPeople } from './DismissedPeople';
 import { DeepFindLeadControls } from '../deepfind/DeepFindLeadControls';
 
 type Adding = 'person' | 'general' | null;
@@ -35,6 +36,7 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
+  const helperRef = useRef<HTMLParagraphElement>(null);
   const flow = useKnownPersonFlow(leadId, hook.refresh);
 
   useEffect(() => { setAdding(null); setBusyId(null); setErrors({}); setNotice(null); }, [leadId]);
@@ -116,6 +118,8 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
           />
         ))}
       </ul>
+      <p ref={helperRef} tabIndex={-1} className="text-xs text-offwhite focus-visible:outline-2 focus-visible:outline-violet-line">Dismissed people are not suggested again. Restore them from Dismissed people.</p>
+      <DismissedPeople leadId={leadId} reloadKey={contacts.map((c) => c.id).join(',')} onRestored={() => void hook.refresh()} helperRef={helperRef} />
       <KnownPersonArea
         flow={flow} contacts={contacts}
         addContact={hook.addContact} updateContact={hook.updateContact}

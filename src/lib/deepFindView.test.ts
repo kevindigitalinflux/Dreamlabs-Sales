@@ -9,6 +9,13 @@ it('clears attention for rejected or non-UK company choices and reviewed suggest
 });
 
 describe('readDeepFindDetails', () => {
+  it('reads dismissed_people and fails soft when absent or odd', () => {
+    expect(readDeepFindDetails({ dismissed_people: [{ name: 'Jane Smith', contact_id: 'c1' }, { name: 'Bob' }, { contact_id: 'x' }, 4] }).dismissedPeople)
+      .toEqual([{ name: 'Jane Smith', contactId: 'c1' }, { name: 'Bob' }]);
+    expect(readDeepFindDetails({}).dismissedPeople).toEqual([]);
+    expect(readDeepFindDetails({ dismissed_people: 'x' }).dismissedPeople).toEqual([]);
+  });
+
   it('reads the engine JSON and drops anything odd', () => {
     expect(readDeepFindDetails({
       domains: [{ domain: 'loveliving.uk', sources: ['hunter_name'], needs_check: false }, { domain: 'x.com', needs_check: true }, 5, { domain: '' }],
@@ -21,11 +28,11 @@ describe('readDeepFindDetails', () => {
       namedByWeb: [{ name: 'David Cox', role: 'Owner' }],
       namedOnSite: [],
       unverified: [{ name: 'Tom Reed', role: 'Director' }],
-      companyCandidates: [], companyNumber: null, steps: [], people: [], websiteSuspect: false, websiteReasons: [], suggestions: [],
+      companyCandidates: [], companyNumber: null, steps: [], people: [], websiteSuspect: false, websiteReasons: [], suggestions: [], dismissedPeople: [],
     });
     expect(readDeepFindDetails(null)).toEqual({
       autoApplied: [],
-      domains: [], namedByWeb: [], namedOnSite: [], unverified: [], companyCandidates: [], companyNumber: null, steps: [], people: [], websiteSuspect: false, websiteReasons: [], suggestions: [],
+      domains: [], namedByWeb: [], namedOnSite: [], unverified: [], companyCandidates: [], companyNumber: null, steps: [], people: [], websiteSuspect: false, websiteReasons: [], suggestions: [], dismissedPeople: [],
     });
   });
 });
