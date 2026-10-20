@@ -70,6 +70,20 @@ describe('runDomainDiscovery v2 (Review Focus 3 and 4)', () => {
     ...over,
   });
 
+  it('spends no company-domain credits when an own domain is already confirmed', async () => {
+    const deps = base();
+    const result = await runDomainDiscovery(input({ hunterCap: 2, known: [{ domain: 'loveliving.uk', source: 'website' }] }), deps, DOMAIN_CHECKS);
+    expect(result.hunterCalls).toBe(0);
+    expect(deps.hunterByName).not.toHaveBeenCalled();
+    expect(deps.hunterList).not.toHaveBeenCalled();
+    expect(deps.hunterFindByCompany).not.toHaveBeenCalled();
+  });
+
+  it('shares the two-call ceiling across all Hunter discovery methods for an existing suspect site', async () => {
+    const result = await runDomainDiscovery(input({ hunterCap: 2, known: [{ domain: 'other.com', source: 'website_suspect' }] }), base(), DOMAIN_CHECKS);
+    expect(result.hunterCalls).toBeLessThanOrEqual(2);
+  });
+
   it('does not accept the Hunter name hit alone, but confirms the domain where a known person is listed', async () => {
     const r = await runDomainDiscovery(input(), base(), DOMAIN_CHECKS);
     const byDomain = Object.fromEntries(r.domains.map((d) => [d.domain, d]));

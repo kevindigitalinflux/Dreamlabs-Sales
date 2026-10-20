@@ -2,7 +2,7 @@
 // Works out a company's email format (first@, first.last@, flast@ ...) from addresses we already know on one of its
 // confirmed domains, and builds candidate addresses for people we are looking for. Imports only import-free modules
 // (tested from src/lib). A built address is a GUESS until Hunter's verifier says it is valid.
-import { buildPatternEmail, inferPattern } from './knownPersonWide.ts';
+import { buildPatternEmail, inferPattern, isGenericMailbox } from './knownPersonWide.ts';
 
 /** A known address and, when known, whose it is. */
 export interface PatternSample { email: string; first: string | null; last: string | null }
@@ -25,9 +25,19 @@ export function inferDomainPattern(domain: string, samples: PatternSample[], peo
   const add = (p: string | null) => { if (p) counts.set(p, (counts.get(p) ?? 0) + 1); };
   for (const s of samples.slice(0, 40)) {
     if (typeof s.email !== 'string' || !onDomain(s.email, domain)) continue;
-    if (s.first) { add(inferPattern(s.email, s.first, s.last)); continue; }
+    if (isGenericMailbox(s.email.toLowerCase())) continue;
+    if (s.first) { add(inferPattern(s.email, s.first.trim().split(/\s+/)[0], s.last)); continue; }
     const matches = new Set(people.slice(0, 20).map((p) => inferPattern(s.email, p.first, p.last)).filter((x): x is string => !!x));
     if (matches.size === 1) add([...matches][0]!);
+    else if (matches.size === 0) {
+      // An unknown public address can reveal a separated format, but never a person's identity.
+      const local = s.email.toLowerCase().split('@')[0];
+      const parts = /^([a-z]{2,})[._-]([a-z]{2,})$/.exec(local);
+      if (parts && !parts.slice(1).some(p => isGenericMailbox(`${p}@${domain}`) || ['customer', 'client', 'customerrelations'].includes(p))) {
+        const separator = local.includes('_') ? '_' : local.includes('-') ? '-' : '.';
+        add(`{first}${separator}{last}`);
+      }
+    }
   }
   if (counts.size !== 1) return null;
   const [pattern, evidence] = [...counts.entries()][0]!;
@@ -47,7 +57,7 @@ export function patternLine(domain: string, p: DomainPattern): string {
 
 /** The candidate address for one person, or null when their name cannot be written in the format. */
 export function patternGuess(p: DomainPattern, person: NamedPerson, domain: string): string | null {
-  return buildPatternEmail(p.pattern, person.first, person.last, domain);
+  return buildPatternEmail(p.pattern, person.first.trim().split(/\s+/)[0], person.last, domain);
 }
 
 /** The fixed suggestion label for an unverified guess, naming the format. */

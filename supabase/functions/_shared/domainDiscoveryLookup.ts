@@ -54,10 +54,13 @@ export async function discoverLeadDomains(
     const d = domainFromWebsite(lead.website);
     return d && DOMAIN_CHECKS.usable(d) ? d : null;
   })();
+  const leadEmailDomain = DOMAIN_CHECKS.clean(lead.email?.split('@')[1]);
+  const confirmedEmailDomain = leadEmailDomain && DOMAIN_CHECKS.usable(leadEmailDomain) ? leadEmailDomain : null;
   const already = savedDomains(lead.email_domains);
   const known: DomainCandidate[] = [
     ...(opts.extraKnown ?? []).filter((k) => k.source === 'typed'),
     ...(websiteDomain ? [{ domain: websiteDomain, source: opts.websiteSuspect ? 'website_suspect' as const : 'website' as const }] : []),
+    ...(confirmedEmailDomain ? [{ domain: confirmedEmailDomain, source: 'lead_email' as const }] : []),
     ...already.map((domain) => ({ domain, source: 'saved' as const })),
     ...(opts.extraKnown ?? []).filter((k) => k.source !== 'typed'),
   ];
@@ -69,7 +72,7 @@ export async function discoverLeadDomains(
   const blocked = savedDomains(lead.blocked_domains);
   const spendHunter = async () => !opts.guard || await opts.guard.hunter();
   const outcome = await runDomainDiscovery({
-    names, variants, hunterCap: opts.hunterCap, registeredName: opts.registeredName ?? null, people: opts.people ?? [], websiteSuspect: !!opts.websiteSuspect, blocked,
+    names, variants, hunterCap: Math.min(opts.hunterCap ?? 12, websiteDomain || already.length || confirmedEmailDomain ? 2 : 12), registeredName: opts.registeredName ?? null, people: opts.people ?? [], websiteSuspect: !!opts.websiteSuspect, blocked,
     website: websiteDomain ? lead.website : null, websiteDomain, known,
     allow: { hunter: opts.allow.hunter && !!hunterKey, site: opts.allow.site && !!websiteDomain, web: opts.allow.web && !!geminiKey, apollo: !!opts.allow.apollo && !!apolloKey },
     budgetMs: opts.budgetMs,

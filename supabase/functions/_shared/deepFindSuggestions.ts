@@ -61,7 +61,9 @@ export function isSuggestionDismissed(s: ReviewSuggestion, lead: ReviewLead): bo
     : s.field === 'title' ? 'title:' + norm(s.name) + ':' + norm(s.value)
     : s.field === 'linkedin_url' ? 'linkedin_url:' + norm(s.name) + ':' + norm(s.value)
     : (s.field ?? 'email') + ':' + norm(s.value);
-  return keys.includes(suggestionKey(s)) || keys.includes(legacy)
+  const displayKey = displayPersonKey(s.field === 'owner_name' ? s.value : s.name);
+  const personDismissed = !!displayKey && keys.some(key => key.startsWith('person:') && displayPersonKey(key.slice(7)) === displayKey);
+  return personDismissed || keys.includes(suggestionKey(s)) || keys.includes(legacy)
     || ((s.field === 'owner_name' || s.field === 'title') && keys.includes('person:' + norm(s.field === 'owner_name' ? s.value : s.name)));
 }
 export function isRoleMailbox(email: string | undefined): boolean {
@@ -73,7 +75,8 @@ export function visibleSuggestions<T extends ReviewSuggestion>(suggestions: T[],
   const seen = new Set(strings(lead.dismissed_suggestions).map(norm));
   const emails = new Set([norm(lead.email), ...strings(lead.additional_emails).map(norm), ...contacts.map((c) => norm(c.email))].filter(Boolean));
   const priority = (s: ReviewSuggestion) => s.field === 'owner_name' || ((!s.field || s.field === 'email') && !!s.value && s.name !== 'Company contact') ? 0 : 1;
-  return fullestPeople(suggestions, s => !s.value && !s.field ? s.name : '').sort((a, b) => Number(a.guess_rank === 'other') - Number(b.guess_rank === 'other') || priority(a) - priority(b) || Number(isRoleMailbox(a.value)) - Number(isRoleMailbox(b.value))).filter((s) => {
+  const owners = new Set(fullestPeople(suggestions.filter(s => s.field === 'owner_name'), s => s.value ?? s.name));
+  return fullestPeople(suggestions.filter(s => s.field !== 'owner_name' || owners.has(s)), s => !s.value && !s.field ? s.name : '').sort((a, b) => Number(a.guess_rank === 'other') - Number(b.guess_rank === 'other') || priority(a) - priority(b) || Number(isRoleMailbox(a.value)) - Number(isRoleMailbox(b.value))).filter((s) => {
     if (isSuggestionDismissed(s, lead)) return false;
     if (s.field === 'title') {
       const same = contacts.find((c) => nameOf(c) === norm(s.name));

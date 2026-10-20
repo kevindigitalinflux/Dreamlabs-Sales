@@ -36,6 +36,7 @@ it('deduplicates display and creation by full first and last names, retaining th
   expect(findSamePerson(contacts, 'Dr Karthik Reddy', 'Venkatapuram')?.id).toBe('1');
   expect(findSamePerson(contacts, 'K', 'Venkatapuram')).toBeNull();
   expect(findSamePerson(contacts, 'Kevin', 'Venkatapuram')).toBeNull();
+  expect(findSamePerson([...contacts, { id: '2', first_name: 'Karthik Reddy', last_name: 'Venkatapuram' }], 'Karthik', 'Venkatapuram')?.id).toBe('2');
   const people = peopleToLookUp({}, contacts, [{ first_name: 'Karthik Reddy', last_name: 'Venkatapuram', title: 'Director' }]);
   expect(people).toHaveLength(1);
   expect(people[0].first).toBe('Karthik Reddy');
@@ -43,4 +44,5 @@ it('deduplicates display and creation by full first and last names, retaining th
   const suggestion = { name: 'Karthik Reddy Venkatapuram', field: 'email', value: 'karthik@example.com' };
   expect(planSuggestionAdd(suggestion, {}, contacts).kind).toBe('contact_update');
   expect(visibleSuggestions([{ name: 'Karthik Venkatapuram' }, { name: 'Karthik Reddy Venkatapuram' }], {}, [])).toEqual([{ name: 'Karthik Reddy Venkatapuram' }]);
+  expect(visibleSuggestions([{ name: 'Karthik Reddy Venkatapuram' }], { dismissed_suggestions: ['person:karthik venkatapuram'] }, [])).toEqual([]);
 });

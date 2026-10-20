@@ -4,7 +4,7 @@ vi.mock('../../supabase/functions/_shared/orgApiKeys', () => ({ resolveOrgApiKey
 vi.mock('../../supabase/functions/_shared/rateLimit', () => ({ checkRateLimit: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/deepFindRegistry', () => ({ resolveRegistry: vi.fn(), registryStep: () => 'Registry checked.' }));
 vi.mock('../../supabase/functions/_shared/domainDiscoveryLookup', () => ({ discoverLeadDomains: vi.fn() }));
-vi.mock('../../supabase/functions/_shared/knownPersonLookup', () => ({ readCompanyPages: vi.fn(), hunterAccount: vi.fn(), hunterDomainList: vi.fn(), hunterVerifyEmail: vi.fn() }));
+vi.mock('../../supabase/functions/_shared/knownPersonLookup', () => ({ webSearchDomainFormat: vi.fn(async () => []), readCompanyPages: vi.fn(), hunterAccount: vi.fn(), hunterDomainList: vi.fn(), hunterVerifyEmail: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/deepFindPeople', () => ({ lookUpPeople: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/workerClient', () => ({ makeWorkerClient: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/companiesHouse', () => ({ fetchActiveOfficers: vi.fn(), fetchCompanyProfile: vi.fn(), fetchOfficerAppointments: vi.fn(), searchCompaniesByName: vi.fn(), searchOfficers: vi.fn() }));
@@ -69,7 +69,7 @@ it('tries common formats without an inferred pattern and fills only the existing
   expect(write).toHaveBeenCalledWith('update', expect.objectContaining({ email: 'valentina@example.com', include_in_sequences: false }));
   expect(result.domains.steps.join(' ')).toContain('Guessed from common formats and confirmed by our email checker, check it');
 });
-it('stops a catch-all domain across people and offers only the top two common guesses per person', async () => {
+it('stops catch-all checks and offers one ranked guess with collapsed alternatives per person', async () => {
   vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
   contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null },
     { id: 'two', first_name: 'John', last_name: 'Jones', title: 'Director', email: null }];
@@ -77,8 +77,9 @@ it('stops a catch-all domain across people and offers only the top two common gu
   const result = await process();
   expect(worker.verifyEmail).toHaveBeenCalledOnce();
   expect(write).not.toHaveBeenCalled();
-  expect(result.domains.suggestions.map((s) => s.value)).toEqual(['jane.smith@example.com', 'jane@example.com', 'john.jones@example.com', 'john@example.com']);
-  expect(result.domains.suggestions.every((s) => s.label === 'Guess, the mail server accepts any address so it cannot be confirmed')).toBe(true);
+  expect(result.domains.suggestions.filter(s => s.guess_rank === 'most_likely').map(s => s.value)).toEqual(['jane.smith@example.com', 'john.jones@example.com']);
+  expect(result.domains.suggestions.filter(s => s.guess_rank === 'other')).toHaveLength(8);
+  expect(result.domains.suggestions.every(s => s.label.includes('unverified'))).toBe(true);
 });
 it('retains a literal website find when the domain is catch-all, without repeating that address', async () => {
   vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
@@ -124,9 +125,9 @@ it('worker off stops common guesses immediately and gives one plain worker line'
   contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null }];
   const result = await process();
   expect(worker.verifyEmail).not.toHaveBeenCalled();
-  expect(result.domains.suggestions).toEqual([]);
+  expect(result.domains.suggestions.filter(s => s.guess_rank === 'most_likely')).toHaveLength(1);
   expect(result.domains.steps.filter((s) => s.includes('Jane Smith: no email found.'))).toEqual([
-    'Jane Smith: no email found.'
+    expect.stringContaining('Jane Smith: no email found.')
   ]);
 });
 it('reserves people time before admitting the browser scrape', async () => {
@@ -201,7 +202,7 @@ it('filters remembered person dismissals from rerun results', async () => {
 it.each([{ dismissed_suggestions: ['email:hello@example.com'] }, { email: 'HELLO@example.com' }, { additional_emails: ['HELLO@example.com'] }])('filters dismissed and already-saved addresses from rerun results: %j', async (saved) => {
   leadOverrides = saved;
   worker.scrapeSite.mockResolvedValue({ ok: true, value: { emails: [{ value: 'hello@example.com', source: null }], phones: [] } });
-  expect((await process()).domains.suggestions).toEqual([]);
+  expect((await process()).domains.suggestions.some(s => s.value === 'hello@example.com')).toBe(false);
 });
 it('uses the Irish website as a confirmed domain without the unusable-website summary', async () => {
   leadOverrides = { country: 'IE' };
@@ -292,7 +293,7 @@ it.each([1, 2])('continues pending Hunter/worker/contact work after a transient 
   const log = vi.spyOn(console, 'error').mockImplementation(() => {});
   const result = await process();
   expect(result.status).toBe('done');
-  expect(hunterDomainList).toHaveBeenCalledOnce();
+  expect(hunterDomainList).not.toHaveBeenCalled(); // A free verified address suppresses paid company lists.
   expect(worker.verifyEmail).toHaveBeenCalled();
   expect(write).toHaveBeenCalledWith('update', expect.objectContaining({ email: 'jane.smith@example.com' }));
   expect(request).not.toHaveBeenCalled();
@@ -335,8 +336,8 @@ it('reports missing worker once for the lead with plain person lines', async () 
   expect(result.domains.steps.filter((s) => s.includes('not set up'))).toEqual([
     'The email checker is not set up, so email formats were not tried.'
   ]);
-  expect(result.domains.steps).toContain('Jane Smith: no email found.');
-  expect(result.domains.steps).toContain('John Jones: no email found.');
+  expect(result.domains.steps.some(s => s.startsWith('Jane Smith: no email found.'))).toBe(true);
+  expect(result.domains.steps.some(s => s.startsWith('John Jones: no email found.'))).toBe(true);
 });
 it.each([false, true])('retains legacy catch-all suggestions with Hunter available %s', async (hunter) => {
   vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
@@ -350,7 +351,7 @@ it.each([false, true])('retains legacy catch-all suggestions with Hunter availab
   expect(hunterVerifyEmail).toHaveBeenCalledTimes(hunter ? 2 : 0);
   for (const value of ['jane.smith@example.com', 'john.brown@example.com']) {
     expect(result.domains.suggestions).toContainEqual(expect.objectContaining({ value,
-      label: hunter ? 'Built from the email format and verified by Hunter, check it' : 'Built from the email format. The mail server accepts any address, so it cannot be confirmed, check it' }));
+      label: expect.stringContaining('Most likely address') }));
   }
   expect(write).not.toHaveBeenCalled();
 });

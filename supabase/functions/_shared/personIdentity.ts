@@ -9,12 +9,13 @@ export function displayPersonKey(value: unknown): string {
 
 /** Keep the fullest spelling without combining fields from different sources. */
 export function fullestPeople<T>(people: T[], name: (person: T) => string): T[] {
+  const words = (value: string) => value.trim().replace(/^(?:(?:mr|mrs|ms|miss|dr|prof|sir|dame|lord|lady)\.?\s+)+/i, '').split(/\s+/).length;
   const out: T[] = [];
   for (const person of people) {
     const key = displayPersonKey(name(person));
     const index = key ? out.findIndex(p => displayPersonKey(name(p)) === key) : -1;
     if (index < 0) out.push(person);
-    else if (name(person).split(/\s+/).length > name(out[index]).split(/\s+/).length) out[index] = person;
+    else if (words(name(person)) > words(name(out[index]))) out[index] = person;
   }
   return out;
 }

@@ -490,3 +490,15 @@ export async function apolloOrgSearch(name: string, apiKey: string, timeoutMs = 
     return { ok: false, failure: failureOf(err) };
   }
 }
+
+/** One grounded search for public addresses on a confirmed domain. No private data or model-only addresses. */
+export async function webSearchDomainFormat(domain: string, key: string, timeoutMs: number) {
+  const { groundedFormatSamples } = await import('./personEmailFinding.ts');
+  try {
+    const result = await geminiGroundedSearch('Search public company pages for email addresses containing "@' + domain + '". Quote only public addresses with source citations. Do not invent addresses or access private data.', key, timeoutMs);
+    return groundedFormatSamples(domain, result.text, result.sourceEvidence ?? []);
+  } catch (error) {
+    console.error('deep find: public format search failed', geminiFailure(error));
+    return [];
+  }
+}

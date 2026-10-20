@@ -43,3 +43,9 @@ export function hunterShortfall(left: number | null, requested: number): string 
 export function hunterAllowanceLeft(allowance: { configured?: boolean; usedUp?: boolean; searchesLeft: number | null; creditsLeft: number | null } | null): number | null {
   return allowance?.configured === false || allowance?.usedUp ? 0 : allowance?.searchesLeft ?? allowance?.creditsLeft ?? null;
 }
+
+/** Per-lead discovery ceiling; the atomic reservation still controls actual spending. */
+export function companyDomainHunterCap(effort: Effort, hasOwnDomain: boolean, runCap: number, leadCount: number): number {
+  const share = effort === 'custom' ? Math.min(12, Math.floor(Math.max(0, runCap) / Math.max(1, leadCount))) : EFFORT_LEVELS[effort].hunter;
+  return hasOwnDomain ? Math.min(2, share) : share;
+}

@@ -1,9 +1,9 @@
-import { displayPersonKey } from './personIdentity.ts';
 // supabase/functions/_shared/deepFindRules.ts
 // Pure rules for Deep find: request validation, turning provider people into contact rows, de-duplication, team-page
 // names, and the plain-English per-lead summary. No imports on purpose: tested from src/lib. Provider, page and model
 // text is untrusted data: every value is type-checked and cleaned, and only fixed sentences carry counts and domains.
 
+import { displayPersonKey } from './personIdentity.ts';
 import { effortTotals, isEffort, type Effort } from './deepFindEffort.ts';
 export const MAX_DEEP_FIND_LEADS = 25;
 /** Caps per run: `hunter` is Hunter CREDITS (one unit per Hunter request, each request limited to about one credit), `ai` is AI calls. */
@@ -85,7 +85,8 @@ export function findSamePerson<T extends ExistingContact>(rows: T[], first: unkn
   const key = displayPersonKey(String(first ?? '') + ' ' + String(last ?? ''));
   if (!key) return null;
   const hits = rows.filter(r => r.kind !== 'general' && displayPersonKey(String(r.first_name ?? '') + ' ' + String(r.last_name ?? '')) === key);
-  return hits.length === 1 ? hits[0]! : null;
+  return hits.sort((a, b) => Number(!!b.dismissed_at) - Number(!!a.dismissed_at)
+    || (String(b.first_name ?? '') + ' ' + String(b.last_name ?? '')).split(/\s+/).length - (String(a.first_name ?? '') + ' ' + String(a.last_name ?? '')).split(/\s+/).length)[0] ?? null;
 }
 
 /** True when any row (any kind or source, dismissed or not) already carries this email, ignoring case. */

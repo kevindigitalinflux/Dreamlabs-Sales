@@ -1,7 +1,7 @@
-import { displayPersonKey } from './personIdentity.ts';
 // supabase/functions/_shared/knownPersonFlow.ts
 // "I know this person" flow for find-decision-makers: save the typed person first, then fill blank fields with the
 // wider lookup (Hunter finder, Hunter company list, email pattern, the company website, web search, Apollo).
+import { displayPersonKey } from './personIdentity.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import type { ContactEditValue } from './contacts.ts';
 import {

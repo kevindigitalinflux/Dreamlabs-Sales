@@ -1,4 +1,6 @@
 // Import-free rules for bounded common-format guesses. No provider or database access.
+import { patternGuess, type DomainPattern, type PatternSample } from './domainPattern.ts';
+import type { MailProvider } from './dnsLookup.ts';
 export const PEOPLE_RESERVE_MS = 25_000;
 export const CATCH_ALL_GUESS_LABEL = 'Guess, the mail server accepts any address so it cannot be confirmed';
 export const COMMON_GUESS_LABEL = 'Guessed from common formats and confirmed by our email checker, check it';
@@ -52,4 +54,36 @@ export class GuessChecks {
 export function personEmailLine(name: string, details: string[]): string {
   const safe = name.replace(/[^\p{L}0-9 '’.-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
   return `${safe}: no email found. ${details.length ? [...new Set(details)].join(' ') : 'No confirmed address was returned.'}`;
+}
+
+/** Inferred public format first, then the fixed common-format order, without duplicates. */
+export function rankedEmailCandidates(first: string, last: string, domain: string, pattern: DomainPattern | null): string[] {
+  const inferred = pattern ? patternGuess(pattern, { first, last }, domain) : null;
+  return [...new Set([...(inferred ? [inferred] : []), ...commonEmailCandidates(first, last, domain)])];
+}
+
+export function providerGuessLine(domain: string, provider: MailProvider): string {
+  const d = domain.toLowerCase().replace(/[^a-z0-9.-]/g, '').slice(0, 80);
+  if (provider === 'google') return `${d} uses Google Workspace, which does not allow mailboxes to be checked, so these are best guesses.`;
+  if (provider === 'microsoft') return `${d} uses Microsoft 365, which does not allow mailboxes to be checked, so these are best guesses.`;
+  if (provider === 'hosted') return `${d} uses a hosted mail provider. These addresses could not be confirmed, so these are best guesses.`;
+  return `${d}: these addresses could not be confirmed, so these are best guesses.`;
+}
+
+/** These values are proposals only. This helper has no write or automatic-fill path. */
+export function unverifiedEmailSuggestions(name: string, candidates: string[], provider: MailProvider) {
+  return candidates.map((value, index) => ({ name, field: 'email' as const, value,
+    guess_rank: index === 0 ? 'most_likely' as const : 'other' as const,
+    label: `${index === 0 ? 'Most likely address' : 'Other possible format'} — Guess, unverified. ${providerGuessLine(value.split('@')[1] ?? '', provider)}` }));
+}
+
+/** Only source evidence supplies public addresses; model-only assertions never establish a format. */
+export function groundedFormatSamples(domain: string, _answer: string, sourceEvidence: string[]): PatternSample[] {
+  const emails = new Set<string>();
+  for (const source of sourceEvidence.slice(0, 20)) {
+    for (const m of source.slice(0, 20_000).matchAll(/[a-z0-9._%+-]+@([a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi)) {
+      if (m[1].toLowerCase() === domain.toLowerCase()) emails.add(m[0].toLowerCase());
+    }
+  }
+  return [...emails].slice(0, 40).map(email => ({ email, first: null, last: null }));
 }

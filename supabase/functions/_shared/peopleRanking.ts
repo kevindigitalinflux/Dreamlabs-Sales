@@ -1,9 +1,9 @@
-import { fullestPeople } from './personIdentity.ts';
 // supabase/functions/_shared/peopleRanking.ts
 // Ranks people a provider found (for example Hunter's company list) by how likely each is the decision maker, using
 // their job title and, as a tie-breaker, the people a web search named. No imports on purpose: tested from src/lib.
 // Ranking only ORDERS people: it never picks one person over another for the user, and never sets "use this one".
 
+import { fullestPeople } from './personIdentity.ts';
 /** The fields ranking reads. Every field is optional because provider data is untrusted. */
 export interface RankablePerson { first_name?: unknown; last_name?: unknown; title?: unknown; seniority?: unknown }
 

@@ -42,7 +42,7 @@ export interface DeepFindDetails {
 }
 
 /** One address offered to check, with where it came from (a fixed label). */
-export interface DeepFindSuggestion { name: string; value: string; label: string; field?: string }
+export interface DeepFindSuggestion { guess_rank?: 'most_likely' | 'other'; name: string; value: string; label: string; field?: string }
 
 /** One Companies House company offered with "Use this company". */
 export interface DeepFindCompanyCandidate { company_number: string; name: string; address: string | null; status: string | null; why?: string }
@@ -98,7 +98,7 @@ export function readDeepFindDetails(value: unknown): DeepFindDetails {
     const value = text(x.value, 200);
     const label = text(x.label, 500);
     if (x.field === 'phone' && !isReviewPhone(value)) return [];
-    return name && value && label && ['email', 'linkedin_url', 'phone', 'owner_name', 'website', 'title'].includes(String(x.field)) ? [{ name, value, label, ...(x.field !== 'email' ? { field: String(x.field) } : {}) }] : [];
+    return name && value && label && ['email', 'linkedin_url', 'phone', 'owner_name', 'website', 'title'].includes(String(x.field)) ? [{ name, value, label, ...((x.guess_rank === 'most_likely' || x.guess_rank === 'other') ? { guess_rank: x.guess_rank as 'most_likely' | 'other' } : {}), ...(x.field !== 'email' ? { field: String(x.field) } : {}) }] : [];
   });
   return {
     autoApplied: readAutoApplied(o.auto_applied),

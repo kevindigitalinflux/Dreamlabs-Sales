@@ -1,9 +1,11 @@
+import { cachedMailProvider } from '../../supabase/functions/_shared/dnsLookup';
+vi.mock('../../supabase/functions/_shared/dnsLookup', () => ({ cachedMailProvider: vi.fn(() => 'unknown'), lookupMx: vi.fn(async () => 'mx') }));
 // Real engine, fake providers and a filter-aware database. No network, keys or remote writes.
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 vi.mock('../../supabase/functions/_shared/orgApiKeys', () => ({ resolveOrgApiKey: vi.fn(), resolveOrgWorkerConfig: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/rateLimit', () => ({ checkRateLimit: vi.fn(async () => true) }));
 vi.mock('../../supabase/functions/_shared/domainDiscoveryLookup', () => ({ discoverLeadDomains: vi.fn() }));
-vi.mock('../../supabase/functions/_shared/knownPersonLookup', () => ({ readCompanyPages: vi.fn(async () => []), webSearchForPerson: vi.fn(), hunterAccount: vi.fn(), hunterDomainList: vi.fn(), hunterVerifyEmail: vi.fn() }));
+vi.mock('../../supabase/functions/_shared/knownPersonLookup', () => ({ webSearchDomainFormat: vi.fn(async () => []), readCompanyPages: vi.fn(async () => []), webSearchForPerson: vi.fn(), hunterAccount: vi.fn(), hunterDomainList: vi.fn(), hunterVerifyEmail: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/deepFindPeople', () => ({ lookUpPeople: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/openCorporates', () => ({ lookupOpenCorporatesOfficer: vi.fn(async () => null) }));
 vi.mock('../../supabase/functions/_shared/registryWebProof', () => ({ registryWebNumbers: vi.fn(async () => []) }));
@@ -20,7 +22,7 @@ import { searchApolloDecisionMakers } from '../../supabase/functions/_shared/apo
 import { searchCompaniesByName } from '../../supabase/functions/_shared/companiesHouse';
 import { resolveOrgApiKey, resolveOrgWorkerConfig } from '../../supabase/functions/_shared/orgApiKeys';
 import { discoverLeadDomains } from '../../supabase/functions/_shared/domainDiscoveryLookup';
-import { webSearchForPerson, readCompanyPages, hunterAccount, hunterDomainList, hunterVerifyEmail } from '../../supabase/functions/_shared/knownPersonLookup';
+import { webSearchDomainFormat, webSearchForPerson, readCompanyPages, hunterAccount, hunterDomainList, hunterVerifyEmail } from '../../supabase/functions/_shared/knownPersonLookup';
 import { lookUpPeople } from '../../supabase/functions/_shared/deepFindPeople';
 import { processDeepFindLead } from '../../supabase/functions/_shared/deepFind';
 import { checkRateLimit } from '../../supabase/functions/_shared/rateLimit';
@@ -31,8 +33,53 @@ import { undoDeepFindChange } from './deepFindReview';
 let lead, contacts, writes, service, deny, aiAllowed, beforeWebsiteWrite, worker, revoked;
 const profile = 'https://www.linkedin.com/in/jane-smith';
 const run = (effort) => processDeepFindLead(service, { id: 'run', org_id: 'org', created_by: 'user', status: 'active' }, { id: 'result', lead_id: 'lead', org_id: 'org', domains: effort ? { effort } : {} });
+it('Medium on Microsoft 365 offers one most likely unverified address without any email write', async () => {
+  contacts[0].email = null;
+  cachedMailProvider.mockReturnValue('microsoft');
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'unverifiable', reason: 'provider_blocked' } });
+  const out = await run('medium');
+  expect(out.status).toBe('done');
+  expect(out.domains.suggestions.filter(s => s.guess_rank === 'most_likely')).toEqual([
+    expect.objectContaining({ value: 'jane.smith@acme.com', label: expect.stringContaining('unverified') }),
+  ]);
+  expect(out.domains.steps.join(' ')).toContain('Microsoft 365');
+  expect(writes.some(w => 'email' in w.patch)).toBe(false);
+  expect(webSearchDomainFormat).not.toHaveBeenCalled();
+});
+it.each(['high', 'extra_high'])('%s uses one reserved grounded format search after free checks', async effort => {
+  contacts[0].email = null;
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockResolvedValue({ ok: false, failure: 'unreachable' });
+  webSearchDomainFormat.mockResolvedValue([{ email: 'jane@acme.com', first: null, last: null }]);
+  const out = await run(effort);
+  expect(webSearchDomainFormat).toHaveBeenCalledTimes(1);
+  expect(out.domains.credits.ai['public email format']).toBe(1);
+  expect(out.domains.suggestions.find(s => s.guess_rank === 'most_likely')?.value).toBe('jane@acme.com');
+  expect(worker.verifyEmail).toHaveBeenCalled();
+  expect(writes.some(w => 'email' in w.patch)).toBe(false);
+});
+it('a free verified address suppresses Hunter company lists and public format search', async () => {
+  resolveOrgApiKey.mockImplementation(async (_s, _o, provider) => ['gemini', 'hunter'].includes(provider) ? 'fake' : null);
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
+  await run('extra_high');
+  expect(hunterDomainList).not.toHaveBeenCalled();
+  expect(webSearchDomainFormat).not.toHaveBeenCalled();
+});
+it('middle-name display matching cannot authorize automatic owner or title writes', async () => {
+  contacts[0].title = null;
+  contacts[0].email = null;
+  discoverLeadDomains.mockResolvedValue({ domains: [{ domain: 'acme.com', sources: ['site_confirms'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [{ domain: 'acme.com', pages: ['<p>Jane Middle Smith, Founder</p>'] }] });
+  const out = await run('low');
+  expect(out.status).toBe('done');
+  expect(writes.some(w => 'owner_name' in w.patch || 'title' in w.patch)).toBe(false);
+  expect(out.domains.suggestions).toContainEqual(expect.objectContaining({ field: 'owner_name', value: 'Jane Middle Smith' }));
+});
 beforeEach(() => {
   vi.clearAllMocks(); revoked = false;
+  cachedMailProvider.mockReturnValue('unknown');
+  webSearchDomainFormat.mockResolvedValue([]);
   fetchActiveOfficers.mockResolvedValue([]);
   searchCompaniesByName.mockResolvedValue([]);
   registryWebNumbers.mockResolvedValue([]);
