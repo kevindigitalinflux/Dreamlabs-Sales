@@ -2,6 +2,39 @@
 import { patternGuess, type DomainPattern, type PatternSample } from './domainPattern.ts';
 import type { MailProvider } from './dnsLookup.ts';
 export const PEOPLE_RESERVE_MS = 25_000;
+export const PEOPLE_LOOKUP_FLOOR_MS = 15_000;
+export const GUESS_TOTAL_MS = 20_000;
+export const GUESS_CHECK_TIMEOUT_MS = 12_000;
+
+/** One wall-clock allowance shared by all guess paths and later domain batches for a lead. */
+export class GuessBudget {
+  private deadline: number | null = null;
+  exhausted = false;
+  constructor(private left: () => number, private hasPeople: () => boolean) {}
+  timeout(maxMs = GUESS_CHECK_TIMEOUT_MS): number {
+    if (this.deadline === null) this.deadline = Date.now() + GUESS_TOTAL_MS;
+    const remaining = this.deadline - Date.now();
+    if (remaining <= 0) this.exhausted = true;
+    const reserve = this.hasPeople() ? PEOPLE_RESERVE_MS + PEOPLE_LOOKUP_FLOOR_MS : 25_000;
+    return Math.max(0, Math.min(maxMs, remaining, this.left() - reserve));
+  }
+  async run(jobs: ((timeoutMs: number) => Promise<void>)[]): Promise<void> {
+    let index = 0;
+    let failed = false;
+    let failure: unknown;
+    const consume = async () => {
+      while (!failed && index < jobs.length) {
+        const timeout = this.timeout();
+        if (timeout < 1) return;
+        try { await jobs[index++]!(timeout); }
+        catch (error) { failed = true; failure = error; }
+      }
+    };
+    await Promise.all([consume(), consume(), consume()]);
+    if (failed) throw failure;
+    if (this.deadline !== null && Date.now() >= this.deadline) this.exhausted = true;
+  }
+}
 export const CATCH_ALL_GUESS_LABEL = 'Guess, the mail server accepts any address so it cannot be confirmed';
 export const COMMON_GUESS_LABEL = 'Guessed from common formats and confirmed by our email checker, check it';
 
@@ -23,28 +56,37 @@ export function optionalPeopleBudget(leftMs: number, hasPeople: boolean): number
 
 /** Leave the people floor after a full worker check; retain the old gate without pending people. */
 export function canStartGuessCheck(leftMs: number, hasPeople: boolean, verifyTimeoutMs: number): boolean {
-  return leftMs > (hasPeople ? PEOPLE_RESERVE_MS + verifyTimeoutMs : 25_000);
+  return leftMs > (hasPeople ? PEOPLE_RESERVE_MS + PEOPLE_LOOKUP_FLOOR_MS + verifyTimeoutMs : 25_000);
 }
 
 /** Shared by inferred and common formats: no repeated address, six checks per lead, five per domain. */
 export class GuessChecks {
   readonly catchAll = new Set<string>();
+  readonly blocked = new Set<string>();
   readonly attempted = new Set<string>();
   private counts = new Map<string, number>();
   private stopped = false;
   constructor(private maxChecks = 6) {}
-  canCheck(email: string, legacy = false): boolean {
+  canCheck(email: string, _legacy = false): boolean {
     const key = email.toLowerCase();
     const d = key.split('@')[1] ?? '';
-    return !this.stopped && (legacy || !this.catchAll.has(d)) && !this.attempted.has(key)
+    return !this.stopped && !this.catchAll.has(d) && !this.blocked.has(d) && !this.attempted.has(key)
       && this.attempted.size < this.maxChecks && (this.counts.get(d) ?? 0) < 5;
+  }
+  claim(email: string): boolean {
+    if (!this.canCheck(email)) return false;
+    this.record(email, null, '');
+    return true;
   }
   record(email: string, status: string | null, reason: string): void {
     const key = email.toLowerCase();
     const d = key.split('@')[1] ?? '';
-    this.attempted.add(key);
-    this.counts.set(d, (this.counts.get(d) ?? 0) + 1);
+    if (!this.attempted.has(key)) {
+      this.attempted.add(key);
+      this.counts.set(d, (this.counts.get(d) ?? 0) + 1);
+    }
     if (status !== null && reason === 'catch_all') this.catchAll.add(d);
+    if (status === 'unverifiable' && ['provider_blocks_checks', 'unknown'].includes(reason)) this.blocked.add(d);
   }
   stopWorker(): void { this.stopped = true; }
   shouldStopPerson(status: string | null): boolean { return status === 'valid'; }

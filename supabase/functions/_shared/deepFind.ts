@@ -31,7 +31,7 @@ import {
 } from './deepFindRules.ts';
 import { makeWorkerClient } from './workerClient.ts';
 import { MAX_VERIFY_PER_LEAD, WORKER_TIMEOUT_MS, scrapeTimeoutFor, unconfirmedLabel, verifyAction } from './workerRules.ts';
-import { rankedEmailCandidates, unverifiedEmailSuggestions, providerGuessLine, GuessChecks, optionalPeopleBudget, canStartGuessCheck, personEmailLine, COMMON_GUESS_LABEL } from './personEmailFinding.ts';
+import { rankedEmailCandidates, unverifiedEmailSuggestions, providerGuessLine, GuessBudget, GuessChecks, optionalPeopleBudget, personEmailLine, COMMON_GUESS_LABEL } from './personEmailFinding.ts';
 import { makeFirecrawlClient } from './firecrawlClient.ts';
 import { FIRECRAWL_DAILY_PAGES, firecrawlDomainFor } from './firecrawlRules.ts';
 import { classifyDeepFindCheckpoint, DeepFindAuthorisationLost } from './deepFindCheckpoint.ts';
@@ -110,7 +110,7 @@ async function insertContacts(service: SupabaseClient, rows: Record<string, unkn
 /** One lead, start to finish. Returns the outcome to store; never throws for provider problems. */
 export async function processDeepFindLead(service: SupabaseClient, run: DeepFindRun, row: ClaimedRow): Promise<LeadOutcome> {
   const effort = effortPolicy(row.domains);
-  const metadata = { effort, effort_caps: effort === 'custom' ? row.domains?.effort_caps : { hunter: EFFORT_LEVELS[effort].hunter, ai: EFFORT_LEVELS[effort].ai, firecrawl: EFFORT_LEVELS[effort].firecrawl } };
+  const metadata = { ...(row.domains?.start_fresh === true ? { start_fresh: true } : {}), effort, effort_caps: effort === 'custom' ? row.domains?.effort_caps : { hunter: EFFORT_LEVELS[effort].hunter, ai: EFFORT_LEVELS[effort].ai, firecrawl: EFFORT_LEVELS[effort].firecrawl } };
   const deadline = Date.now() + LEAD_BUDGET_MS;
   const left = () => deadline - Date.now();
   const { data: leadData, error: leadErr } = await service.from('leads').select('*').eq('id', row.lead_id).maybeSingle();
@@ -178,18 +178,28 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const autoApplied: AutoApplied[] = [];
   let apolloPeople = 0;
   /** Plain-English step lines shown with the results. */
-  const steps: string[] = [];
+  const steps: string[] = row.domains?.start_fresh === true && Array.isArray(row.domains.steps) ? row.domains.steps.filter((s): s is string => typeof s === 'string' && s.startsWith('Start fresh:')) : [];
+  const dismissedPeople: { name: string; contact_id?: string }[] = [];
+  const recordDismissed = (name: string, contactId?: string) => {
+    if (!name.trim() || dismissedPeople.some(p => displayPersonKey(p.name) === displayPersonKey(name))) return;
+    if (dismissedPeople.length < 10) dismissedPeople.push({ name, ...(contactId ? { contact_id: contactId } : {}) });
+    const line = `${name} was dismissed earlier, so Deep find skipped them. Use Start fresh or Restore them from the lead page.`;
+    if (!steps.includes(line)) steps.push(line);
+  };
   let registryEvidence: Record<string, unknown> = {};
   if (effort !== 'low' && !configured.geminiKey) steps.push('LinkedIn search skipped: no Gemini key is configured.');
   const all = () => [...rows, ...created];
   const scope = { leadId: lead.id, orgId: run.org_id };
   const ownerSuppressed = (name: string) => {
-    const key = name.trim().toLowerCase().replace(/\s+/g, ' ');
-    const dismissed = Array.isArray(lead.dismissed_suggestions) ? lead.dismissed_suggestions : [];
     const parsed = parseLeadPersonName(name);
-    return dismissed.includes('person:' + key) || dismissed.includes('owner_name:' + key)
-      || !!(parsed && findSamePerson(all(), parsed.first, parsed.last)?.dismissed_at);
+    const contact = parsed ? findSamePerson(all(), parsed.first, parsed.last) : null;
+    const suppressed = isSuggestionDismissed({ name, field: 'owner_name', value: name }, lead) || !!contact?.dismissed_at;
+    if (suppressed) recordDismissed(name, contact?.id);
+    return suppressed;
   };
+  for (const contact of rows) if (contact.dismissed_at) recordDismissed([str(contact.first_name), str(contact.last_name)].filter(Boolean).join(' '), contact.id);
+  for (const raw of [lead.owner_name, ...(Array.isArray(lead.additional_owners) ? lead.additional_owners : [])]) if (typeof raw === 'string') ownerSuppressed(raw);
+
   const applyLead = async (field: string, value: string) => {
     if (field === 'owner_name' && ownerSuppressed(value)) return false;
     const saved = await applyDeepFindBlank(service, scope, 'leads', lead, field, value, autoApplied, checkpoint);
@@ -210,7 +220,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     const { data: current, error } = await service.from('leads').select('dismissed_suggestions').eq('id', lead.id).eq('org_id', run.org_id).maybeSingle();
     if (error || !current) return null;
     const name = (String(row.first_name ?? '') + ' ' + String(row.last_name ?? '')).trim();
-    if (isSuggestionDismissed({ name }, current)) return null;
+    if (ownerSuppressed(name) || isSuggestionDismissed({ name, field: 'owner_name', value: name }, current)) { recordDismissed(name); return null; }
     const prepared = { ...row };
     for (const field of ['title', 'email', 'phone', 'linkedin_url']) {
       const value = str(prepared[field]);
@@ -225,15 +235,19 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   };
   const checkedEmails = new Map<string, Awaited<ReturnType<typeof worker.verifyEmail>>>();
   const reviewableSuggestions = () => visibleSuggestions(suggestions.filter((s) => {
+    if (ownerSuppressed(s.name)) return false;
     const checked = s.field === 'email' ? checkedEmails.get(s.value.toLowerCase()) : null;
     return !checked?.ok || checked.value.status !== 'invalid';
   }), lead, all());
-  const checkEmail = async (email: string) => {
+  const checkEmail = async (email: string, opts?: { timeoutMs?: number }) => {
     const key = email.toLowerCase();
     const cached = checkedEmails.get(key);
     if (cached) return cached;
+    const checkDeadline = opts?.timeoutMs === undefined ? null : Date.now() + opts.timeoutMs;
     await checkpoint();
-    const result = await worker.verifyEmail(email);
+    const remaining = checkDeadline === null ? null : checkDeadline - Date.now();
+    if (remaining !== null && remaining < 1) return { ok: false as const, failure: 'unreachable' as const, line: 'The email check ran out of time.' };
+    const result = remaining === null ? await worker.verifyEmail(email) : await worker.verifyEmail(email, { timeoutMs: remaining });
     checkedEmails.set(key, result);
     return result;
   };
@@ -245,6 +259,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     // A wide lookup can fill its newly inserted row before returning it to this engine.
     if (!candidates.some(c => c.id === contact.id)) candidates.push(contact);
     const unique = findSamePerson(candidates, contact.first_name, contact.last_name);
+    if (ownerSuppressed(name)) return null;
     if (!unique || unique.dismissed_at || unique.id !== contact.id) {
       for (const [field, value] of Object.entries(patch)) {
         if (str(value)) suggestions.push({ name, field, value, label: 'Person match is ambiguous; review the full name before adding.' });
@@ -325,6 +340,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     officers = fullestPeople(registry.number && chKey ? await fetchActiveOfficers(registry.number, chKey) : [], o => String(o.first_name ?? '') + ' ' + String(o.last_name ?? ''));
     const officerRows: Record<string, unknown>[] = [];
     for (const o of officers) {
+      if (o.first_name && o.last_name && ownerSuppressed(o.first_name + ' ' + o.last_name)) continue;
       if (!o.first_name || !o.last_name || samePersonMatches(all(), o.first_name, o.last_name).length) continue;
       if (officerRows.some((r) => r.first_name === o.first_name && r.last_name === o.last_name)) continue;
       officerRows.push({ lead_id: lead.id, source: 'companies_house', first_name: o.first_name, last_name: o.last_name, title: o.title, created_by: run.created_by });
@@ -475,8 +491,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     ...(Array.isArray(lead.additional_owners) ? lead.additional_owners : []),
     ...extraSitePeople.map((p) => p.name), ...pages.flatMap((html) => extractTeamMembers(html).map((p) => p.name)),
     ...webPeople.map((p) => p.name),
-  ] }, all(), officers);
-  const canCheckGuess = () => canStartGuessCheck(left(), lookupPeople().length > 0, WORKER_TIMEOUT_MS.verify);
+  ] }, all(), officers).filter(p => !ownerSuppressed(p.first + ' ' + p.last));
   const optionalBudget = () => optionalPeopleBudget(left(), lookupPeople().length > 0);
   const scrapeTimeout = scrapeTimeoutFor(optionalBudget());
   if (scrapeDomain && scrapeTimeout !== null) {
@@ -538,6 +553,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // otherwise they are only offered as "Guess, unverified" suggestions: never filled in, never in sequences.
   const ownerName = parseLeadPersonName(lead.owner_name);
   const checks = new GuessChecks(MAX_VERIFY_PER_LEAD);
+  const guessBudget = new GuessBudget(left, () => lookupPeople().length > 0);
   const patterns = new Map<string, ReturnType<typeof inferDomainPattern>>();
   let publicFormatSearchUsed = false;
   const confirmedGuessPeople = new Set<string>();
@@ -570,22 +586,43 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       ];
       const pattern = inferDomainPattern(d, samples, knownNames);
       patterns.set(d, pattern);
+      if (pattern) steps.push(patternLine(d, pattern));
+      if (['google', 'microsoft'].includes(cachedMailProvider(d) ?? '')) checks.blocked.add(d);
+    }
+    // Round-robin candidates across people. Both inferred and common formats share the same three slots.
+    const guessPeople = lookupPeople().slice(0, 5);
+    const jobs: ((timeoutMs: number) => Promise<void>)[] = [];
+    for (let rank = 0; rank < 6; rank++) for (const d of checkDomains.slice(0, 4)) for (const person of guessPeople) {
+      const guess = rankedEmailCandidates(person.first, person.last, d, patterns.get(d) ?? null)[rank];
+      if (!guess) continue;
+      jobs.push(async timeoutMs => {
+        const name = person.first + ' ' + person.last;
+        if (confirmedGuessPeople.has(name) || checkerFailure || emailOnLead(all(), guess) || !checks.claim(guess)) return;
+        const checked = await checkEmail(guess, { timeoutMs });
+        checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : '');
+        if (!checked.ok) { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
+        else if (checked.value.status === 'invalid') invalidGuesses.add(guess);
+        else if (checked.value.status === 'valid') confirmedGuessPeople.add(name);
+      });
+    }
+    await guessBudget.run(jobs);
+    if (guessBudget.exhausted && !steps.includes('Email guess checks reached the 20 second limit for this lead. Remaining time was kept for people lookups.')) steps.push('Email guess checks reached the 20 second limit for this lead. Remaining time was kept for people lookups.');
+    for (const d of checkDomains.slice(0, 4)) {
+      const pattern = patterns.get(d);
       if (!pattern) continue;
-      steps.push(patternLine(d, pattern));
-      for (const person of peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers).slice(0, 5)) {
+      for (const person of guessPeople) {
         const guess = patternGuess(pattern, person, d);
         if (!guess || emailOnLead(all(), guess) || suggestions.some((s) => s.value === guess)) continue;
         const name = `${person.first} ${person.last}`.slice(0, 80);
-        if (confirmedGuessPeople.has(name)) continue;
         let verdict: string | null = null;
         let label = guessLabel(pattern, d);
         // Free checker first; Hunter is asked only when it cannot decide and credits remain.
-        const checked = canCheckGuess() && checks.canCheck(guess, true) ? await checkEmail(guess) : null;
+        const checked = checkedEmails.get(guess.toLowerCase()) ?? null;
         if (checked) {
           checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : '');
           if (!checked.ok) { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
         }
-        const action = verifyAction(checked && checked.ok ? checked.value.status : null, !!hunterKey && verifications < 3 && left() > 25_000);
+        const action = verifyAction(checked && checked.ok ? checked.value.status : null, !!hunterKey && !guessBudget.exhausted && !checks.blocked.has(d) && !checks.catchAll.has(d) && verifications < 3 && left() > 45_000);
         if (action === 'drop') { invalidGuesses.add(guess); continue; }
         if (action === 'accept') {
           confirmedGuessPeople.add(name);
@@ -593,8 +630,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
           verdict = 'verified';
           label = 'Built from the email format and confirmed by our email checker, check it';
         } else if (action === 'ask_hunter' && await spend.hunter('verify email format')) {
+          const hunterTimeout = guessBudget.timeout(5_000);
+          if (hunterTimeout < 1) continue;
           verifications++;
-          const v = await hunterVerifyEmail(guess, hunterKey!, 5_000);
+          const v = await hunterVerifyEmail(guess, hunterKey!, hunterTimeout);
           if (v.ok) {
             verdict = v.verdict;
             if (verdict === 'verified') label = 'Built from the email format and verified by Hunter, check it';
@@ -622,24 +661,20 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     // A new person always remains a suggestion for human review, even when their guessed address is valid.
     for (const person of lookupPeople().slice(0, 5)) {
       const name = `${person.first} ${person.last}`.slice(0, 80);
-      if (confirmedGuessPeople.has(name)) continue;
       for (const d of checkDomains.slice(0, 4)) {
         const candidates = rankedEmailCandidates(person.first, person.last, d, patterns.get(d) ?? null);
         if (candidates.length === 0) { detail(name, 'This name could not be used to build an email address.'); continue; }
-        let tried = candidates.filter((email) => checks.attempted.has(email)).length;
+        const tried = candidates.filter((email) => checks.attempted.has(email)).length;
         let valid = false;
         for (const guess of candidates) {
-          if (checks.catchAll.has(d) || checkerFailure) break;
-          if (emailOnLead(all(), guess) || suggestions.some((s) => s.value.toLowerCase() === guess) || !checks.canCheck(guess)) continue;
-          if (!canCheckGuess()) { detail(name, 'Not enough time left in this run, try Deep find again.'); break; }
-          const checked = await checkEmail(guess);
+          if (emailOnLead(all(), guess) || suggestions.some((s) => s.value.toLowerCase() === guess)) continue;
+          const checked = checkedEmails.get(guess.toLowerCase());
+          if (!checked) continue;
           checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : '');
           if (!checked.ok) {
             checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; break;
           }
-          tried++;
           if (checked.value.status === 'invalid') invalidGuesses.add(guess);
-          if (checks.catchAll.has(d)) break;
           if (verifyAction(checked.value.status, false) !== 'accept') continue;
           valid = checks.shouldStopPerson(checked.value.status);
           if (valid) confirmedGuessPeople.add(name);
@@ -656,7 +691,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         if (checks.catchAll.has(d)) {
           detail(name, 'The mail server accepts any address, so guesses cannot be confirmed.');
         } else if (tried > 0) detail(name, `Tried ${tried} common format${tried === 1 ? '' : 's'} on ${d} (${valid ? 'one confirmed for review' : 'none confirmed'}).`);
-        else if (!checkerFailure && canCheckGuess() && !checks.canCheck(candidates[0]!)) detail(name, 'The email check limit for this run or domain was reached.');
+        else if (!checkerFailure && !checks.canCheck(candidates[0]!)) detail(name, 'The email check limit for this run or domain was reached.');
         if (valid) break;
       }
     }
@@ -831,7 +866,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // (3) everyone to look up (contacts without an email, officers, names on the lead) on CONFIRMED domains only
   // Keep the existing wide-lookup trust boundary: site/web-only names get guesses for review above,
   // but do not become Hunter contacts merely because the optional team reader found them.
-  const people = peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers);
+  const people = peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, all(), officers).filter(p => !ownerSuppressed(p.first + ' ' + p.last));
   const verifiedDomains = domains.filter((d) => verified.has(d)).slice(0, 4);
   // Share the exact same grounded search with wide email lookups: never search twice for one person in a run.
   const personKey = (first: string, last: string) => `${first} ${last}`.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -873,13 +908,16 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }
   problems.push(...peopleOut.problems);
   // Rank remaining guesses only for confirmed domains and people still missing an address.
-  for (const person of lookupPeople().slice(0, 5)) {
+  for (const person of lookupPeople()) {
     if (findSamePerson(all(), person.first, person.last)?.email) continue;
     const name = person.first + ' ' + person.last;
     const domain = [...verified][0];
     if (!domain) continue;
     const candidates = rankedEmailCandidates(person.first, person.last, domain, patterns.get(domain) ?? null)
-      .filter(email => !invalidGuesses.has(email) && !emailOnLead(all(), email));
+      .filter(email => {
+        const checked = checkedEmails.get(email);
+        return !invalidGuesses.has(email) && !(checked?.ok && checked.value.status === 'invalid') && !emailOnLead(all(), email);
+      });
     if (!candidates.length || confirmedGuessPeople.has(name)) continue;
     // Replace old unverified format guesses; never replace found or checker-valid evidence.
     for (let i = suggestions.length - 1; i >= 0; i--) {
@@ -960,6 +998,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // Owner-like contacts are searched even when an email is already saved. Names without a contact remain reviewable.
   const linkedinPeople: WebSearchPerson[] = [];
   const addLinkedinPerson = (p: WebSearchPerson) => {
+    if (ownerSuppressed(p.first + ' ' + p.last)) return;
     if (!p.first || !p.last || (effort !== 'extra_high' && !ownerLike(p)) || linkedinPeople.some((x) => personKey(x.first, x.last) === personKey(p.first, p.last))) return;
     const contact = findSamePerson(all(), p.first, p.last);
     if (contact?.dismissed_at || str(contact?.linkedin_url)) return;
@@ -1012,6 +1051,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     people_found: stats.hunterPeople + stats.officersAdded + apolloPeople,
     domains: {
       ...metadata,
+      dismissed_people: dismissedPeople,
       registry_evidence: registryEvidence,
       auto_applied: autoApplied.slice(0, 100),
       domains: discovery.domains,
@@ -1036,7 +1076,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (!(error instanceof DeepFindAuthorisationLost)) console.error('deep find: lead processing stopped', error instanceof Error && ['Error', 'TypeError', 'RangeError', 'SyntaxError', 'AbortError'].includes(error.name) ? error.name : 'UnknownError', 'Unexpected failure while processing a lead; provider payload omitted.');
     return { status: error instanceof DeepFindAuthorisationLost ? 'skipped' : 'failed',
       reason: error instanceof DeepFindAuthorisationLost ? error.message : 'Deep find could not finish. Saved changes are listed below with Undo.',
-      people_found: created.length, domains: { ...metadata, registry_evidence: registryEvidence, auto_applied: autoApplied.slice(0, 100), suggestions: reviewableSuggestions().slice(0, 25), steps } };
+      people_found: created.length, domains: { ...metadata, dismissed_people: dismissedPeople, registry_evidence: registryEvidence, auto_applied: autoApplied.slice(0, 100), suggestions: reviewableSuggestions().slice(0, 25), steps } };
   }
 }
 
@@ -1119,7 +1159,9 @@ export async function runDeepFindTick(service: SupabaseClient, startedAt: number
     try { out = await processDeepFindLead(service, run, row); } catch { console.error('deep find: claimed lead processing failed'); out = { status: 'failed', reason: 'Something went wrong while searching this lead.' }; }
     const effort = effortPolicy(row.domains);
     const label = effort === 'custom' ? 'Custom' : EFFORT_LEVELS[effort].label;
-    const resultSteps = Array.isArray(out.domains?.steps) ? out.domains.steps as string[] : [];
+    const freshSteps = row.domains?.start_fresh === true && Array.isArray(row.domains.steps)
+      ? row.domains.steps.filter((line): line is string => typeof line === 'string' && line.startsWith('Start fresh:')) : [];
+    const resultSteps = [...new Set([...freshSteps, ...(Array.isArray(out.domains?.steps) ? out.domains.steps as string[] : [])])];
     if (!resultSteps.some(line => line.startsWith(`${label} effort:`))) resultSteps.push(`${label} effort: stopped before the free phase finished; deeper steps were skipped. ${out.reason}`);
     await updateRow(service, row.id, {
       status: out.status, reason: out.reason.slice(0, 1000), people_found: out.people_found ?? 0,

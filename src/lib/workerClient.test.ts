@@ -46,6 +46,20 @@ const make = (u: UsageClient, fetchImpl: typeof fetch, config: WorkerConfig | nu
 afterEach(() => { vi.useRealTimers(); });
 
 describe('makeWorkerClient', () => {
+  it('honours the shorter guess timeout and never refunds a client timeout', async () => {
+    vi.useFakeTimers();
+    const u = usage();
+    const f = vi.fn<typeof fetch>((_input, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+    }));
+    const pending = make(u, f).verifyEmail('jane@example.com', { timeoutMs: 12_000 });
+    await vi.advanceTimersByTimeAsync(11_999);
+    expect(refundCalls(u)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await pending).toMatchObject({ ok: false, failure: 'unreachable' });
+    expect(reserveCalls(u)).toHaveLength(1);
+    expect(refundCalls(u)).toHaveLength(0);
+  });
   it('honours the per-call scrape timeout without refunding work still running', async () => {
     vi.useFakeTimers();
     const u = usage();

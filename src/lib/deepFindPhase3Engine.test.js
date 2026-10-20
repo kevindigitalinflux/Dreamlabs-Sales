@@ -123,6 +123,66 @@ beforeEach(() => {
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it('UKRM keeps one ranked suggestion per director after two invalid checks and one unverifiable result', async () => {
+  lead.business_name = 'UKRM'; lead.website = null;
+  contacts = [
+    { id: 'one', lead_id: 'lead', first_name: 'Karthik', last_name: 'Rao', source: 'companies_house', title: 'Director', email: null },
+    { id: 'two', lead_id: 'lead', first_name: 'Ravi', last_name: 'Kumar', source: 'companies_house', title: 'Director', email: null },
+  ];
+  discoverLeadDomains.mockResolvedValue({ domains: [{ domain: 'ukrmanagement.com', sources: ['site_confirms'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] });
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  let count = 0;
+  worker.verifyEmail.mockImplementation(async () => ({ ok: true, value: ++count < 3 ? { status: 'invalid', reason: 'mailbox_missing' } : { status: 'unverifiable', reason: 'unknown' } }));
+  const out = await run('low');
+  expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
+  expect(out.domains.suggestions.filter(s => s.guess_rank === 'most_likely').map(s => s.name).sort()).toEqual(['Karthik Rao', 'Ravi Kumar']);
+  expect(contacts.every(c => !c.email)).toBe(true);
+});
+it('reports dismissed contacts and owner/person keys while skipping their checks and lookups', async () => {
+  contacts[0].email = null; contacts[0].dismissed_at = 'yesterday';
+  lead.additional_owners = ['Ravi Kumar', 'Karthik Rao'];
+  lead.dismissed_suggestions = ['owner:ravi kumar', 'person:karthik rao'];
+  const out = await run('low');
+  expect(out.domains.dismissed_people).toEqual(expect.arrayContaining([
+    { name: 'Jane Smith', contact_id: 'c' }, { name: 'Ravi Kumar' }, { name: 'Karthik Rao' },
+  ]));
+  expect(out.domains.steps).toContain('Jane Smith was dismissed earlier, so Deep find skipped them. Use Start fresh or Restore them from the lead page.');
+  expect(worker.verifyEmail).not.toHaveBeenCalled();
+  expect(lookUpPeople.mock.calls[0][0].people).toEqual([]);
+});
+it('skips guess verification for Google and Microsoft while retaining ranked proposals', async () => {
+  for (const provider of ['google', 'microsoft']) {
+    cachedMailProvider.mockReturnValue(provider);
+    contacts[0].email = null;
+    resolveOrgWorkerConfig.mockResolvedValue({});
+    const out = await run('low');
+    expect(out.domains.suggestions).toContainEqual(expect.objectContaining({ name: 'Jane Smith', guess_rank: 'most_likely' }));
+  }
+  expect(worker.verifyEmail).not.toHaveBeenCalled();
+});
+it('caps concurrent guesses at 20 seconds and leaves time for both people lookups', async () => {
+  vi.useFakeTimers();
+  contacts[0].email = null;
+  contacts.push({ id: 'two', lead_id: 'lead', first_name: 'Alex', last_name: 'Brown', email: null });
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  let active = 0, peak = 0;
+  worker.verifyEmail.mockImplementation(async (_email, { timeoutMs }) => {
+    peak = Math.max(peak, ++active);
+    await new Promise(resolve => setTimeout(resolve, timeoutMs));
+    active--;
+    return { ok: true, value: { status: 'invalid', reason: 'mailbox_missing' } };
+  });
+  const pending = run('low');
+  await vi.advanceTimersByTimeAsync(20_000);
+  const out = await pending;
+  expect(peak).toBe(3);
+  expect(worker.verifyEmail.mock.calls.every(([, opts]) => opts.timeoutMs <= 12_000)).toBe(true);
+  expect(lookUpPeople.mock.calls[0][0].people).toHaveLength(2);
+  expect(lookUpPeople.mock.calls[0][0].left()).toBe(50_000);
+  expect(out.domains.steps.join(' ')).toContain('20 second limit');
+  expect(out.domains.suggestions.filter(s => s.guess_rank === 'most_likely')).toHaveLength(2);
+  vi.useRealTimers();
+});
 it('Low disables paid discovery, Hunter, AI, Apollo, Places and LinkedIn even with every key', async () => {
   resolveOrgApiKey.mockImplementation(async (_s, _o, p) => p === 'companies_house' ? null : 'fake');
   lead.phone = null;
@@ -545,7 +605,7 @@ it.each([false, true])('late-domain inference uses checker first and Hunter only
     .mockResolvedValueOnce({ domains: [{ domain: 'newco.com', sources: ['web'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] });
   readCompanyPages.mockImplementation(async url => url.includes('newco.com') ? ['<title>Acme</title><p>alex.brown@newco.com</p>'] : []);
   await run('medium');
-  expect(worker.verifyEmail).toHaveBeenCalledWith('jane.smith@newco.com');
+  expect(worker.verifyEmail).toHaveBeenCalledWith('jane.smith@newco.com', { timeoutMs: 12_000 });
   expect(hunterVerifyEmail).toHaveBeenCalledTimes(hunter ? 1 : 0);
 });
 

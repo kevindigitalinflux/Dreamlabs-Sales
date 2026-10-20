@@ -11,8 +11,8 @@ const ID2 = '9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d';
 
 describe('parseCreateRequest', () => {
   it('accepts up to 25 distinct ids and defaults the caps', () => {
-    expect(parseCreateRequest({ lead_ids: [ID, ID.toUpperCase(), ID2] })).toEqual({ ok: true, leadIds: [ID, ID2], caps: { hunter: 60, ai: 25 }, effort: 'custom' });
-    expect(parseCreateRequest({ lead_ids: [ID], caps: { hunter: 0, ai: 3 } })).toEqual({ ok: true, leadIds: [ID], caps: { hunter: 0, ai: 3 }, effort: 'custom' });
+    expect(parseCreateRequest({ lead_ids: [ID, ID.toUpperCase(), ID2] })).toEqual({ ok: true, leadIds: [ID, ID2], caps: { hunter: 60, ai: 25 }, effort: 'custom', startFresh: false });
+    expect(parseCreateRequest({ lead_ids: [ID], caps: { hunter: 0, ai: 3 } })).toEqual({ ok: true, leadIds: [ID], caps: { hunter: 0, ai: 3 }, effort: 'custom', startFresh: false });
   });
   it('derives server caps for preset effort and rejects invalid levels', () => {
     expect(parseCreateRequest({ lead_ids: [ID, ID2], effort: 'medium', caps: { hunter: 500, ai: 200 } })).toMatchObject({ caps: { hunter: 2, ai: 4 }, effort: 'medium' });

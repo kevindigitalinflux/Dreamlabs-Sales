@@ -20,7 +20,7 @@ export const STUCK_AFTER_MS = 10 * 60 * 1000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /** A validated create request. */
-export type CreateRequest = { ok: true; leadIds: string[]; caps: { hunter: number; ai: number }; effort: Effort } | { ok: false; error: string };
+export type CreateRequest = { ok: true; leadIds: string[]; caps: { hunter: number; ai: number }; effort: Effort; startFresh: boolean } | { ok: false; error: string };
 
 function cap(value: unknown, fallback: number, max: number): number | null {
   if (value === undefined || value === null) return fallback;
@@ -32,6 +32,7 @@ function cap(value: unknown, fallback: number, max: number): number | null {
 export function parseCreateRequest(body: unknown): CreateRequest {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return { ok: false, error: 'Invalid request' };
   const b = body as Record<string, unknown>;
+  if (b.start_fresh !== undefined && typeof b.start_fresh !== 'boolean') return { ok: false, error: 'start_fresh must be a boolean' };
   if (!Array.isArray(b.lead_ids) || b.lead_ids.length === 0) return { ok: false, error: 'Choose at least one lead' };
   if (b.lead_ids.length > MAX_DEEP_FIND_LEADS) return { ok: false, error: `Choose ${MAX_DEEP_FIND_LEADS} leads or fewer` };
   const ids = [...new Set(b.lead_ids.map((v) => (typeof v === 'string' ? v.trim().toLowerCase() : '')))];
@@ -44,7 +45,7 @@ export function parseCreateRequest(body: unknown): CreateRequest {
   if (b.effort !== undefined && !isEffort(b.effort)) return { ok: false, error: 'Choose a valid effort level' };
   const effort = isEffort(b.effort) ? b.effort : 'custom';
   const totals = effort === 'custom' ? { hunter, ai } : effortTotals(effort, ids.length);
-  return { ok: true, leadIds: ids, caps: { hunter: totals.hunter, ai: totals.ai }, effort };
+  return { ok: true, leadIds: ids, caps: { hunter: totals.hunter, ai: totals.ai }, effort, startFresh: b.start_fresh === true };
 }
 
 /** True for a UUID string. */

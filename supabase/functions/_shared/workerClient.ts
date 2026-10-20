@@ -12,7 +12,7 @@ import {
 export type WorkerResult<T> = { ok: true; value: T } | { ok: false; failure: WorkerFailure; line: string };
 
 export interface WorkerClient {
-  verifyEmail(email: string): Promise<WorkerResult<VerifyReply>>;
+  verifyEmail(email: string, opts?: { timeoutMs?: number }): Promise<WorkerResult<VerifyReply>>;
   scrapeSite(domain: string, mode?: ScrapeMode, opts?: { timeoutMs?: number }): Promise<WorkerResult<ScrapeFound>>;
   /** Plain step lines for the Deep find result: the check tally, the scrape result, then each distinct skip reason. */
   lines(): string[];
@@ -41,18 +41,20 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
   };
 
   async function call(kind: Kind, units: number, path: string, body: unknown, timeoutMs: number = WORKER_TIMEOUT_MS[kind]): Promise<RawResult> {
+    const deadline = Date.now() + timeoutMs;
     const already = stopped[kind];
     if (already) return { ok: false, ...already };
     if (!config) return stop(kind, 'not_configured', workerFailureLine('not_configured'));
     const resource = WORKER_RESOURCE[kind];
     const reserve = await reserveUsage(usage, orgId, resource, units);
     if (!reserve.ok) return stop(kind, 'limit_reached', refusalLine(reserve.reason, resource, reserve.limit));
+    if (Date.now() >= deadline) return stop(kind, 'unreachable', workerFailureLine('unreachable'));
 
     let failure: WorkerFailure | null = null;
     let json: unknown = null;
     const controller = new AbortController();
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, Math.max(1, deadline - Date.now()));
     try {
       const res = await fetchImpl(`${config.url}${path}`, {
         method: 'POST', redirect: 'error', signal: controller.signal,
@@ -80,14 +82,14 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
   }
 
   return {
-    async verifyEmail(email) {
+    async verifyEmail(email, options) {
       const already = stopped.verify;
       if (already) return { ok: false, ...already };
       if (verifyCalls >= MAX_VERIFY_PER_LEAD) {
         return stop('verify', 'limit_reached', `Only ${MAX_VERIFY_PER_LEAD} email checks are used for one lead in one Deep find.`);
       }
       verifyCalls++;
-      const raw = await call('verify', 1, '/verify-email', { email });
+      const raw = await call('verify', 1, '/verify-email', { email }, options?.timeoutMs);
       if (!raw.ok) return { ok: false, failure: raw.failure, line: raw.line };
       const reply = parseVerifyReply(raw.json, email);
       if (!reply) { const line = workerFailureLine('bad_response'); addLine(line); return { ok: false, failure: 'bad_response', line }; }

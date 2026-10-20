@@ -31,7 +31,7 @@ it('stops a catch-all domain for all people when any result says catch-all', () 
   later.record('john@example.com', 'risky', 'catch_all');
   expect(later.catchAll.has('example.com')).toBe(true);
   expect(later.canCheck('next@example.com')).toBe(false);
-  expect(later.canCheck('next@example.com', true)).toBe(true);
+  expect(later.canCheck('next@example.com', true)).toBe(false);
 });
 it('stops a person on valid, and stops all guesses when the worker cannot answer', () => {
   const state = new GuessChecks();
@@ -57,7 +57,7 @@ it('explains attempts, catch-all, missing worker and time using fixed sentences'
 });
 
 it.each([
-  [44_999, true, false], [45_000, true, false], [45_001, true, true],
+  [59_999, true, false], [60_000, true, false], [60_001, true, true],
   [25_000, false, false], [25_001, false, true], [26_000, true, false],
 ])('worker admission at %i ms with pending people %s is %s', (left, people, expected) => {
   expect(canStartGuessCheck(left, people, 20_000)).toBe(expected);
