@@ -46,6 +46,24 @@ const make = (u: UsageClient, fetchImpl: typeof fetch, config: WorkerConfig | nu
 afterEach(() => { vi.useRealTimers(); });
 
 describe('makeWorkerClient', () => {
+  it('refunds an expired local deadline once with the reserve day and allows the next check', async () => {
+    vi.useFakeTimers();
+    const u = usage(n => {
+      if (n === 1) vi.setSystemTime(Date.now() + 12_000);
+      return { data: ALLOWED, error: null };
+    });
+    const f = worker(200, VERIFY_OK);
+    const c = make(u, f);
+    expect(await c.verifyEmail('max@loveliving.uk', { timeoutMs: 12_000 })).toMatchObject({ ok: false });
+    expect(f).not.toHaveBeenCalled();
+    expect(refundCalls(u)).toEqual([['usage_refund', {
+      p_org: 'org-1', p_resource: 'worker_verify', p_units: 1, p_day: ALLOWED.day,
+    }]]);
+    expect(await c.verifyEmail('max@loveliving.uk')).toMatchObject({ ok: true });
+    expect(reserveCalls(u)).toHaveLength(2);
+    expect(refundCalls(u)).toHaveLength(1);
+    expect(f).toHaveBeenCalledTimes(1);
+  });
   it('honours the shorter guess timeout and never refunds a client timeout', async () => {
     vi.useFakeTimers();
     const u = usage();

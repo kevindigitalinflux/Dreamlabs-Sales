@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { commonEmailCandidates, GuessChecks, optionalPeopleBudget, canStartGuessCheck, personEmailLine } from '../../supabase/functions/_shared/personEmailFinding';
+import { commonEmailCandidates, GuessChecks, optionalPeopleBudget, personEmailLine } from '../../supabase/functions/_shared/personEmailFinding';
 import { scrapeTimeoutFor } from '../../supabase/functions/_shared/workerRules';
 import { firecrawlTimeoutFor } from '../../supabase/functions/_shared/firecrawlRules';
 
@@ -54,11 +54,4 @@ it('explains attempts, catch-all, missing worker and time using fixed sentences'
   expect(personEmailLine('Jane Smith', ['Tried 3 common formats on example.com (none confirmed).', 'Hunter is used up this month.']))
     .toBe('Jane Smith: no email found. Tried 3 common formats on example.com (none confirmed). Hunter is used up this month.');
   expect(personEmailLine('<Jane>\nSmith', [])).toBe('Jane Smith: no email found. No confirmed address was returned.');
-});
-
-it.each([
-  [59_999, true, false], [60_000, true, false], [60_001, true, true],
-  [25_000, false, false], [25_001, false, true], [26_000, true, false],
-])('worker admission at %i ms with pending people %s is %s', (left, people, expected) => {
-  expect(canStartGuessCheck(left, people, 20_000)).toBe(expected);
 });

@@ -19,7 +19,7 @@ it('reserves concurrent attempts before results and stops both guess paths on bl
   expect(checks.claim('one@other.com')).toBe(true);
   expect(checks.claim('two@other.com')).toBe(false);
 });
-it.each(['provider_blocks_checks', 'unknown'])('stops guesses after unverifiable %s', reason => {
+it.each(['provider_blocks_checks', 'unknown', 'checker_error', 'other_reason', ''])('stops guesses after unverifiable %s', reason => {
   const checks = new GuessChecks();
   checks.record('first@ukrm.com', 'unverifiable', reason);
   expect(checks.canCheck('next@ukrm.com')).toBe(false);

@@ -19,6 +19,7 @@ import { readCompanyPages, hunterAccount, hunterDomainList, hunterVerifyEmail } 
 import { lookUpPeople } from '../../supabase/functions/_shared/deepFindPeople';
 import { makeWorkerClient } from '../../supabase/functions/_shared/workerClient';
 import { fetchActiveOfficers } from '../../supabase/functions/_shared/companiesHouse';
+import { GuessBudget } from '../../supabase/functions/_shared/personEmailFinding';
 import { processDeepFindLead } from '../../supabase/functions/_shared/deepFind';
 let request, service, write, contacts, checkpointError, checkpointReads, accessLostAt, cancelledAt, worker, leadOverrides;
 beforeEach(() => {
@@ -78,7 +79,7 @@ it('stops catch-all checks and offers one ranked guess with collapsed alternativ
   expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
   expect(write).not.toHaveBeenCalled();
   expect(result.domains.suggestions.filter(s => s.guess_rank === 'most_likely').map(s => s.value)).toEqual(['jane.smith@example.com', 'john.jones@example.com']);
-  expect(result.domains.suggestions.filter(s => s.guess_rank === 'other')).toHaveLength(8);
+  expect(result.domains.suggestions.filter(s => s.guess_rank === 'other')).toHaveLength(4);
   expect(result.domains.suggestions.every(s => s.label.includes('unverified'))).toBe(true);
 });
 it('retains a literal website find when the domain is catch-all, without repeating that address', async () => {
@@ -408,4 +409,50 @@ it.each([false, true])('preserves wide person lookup at 26 seconds with legacy p
   await process();
   expect(worker.verifyEmail).not.toHaveBeenCalled();
   expect(lookUpPeople.mock.calls[0][0].people).toContainEqual(expect.objectContaining({ first: 'Jane', last: 'Smith' }));
+});
+
+it.each([false, true])('handles only one of concurrent valid candidates with inferred pattern %s', async (pattern) => {
+  resolveOrgWorkerConfig.mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null }];
+  if (pattern) contacts.push({ id: 'sample', first_name: 'Max', last_name: 'Jones', email: 'max.jones@example.com' });
+  const pending = [];
+  worker.verifyEmail.mockImplementation(() => new Promise(resolve => {
+    pending.push(resolve);
+    if (pending.length === 3) for (const finish of pending) finish({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
+  }));
+  const result = await process();
+  expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
+  const emailWrites = write.mock.calls.filter(([action, patch]) => action === 'update' && patch.email);
+  const emailSuggestions = result.domains.suggestions.filter(s => s.name === 'Jane Smith' && s.field === 'email');
+  expect(emailWrites.length + emailSuggestions.length).toBe(1);
+  expect(emailWrites).toHaveLength(1);
+  expect(result.domains.steps.join(' ')).not.toContain('could not be saved');
+});
+
+it('suggests exactly one valid address for a person checked concurrently on two patterned domains', async () => {
+  resolveOrgWorkerConfig.mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  leadOverrides = { owner_name: 'Jane Smith' };
+  contacts = [{ id: 'sample1', first_name: 'Max', last_name: 'Jones', email: 'max.jones@example.com' },
+    { id: 'sample2', first_name: 'Mary', last_name: 'Brown', email: 'mary.brown@other.com' }];
+  discoverLeadDomains.mockResolvedValue({ domains: ['example.com', 'other.com'].map(domain => ({ domain, needs_check: false, sources: ['website'] })),
+    people: [], notes: [], problems: [], sitePages: [] });
+  const pending = [];
+  worker.verifyEmail.mockImplementation(() => new Promise(resolve => {
+    pending.push(resolve);
+    if (pending.length === 3) for (const finish of pending) finish({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
+  }));
+  const result = await process();
+  expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
+  expect(result.domains.suggestions.filter(s => s.name === 'Jane Smith' && s.field === 'email')).toHaveLength(1);
+  expect(result.domains.steps.join(' ')).not.toContain('could not be saved');
+});
+
+it('does not reserve a Hunter verification credit when its guess timeout is zero', async () => {
+  resolveOrgApiKey.mockImplementation(async (_s, _o, provider) => provider === 'hunter' ? 'fake-key' : null);
+  contacts = [{ id: 'sample', first_name: 'Max', last_name: 'Jones', email: 'max.jones@example.com' },
+    { id: 'one', first_name: 'Jane', last_name: 'Smith', email: null }];
+  vi.spyOn(GuessBudget.prototype, 'timeout').mockImplementation((maximum) => maximum === 5_000 ? 0 : 12_000);
+  const result = await process();
+  expect(hunterVerifyEmail).not.toHaveBeenCalled();
+  expect(result.domains.credits.hunter['verify email format']).toBeUndefined();
 });

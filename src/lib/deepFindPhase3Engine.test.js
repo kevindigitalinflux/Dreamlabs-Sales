@@ -146,7 +146,7 @@ it('reports dismissed contacts and owner/person keys while skipping their checks
   expect(out.domains.dismissed_people).toEqual(expect.arrayContaining([
     { name: 'Jane Smith', contact_id: 'c' }, { name: 'Ravi Kumar' }, { name: 'Karthik Rao' },
   ]));
-  expect(out.domains.steps).toContain('Jane Smith was dismissed earlier, so Deep find skipped them. Use Start fresh or Restore them from the lead page.');
+  expect(out.domains.steps).toContain('Jane Smith was dismissed earlier, so Deep find skipped them. Restore them from the lead page.');
   expect(worker.verifyEmail).not.toHaveBeenCalled();
   expect(lookUpPeople.mock.calls[0][0].people).toEqual([]);
 });
@@ -163,12 +163,16 @@ it('offers ranked addresses even for known people beyond the five-person lookup 
   contacts = ['Jane', 'Alex', 'Alice', 'Ravi', 'Karthik', 'Sarah'].map((first_name, i) => ({ id: 'c' + i, lead_id: 'lead', first_name, last_name: 'Smith', email: null }));
   const out = await run('low');
   expect(out.domains.suggestions.filter(s => s.guess_rank === 'most_likely')).toHaveLength(6);
+  expect(out.domains.suggestions.filter(s => s.guess_rank === 'other').length).toBeLessThanOrEqual(12);
+  for (const person of contacts) expect(out.domains.suggestions.filter(s => s.name === person.first_name + ' Smith' && s.guess_rank === 'other').length).toBeLessThanOrEqual(2);
 });
-it('bounds dismissed_people to ten without losing the plain skip steps', async () => {
+it('bounds dismissed_people to ten and skip steps to three plus a summary', async () => {
   contacts = ['Jane', 'Alex', 'Alice', 'Ravi', 'Karthik', 'Sarah', 'Tom', 'David', 'Mary', 'Simon', 'Robert'].map((first_name, i) => ({ id: 'c' + i, lead_id: 'lead', first_name, last_name: 'Smith', email: null, dismissed_at: 'yesterday' }));
   const out = await run('low');
   expect(out.domains.dismissed_people).toHaveLength(10);
-  expect(out.domains.steps.filter(s => s.includes('was dismissed earlier'))).toHaveLength(11);
+  expect(out.domains.steps.filter(s => s.includes('was dismissed earlier'))).toHaveLength(3);
+  expect(out.domains.steps).toContain('and 8 more people were dismissed earlier.');
+  expect(out.domains.steps.join(' ')).not.toContain('Use Start fresh');
 });
 it('skips guess verification for Google and Microsoft while retaining ranked proposals', async () => {
   for (const provider of ['google', 'microsoft']) {
@@ -615,7 +619,7 @@ it.each(['low', 'medium', 'high', 'extra_high'])('%s allows OpenCorporates only 
   await run(effort);
   expect(lookupOpenCorporatesOfficer).toHaveBeenCalledTimes(effort === 'extra_high' ? 1 : 0);
 });
-it.each([false, true])('late-domain inference uses checker first and Hunter only when configured: %s', async hunter => {
+it.each([false, true])('late-domain inference stops Hunter after any unverifiable checker result, configured: %s', async hunter => {
   contacts[0].email = null; lead.owner_name = 'Alex Brown';
   resolveOrgApiKey.mockImplementation(async (_s,_o,p) => hunter && p === 'hunter' ? 'fake' : null);
   resolveOrgWorkerConfig.mockResolvedValue({});
@@ -627,7 +631,7 @@ it.each([false, true])('late-domain inference uses checker first and Hunter only
   await run('medium');
   expect(worker.verifyEmail).toHaveBeenCalledWith('jane.smith@newco.com', { timeoutMs: expect.any(Number) });
   expect(worker.verifyEmail.mock.calls[0][1].timeoutMs).toBeLessThanOrEqual(12_000);
-  expect(hunterVerifyEmail).toHaveBeenCalledTimes(hunter ? 1 : 0);
+  expect(hunterVerifyEmail).not.toHaveBeenCalled();
 });
 
 it('historical registry source alone does not prove an active decision maker', async () => {
@@ -676,4 +680,20 @@ it('late own-site reads preserve the downstream people and checker reserve', asy
   await run('medium');
   expect(readCompanyPages.mock.calls.some(([url]) => url.includes('newco.com'))).toBe(false);
   expect(worker.verifyEmail.mock.calls.some(([email]) => email.endsWith('@newco.com'))).toBe(true);
+});
+
+it.each(['manual', 'dream_agent', 'companies_house', 'cro', 'hunter', 'apollo'])('gives dismissal recovery advice for %s contacts', async source => {
+  contacts[0].dismissed_at = 'yesterday'; contacts[0].source = source;
+  const out = await run('low');
+  const lines = out.domains.steps.join(' ');
+  expect(lines).toContain('Restore them from the lead page.');
+  expect(lines.includes('Use Start fresh')).toBe(['companies_house', 'cro', 'hunter', 'apollo'].includes(source));
+});
+it('mentions Start fresh when an automatic dismissed contact is beyond the three named steps', async () => {
+  contacts = ['Jane', 'Alex', 'Alice', 'Ravi'].map((first_name, i) => ({ id: 'c' + i, lead_id: 'lead', first_name,
+    last_name: 'Smith', dismissed_at: 'yesterday', source: i === 3 ? 'hunter' : 'manual' }));
+  const out = await run('low');
+  expect(out.domains.steps.filter(s => s.includes('was dismissed earlier'))).toHaveLength(3);
+  expect(out.domains.steps.join(' ')).toContain('and 1 more people were dismissed earlier.');
+  expect(out.domains.steps.join(' ')).toContain('Use Start fresh');
 });

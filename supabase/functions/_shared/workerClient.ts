@@ -48,7 +48,13 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
     const resource = WORKER_RESOURCE[kind];
     const reserve = await reserveUsage(usage, orgId, resource, units);
     if (!reserve.ok) return stop(kind, 'limit_reached', refusalLine(reserve.reason, resource, reserve.limit));
-    if (Date.now() >= deadline) return stop(kind, 'unreachable', workerFailureLine('unreachable'));
+    if (Date.now() >= deadline) {
+      // The local deadline expired before dispatch: the worker did no work. Keep later calls eligible.
+      await refundUsage(usage, orgId, resource, units, reserve.day);
+      const line = 'The lookup worker call was skipped because its local time allowance expired.';
+      addLine(line);
+      return { ok: false, failure: 'unreachable', line };
+    }
 
     let failure: WorkerFailure | null = null;
     let json: unknown = null;

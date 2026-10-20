@@ -52,11 +52,6 @@ export function optionalPeopleBudget(leftMs: number, hasPeople: boolean): number
   return Math.max(0, leftMs - (hasPeople ? PEOPLE_RESERVE_MS : 0));
 }
 
-/** Leave the people floor after a full worker check; retain the old gate without pending people. */
-export function canStartGuessCheck(leftMs: number, hasPeople: boolean, verifyTimeoutMs: number): boolean {
-  return leftMs > (hasPeople ? PEOPLE_RESERVE_MS + PEOPLE_LOOKUP_FLOOR_MS + verifyTimeoutMs : 25_000);
-}
-
 /** Shared by inferred and common formats: no repeated address, six checks per lead, five per domain. */
 export class GuessChecks {
   readonly catchAll = new Set<string>();
@@ -84,7 +79,7 @@ export class GuessChecks {
       this.counts.set(d, (this.counts.get(d) ?? 0) + 1);
     }
     if (status !== null && reason === 'catch_all') this.catchAll.add(d);
-    if (status === 'unverifiable' && ['provider_blocks_checks', 'unknown'].includes(reason)) this.blocked.add(d);
+    if (status === 'unverifiable') this.blocked.add(d);
   }
   stopWorker(): void { this.stopped = true; }
   shouldStopPerson(status: string | null): boolean { return status === 'valid'; }

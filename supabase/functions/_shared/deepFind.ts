@@ -180,11 +180,27 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   /** Plain-English step lines shown with the results. */
   const steps: string[] = row.domains?.start_fresh === true && Array.isArray(row.domains.steps) ? row.domains.steps.filter((s): s is string => typeof s === 'string' && s.startsWith('Start fresh:')) : [];
   const dismissedPeople: { name: string; contact_id?: string }[] = [];
+  const dismissedNames = new Map<string, { name: string; automatic: boolean }>();
   const recordDismissed = (name: string, contactId?: string) => {
-    if (!name.trim() || dismissedPeople.some(p => displayPersonKey(p.name) === displayPersonKey(name))) return;
+    if (!name.trim()) return;
+    const key = displayPersonKey(name);
+    const contact = contactId ? rows.find(c => c.id === contactId) : null;
+    const automatic = !!contact?.dismissed_at && ['companies_house', 'cro', 'hunter', 'apollo'].includes(contact.source ?? '');
+    const existing = dismissedNames.get(key);
+    if (existing) { existing.automatic ||= automatic; return; }
+    dismissedNames.set(key, { name, automatic });
     if (dismissedPeople.length < 10) dismissedPeople.push({ name, ...(contactId ? { contact_id: contactId } : {}) });
-    const line = `${name} was dismissed earlier, so Deep find skipped them. Use Start fresh or Restore them from the lead page.`;
-    if (!steps.includes(line)) steps.push(line);
+  };
+  const dismissedStepLines = () => {
+    const people = [...dismissedNames.values()];
+    const advice = (automatic: boolean) => automatic ? 'Use Start fresh or Restore them from the lead page.' : 'Restore them from the lead page.';
+    const lines = people.slice(0, 3).map(p =>
+      `${p.name} was dismissed earlier, so Deep find skipped them. ${advice(p.automatic)}`);
+    if (!people.slice(0, 3).some(p => p.automatic) && people.slice(3).some(p => p.automatic)) {
+      lines[2] += ' Use Start fresh to restore people found automatically.';
+    }
+    if (people.length > 3) lines.push(`and ${people.length - 3} more people were dismissed earlier.`);
+    return lines;
   };
   let registryEvidence: Record<string, unknown> = {};
   if (effort !== 'low' && !configured.geminiKey) steps.push('LinkedIn search skipped: no Gemini key is configured.');
@@ -563,6 +579,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const patterns = new Map<string, ReturnType<typeof inferDomainPattern>>();
   let publicFormatSearchUsed = false;
   const confirmedGuessPeople = new Set<string>();
+  // In-flight valid results stop admission; only the result loops mark an address as handled.
+  const validCheckPeople = new Set<string>();
   const invalidGuesses = new Set<string>();
   const unverifiedGuesses = new Set<string>();
   const peopleBeforeChecks = lookupPeople();
@@ -603,12 +621,12 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       if (!guess) continue;
       jobs.push(async timeoutMs => {
         const name = person.first + ' ' + person.last;
-        if (confirmedGuessPeople.has(name) || checkerFailure || emailOnLead(all(), guess) || !checks.claim(guess)) return;
+        if (confirmedGuessPeople.has(name) || validCheckPeople.has(name) || checkerFailure || emailOnLead(all(), guess) || !checks.claim(guess)) return;
         const checked = await checkEmail(guess, { timeoutMs });
         checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : '');
         if (!checked.ok) { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
         else if (checked.value.status === 'invalid') invalidGuesses.add(guess);
-        else if (checked.value.status === 'valid') confirmedGuessPeople.add(name);
+        else if (checked.value.status === 'valid') validCheckPeople.add(name);
       });
     }
     await guessBudget.run(jobs);
@@ -616,9 +634,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       const pattern = patterns.get(d);
       if (!pattern) continue;
       for (const person of guessPeople) {
+        const name = `${person.first} ${person.last}`.slice(0, 80);
+        if (confirmedGuessPeople.has(name)) continue;
         const guess = patternGuess(pattern, person, d);
         if (!guess || emailOnLead(all(), guess) || suggestions.some((s) => s.value === guess)) continue;
-        const name = `${person.first} ${person.last}`.slice(0, 80);
         let verdict: string | null = null;
         let label = guessLabel(pattern, d);
         // Free checker first; Hunter is asked only when it cannot decide and credits remain.
@@ -634,17 +653,19 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
           detail(name, 'An email-format guess was confirmed by our email checker.');
           verdict = 'verified';
           label = 'Built from the email format and confirmed by our email checker, check it';
-        } else if (action === 'ask_hunter' && await spend.hunter('verify email format')) {
+        } else if (action === 'ask_hunter') {
           const hunterTimeout = guessBudget.timeout(5_000);
           if (hunterTimeout < 1) continue;
-          verifications++;
-          const v = await hunterVerifyEmail(guess, hunterKey!, hunterTimeout);
-          if (v.ok) {
-            verdict = v.verdict;
-            if (verdict === 'verified') label = 'Built from the email format and verified by Hunter, check it';
-          } else {
-            problems.push({ step: 'hunter_verify', target: d, failure: safeFailure(v.failure) });
-            if (v.failure === 'usage_exhausted' || v.failure === 'rate_limited') spend.stopHunter();
+          if (await spend.hunter('verify email format')) {
+            verifications++;
+            const v = await hunterVerifyEmail(guess, hunterKey!, hunterTimeout);
+            if (v.ok) {
+              verdict = v.verdict;
+              if (verdict === 'verified') { confirmedGuessPeople.add(name); label = 'Built from the email format and verified by Hunter, check it'; }
+            } else {
+              problems.push({ step: 'hunter_verify', target: d, failure: safeFailure(v.failure) });
+              if (v.failure === 'usage_exhausted' || v.failure === 'rate_limited') spend.stopHunter();
+            }
           }
         }
         if (verdict === 'invalid') { invalidGuesses.add(guess); continue; }
@@ -666,6 +687,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     // A new person always remains a suggestion for human review, even when their guessed address is valid.
     for (const person of lookupPeople().slice(0, 5)) {
       const name = `${person.first} ${person.last}`.slice(0, 80);
+      if (confirmedGuessPeople.has(name)) continue;
       for (const d of checkDomains.slice(0, 4)) {
         const candidates = rankedEmailCandidates(person.first, person.last, d, patterns.get(d) ?? null);
         if (candidates.length === 0) { detail(name, 'This name could not be used to build an email address.'); continue; }
@@ -932,7 +954,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     }
     if (suggestions.some(s => displayPersonKey(s.name) === displayPersonKey(name) && s.field === 'email')) continue;
     const provider = cachedMailProvider(domain) ?? 'unknown';
-    suggestions.push(...unverifiedEmailSuggestions(name, candidates, provider));
+    suggestions.push(...unverifiedEmailSuggestions(name, candidates.slice(0, 3), provider));
     detail(name, providerGuessLine(domain, provider));
   }
   const checkerNotConfigured = checkerFailure === checkerFailures.not_configured;
@@ -1051,6 +1073,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (error) console.error('deep find: linkedin capture failed');
   }
 
+  const finalSuggestions = reviewableSuggestions().slice(0, 25);
+  steps.push(...dismissedStepLines());
   return {
     status: 'done',
     reason: (apolloPeople ? `Apollo added ${apolloPeople} decision-maker contacts. ` : '') + deepFindSummary(stats),
@@ -1063,7 +1087,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       domains: discovery.domains,
       named_by_web: namedByWeb,
       named_on_site: namedOnSite,
-      suggestions: reviewableSuggestions().slice(0, 25),
+      suggestions: finalSuggestions,
       unverified_people: unverifiedPeople,
       registered_name: registry.name,
       website_suspect: suspicion.suspect,
@@ -1080,9 +1104,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   };
   } catch (error) {
     if (!(error instanceof DeepFindAuthorisationLost)) console.error('deep find: lead processing stopped', error instanceof Error && ['Error', 'TypeError', 'RangeError', 'SyntaxError', 'AbortError'].includes(error.name) ? error.name : 'UnknownError', 'Unexpected failure while processing a lead; provider payload omitted.');
+    const finalSuggestions = reviewableSuggestions().slice(0, 25);
+    steps.push(...dismissedStepLines());
     return { status: error instanceof DeepFindAuthorisationLost ? 'skipped' : 'failed',
       reason: error instanceof DeepFindAuthorisationLost ? error.message : 'Deep find could not finish. Saved changes are listed below with Undo.',
-      people_found: created.length, domains: { ...metadata, dismissed_people: dismissedPeople, registry_evidence: registryEvidence, auto_applied: autoApplied.slice(0, 100), suggestions: reviewableSuggestions().slice(0, 25), steps } };
+      people_found: created.length, domains: { ...metadata, dismissed_people: dismissedPeople, registry_evidence: registryEvidence, auto_applied: autoApplied.slice(0, 100), suggestions: finalSuggestions, steps } };
   }
 }
 
