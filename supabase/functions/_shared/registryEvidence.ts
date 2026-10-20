@@ -1,4 +1,4 @@
-import { companyNameTokens, hasLocation, locationAgrees, pickCompany, type CompanyCandidate, type LeadLocation } from './registrySearch.ts';
+import { companyNameTokens, hasLocation, strongLocationAgrees, pickCompany, type CompanyCandidate, type LeadLocation } from './registrySearch.ts';
 import { sameCompanyName } from './nameVariants.ts';
 
 export interface RegistryEvidence { E1: boolean; E2: boolean; E3: boolean; E4: boolean; E5: boolean; E6: boolean; reasons: string[] }
@@ -35,7 +35,7 @@ export function matchRegistryEvidence(scored: CompanyCandidate[], name: string, 
   for (const c of scored) {
     const tokens = companyNameTokens(c.name);
     const E1 = sameCompanyName(c.name, name) || (tokens.length === words.length && allWords(c));
-    const E2 = locationAgrees(c, loc);
+    const E2 = strongLocationAgrees(c, loc);
     const escapedNumber = c.company_number.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const legalName = c.name.toLowerCase().replace(/\s+/g, ' ').trim();
     const legalPattern = legalName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -78,7 +78,7 @@ export function matchRegistryEvidence(scored: CompanyCandidate[], name: string, 
   // Preserve the pre-evidence rules when no independent proof is available, including unique names without location.
   if (!chosen && !scored.some(c => { const e = evidence[c.company_number]; return e.E3 || e.E4 || e.E5; })) {
     const legacy = pickCompany(scored, name, loc).chosen;
-    if (legacy && !active.some(c => c !== legacy && strength(c) >= strength(legacy))) chosen = legacy;
+    if (legacy && (!hasLocation(loc) || evidence[legacy.company_number].E2) && !active.some(c => c !== legacy && strength(c) >= strength(legacy))) chosen = legacy;
   }
   const candidates = [...scored].sort((a, b) => Number(b.status === 'active') - Number(a.status === 'active') || strength(b) - strength(a) || b.score - a.score || a.company_number.localeCompare(b.company_number))
     .slice(0, 5).map(c => ({ ...c, why: evidence[c.company_number].reasons.join(', ') }));

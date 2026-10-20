@@ -1,3 +1,4 @@
+import { displayPersonKey } from './personIdentity.ts';
 // supabase/functions/_shared/knownPersonFlow.ts
 // "I know this person" flow for find-decision-makers: save the typed person first, then fill blank fields with the
 // wider lookup (Hunter finder, Hunter company list, email pattern, the company website, web search, Apollo).
@@ -5,7 +6,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import type { ContactEditValue } from './contacts.ts';
 import {
   domainFromWebsite, emailTakenByOther, isDirectoryDomain, LOOKUP_LIMIT_MESSAGE, mergeFoundIntoPerson,
-  normName, type FoundFields,
+  type FoundFields,
 } from './knownPerson.ts';
 import {
   apolloMatchPerson, hunterDomainList, hunterFindEmail, hunterVerifyEmail, isPublicDomain, scanWebsiteForPerson,
@@ -80,8 +81,8 @@ export async function runKnownPerson(
   const live = people.filter((r) => !r.dismissed_at).sort(byOldest);
 
   // (a) find an existing person: by email when typed (then a same-name row with no email), else by first + last name
-  const sameName = (r: Row) => normName(r.first_name as string) === normName(typed.first_name)
-    && normName(r.last_name as string) === normName(typed.last_name);
+  const sameName = (r: Row) => !!displayPersonKey(typed.first_name + ' ' + typed.last_name)
+    && displayPersonKey(String(r.first_name ?? '') + ' ' + String(r.last_name ?? '')) === displayPersonKey(typed.first_name + ' ' + typed.last_name);
   let match: Row | undefined;
   if (typed.email) {
     const byEmail = live.filter((r) => lower(r.email) === typed.email);

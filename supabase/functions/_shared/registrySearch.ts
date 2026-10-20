@@ -95,6 +95,17 @@ export function locationAgrees(c: Pick<CompanyCandidate, 'postcode' | 'locality'
   return false;
 }
 
+/** Strong E2 needs a full postcode or a specific address, never city alone. */
+export function strongLocationAgrees(c: Pick<CompanyCandidate, 'postcode' | 'locality' | 'address'>, loc: LeadLocation): boolean {
+  const pc = postcodeKey(loc.postcode);
+  if (pc && postcodeKey(c.postcode) === pc) return true;
+  if (pc && postcodeKey(c.postcode) && postcodeKey(c.postcode) !== pc) return false;
+  const words = (v: string | null) => companyNameTokens(v).filter(w => !['unit', 'road', 'street', 'court', 'house', 'building', ...companyNameTokens(loc.city)].includes(w));
+  const street = words(loc.address);
+  const target = words(c.address);
+  return street.length >= 2 && street.filter(w => target.includes(w)).length >= 2;
+}
+
 /** True when the lead has any location information at all. */
 export function hasLocation(loc: LeadLocation): boolean {
   return !!(text(loc.postcode, 12) || text(loc.city, 60) || text(loc.address, 200));

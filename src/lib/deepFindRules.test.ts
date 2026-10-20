@@ -56,10 +56,10 @@ describe('de-duplication (Review Focus 3)', () => {
   ];
   it('matches the same person across sources, case and first-name forms', () => {
     expect(findSamePerson(rows, 'Dave', 'Cox')).toBe(null); // not an initial or a prefix: never guessed
-    expect(findSamePerson(rows, 'D', 'cox')?.id).toBe('1');
+    expect(findSamePerson(rows, 'D', 'cox')).toBeNull();
     expect(findSamePerson(rows, 'David', 'Cox')?.id).toBe('1');
     expect(findSamePerson(rows, 'Sara', 'Smith')?.id).toBe('2'); // dismissed rows count: never re-added
-    expect(findSamePerson([...rows, { id: '4', kind: 'person', first_name: 'D', last_name: 'Cox' }], 'David', 'Cox')).toBe(null);
+    expect(findSamePerson([...rows, { id: '4', kind: 'person', first_name: 'D', last_name: 'Cox' }], 'David', 'Cox')?.id).toBe('1');
   });
   it('sees an email already on the lead in any case', () => {
     expect(emailOnLead(rows, 'sara@loveliving.uk')).toBe(true);

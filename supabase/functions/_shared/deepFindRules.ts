@@ -1,3 +1,4 @@
+import { displayPersonKey } from './personIdentity.ts';
 // supabase/functions/_shared/deepFindRules.ts
 // Pure rules for Deep find: request validation, turning provider people into contact rows, de-duplication, team-page
 // names, and the plain-English per-lead summary. No imports on purpose: tested from src/lib. Provider, page and model
@@ -76,23 +77,14 @@ export interface ExistingContact {
   name_obfuscated?: unknown;
 }
 
-/** True when two first names plausibly name the same person: same name, or one is an initial or a prefix of the other. */
-function firstAgrees(a: string, b: string): boolean {
-  if (!a || !b) return false;
-  if (a === b) return true;
-  if (a.length === 1 || b.length === 1) return a[0] === b[0];
-  return a.length >= 3 && b.length >= 3 && (a.startsWith(b) || b.startsWith(a));
-}
-
 /**
  * The existing person this name most likely is (same surname, agreeing first name), dismissed rows included so a
  * removed person is never re-added. Null when there is none, or when two different people match (never guesses).
  */
 export function findSamePerson<T extends ExistingContact>(rows: T[], first: unknown, last: unknown): T | null {
-  const f = nameKey(first);
-  const l = nameKey(last);
-  if (!f || !l) return null;
-  const hits = rows.filter((r) => r.kind !== 'general' && nameKey(r.last_name) === l && firstAgrees(nameKey(r.first_name), f));
+  const key = displayPersonKey(String(first ?? '') + ' ' + String(last ?? ''));
+  if (!key) return null;
+  const hits = rows.filter(r => r.kind !== 'general' && displayPersonKey(String(r.first_name ?? '') + ' ' + String(r.last_name ?? '')) === key);
   return hits.length === 1 ? hits[0]! : null;
 }
 
@@ -196,11 +188,8 @@ export function extractTeamMembers(html: unknown): SitePerson[] {
 
 /** True when a named person (web or website) is one of the stored contacts: same surname and first initial. */
 export function namedPersonIsStored(name: string, rows: ExistingContact[]): boolean {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length < 2) return false;
-  const l = nameKey(parts[parts.length - 1]);
-  const f = nameKey(parts[0]);
-  return rows.some((r) => nameKey(r.last_name) === l && nameKey(r.first_name)[0] === f[0]);
+  const key = displayPersonKey(name);
+  return !!key && rows.some(r => displayPersonKey(String(r.first_name ?? '') + ' ' + String(r.last_name ?? '')) === key);
 }
 
 /** What one lead's Deep find did, for the summary. */
@@ -318,8 +307,12 @@ export function peopleToLookUp(
   officers: { first_name: string | null; last_name: string | null; title: string | null }[],
 ): PersonToLookUp[] {
   const out: PersonToLookUp[] = [];
-  const known = (first: string, last: string) => out.some((p) => nameKey(p.last) === nameKey(last) && firstAgrees(nameKey(p.first), nameKey(first)));
-  const add = (p: PersonToLookUp) => { if (p.first && p.last && !known(p.first, p.last) && out.length < 12) out.push(p); };
+  const add = (p: PersonToLookUp) => {
+    const existing = out.find(x => displayPersonKey(x.first + ' ' + x.last) === displayPersonKey(p.first + ' ' + p.last));
+    if (existing) {
+      if ((p.first + ' ' + p.last).split(/\s+/).length > (existing.first + ' ' + existing.last).split(/\s+/).length) { existing.first = p.first; existing.last = p.last; }
+    } else if (p.first && p.last && out.length < 12) out.push(p);
+  };
   const withEmail = contacts.filter((c) => typeof c.email === 'string' && c.email.trim() !== '');
   const alreadyHasEmail = (first: string, last: string) => findSamePerson(withEmail, first, last) !== null;
   for (const c of contacts) {

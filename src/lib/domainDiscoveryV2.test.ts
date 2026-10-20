@@ -76,7 +76,7 @@ describe('runDomainDiscovery v2 (Review Focus 3 and 4)', () => {
     expect(byDomain['lovelivinguk.co.uk']).toMatchObject({ needs_check: true, sources: ['hunter_name_weak'] });
     expect(byDomain['loveliving.uk']).toMatchObject({ needs_check: false, sources: ['person_confirmed'] });
     // MX but no known person and only a similar Hunter name: kept for searching, never confirmed (Review Focus 3).
-    expect(byDomain['loveliving.com']).toMatchObject({ needs_check: true, sources: ['hunter_name_weak'] });
+    expect(byDomain['loveliving.com']).toBeUndefined(); // Stop paid discovery once a domain is confirmed.
     expect(r.notes.some((n) => n.includes('loveliving.uk'))).toBe(true);
   });
 

@@ -1,5 +1,6 @@
+import { displayPersonKey, fullestPeople } from './personIdentity.ts';
 // Import-free review and country rules shared by Deep find and its session UI.
-export interface ReviewSuggestion { name: string; value?: string; role?: string | null; label?: string; field?: string }
+export interface ReviewSuggestion { guess_rank?: 'most_likely' | 'other'; name: string; value?: string; role?: string | null; label?: string; field?: string }
 export interface ReviewLead {
   email?: unknown; additional_emails?: unknown; dismissed_suggestions?: unknown;
   country?: unknown; registry_candidates_rejected?: unknown; owner_name?: unknown;
@@ -72,7 +73,7 @@ export function visibleSuggestions<T extends ReviewSuggestion>(suggestions: T[],
   const seen = new Set(strings(lead.dismissed_suggestions).map(norm));
   const emails = new Set([norm(lead.email), ...strings(lead.additional_emails).map(norm), ...contacts.map((c) => norm(c.email))].filter(Boolean));
   const priority = (s: ReviewSuggestion) => s.field === 'owner_name' || ((!s.field || s.field === 'email') && !!s.value && s.name !== 'Company contact') ? 0 : 1;
-  return [...suggestions].sort((a, b) => priority(a) - priority(b) || Number(isRoleMailbox(a.value)) - Number(isRoleMailbox(b.value))).filter((s) => {
+  return fullestPeople(suggestions, s => !s.value && !s.field ? s.name : '').sort((a, b) => Number(a.guess_rank === 'other') - Number(b.guess_rank === 'other') || priority(a) - priority(b) || Number(isRoleMailbox(a.value)) - Number(isRoleMailbox(b.value))).filter((s) => {
     if (isSuggestionDismissed(s, lead)) return false;
     if (s.field === 'title') {
       const same = contacts.find((c) => nameOf(c) === norm(s.name));
@@ -93,14 +94,14 @@ export function visibleSuggestions<T extends ReviewSuggestion>(suggestions: T[],
       const key = suggestionKey(s);
       if (seen.has(key)) return false;
       seen.add(key);
-      const same = contacts.find((c) => nameOf(c) === norm(s.name));
+      const same = contacts.find((c) => displayPersonKey(nameOf(c)) && displayPersonKey(nameOf(c)) === displayPersonKey(s.name));
       return !same || (!same.dismissed_at && !norm(same.linkedin_url));
     }
     if (!norm(s.name) || (s.field && s.field !== 'email') || (s.value !== undefined && !validEmail(norm(s.value)))) return false;
     const key = suggestionKey(s);
     if (seen.has(key)) return false;
     seen.add(key);
-    const same = contacts.find((c) => nameOf(c) === norm(s.name));
+    const same = contacts.find((c) => displayPersonKey(nameOf(c)) && displayPersonKey(nameOf(c)) === displayPersonKey(s.name));
     return s.value ? !emails.has(norm(s.value)) && !(same && (same.dismissed_at || norm(same.email))) : !same;
   });
 }
@@ -121,7 +122,7 @@ export function planSuggestionAdd(s: ReviewSuggestion, lead: ReviewLead, contact
   if (s.field === 'owner_name') return { kind: 'lead_update', patch: { owner_name: s.value!.trim() } };
   if (s.field === 'website') return { kind: 'lead_update', patch: { website: s.value!.trim() } };
   if (s.field === 'linkedin_url') {
-    const same = contacts.find((c) => nameOf(c) === norm(s.name));
+    const same = contacts.find((c) => displayPersonKey(nameOf(c)) && displayPersonKey(nameOf(c)) === displayPersonKey(s.name));
     if (same) return { kind: 'linkedin_update', id: same.id, patch: { linkedin_url: s.value! } };
     const [first, ...rest] = s.name.trim().split(/\s+/);
     return { kind: 'contact_insert', patch: { source: 'manual', kind: 'person', first_name: first!, last_name: rest.join(' ') || null,
@@ -132,7 +133,7 @@ export function planSuggestionAdd(s: ReviewSuggestion, lead: ReviewLead, contact
     return !norm(lead.email) ? { kind: 'lead_update', patch: { email } }
       : { kind: 'lead_update', patch: { additional_emails: [...strings(lead.additional_emails), s.value!.trim()] } };
   }
-  const same = contacts.find((c) => nameOf(c) === norm(s.name));
+  const same = contacts.find((c) => displayPersonKey(nameOf(c)) && displayPersonKey(nameOf(c)) === displayPersonKey(s.name));
   if (same) return email && !norm(same.email) && !same.dismissed_at
     ? { kind: 'contact_update', id: same.id, patch: { email, include_in_sequences: false } } : { kind: 'none' };
   const [first, ...rest] = s.name.trim().split(/\s+/);

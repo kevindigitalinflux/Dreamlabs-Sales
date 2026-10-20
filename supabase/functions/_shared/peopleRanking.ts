@@ -1,3 +1,4 @@
+import { fullestPeople } from './personIdentity.ts';
 // supabase/functions/_shared/peopleRanking.ts
 // Ranks people a provider found (for example Hunter's company list) by how likely each is the decision maker, using
 // their job title and, as a tie-breaker, the people a web search named. No imports on purpose: tested from src/lib.
@@ -45,7 +46,7 @@ export function webHintScore(person: RankablePerson, hints: HintPerson[]): numbe
 
 /** People ordered by decisionScore plus webHintScore, highest first; ties keep their original order. */
 export function rankPeople<T extends RankablePerson>(people: T[], hints: HintPerson[] = []): T[] {
-  return people
+  return fullestPeople(people, p => String(p.first_name ?? '') + ' ' + String(p.last_name ?? ''))
     .map((p, i) => ({ p, i, score: decisionScore(p.title, p.seniority) + webHintScore(p, hints) }))
     .sort((a, b) => b.score - a.score || a.i - b.i)
     .map((x) => x.p);

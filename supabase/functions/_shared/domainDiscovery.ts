@@ -5,6 +5,7 @@
 // predicates (the existing hostname, SSRF and directory rules) and must also fit the company's brand words.
 
 import { siteConfirmLine, siteConfirmsCompany } from './domainSiteCheck.ts';
+import { isDirectoryDomain } from './knownPerson.ts';
 import { countryPhoneMismatch } from './deepFindSuggestions.ts';
 
 /** Where a domain came from, strongest first (see SOURCE_RANK). */
@@ -258,6 +259,43 @@ export function parseDohMx(json: unknown): 'mx' | 'none' | 'error' {
 }
 
 /** Why the lead's website may belong to a different company. */
+/** Match whole company abbreviations, including UK + R + Management and UKR Mgmt. */
+function abbreviatedName(value: string, name: string): boolean {
+  const words = name.toLowerCase().split(/[^a-z0-9]+/).filter(w => w && !['limited', 'ltd', 'llp', 'plc', 'the', 'and'].includes(w));
+  if (words.length < 2) return false;
+  const tokens = value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const initials = [words.map(w => w[0]).join(''), words.map(w => w.length <= 2 ? w : w[0]).join('')];
+  if (tokens.some(t => t.length >= 3 && initials.includes(t))) return true;
+  const choices = words.map(w => [w, ...(w.length > 2 ? [w[0]] : []), ...(w === 'management' ? ['mgmt'] : [])]);
+  const variants = choices.reduce<string[]>((out, parts) => out.flatMap(prefix => parts.map(p => prefix + p)).slice(0, 128), ['']);
+  return variants.some(v => v.length >= 4 && (tokens.includes(v) || tokens.join('') === v));
+}
+
+interface SiteIdentity { phone?: unknown; postcode?: unknown; email?: unknown; website?: unknown }
+/** Saved values must occur on the site. Generic numbers and partial email/postcode matches provide no proof. */
+function siteContactEvidence(text: string, lead: SiteIdentity): string | null {
+  const phoneKey = (s: string) => s.replace(/\D/g, '').replace(/^(?:0044|44)0?/, '').replace(/^0/, '');
+  if (typeof lead.phone === 'string' && phoneKey(lead.phone).length >= 9) {
+    for (const m of text.matchAll(/\+?\d[\d ().-]{7,}\d/g)) {
+      const before = text.slice(Math.max(0, m.index! - 30), m.index).toLowerCase();
+      if ((/\b(call|phone|tel|telephone|mobile|contact)\b/.test(before) || /[+() -]/.test(m[0]))
+        && !/\b(company|registration|account|vat)\b/.test(before) && phoneKey(m[0]) === phoneKey(lead.phone)) return 'phone';
+    }
+  }
+  if (typeof lead.postcode === 'string') {
+    const pc = lead.postcode.toUpperCase().replace(/\s/g, '');
+    if (/^[A-Z]{1,2}\d[A-Z\d]?\d[A-Z]{2}$/.test(pc) && new RegExp(`\\b${pc.slice(0, -3)}\\s*${pc.slice(-3)}\\b`, 'i').test(text)) return 'postcode';
+  }
+  if (typeof lead.email === 'string') {
+    const saved = lead.email.trim().toLowerCase();
+    const domain = saved.split('@')[1];
+    for (const m of text.matchAll(/[a-z0-9._%+-]+@([a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi)) {
+      if (m[0].toLowerCase() === saved || (domain && m[1].toLowerCase() === domain && !['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com'].includes(domain))) return 'email';
+    }
+  }
+  return null;
+}
+
 export interface WebsiteSuspicion { suspect: boolean; reasons: string[] }
 
 /**
@@ -265,7 +303,7 @@ export interface WebsiteSuspicion { suspect: boolean; reasons: string[] }
  * only from other countries (not +44 or +353, and no UK-style 0... number), or when neither the home page title nor
  * its footer carries the company's distinctive name words. Each reason is a fixed sentence.
  */
-export function websiteSuspicion(pages: string[], names: string[], country?: unknown): WebsiteSuspicion {
+export function websiteSuspicion(pages: string[], names: string[], country?: unknown, lead: SiteIdentity = {}): WebsiteSuspicion {
   const reasons: string[] = [];
   const all = pages.slice(0, 6).map((p) => (typeof p === 'string' ? p.slice(0, 600_000) : '')).join('\n');
   if (!all) return { suspect: false, reasons };
@@ -286,10 +324,21 @@ export function websiteSuspicion(pages: string[], names: string[], country?: unk
   const carries = (s: string) => names.some((n) => {
     const d = distinctiveTokens(n);
     const w = brandTokens(s);
-    return d.length > 0 && d.every((t) => w.includes(t) || w.join('').includes(t));
+    return (d.length > 0 && d.every((t) => w.includes(t) || w.join('').includes(t))) || abbreviatedName(s, n);
   });
-  if (title.trim() && !carries(title) && !carries(footer)) reasons.push('The website title and footer name a different business.');
-  return { suspect: reasons.length > 0, reasons };
+  let domainMatch = false;
+  if (typeof lead.website === 'string') {
+    try {
+      const host = new URL(lead.website.includes('://') ? lead.website : `https://${lead.website}`).hostname.replace(/^www\./, '');
+      if (isDirectoryDomain(host)) reasons.push('The website is a directory page, not the company’s own site.');
+      domainMatch = names.some(n => abbreviatedName(host.split('.')[0], n));
+    } catch { /* Invalid URLs provide no name evidence. */ }
+  }
+  const contact = siteContactEvidence(text, lead);
+  if (title.trim() && !carries(title) && !carries(footer) && !domainMatch && !contact) reasons.push('The website title and footer name a different business.');
+  const suspect = reasons.length > 0;
+  if (contact) reasons.push(`confirmed by ${contact} on the site`);
+  return { suspect, reasons };
 }
 
 const EMAIL_IN_HTML = /(?:mailto:)?([a-z0-9._%+-]{1,64}@([a-z0-9-]+(?:\.[a-z0-9-]+)+))/gi;
@@ -602,7 +651,7 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
     if (step.startsWith('hunter') && ['401', '402', '429', 'usage_exhausted', 'rate_limited'].includes(f)) hunterRefused = true;
   };
   const confirmed = () => seen.some((s) => isCorroborated(seen.filter((x) => x.domain === s.domain).map((x) => x.source))
-    && !input.known.some((k) => k.domain === s.domain));
+    && !blocked.has(s.domain));
 
   if (input.allow.hunter) {
     for (const name of searchNames) {
@@ -623,7 +672,7 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
     if (deps.hunterFindByCompany && companies.length > 0) {
       search: for (const p of people.slice(0, 3)) {
         for (const company of companies) {
-          if (!canHunter(2_000)) break search;
+          if (!canHunter(2_000) || confirmed()) break search;
           hunterCalls++;
           const res = await deps.hunterFindByCompany(company, p.first, p.last, Math.min(5_000, left())).catch((): Failed => ({ ok: false, failure: 'network' }));
           if (!res.ok) {
@@ -676,7 +725,7 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
     }
     if (input.allow.hunter && deps.hunterList) {
       for (const d of withMx.slice(0, MAX_PROBES)) {
-        if (!canHunter(3_000)) break;
+        if (!canHunter(3_000) || confirmed()) break;
         hunterCalls++;
         const res = await deps.hunterList(d, Math.min(5_000, left())).catch((): Failed => ({ ok: false, failure: 'network' }));
         if (!res.ok) { failed('hunter_list', d, res.failure); continue; }
