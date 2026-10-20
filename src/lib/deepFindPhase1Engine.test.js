@@ -161,3 +161,16 @@ it('offers person/company prose without a profile on the same line for review on
   expect(contacts[0].linkedin_url).toBeNull();
   expect(out.domains.suggestions.some(s => s.value === profile)).toBe(true);
 });
+
+it('explains a suspect saved website without claiming it is missing', async () => {
+  readCompanyPages.mockResolvedValue(['<title>Different Business</title>']);
+  const out = await run();
+  expect(out.domains.website_suspect).toBe(true);
+  expect(out.reason).toContain("The lead's website may belong to another company, so it was not used.");
+  expect(out.reason).not.toContain('This lead has no usable website.');
+});
+it('does not call an unreadable saved website missing', async () => {
+  expect((await run()).reason).not.toContain('This lead has no usable website.');
+  lead.website = null;
+  expect((await run()).reason).toContain('This lead has no usable website.');
+});

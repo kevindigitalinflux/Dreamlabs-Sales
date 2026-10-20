@@ -40,6 +40,7 @@ describe('costs and mapping', () => {
   it('refunds only when the worker did no work', () => {
     expect(shouldRefund('busy')).toBe(true);
     expect(shouldRefund('unreachable')).toBe(true);
+    expect(shouldRefund('timeout')).toBe(false);
     expect(shouldRefund('not_configured')).toBe(true);
     expect(shouldRefund('bad_response')).toBe(false);
     expect(shouldRefund('limit_reached')).toBe(false);
@@ -126,7 +127,7 @@ describe('plain-English text', () => {
     expect(unconfirmedLabel('whatever')).toBe('Built from the email format. Our email checker could not confirm it, check it');
   });
   it('words each failure without naming the worker address', () => {
-    for (const f of ['not_configured', 'limit_reached', 'busy', 'unreachable', 'bad_response'] as const) {
+    for (const f of ['not_configured', 'limit_reached', 'busy', 'unreachable', 'timeout', 'bad_response'] as const) {
       const line = workerFailureLine(f);
       expect(line.length).toBeGreaterThan(10);
       expect(line).not.toMatch(/https?:|didreamlabs|secret/i);

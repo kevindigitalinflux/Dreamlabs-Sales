@@ -74,7 +74,7 @@ describe('makeWorkerClient', () => {
     await vi.advanceTimersByTimeAsync(11_999);
     expect(refundCalls(u)).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(1);
-    expect(await pending).toMatchObject({ ok: false, failure: 'unreachable' });
+    expect(await pending).toMatchObject({ ok: false, failure: 'timeout' });
     expect(reserveCalls(u)).toHaveLength(1);
     expect(refundCalls(u)).toHaveLength(0);
   });
@@ -90,7 +90,7 @@ describe('makeWorkerClient', () => {
     expect(aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     expect(aborted).toBe(true);
-    expect(await pending).toMatchObject({ ok: false, failure: 'unreachable' });
+    expect(await pending).toMatchObject({ ok: false, failure: 'timeout' });
     expect(reserveCalls(u)).toHaveLength(1);
     expect(refundCalls(u)).toHaveLength(0);
   });
@@ -309,27 +309,17 @@ describe('makeWorkerClient', () => {
     ]);
   });
 
-  it('aborts a slow call and reports unreachable', async () => {
-    vi.useFakeTimers();
+  it('keeps later checks eligible after a dispatched timeout without refunding', async () => {
     const u = usage();
-    let aborted = false;
-    const f = vi.fn<typeof fetch>((_input, init) => new Promise<Response>((_resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => { aborted = true; reject(new DOMException('aborted', 'AbortError')); });
-    }));
+    const f = vi.fn<typeof fetch>().mockRejectedValueOnce(new DOMException('aborted', 'AbortError'))
+      .mockResolvedValueOnce(new Response(JSON.stringify(VERIFY_OK), { status: 200 }));
     const c = make(u, f);
-    const pending = c.verifyEmail('max@loveliving.uk');
-    await vi.advanceTimersByTimeAsync(19_999);
-    expect(aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(2);
-    expect(aborted).toBe(true);
-    const r = await pending;
-    expect(r).toEqual({ ok: false, failure: 'unreachable', line: workerFailureLine('unreachable') });
+    expect(await c.verifyEmail('first@example.com')).toEqual({ ok: false, failure: 'timeout', line: 'The email checker took too long to answer for this address.' });
+    expect(await c.verifyEmail('max@loveliving.uk')).toMatchObject({ ok: true });
+    expect(reserveCalls(u)).toHaveLength(2);
     // our own timeout: the worker may still be running, so the units stay reserved
-    expect(refundCalls(u).length).toBe(0);
-    expect(reserveCalls(u).length).toBe(1);
-    const again = await c.verifyEmail('max@loveliving.uk');
-    expect(again).toMatchObject({ ok: false, failure: 'unreachable' });
-    expect(reserveCalls(u).length).toBe(1);
+    expect(refundCalls(u)).toHaveLength(0);
+    expect(c.lines().join(' ')).not.toContain('could not be reached');
   });
 
   it('refunds once when the network fails fast, before any timeout', async () => {
@@ -383,4 +373,27 @@ describe('makeWorkerClient', () => {
     expect(all).not.toContain('lookup.');
     expect(all).not.toContain('max@loveliving.uk');
   });
+});
+
+it('retains usage when our timer fires and fetch throws an ordinary error', async () => {
+  vi.useFakeTimers();
+  const u = usage();
+  const f = vi.fn<typeof fetch>((_url, init) => new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener('abort', () => reject(new Error('cancelled')));
+  }));
+  const pending = make(u, f).verifyEmail('first@example.com', { timeoutMs: 18_000 });
+  await vi.advanceTimersByTimeAsync(18_000);
+  expect(await pending).toMatchObject({ ok: false, failure: 'timeout' });
+  expect(refundCalls(u)).toHaveLength(0);
+});
+it('classifies an aborted response body as timeout and keeps later checks eligible', async () => {
+  const u = usage();
+  const response = new Response('{}');
+  vi.spyOn(response, 'json').mockRejectedValue(new DOMException('aborted', 'AbortError'));
+  const f = vi.fn<typeof fetch>().mockResolvedValueOnce(response)
+    .mockResolvedValueOnce(new Response(JSON.stringify(VERIFY_OK)));
+  const c = make(u, f);
+  expect(await c.verifyEmail('first@example.com')).toMatchObject({ ok: false, failure: 'timeout' });
+  expect(await c.verifyEmail('max@loveliving.uk')).toMatchObject({ ok: true });
+  expect(refundCalls(u)).toHaveLength(0);
 });

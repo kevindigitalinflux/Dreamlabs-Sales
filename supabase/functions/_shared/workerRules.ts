@@ -4,7 +4,7 @@
 import type { UsageResource } from './usageRules.ts';
 
 export type ScrapeMode = 'homepage' | 'key_pages' | 'deep';
-export type WorkerFailure = 'not_configured' | 'limit_reached' | 'busy' | 'unreachable' | 'bad_response';
+export type WorkerFailure = 'not_configured' | 'limit_reached' | 'busy' | 'unreachable' | 'timeout' | 'bad_response';
 export interface WorkerConfig { url: string; secret: string }
 
 export const SCRAPE_UNITS: Record<ScrapeMode, number> = { homepage: 1, key_pages: 1, deep: 3 };
@@ -134,6 +134,7 @@ export function workerFailureLine(failure: WorkerFailure): string {
     case 'not_configured': return 'The lookup worker is not set up, so it was not used.';
     case 'limit_reached': return 'The lookup worker was skipped because a daily limit was reached.';
     case 'busy': return 'The lookup worker was busy, so it was skipped.';
+    case 'timeout': return 'The email checker took too long to answer for this address.';
     case 'unreachable': return 'The lookup worker could not be reached, so it was skipped.';
     case 'bad_response': return 'The lookup worker sent an answer that could not be used.';
   }

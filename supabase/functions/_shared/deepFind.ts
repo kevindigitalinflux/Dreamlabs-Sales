@@ -30,7 +30,7 @@ import {
   hunterPeople, namedPersonIsStored, parseLeadPersonName, peopleToLookUp, stuckAction, type ExistingContact, type LeadStats, type SitePerson,
 } from './deepFindRules.ts';
 import { makeWorkerClient } from './workerClient.ts';
-import { MAX_VERIFY_PER_LEAD, WORKER_TIMEOUT_MS, scrapeTimeoutFor, unconfirmedLabel, verifyAction } from './workerRules.ts';
+import { MAX_VERIFY_PER_LEAD, WORKER_TIMEOUT_MS, scrapeTimeoutFor, unconfirmedLabel, verifyAction, type WorkerFailure } from './workerRules.ts';
 import { rankedEmailCandidates, unverifiedEmailSuggestions, providerGuessLine, GuessBudget, GuessChecks, optionalPeopleBudget, personEmailLine, COMMON_GUESS_LABEL } from './personEmailFinding.ts';
 import { makeFirecrawlClient } from './firecrawlClient.ts';
 import { FIRECRAWL_DAILY_PAGES, firecrawlDomainFor } from './firecrawlRules.ts';
@@ -266,7 +266,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     const checkDeadline = opts?.timeoutMs === undefined ? null : Date.now() + opts.timeoutMs;
     await checkpoint();
     const remaining = checkDeadline === null ? null : checkDeadline - Date.now();
-    if (remaining !== null && remaining < 1) return { ok: false as const, failure: 'unreachable' as const, line: 'The email check ran out of time.' };
+    if (remaining !== null && remaining < 1) return { ok: false as const, failure: 'timeout' as const, line: 'The email checker took too long to answer for this address.' };
     const result = remaining === null ? await worker.verifyEmail(email) : await worker.verifyEmail(email, { timeoutMs: remaining });
     checkedEmails.set(key, result);
     return result;
@@ -338,7 +338,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const suspicion = websiteSuspicion(sitePages, [str(lead.business_name) ?? '', knownRegistry?.name ?? ''].filter(Boolean), lead.country, lead);
   if (suspicion.suspect) steps.push(`This website may belong to a different company: ${suspicion.reasons.join(' ')}`);
   const usableSite = siteReadable && !suspicion.suspect;
-  stats.noWebsite = !usableSite;
+  stats.noWebsite = !str(lead.website);
   const pages = usableSite ? sitePages : [];
 
   // (0) the registered company and its officers (officers become companies_house contacts, as before)
@@ -574,7 +574,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const ownerName = parseLeadPersonName(lead.owner_name);
   const checks = new GuessChecks(MAX_VERIFY_PER_LEAD);
   for (const [email, checked] of checkedEmails) checks.record(email,
-    checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : '');
+    checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : checked.failure);
   const guessBudget = new GuessBudget(left, () => lookupPeople().length > 0);
   const patterns = new Map<string, ReturnType<typeof inferDomainPattern>>();
   let publicFormatSearchUsed = false;
@@ -586,10 +586,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const peopleBeforeChecks = lookupPeople();
   const emailDetails = new Map<string, string[]>();
   const detail = (name: string, line: string) => emailDetails.set(name, [...(emailDetails.get(name) ?? []), line]);
-  const checkerFailures: Record<string, string> = {
+  const checkerFailures: Record<WorkerFailure, string> = {
     not_configured: 'The email checker is not set up.', limit_reached: 'The email checker reached its limit.',
     busy: 'The email checker is busy.', unreachable: 'The email checker could not be reached.',
     bad_response: 'The email checker could not return a usable answer.',
+    timeout: 'The email checker took too long to answer for this address.',
   };
   let checkerFailure: string | null = workerConfig ? null : checkerFailures.not_configured;
   let verifications = 0;
@@ -623,8 +624,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         const name = person.first + ' ' + person.last;
         if (confirmedGuessPeople.has(name) || validCheckPeople.has(name) || checkerFailure || emailOnLead(all(), guess) || !checks.claim(guess)) return;
         const checked = await checkEmail(guess, { timeoutMs });
-        checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : '');
-        if (!checked.ok) { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
+        checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : checked.failure);
+        if (!checked.ok) {
+          if (checked.failure !== 'timeout') { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
+          else detail(name, checkerFailures.timeout);
+        }
         else if (checked.value.status === 'invalid') invalidGuesses.add(guess);
         else if (checked.value.status === 'valid') validCheckPeople.add(name);
       });
@@ -643,8 +647,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         // Free checker first; Hunter is asked only when it cannot decide and credits remain.
         const checked = checkedEmails.get(guess.toLowerCase()) ?? null;
         if (checked) {
-          checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : '');
-          if (!checked.ok) { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
+          checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : checked.failure);
+          if (!checked.ok && checked.failure !== 'timeout') { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
         }
         const action = verifyAction(checked && checked.ok ? checked.value.status : null, !!hunterKey && !guessBudget.exhausted && !checks.blocked.has(d) && !checks.catchAll.has(d) && verifications < 3 && left() > 45_000);
         if (action === 'drop') { invalidGuesses.add(guess); continue; }
@@ -697,8 +701,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
           if (emailOnLead(all(), guess) || suggestions.some((s) => s.value.toLowerCase() === guess)) continue;
           const checked = checkedEmails.get(guess.toLowerCase());
           if (!checked) continue;
-          checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : '');
+          checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : checked.failure);
           if (!checked.ok) {
+            if (checked.failure === 'timeout') { detail(name, checkerFailures.timeout); continue; }
             checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; break;
           }
           if (checked.value.status === 'invalid') invalidGuesses.add(guess);
@@ -715,6 +720,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
           } else suggestions.push({ name, field: 'email', value: guess, label: COMMON_GUESS_LABEL });
           break;
         }
+        if (checks.timedOut.has(d)) detail(name, 'This mail server answers too slowly to check, so these are best guesses.');
         if (checks.catchAll.has(d)) {
           detail(name, 'The mail server accepts any address, so guesses cannot be confirmed.');
         } else if (tried > 0) detail(name, `Tried ${tried} common format${tried === 1 ? '' : 's'} on ${d} (${valid ? 'one confirmed for review' : 'none confirmed'}).`);
@@ -723,7 +729,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       }
     }
 
-    if (guessBudget.exhausted && !steps.includes('Email guess checks reached the 20 second limit for this lead. Remaining time was kept for people lookups.')) steps.push('Email guess checks reached the 20 second limit for this lead. Remaining time was kept for people lookups.');
+    if (guessBudget.exhausted && !steps.includes('Email guess checks reached the 36 second limit for this lead. Remaining time was kept for people lookups.')) steps.push('Email guess checks reached the 36 second limit for this lead. Remaining time was kept for people lookups.');
   };
   const discoverPublicFormat = async () => {
       if ((effort === 'high' || effort === 'extra_high') && geminiKey && !publicFormatSearchUsed && ![...checkedEmails.values()].some(c => c.ok && c.value.status === 'valid')) {
@@ -1077,7 +1083,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   steps.push(...dismissedStepLines());
   return {
     status: 'done',
-    reason: (apolloPeople ? `Apollo added ${apolloPeople} decision-maker contacts. ` : '') + deepFindSummary(stats),
+    reason: (apolloPeople ? `Apollo added ${apolloPeople} decision-maker contacts. ` : '') + (suspicion.suspect ? "The lead's website may belong to another company, so it was not used. " : '') + deepFindSummary(stats),
     people_found: stats.hunterPeople + stats.officersAdded + apolloPeople,
     domains: {
       ...metadata,

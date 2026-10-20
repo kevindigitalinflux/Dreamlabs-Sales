@@ -451,8 +451,28 @@ it('does not reserve a Hunter verification credit when its guess timeout is zero
   resolveOrgApiKey.mockImplementation(async (_s, _o, provider) => provider === 'hunter' ? 'fake-key' : null);
   contacts = [{ id: 'sample', first_name: 'Max', last_name: 'Jones', email: 'max.jones@example.com' },
     { id: 'one', first_name: 'Jane', last_name: 'Smith', email: null }];
-  vi.spyOn(GuessBudget.prototype, 'timeout').mockImplementation((maximum) => maximum === 5_000 ? 0 : 12_000);
+  vi.spyOn(GuessBudget.prototype, 'timeout').mockImplementation((maximum) => maximum === 5_000 ? 0 : 18_000);
   const result = await process();
   expect(hunterVerifyEmail).not.toHaveBeenCalled();
   expect(result.domains.credits.hunter['verify email format']).toBeUndefined();
+});
+
+it('continues guesses after one local timeout and explains two slow answers per domain', async () => {
+  vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  contacts = [{ id: 'contact', first_name: 'Valentina', last_name: 'Antunovic', title: 'Founder', email: null }];
+  worker.verifyEmail.mockResolvedValue({ ok: false, failure: 'timeout', line: 'The email checker took too long to answer for this address.' });
+  const result = await process();
+  expect(worker.verifyEmail.mock.calls.length).toBeGreaterThanOrEqual(2);
+  const text = JSON.stringify(result);
+  expect(text).toContain('This mail server answers too slowly to check, so these are best guesses.');
+  expect(text).toContain('The email checker took too long to answer for this address.');
+  expect(text).not.toContain('could not be reached');
+});
+it('accepts a valid guess after an earlier timeout', async () => {
+  vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
+  contacts = [{ id: 'contact', first_name: 'Valentina', last_name: 'Antunovic', title: 'Founder', email: null }];
+  worker.verifyEmail.mockResolvedValueOnce({ ok: false, failure: 'timeout', line: 'The email checker took too long to answer for this address.' })
+    .mockResolvedValueOnce({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
+  await process();
+  expect(write).toHaveBeenCalledWith('update', expect.objectContaining({ email: 'valentina@example.com', include_in_sequences: false }));
 });

@@ -61,9 +61,9 @@ it('does not let shared contact details rescue an abbreviation naming another bu
   expect(websiteSuspicion(['<title>Spencer Property Management</title>TW3 3TT Call 020 8577 0450'],
     ['Smith Property Management Ltd'], 'GB', { ...lead, website: 'spmanagement.co.uk' }).suspect).toBe(true);
 });
-it('requires corroboration for four-letter initials and checks a conflicting footer', () => {
-  expect(websiteSuspicion(['<title>UKRM Home</title>'], names, 'GB', lead).suspect).toBe(true);
-  expect(websiteSuspicion(['<title>UKRM Home</title><footer>Copyright Spencer Property Management</footer>TW3 3TT'], names, 'GB', lead).suspect).toBe(true);
+it('requires page corroboration when no saved email matches the website', () => {
+  expect(websiteSuspicion(['<title>UKRM Home</title>'], names, 'GB', { ...lead, email: null }).suspect).toBe(true);
+  expect(websiteSuspicion(['<title>UKRM Home</title><footer>Copyright Spencer Property Management</footer>TW3 3TT'], names, 'GB', { ...lead, email: null }).suspect).toBe(true);
 });
 it('accepts UKRM with saved contact evidence and rejects postcode without name evidence', () => {
   expect(websiteSuspicion(['<title>UKRM Home</title>TW3 3TT Call 020 8577 0450 info@ukrmanagement.com'], names, 'GB', lead).suspect).toBe(false);

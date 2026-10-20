@@ -3,8 +3,8 @@ import { patternGuess, type DomainPattern, type PatternSample } from './domainPa
 import type { MailProvider } from './dnsLookup.ts';
 export const PEOPLE_RESERVE_MS = 25_000;
 export const PEOPLE_LOOKUP_FLOOR_MS = 15_000;
-export const GUESS_TOTAL_MS = 20_000;
-export const GUESS_CHECK_TIMEOUT_MS = 12_000;
+export const GUESS_TOTAL_MS = 36_000;
+export const GUESS_CHECK_TIMEOUT_MS = 18_000;
 
 /** One wall-clock allowance shared by all guess paths and later domain batches for a lead. */
 export class GuessBudget {
@@ -57,6 +57,9 @@ export class GuessChecks {
   readonly catchAll = new Set<string>();
   readonly blocked = new Set<string>();
   readonly attempted = new Set<string>();
+  readonly timedOut = new Set<string>();
+  private timeoutAddresses = new Set<string>();
+  private timeoutCounts = new Map<string, number>();
   private counts = new Map<string, number>();
   private stopped = false;
   constructor(private maxChecks = 6) {}
@@ -77,6 +80,12 @@ export class GuessChecks {
     if (!this.attempted.has(key)) {
       this.attempted.add(key);
       this.counts.set(d, (this.counts.get(d) ?? 0) + 1);
+    }
+    if (reason === 'timeout' && !this.timeoutAddresses.has(key)) {
+      this.timeoutAddresses.add(key);
+      const count = (this.timeoutCounts.get(d) ?? 0) + 1;
+      this.timeoutCounts.set(d, count);
+      if (count >= 2) { this.blocked.add(d); this.timedOut.add(d); }
     }
     if (status !== null && reason === 'catch_all') this.catchAll.add(d);
     if (status === 'unverifiable') this.blocked.add(d);

@@ -5,6 +5,7 @@
 // predicates (the existing hostname, SSRF and directory rules) and must also fit the company's brand words.
 
 import { siteConfirmLine, siteConfirmsCompany } from './domainSiteCheck.ts';
+import { emailMatchesWebsiteDomain, registrableDomain } from './selectedLeadPipelineRules.ts';
 import { isDirectoryDomain } from './knownPerson.ts';
 import { isFreeMailDomain } from './knownPersonWide.ts';
 import { countryPhoneMismatch } from './deepFindSuggestions.ts';
@@ -329,10 +330,15 @@ export function websiteSuspicion(pages: string[], names: string[], country?: unk
     return d.length > 0 && d.every((t) => w.includes(t) || w.includes(d.join('')));
   });
   let domainName = '';
+  let ownEmailDomain = false;
   if (typeof lead.website === 'string') {
     try {
       const host = new URL(lead.website.includes('://') ? lead.website : `https://${lead.website}`).hostname.replace(/^www\./, '');
       if (isDirectoryDomain(host)) reasons.push('The website is a directory page, not the company’s own site.');
+      const root = registrableDomain(host);
+      ownEmailDomain = typeof lead.email === 'string' && /^[^\s@]+@[^\s@]+$/.test(lead.email.trim())
+        && emailMatchesWebsiteDomain(lead.email.trim(), lead.website)
+        && !!root && !isFreeMailDomain(root) && !isDirectoryDomain(host) && !isDirectoryDomain(root);
       domainName = host.split('.')[0];
     } catch { /* Invalid URLs provide no name evidence. */ }
   }
@@ -351,8 +357,9 @@ export function websiteSuspicion(pages: string[], names: string[], country?: unk
     /[a-z]/.test(t) && !INDUSTRY_WORDS.has(t) && !neutral.has(t) && !distinctive.includes(t)
     && !initialPrefix(t) && !names.some(n => abbreviatedName(t, n, true))));
   const weakAccepted = weakName && !differentBusiness && !!(contact || (longWeakName && realNameToken));
-  if ((title.trim() || footer.trim() || weakName) && !carries(title) && !carries(footer) && !weakAccepted && !(contact && !differentBusiness && !weakName)) reasons.push('The website title and footer name a different business.');
+  if (!ownEmailDomain && (title.trim() || footer.trim() || weakName) && !carries(title) && !carries(footer) && !weakAccepted && !(contact && !differentBusiness && !weakName)) reasons.push('The website title and footer name a different business.');
   const suspect = reasons.length > 0;
+  if (ownEmailDomain && !suspect) reasons.push("confirmed by the lead's own email address on this domain");
   if (contact && !suspect) reasons.push(`Confirmed by ${contact} on the site.`);
   return { suspect, reasons };
 }

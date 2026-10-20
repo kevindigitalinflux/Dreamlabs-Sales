@@ -119,3 +119,22 @@ describe('runDomainDiscovery v2 (Review Focus 3 and 4)', () => {
     expect(d.readSite).not.toHaveBeenCalled();
   });
 });
+
+it('confirms UKRM from the saved corporate email without page contact details', () => {
+  expect(websiteSuspicion(['<title>UKRM Home</title>'], ['UK Rental Management'], 'UK', {
+    website: 'https://ukrmanagement.com', email: 'info@ukrmanagement.com',
+  })).toEqual({ suspect: false, reasons: ["confirmed by the lead's own email address on this domain"] });
+});
+it.each([
+  ['https://www.ukrmanagement.co.uk', 'info@mail.ukrmanagement.co.uk', false],
+  ['https://ukrmanagement.com', 'info@notukrmanagement.com', true],
+  ['https://gmail.com', 'info@gmail.com', true],
+  ['https://linkedin.com', 'info@linkedin.com', true],
+])('checks saved email domain boundaries for %s', (website, email, suspect) => {
+  expect(websiteSuspicion(['<title>Unrelated Home</title>'], ['UK Rental Management'], 'UK', { website, email }).suspect).toBe(suspect);
+});
+it('retains foreign-phone suspicion despite matching saved email', () => {
+  expect(websiteSuspicion(['<title>UKRM Home</title>Phone +1 212 555 1234'], ['UK Rental Management'], 'UK', {
+    website: 'ukrmanagement.com', email: 'info@ukrmanagement.com',
+  }).suspect).toBe(true);
+});

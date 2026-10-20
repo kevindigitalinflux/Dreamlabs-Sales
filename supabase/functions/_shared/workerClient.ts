@@ -53,7 +53,7 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
       await refundUsage(usage, orgId, resource, units, reserve.day);
       const line = 'The lookup worker call was skipped because its local time allowance expired.';
       addLine(line);
-      return { ok: false, failure: 'unreachable', line };
+      return { ok: false, failure: 'timeout', line };
     }
 
     let failure: WorkerFailure | null = null;
@@ -70,12 +70,14 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
       // Redirects are refused before forwarding credentials; no work happened at the worker.
       failure = res.status >= 300 && res.status < 400 ? 'unreachable' : failureForStatus(res.status);
       if (failure === null) {
-        try { json = await res.json(); } catch { failure = 'bad_response'; }
+        try { json = await res.json(); } catch (error) {
+          failure = timedOut || (error instanceof Error && error.name === 'AbortError') ? 'timeout' : 'bad_response';
+        }
       } else {
         try { await res.body?.cancel(); } catch { /* nothing to cancel */ }
       }
-    } catch {
-      failure = 'unreachable';
+    } catch (error) {
+      failure = timedOut || (error instanceof Error && error.name === 'AbortError') ? 'timeout' : 'unreachable';
     } finally {
       clearTimeout(timer);
     }
@@ -83,7 +85,7 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
     // Our own timeout is not "the worker did no work": it may still be running, so the units stay reserved.
     if (shouldRefund(failure) && !timedOut) await refundUsage(usage, orgId, resource, units, reserve.day);
     const line = workerFailureLine(failure);
-    if (failure === 'bad_response') { addLine(line); return { ok: false, failure, line }; }
+    if (failure === 'bad_response' || failure === 'timeout') { addLine(line); return { ok: false, failure, line }; }
     return stop(kind, failure, line);
   }
 

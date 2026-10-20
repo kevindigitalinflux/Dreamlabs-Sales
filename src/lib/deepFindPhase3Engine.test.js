@@ -184,7 +184,7 @@ it('skips guess verification for Google and Microsoft while retaining ranked pro
   }
   expect(worker.verifyEmail).not.toHaveBeenCalled();
 });
-it('caps concurrent guesses at 20 seconds and leaves time for both people lookups', async () => {
+it('caps concurrent guesses at the people reserve with an 18 second check cap', async () => {
   vi.useFakeTimers();
   contacts[0].email = null;
   contacts.push({ id: 'two', lead_id: 'lead', first_name: 'Alex', last_name: 'Brown', email: null });
@@ -197,13 +197,13 @@ it('caps concurrent guesses at 20 seconds and leaves time for both people lookup
     return { ok: true, value: { status: 'invalid', reason: 'mailbox_missing' } };
   });
   const pending = run('low');
-  await vi.advanceTimersByTimeAsync(20_000);
+  await vi.advanceTimersByTimeAsync(30_000);
   const out = await pending;
   expect(peak).toBe(3);
-  expect(worker.verifyEmail.mock.calls.every(([, opts]) => opts.timeoutMs <= 12_000)).toBe(true);
+  expect(worker.verifyEmail.mock.calls.every(([, opts]) => opts.timeoutMs <= 18_000)).toBe(true);
   expect(lookUpPeople.mock.calls[0][0].people).toHaveLength(2);
-  expect(lookUpPeople.mock.calls[0][0].left()).toBe(50_000);
-  expect(out.domains.steps.join(' ')).toContain('20 second limit');
+  expect(lookUpPeople.mock.calls[0][0].left()).toBe(40_000);
+  expect(out.domains.steps.join(' ')).not.toContain('36 second limit');
   expect(out.domains.suggestions.filter(s => s.guess_rank === 'most_likely')).toHaveLength(2);
   vi.useRealTimers();
 });
@@ -630,7 +630,7 @@ it.each([false, true])('late-domain inference stops Hunter after any unverifiabl
   readCompanyPages.mockImplementation(async url => url.includes('newco.com') ? ['<title>Acme</title><p>alex.brown@newco.com</p>'] : []);
   await run('medium');
   expect(worker.verifyEmail).toHaveBeenCalledWith('jane.smith@newco.com', { timeoutMs: expect.any(Number) });
-  expect(worker.verifyEmail.mock.calls[0][1].timeoutMs).toBeLessThanOrEqual(12_000);
+  expect(worker.verifyEmail.mock.calls[0][1].timeoutMs).toBeLessThanOrEqual(18_000);
   expect(hunterVerifyEmail).not.toHaveBeenCalled();
 });
 
