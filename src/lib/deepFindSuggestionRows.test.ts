@@ -31,6 +31,6 @@ it('links https LinkedIn suggestions safely and rejects unsafe schemes', () => {
 
 it('renders the lead result headings at the level it is given', async () => {
   const { Heading } = await import('../components/deepfind/Heading');
-  expect(renderToStaticMarkup(createElement(Heading, { level: 5 }, 'x'))).toBe('<h5>x</h5>');
-  expect(renderToStaticMarkup(createElement(Heading, { level: 9 }, 'x'))).toBe('<h6>x</h6>');
+  expect(renderToStaticMarkup(createElement(Heading, { level: 5, children: 'x' }))).toBe('<h5>x</h5>');
+  expect(renderToStaticMarkup(createElement(Heading, { level: 9, children: 'x' }))).toBe('<h6>x</h6>');
 });
