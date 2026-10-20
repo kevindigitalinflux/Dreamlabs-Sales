@@ -87,3 +87,8 @@ Phase 3a-c gates at `2877d787d90e3a921a293ea1365accbb3239e2c5`: TypeScript 0 dia
 - [ ] Build A1/A2 implemented locally on `codex/deepfind-effort-matching`; independent Claude review pending. Evidence-based matching, Most likely/reasons, effort controls/totals, free-first conditional depth, per-lead caps and persisted policy are built. Fix-round gates: TypeScript 0 diagnostics; 128 files / 1,984 tests / 0 failures; build 0 errors. Leave unchecked until reviewed. Fix round 1 addresses all review findings; independent rereview remains pending. See HANDOFF **Build A — Fix round 1**.
 - [ ] After independent review and separate publication authorization: deploy frontend and `run-deep-find`, then verify BK matching, effort/allowances, free versus deep outcomes, Undo/dismissals, keyboard focus and phone width. No publication is authorized by this build.
 - [ ] Build B remains excluded and unbuilt: readiness badge, migration 065 and parallel leads. Migration needs review and Kevin's explicit authorization.
+
+## Deep find A2 (2026-10-20)
+
+- [ ] All four approved A2 parts are built locally on `codex/deepfind-a2`; independent Claude review is pending. Gates: TypeScript 0 diagnostics; 130 files / 2,033 tests / 0 failures; build 0 errors. See HANDOFF **Deep find A2**. Leave unchecked until independently reviewed.
+- [ ] After review and separate publication authorization, verify real UKRM matching, provider/credit behavior, unverified Add/Dismiss, phone width and keyboard focus. Browser, Deno and live checks remain pending. No migration is needed or authorized.
