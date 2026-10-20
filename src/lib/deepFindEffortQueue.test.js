@@ -53,3 +53,11 @@ it('legacy queue calls use Custom numeric caps', async () => {
   await queueRun(service, 'org', 'user', ['a'], { hunter: 20, ai: 5 });
   expect(tables.deep_find_leads[0].domains).toEqual({ effort: 'custom', effort_caps: { hunter: 20, ai: 5 } });
 });
+it('keeps Start fresh metadata and restoration counts through an early skipped lead', async () => {
+  const { service, tables } = database();
+  await queueRun(service, 'org', 'user', ['a'], { hunter: 0, ai: 0 }, 'low', { a: 2 });
+  expect(tables.deep_find_leads[0].domains).toMatchObject({ start_fresh: true, steps: ['Start fresh: restored 2 dismissed people and cleared dismissed suggestions'] });
+  await runDeepFindTick(service, Date.now());
+  expect(tables.deep_find_leads[0].domains).toMatchObject({ start_fresh: true });
+  expect(tables.deep_find_leads[0].domains.steps).toContain('Start fresh: restored 2 dismissed people and cleared dismissed suggestions');
+});

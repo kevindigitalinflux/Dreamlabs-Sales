@@ -1,4 +1,11 @@
-// supabase/functions/run-deep-find/index.ts
+// supabase/functions/run-de
+  if (!await checkRateLimit(service, `deep-find-create:${caller.id}`, 30, 24 * 60, true)) {
+    return json({ error: 'You have started a lot of Deep finds today. Try again tomorrow.' }, 429, headers);
+  }
+
+  const access = await authorizeDeepFindCreate(client, service, caller.id, parsed.leadIds);
+  if (!access.ok) return json(access.result.body, access.result.status, headers);
+  const orgId = access.orgId;ep-find/index.ts
 // DEPLOY WITH verify_jwt = false (see supabase/config.toml): the pg_cron tick sends only x-cron-secret, no Authorization
 // header, so the gateway would answer 401. The function authenticates every action itself:
 //   create  signed-in user: validates the leads (RLS read, same org, caller is a member and can edit each one), max 25,
@@ -19,6 +26,7 @@ import { cancelDeepFindRun, runDeepFindTick } from '../_shared/deepFind.ts';
 import { isUuid, parseCreateRequest } from '../_shared/deepFindRules.ts';
 import { cronSecretMatches } from '../_shared/timingSafe.ts';
 import { blockDomain, chooseCompany, queueRun } from '../_shared/deepFindLeadActions.ts';
+import { authorizeDeepFindCreate } from '../_shared/deepFindCreate.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { hunterAccount } from '../_shared/knownPersonLookup.ts';
 import { hunterAccountEmpty } from '../_shared/hunterLimits.ts';
@@ -104,25 +112,6 @@ Deno.serve(async (req) => {
   // create
   const parsed = parseCreateRequest(body);
   if (!parsed.ok) return json({ error: parsed.error }, 400, headers);
-  if (!await checkRateLimit(service, `deep-find-create:${caller.id}`, 30, 24 * 60, true)) {
-    return json({ error: 'You have started a lot of Deep finds today. Try again tomorrow.' }, 429, headers);
-  }
-
-  // RLS-scoped read: only leads the caller can see come back.
-  const { data: leadData, error: leadErr } = await client.from('leads').select('id, org_id').in('id', parsed.leadIds);
-  if (leadErr) return json({ error: 'Could not read the selected leads' }, 500, headers);
-  const leads = (leadData ?? []) as { id: string; org_id: string }[];
-  if (leads.length !== parsed.leadIds.length) return json({ error: 'Some of the selected leads could not be found' }, 404, headers);
-  const orgIds = new Set(leads.map((l) => l.org_id));
-  if (orgIds.size !== 1) return json({ error: 'Selected leads span more than one organisation' }, 400, headers);
-  const orgId = [...orgIds][0]!;
-  const { data: member } = await service.from('org_members').select('role').eq('org_id', orgId).eq('user_id', caller.id).maybeSingle();
-  if (!member) return json({ error: 'Not a member of this organisation' }, 403, headers);
-  for (const l of leads) {
-    const { data: canEdit, error } = await client.rpc('can_edit_lead', { target_lead: l.id });
-    if (error || canEdit !== true) return json({ error: 'You can only run Deep find on leads you can edit' }, 403, headers);
-  }
-
   const { count: activeRuns } = await service.from('deep_find_runs').select('id', { count: 'exact', head: true })
     .eq('org_id', orgId).eq('status', 'active');
   if ((activeRuns ?? 0) >= MAX_ACTIVE_RUNS_PER_ORG) {
@@ -133,8 +122,12 @@ Deno.serve(async (req) => {
   const leadIds = parsed.leadIds.filter((id) => !busyIds.has(id));
   if (leadIds.length === 0) return json({ error: 'Deep find is already working on these leads' }, 409, headers);
 
+  // Re-check the entire original selection before any Start fresh write, including leads filtered as busy.
+  const fresh = parsed.startFresh ? await authorizeDeepFindCreate(client, service, caller.id, parsed.leadIds, true) : access;
+  if (!fresh.ok) return json(fresh.result.body, fresh.result.status, headers);
+
   // Service-client inserts: every check above has passed (no client INSERT exists on the 057 tables).
-  const queued = await queueRun(service, orgId, caller.id, leadIds, parsed.caps, parsed.effort);
+  const queued = await queueRun(service, orgId, caller.id, leadIds, parsed.caps, parsed.effort, parsed.startFresh ? fresh.restored : undefined);
   if (!queued.runId) {
     return 'failed' in queued && queued.failed
       ? json({ error: 'Could not queue the selected leads' }, 500, headers)
