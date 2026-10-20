@@ -179,12 +179,12 @@ describe('runDomainDiscovery', () => {
     ...over,
   });
 
-  it('finds the Love Living domain by company name and counts calls', async () => {
+  it('skips company-name credits when the lead already has a confirmed website', async () => {
     const r = await runDomainDiscovery(input(), deps(), DOMAIN_CHECKS);
-    expect(r.discovered.map((d) => d.domain)).toEqual(['loveliving.uk']);
+    expect(r.discovered).toEqual([]);
     expect(r.domains[0]!.domain).toBe('lovelivingmanagement.com');
     expect(r.people).toEqual([{ name: 'David Cox', role: 'Director' }]);
-    expect(r).toMatchObject({ hunterCalls: 1, aiCalls: 1, problems: [] });
+    expect(r).toMatchObject({ hunterCalls: 0, aiCalls: 1, problems: [] });
   });
 
   it('refuses Hunter\'s answer for an unrelated company and keeps going after failures', async () => {
@@ -200,9 +200,9 @@ describe('runDomainDiscovery', () => {
 
   it('accepts a weak Hunter match only with a second signal', async () => {
     const weak = deps({ hunterByName: vi.fn(async () => ({ ok: true as const, domain: 'loveliving.uk', organization: null })), webSearch: vi.fn(async () => ({ ok: false as const, failure: 'timeout' })) });
-    const alone = await runDomainDiscovery(input(), weak, DOMAIN_CHECKS);
+    const alone = await runDomainDiscovery(input({ known: [] }), weak, DOMAIN_CHECKS);
     expect(alone.discovered).toEqual([{ domain: 'loveliving.uk', sources: ['hunter_name_weak'], needs_check: true }]);
-    const backed = await runDomainDiscovery(input(), { ...weak, readSite: vi.fn(async () => ['<a href="mailto:jo@loveliving.uk">Jo</a>']) }, DOMAIN_CHECKS);
+    const backed = await runDomainDiscovery(input({ known: [] }), { ...weak, readSite: vi.fn(async () => ['<a href="mailto:jo@loveliving.uk">Jo</a>']) }, DOMAIN_CHECKS);
     expect(backed.discovered).toEqual([{ domain: 'loveliving.uk', sources: ['hunter_name_weak', 'website_email'], needs_check: false }]);
   });
 
