@@ -726,3 +726,6 @@ Branch `claude/dismissed-people-ui` (UI only, not pushed). Engine contract: run 
 - Lead card: `DismissedPeople.tsx` ("Dismissed people (N)", only when N > 0) plus a helper line under the list; Restore uses `restoreDismissedContact` in `src/lib/restoreDismissed.ts` (RLS, compare-and-set on `dismissed_at`, coded error).
 - Deep find result: amber callout in `DeepFindLeadResult.tsx` with a Restore button per person that has a `contact_id`; people without one only get the "run again with Start fresh" hint (suggestion keys in `leads.dismissed_suggestions` are not restorable one by one here).
 - Older results without the field show nothing extra.
+
+## Deployed 2026-10-20
+- A3 engine + dismissed-people UI merged to main (29a881a) and pushed; `run-deep-find` deployed. Rollback point: git tag `checkpoint-pre-a3-2026-10-20` (old main f39a9d2). Next: Kevin re-tests UKRM (Start fresh, Medium run, then each director).
