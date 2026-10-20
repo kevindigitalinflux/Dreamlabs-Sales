@@ -4,8 +4,8 @@ const over = (fg, a, bg) => fg.map((c, i) => c * a + bg[i] * (1 - a));
 const lum = (c) => { const [r, g, b] = c.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
 const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 const T = {
-  light: { offwhite: hex('#040F49'), card: hex('#FFFFFF'), bg: hex('#F4F4F8'), surface: [hex('#040F49'), 0.04], danger: hex('#EC0B0B'), success: hex('#1D8660') },
-  dark: { offwhite: hex('#F4F4F8'), card: hex('#111C6A'), bg: hex('#09102E'), surface: [hex('#1A2575'), 1], danger: hex('#F87171'), success: hex('#34D399') },
+  light: { offwhite: hex('#040F49'), card: hex('#FFFFFF'), bg: hex('#F4F4F8'), surface: [hex('#040F49'), 0.04], danger: hex('#EC0B0B'), dangerStrong: hex('#C40A0A'), violetLine: hex('#8B32FF'), muted: [hex('#040F49'), 0.65], success: hex('#1D8660') },
+  dark: { offwhite: hex('#F4F4F8'), card: hex('#111C6A'), bg: hex('#09102E'), surface: [hex('#1A2575'), 1], danger: hex('#F87171'), dangerStrong: hex('#F87171'), violetLine: hex('#B794FF'), muted: [hex('#F4F4F8'), 0.55], success: hex('#34D399') },
 };
 const tints = { violet: hex('#8B32FF'), cyan: hex('#00DFDF'), amber: hex('#F59E0B'), green: hex('#22C55E'), red: hex('#EF4444') };
 let fail = 0;
@@ -20,6 +20,18 @@ for (const [theme, t] of Object.entries(T)) {
     checks.push([`offwhite on ${g}`, t.offwhite, gc]);
     checks.push([`offwhite/80 on ${g}`, over(t.offwhite, 0.8, gc), gc]);
   }
+  const redBtn = over(tints.red, 0.15, t.card);
+  const inputBg = theme === 'light' ? surface : t.surface[0];
+  checks.push(['danger-strong text on card', t.dangerStrong, t.card], ['danger-strong text on page bg', t.dangerStrong, t.bg],
+    ['danger-strong text on surface/50 on card', t.dangerStrong, grounds['surface/50 on card']],
+    ['danger-strong button text on red-500/15 over card', t.dangerStrong, redBtn],
+    ['muted on card (Modal close button)', over(t.muted[0], t.muted[1], t.card), t.card],
+    ['muted on input background (placeholder)', over(t.muted[0], t.muted[1], inputBg), inputBg],
+    ['muted on surface (label)', over(t.muted[0], t.muted[1], surface), surface],
+    ['violet-line outline/border on card (non-text 3:1)', t.violetLine, t.card],
+    ['violet-line outline on page bg (non-text 3:1)', t.violetLine, t.bg],
+    ['violet-line outline on violet/10 card (non-text 3:1)', t.violetLine, grounds['violet/10 on card (selected card)']],
+    ['radio check (text-card) on violet-line fill (non-text 3:1)', t.card, t.violetLine]);
   checks.push(['danger on card', t.danger, t.card], ['success on card', t.success, t.card]);
   checks.push(['on-accent on violet', hex('#F4F4F8'), tints.violet]);
   checks.push(['offwhite/50 radio border on card (non-text 3:1)', over(t.offwhite, 0.5, t.card), t.card]);

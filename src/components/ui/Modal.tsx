@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
-import type { ReactNode } from 'react';
+import { useEffect, useId, useRef } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { FOCUSABLE_SELECTOR, trapTarget } from '../../lib/focusTrap';
 
 interface ModalProps {
   open: boolean;
@@ -9,34 +10,63 @@ interface ModalProps {
   children: ReactNode;
 }
 
-/** Centered dialog. Closes on Escape, overlay click, or the X button. */
+/**
+ * Centered dialog. Closes on Escape, overlay click, or the X button. On open, focus moves to the title; Tab and
+ * Shift+Tab stay inside the dialog; on close, focus returns to the control that opened it. An Escape already
+ * handled inside (for example by the select listbox) closes only that, not the dialog.
+ */
 export function Modal({ open, onClose, title, children }: ModalProps) {
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    titleRef.current?.focus();
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !e.defaultPrevented) onCloseRef.current();
     }
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (opener?.isConnected) opener.focus();
+    };
+  }, [open]);
+
+  function onDialogKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
+    const dialog = dialogRef.current;
+    // Tab inside the select listbox (portalled outside the dialog) is handled by the listbox itself.
+    if (e.key !== 'Tab' || e.defaultPrevented || !dialog || !(e.target instanceof Node) || !dialog.contains(e.target)) return;
+    const items = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+    const target = trapTarget(items.length, items.indexOf(document.activeElement as HTMLElement), e.shiftKey);
+    if (target === null) return;
+    e.preventDefault();
+    (target === 'container' ? dialog : items[target]).focus();
+  }
 
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose} role="presentation">
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-line bg-card p-6"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onKeyDown={onDialogKeyDown}
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-line bg-card p-6 outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between gap-4">
-          <h3 className="text-lg font-bold">{title}</h3>
+          <h3 id={titleId} ref={titleRef} tabIndex={-1} className="text-lg font-bold outline-none">{title}</h3>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted hover:bg-surface hover:text-offwhite"
+            className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted hover:bg-surface hover:text-offwhite focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-line"
           >
             <X className="h-5 w-5" aria-hidden />
           </button>
