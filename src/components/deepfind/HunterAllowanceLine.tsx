@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { useOrg } from '../../hooks/useOrg';
 import { fetchHunterAllowance, hunterAllowanceText, type HunterAllowance } from '../../lib/deepFind';
 import { hunterShortfall, hunterAllowanceLeft } from '../../../supabase/functions/_shared/deepFindEffort';
@@ -22,9 +23,10 @@ export function HunterAllowanceLine({ requested = 0, onAllowance }: { requested?
     return () => { live = false; };
   }, [currentOrg?.id, onAllowance]);
 
-  if (state.loading) return <p className="text-xs text-muted">Checking Hunter&apos;s searches left this month...</p>;
+  if (state.loading) return <p className="text-[13px] text-offwhite/80">Checking Hunter&apos;s searches left this month...</p>;
   const text = hunterAllowanceText(state.allowance);
-  if (!text) return <p className="text-xs text-muted">Could not check how many Hunter searches are left.</p>;
+  if (!text) return <p className="text-[13px] text-offwhite/80">Could not check how many Hunter searches are left.</p>;
   const warning = hunterShortfall(hunterAllowanceLeft(state.allowance), requested);
-  return <p role="status" className={state.allowance?.usedUp || warning ? 'text-xs text-danger' : 'text-xs text-muted'}>{text}{warning && <> {warning}</>}</p>;
+  if (!(state.allowance?.usedUp || warning)) return <p role="status" className="text-[13px] text-offwhite/80">{text}</p>;
+  return <p role="status" className="flex items-start gap-2 rounded-xl border-2 border-amber-500/60 bg-amber-500/10 p-3 text-sm text-offwhite"><AlertTriangle size={18} aria-hidden className="mt-0.5 shrink-0" /><span><span className="font-semibold">Allowance warning: </span>{text}{warning && <> {warning}</>}</span></p>;
 }
