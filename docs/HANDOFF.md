@@ -796,3 +796,10 @@ Branch `claude/dismissed-people-ui` (UI only, not pushed). Engine contract: run 
 
 - Claude reviewed the diff and re-ran gates (tsc clean, 2,178 tests, 0 failures). Kevin authorized merge, push and deploy. Commit `c2c9f66`, merged to main as `5bf88fa`, pushed. `run-deep-find` deployed to project `wgomksxelyfkzepbnkdd`. No frontend deploy (tests only under src/).
 - Still pending: live UKRM verification (company_number 09238000) of the deployed function. Kevin to rerun Deep find and report the step lines: more than one address format should now be checked per domain.
+
+### Live UKRM rerun after the guess-block fix (Kevin, 2026-10-22, medium effort)
+- Lead: UK Residential Management Limited. Deployed `run-deep-find` from `5bf88fa`. Result: 0 people added; Hunter 0 of 1 credits, AI 0 of 2.
+- Both saved director addresses (karthik.venkatapuram@, muhammad.asif@ukrmanagement.com) checked: do not exist. Replacement suggestions: karthik@ and muhammad@ukrmanagement.com, ranked "most likely", labelled unverified, each with 2 other formats.
+- Step lines: "Tried 1 common format on ukrmanagement.com (none confirmed)" for each person; "Checked 3 email addresses with our own checker (0 valid, 2 not real, 1 could not be confirmed)". So only ONE guess was actually checked (2 of the 3 checks are the saved addresses), and it came back unverifiable.
+- Open observation, not yet diagnosed: the fix did not visibly increase checks here. Candidate causes: the second person's rank-0 guess never ran (guessBudget time/slot limit, or the people-time reserve), or rank 1+ candidates did not run after the first unverifiable. Check `processDeepFindLead` job loop (`deepFind.ts` ~line 664) and `guessBudget`. Not a regression: the old rule would have checked the same or fewer. Decide with Kevin whether to dig in.
+- Vault copy not yet refreshed by this entry.
