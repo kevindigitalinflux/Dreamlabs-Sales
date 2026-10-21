@@ -36,7 +36,7 @@ function canReplaceSavedEmail(s: ReviewSuggestion, contacts: ReviewContact[]): b
   if (!evidence || !validEmail(norm(evidence.email)) || !s.value || norm(s.value) === norm(evidence.email)) return false;
   const matches = contacts.filter(c => displayPersonKey(nameOf(c)) === displayPersonKey(s.name));
   return matches.length === 1 && matches[0]!.id === evidence.contact_id && !matches[0]!.dismissed_at
-    && matches[0]!.email === evidence.email;
+    && norm(matches[0]!.email) === norm(evidence.email);
 }
 const ROLE_MAILBOXES = new Set(['privacy','gdpr','dpo','legal','compliance','careers','jobs','recruitment','press','media','abuse','postmaster','webmaster','noreply','no-reply','donotreply','unsubscribe']);
 
