@@ -758,3 +758,9 @@ Branch `claude/dismissed-people-ui` (UI only, not pushed). Engine contract: run 
 
 ## Deployed 2026-10-21 (fix3)
 - codex/deepfind-a3-fix3 (a34b879) merged, run-deep-find deployed: invalid saved emails warned + retried with other formats, not used as format evidence; saved email never auto-changed. Rollback tag: checkpoint-pre-a3-2026-10-20. Known flake: hunterLimits.test.ts can time out under load.
+
+## Replacement suggestion UI (branch claude/replacement-ui)
+- Replacement suggestions (`replaces_saved_email`) now show at the top of Suggestions under "Saved addresses that do not exist": person, old address struck through with "Does not exist", candidate with its label ("Guess, unverified"), primary "Replace with <address>" for the top candidate, other formats under a closed disclosure with secondary Replace buttons, plus Dismiss.
+- Replace uses the user session (`src/lib/deepFindReplacements.ts`): updates only that contact's email if it still equals the old address (case-insensitive), else "Changed since, left as is." Sequences and the follow-up setting are untouched.
+- Likely cause of the missing button: `canReplaceSavedEmail` compared the saved email with exact case, so a case difference hid the whole suggestion (or it only appeared via the generic Add path). Now case-insensitive. Not confirmed against live data.
+- Edge function code in `supabase/functions/_shared/deepFindSuggestions.ts` changed by one line; it needs a deploy only if the edge function itself should share the fix (the UI import is enough for the front end).
