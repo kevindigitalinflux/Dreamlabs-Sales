@@ -698,7 +698,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
           checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : checked.failure);
           if (!checked.ok && checked.failure !== 'timeout') { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
         }
-        const action = verifyAction(checked && checked.ok ? checked.value.status : null, !!hunterKey && !guessBudget.exhausted && !checks.blocked.has(d) && !checks.catchAll.has(d) && verifications < 3 && left() > 45_000);
+        const action = verifyAction(checked && checked.ok ? checked.value.status : null, !!hunterKey && !guessBudget.exhausted && !checks.blocked.has(d) && !checks.hasUnverifiable(d) && !checks.catchAll.has(d) && verifications < 3 && left() > 45_000);
         if (action === 'drop') { invalidGuesses.add(guess); continue; }
         if (action === 'accept') {
           confirmedGuessPeople.add(name);

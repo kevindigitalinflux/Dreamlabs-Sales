@@ -123,7 +123,7 @@ beforeEach(() => {
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
-it('UKRM keeps one ranked suggestion per director after two invalid checks and one unverifiable result', async () => {
+it('UKRM keeps one ranked suggestion per director after invalid and unverifiable checks within the domain cap', async () => {
   lead.business_name = 'UKRM'; lead.website = null;
   contacts = [
     { id: 'one', lead_id: 'lead', first_name: 'Karthik', last_name: 'Rao', source: 'companies_house', title: 'Director', email: null },
@@ -134,7 +134,7 @@ it('UKRM keeps one ranked suggestion per director after two invalid checks and o
   let count = 0;
   worker.verifyEmail.mockImplementation(async () => ({ ok: true, value: ++count < 3 ? { status: 'invalid', reason: 'mailbox_missing' } : { status: 'unverifiable', reason: 'unknown' } }));
   const out = await run('low');
-  expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
+  expect(worker.verifyEmail).toHaveBeenCalledTimes(5);
   expect(out.domains.suggestions.filter(s => s.guess_rank === 'most_likely').map(s => s.name).sort()).toEqual(['Karthik Rao', 'Ravi Kumar']);
   expect(contacts.every(c => !c.email)).toBe(true);
 });
@@ -149,12 +149,12 @@ it('UKRM retries invalid saved director guesses without circular format evidence
   discoverLeadDomains.mockResolvedValue({ domains: [{ domain: 'ukrmanagement.com', sources: ['site_confirms'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] });
   resolveOrgWorkerConfig.mockResolvedValue({});
   worker.verifyEmail.mockImplementation(async email => ({ ok: true, value: email === lead.email
-    ? { status: 'unverifiable', reason: 'provider_blocked' }
+    ? { status: 'unverifiable', reason: 'unknown' }
     : { status: 'invalid', reason: 'mailbox_missing', detail: 'PRIVATE PROVIDER TEXT' } }));
   const out = await run('medium');
   expect(out.domains.steps.join(' ')).not.toContain('Email format on');
   expect(out.domains.steps.join(' ')).not.toContain('PRIVATE PROVIDER TEXT');
-  expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
+  expect(worker.verifyEmail).toHaveBeenCalledTimes(5);
   expect(lookUpPeople.mock.calls[0][0].people.map(p => p.contactId)).toEqual(['one', 'two']);
   for (const c of contacts) {
     const name = `${c.first_name} ${c.last_name}`;
@@ -162,7 +162,7 @@ it('UKRM retries invalid saved director guesses without circular format evidence
     expect(out.domains.people).toContainEqual(expect.objectContaining({ name, email_found: false, reason: 'Saved address does not exist.' }));
     const proposals = out.domains.suggestions.filter(s => s.name === name && s.field === 'email');
     const first = c.first_name.toLowerCase(), last = c.last_name.toLowerCase();
-    expect(proposals.map(s => s.value)).toEqual([`${first}@ukrmanagement.com`, `${first[0]}${last}@ukrmanagement.com`, `${first}${last}@ukrmanagement.com`]);
+    expect(proposals.map(s => s.value)).toEqual([`${first[0]}${last}@ukrmanagement.com`, `${first}${last}@ukrmanagement.com`, `${first}_${last}@ukrmanagement.com`]);
     expect(proposals[0]).toMatchObject({ guess_rank: 'most_likely', label: expect.stringContaining('unverified') });
     expect(proposals[0].label).toContain('Replaces the saved address that does not exist');
   }
@@ -323,7 +323,7 @@ it.each([
   ['unknown', 'The mail server gave no clear answer.'],
   ['checker_error', 'The email checker could not finish this check.'],
   ['timeout', 'The email checker could not finish this check.'],
-])('explains unverifiable %s on the person line and stops further domain guesses', async (reason, sentence) => {
+])('explains unverifiable %s on the person line within the domain cap', async (reason, sentence) => {
   lead.website = null;
   contacts[0].email = 'jane.smith@acme.com';
   cachedMailProvider.mockReturnValue('microsoft');
@@ -776,11 +776,13 @@ it.each(['low', 'medium', 'high', 'extra_high'])('%s allows OpenCorporates only 
   await run(effort);
   expect(lookupOpenCorporatesOfficer).toHaveBeenCalledTimes(effort === 'extra_high' ? 1 : 0);
 });
-it.each([false, true])('late-domain inference stops Hunter after any unverifiable checker result, configured: %s', async hunter => {
+it.each([false, true])('late-domain inference stops Hunter after one unverifiable checker result, configured: %s', async hunter => {
   contacts[0].email = null; lead.owner_name = 'Alex Brown';
   resolveOrgApiKey.mockImplementation(async (_s,_o,p) => hunter && p === 'hunter' ? 'fake' : null);
   resolveOrgWorkerConfig.mockResolvedValue({});
-  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'unverifiable', reason: 'test' } });
+  let calls = 0;
+  worker.verifyEmail.mockImplementation(async () => ({ ok: true, value: ++calls === 1
+    ? { status: 'unverifiable', reason: 'unknown' } : { status: 'invalid', reason: 'mailbox_missing' } }));
   hunterVerifyEmail.mockResolvedValue({ ok: true, verdict: 'unverifiable' });
   discoverLeadDomains.mockResolvedValueOnce({ domains: [], people: [], notes: [], problems: [], sitePages: [] })
     .mockResolvedValueOnce({ domains: [{ domain: 'newco.com', sources: ['web'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] });
@@ -789,6 +791,22 @@ it.each([false, true])('late-domain inference stops Hunter after any unverifiabl
   expect(worker.verifyEmail).toHaveBeenCalledWith('jane.smith@newco.com', { timeoutMs: expect.any(Number) });
   expect(worker.verifyEmail.mock.calls[0][1].timeoutMs).toBeLessThanOrEqual(18_000);
   expect(hunterVerifyEmail).not.toHaveBeenCalled();
+});
+
+it('checks another format after one unverifiable Microsoft 365 guess and offers a confirmed replacement', async () => {
+  contacts[0].email = 'jane.smith@acme.com';
+  cachedMailProvider.mockReturnValue('microsoft');
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockImplementation(async email => ({ ok: true, value: email === 'jane@acme.com'
+    ? { status: 'unverifiable', reason: 'unknown' } : email === 'jsmith@acme.com'
+      ? { status: 'valid', reason: 'deliverable' } : { status: 'invalid', reason: 'mailbox_missing' } }));
+  const out = await run('medium');
+  expect(worker.verifyEmail.mock.calls.map(([email]) => email)).toEqual(expect.arrayContaining(['jane@acme.com', 'jsmith@acme.com']));
+  expect(worker.verifyEmail.mock.calls.length).toBeLessThanOrEqual(5);
+  expect(out.domains.suggestions).toContainEqual(expect.objectContaining({ value: 'jsmith@acme.com',
+    replaces_saved_email: { contact_id: contacts[0].id, email: 'jane.smith@acme.com' },
+    label: expect.stringContaining('confirmed by our email checker') }));
+  expect(writes.some(w => 'email' in w.patch)).toBe(false);
 });
 
 it('historical registry source alone does not prove an active decision maker', async () => {

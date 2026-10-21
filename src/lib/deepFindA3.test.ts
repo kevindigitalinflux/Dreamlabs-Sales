@@ -19,10 +19,40 @@ it('reserves concurrent attempts before results and stops both guess paths on bl
   expect(checks.claim('one@other.com')).toBe(true);
   expect(checks.claim('two@other.com')).toBe(false);
 });
-it.each(['provider_blocks_checks', 'unknown', 'checker_error', 'other_reason', ''])('stops guesses after unverifiable %s', reason => {
+it.each(['unknown', 'checker_error', 'other_reason', '', 'timeout'])('allows another address after one unverifiable %s', reason => {
   const checks = new GuessChecks();
   checks.record('first@ukrm.com', 'unverifiable', reason);
-  expect(checks.canCheck('next@ukrm.com')).toBe(false);
+  expect(checks.blocked.has('ukrm.com')).toBe(false);
+  expect(checks.claim('FIRST@UKRM.COM')).toBe(false);
+  expect(checks.claim('next@ukrm.com')).toBe(true);
+});
+it('blocks after two distinct unverifiable addresses, counting cached results only once', () => {
+  const checks = new GuessChecks();
+  checks.record('first@ukrm.com', 'unverifiable', 'unknown');
+  checks.record('FIRST@UKRM.COM', 'unverifiable', 'checker_error');
+  checks.record('first@other.com', 'unverifiable', 'unknown');
+  expect(checks.claim('next@ukrm.com')).toBe(true);
+  checks.record('next@ukrm.com', 'unverifiable', 'checker_error');
+  expect(checks.blocked.has('ukrm.com')).toBe(true);
+  expect(checks.claim('third@ukrm.com')).toBe(false);
+  expect(checks.claim('next@other.com')).toBe(true);
+  expect(checks.timedOut.has('ukrm.com')).toBe(false);
+});
+it('blocks immediately when SMTP cannot connect', () => {
+  const checks = new GuessChecks();
+  checks.record('first@ukrm.com', 'unverifiable', 'provider_blocks_checks');
+  expect(checks.blocked.has('ukrm.com')).toBe(true);
+  expect(checks.claim('next@ukrm.com')).toBe(false);
+  expect(checks.claim('next@other.com')).toBe(true);
+});
+it('keeps five-per-domain and six-per-lead caps after duplicate unverifiable results', () => {
+  const checks = new GuessChecks();
+  checks.record('first@ukrm.com', 'unverifiable', 'unknown');
+  checks.record('FIRST@UKRM.COM', 'unverifiable', 'unknown');
+  for (let i = 0; i < 4; i++) expect(checks.claim(`${i}@ukrm.com`)).toBe(true);
+  expect(checks.claim('six@ukrm.com')).toBe(false);
+  expect(checks.claim('one@other.com')).toBe(true);
+  expect(checks.claim('two@other.com')).toBe(false);
 });
 it('keeps invalid results eligible for the next candidate', () => {
   const checks = new GuessChecks();
