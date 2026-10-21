@@ -3,6 +3,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { planTitleUpgrade } from '../../supabase/functions/_shared/deepFindSuggestions';
 import { loadDeepFindReview, rejectDeepFindCompanies, reviewNotice, saveDeepFindReview } from './deepFindReview';
 
+it('replaces an invalid saved email only after Add, with exact-value CAS and sequences disabled', async () => {
+  const contact = { id: 'c', first_name: 'Jane', last_name: 'Smith', email: 'jane.smith@example.com' };
+  const suggestion = { name: 'Jane Smith', field: 'email', value: 'jane@example.com',
+    replaces_saved_email: { contact_id: 'c', email: contact.email } };
+  const db = database({ contacts: [contact] });
+  expect(await saveDeepFindReview(db.client, 'user', 'lead', suggestion, 'add')).toBe('saved');
+  expect(db.writes).toEqual([{ table: 'decision_maker_candidates', operation: 'update',
+    patch: { email: 'jane@example.com', include_in_sequences: false },
+    filters: [['id', 'c'], ['lead_id', 'lead'], ['dismissed_at', null], ['email', contact.email]] }]);
+  const changed = database({ contacts: [{ ...contact, email: 'new@example.com' }] });
+  expect(await saveDeepFindReview(changed.client, 'user', 'lead', suggestion, 'add')).toBe('none');
+  expect(changed.writes).toEqual([]);
+  const denied = database({ contacts: [contact], writeError: true });
+  await expect(saveDeepFindReview(denied.client, 'user', 'lead', suggestion, 'add')).rejects.toThrow('Could not save');
+});
 function database(options: { owner?: string | null; email?: string | null; contacts?: object[]; readError?: boolean; writeError?: boolean } = {}) {
   const writes: { table: string; operation: string; patch: Record<string, unknown>; filters: unknown[][] }[] = [];
   const from = vi.fn((table: string) => {

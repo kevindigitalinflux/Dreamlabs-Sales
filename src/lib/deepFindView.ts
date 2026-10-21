@@ -47,7 +47,7 @@ export interface DeepFindDetails {
 export interface DeepFindDismissedPerson { name: string; contactId?: string }
 
 /** One address offered to check, with where it came from (a fixed label). */
-export interface DeepFindSuggestion { guess_rank?: 'most_likely' | 'other'; name: string; value: string; label: string; field?: string }
+export interface DeepFindSuggestion { replaces_saved_email?: { contact_id: string; email: string }; guess_rank?: 'most_likely' | 'other'; name: string; value: string; label: string; field?: string }
 
 /** One Companies House company offered with "Use this company". */
 export interface DeepFindCompanyCandidate { company_number: string; name: string; address: string | null; status: string | null; why?: string }
@@ -102,8 +102,11 @@ export function readDeepFindDetails(value: unknown): DeepFindDetails {
     const name = text(x.name, 80);
     const value = text(x.value, 200);
     const label = text(x.label, 500);
+    const replacement = x.replaces_saved_email && typeof x.replaces_saved_email === 'object' ? x.replaces_saved_email as Record<string, unknown> : {};
+    const contactId = text(replacement.contact_id, 80), savedEmail = text(replacement.email, 200);
+    const replaces = x.field === 'email' && contactId && savedEmail ? { replaces_saved_email: { contact_id: contactId, email: savedEmail } } : {};
     if (x.field === 'phone' && !isReviewPhone(value)) return [];
-    return name && value && label && ['email', 'linkedin_url', 'phone', 'owner_name', 'website', 'title'].includes(String(x.field)) ? [{ name, value, label, ...((x.guess_rank === 'most_likely' || x.guess_rank === 'other') ? { guess_rank: x.guess_rank as 'most_likely' | 'other' } : {}), ...(x.field !== 'email' ? { field: String(x.field) } : {}) }] : [];
+    return name && value && label && ['email', 'linkedin_url', 'phone', 'owner_name', 'website', 'title'].includes(String(x.field)) ? [{ name, value, label, ...replaces, ...((x.guess_rank === 'most_likely' || x.guess_rank === 'other') ? { guess_rank: x.guess_rank as 'most_likely' | 'other' } : {}), ...(x.field !== 'email' ? { field: String(x.field) } : {}) }] : [];
   });
   return {
     autoApplied: readAutoApplied(o.auto_applied),

@@ -4,6 +4,19 @@ import { suggestionKey, isRoleMailbox, visibleSuggestions, planSuggestionAdd, re
 const email = { name: 'Company contact', value: ' HELLO@Example.com ', label: 'Found on site' };
 const jane = { name: 'Jane Smith', role: 'Director' };
 const contact = { id: 'c', first_name: 'Jane', last_name: 'Smith', email: null };
+it('shows invalid saved-email replacements only while the exact contact and address still match', () => {
+  const saved = { ...contact, email: 'jane.smith@example.com' };
+  const suggestion = { name: 'Jane Smith', field: 'email', value: 'jane@example.com', guess_rank: 'most_likely' as const,
+    replaces_saved_email: { contact_id: 'c', email: saved.email } };
+  expect(visibleSuggestions([suggestion], {}, [saved])).toEqual([suggestion]);
+  expect(planSuggestionAdd(suggestion, {}, [saved])).toMatchObject({ kind: 'contact_update', id: 'c', patch: { email: suggestion.value, include_in_sequences: false } });
+  for (const changed of [{ ...saved, email: 'new@example.com' }, { ...saved, dismissed_at: 'today' }, { ...saved, id: 'other' }]) {
+    expect(visibleSuggestions([suggestion], {}, [changed])).toEqual([]);
+    expect(planSuggestionAdd(suggestion, {}, [changed])).toEqual({ kind: 'none' });
+  }
+  expect(visibleSuggestions([suggestion], { dismissed_suggestions: ['email:jane@example.com'] }, [saved])).toEqual([]);
+  expect(visibleSuggestions([suggestion], {}, [saved, { ...saved, id: 'duplicate' }])).toEqual([]);
+});
 describe('Deep find review rules', () => {
   it('normalises stable email and person keys', () => {
     expect(suggestionKey(email)).toBe('email:hello@example.com');

@@ -36,6 +36,8 @@ export interface PeopleContext {
   people: PersonToLookUp[];
   /** All contacts on the lead right now (existing and created by this run). */
   contacts: () => Contact[];
+  /** The engine excludes rejected saved addresses and explicit guesses from format evidence. */
+  emailFormatEvidence?: (contact: Contact) => boolean;
   /** Confirmed company domains only. */
   domains: string[];
   website: string | null;
@@ -118,7 +120,7 @@ export async function lookUpPeople(ctx: PeopleContext): Promise<PeopleOutcome> {
     const work: FoundFields = { email: null, phone: str(contact?.phone), linkedin_url: str(contact?.linkedin_url) };
     const patch: Record<string, string> = {};
     let emailStep: StepId | null = null;
-    const knownAddresses: KnownAddress[] = ctx.contacts().filter((r) => r.kind !== 'general' && str(r.email))
+    const knownAddresses: KnownAddress[] = ctx.contacts().filter((r) => r.kind !== 'general' && str(r.email) && (!ctx.emailFormatEvidence || ctx.emailFormatEvidence(r)))
       .map((r) => ({ email: str(r.email)!, first: str(r.first_name), last: str(r.last_name) }));
     // A credit-cap refusal is reported to the lookup as 429; it is not a provider failure, so it is not listed as one.
     let capRefused = false;

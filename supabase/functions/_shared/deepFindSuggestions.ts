@@ -1,6 +1,7 @@
 import { displayPersonKey, fullestPeople } from './personIdentity.ts';
 // Import-free review and country rules shared by Deep find and its session UI.
-export interface ReviewSuggestion { guess_rank?: 'most_likely' | 'other'; name: string; value?: string; role?: string | null; label?: string; field?: string }
+export interface SavedEmailReplacement { contact_id: string; email: string }
+export interface ReviewSuggestion { replaces_saved_email?: SavedEmailReplacement; guess_rank?: 'most_likely' | 'other'; name: string; value?: string; role?: string | null; label?: string; field?: string }
 export interface ReviewLead {
   email?: unknown; additional_emails?: unknown; dismissed_suggestions?: unknown;
   country?: unknown; registry_candidates_rejected?: unknown; owner_name?: unknown;
@@ -29,6 +30,14 @@ export function isReviewPhone(value: unknown): boolean {
   return /^0[12378]\d{8,9}$/.test(digits) || /^0[1-9]\d{6,8}$/.test(digits);
 }
 const nameOf = (c: ReviewContact) => norm(`${norm(c.first_name)} ${norm(c.last_name)}`);
+/** Replacement evidence only authorizes the reviewed value while this exact saved contact still matches. */
+function canReplaceSavedEmail(s: ReviewSuggestion, contacts: ReviewContact[]): boolean {
+  const evidence = s.replaces_saved_email;
+  if (!evidence || !validEmail(norm(evidence.email)) || !s.value || norm(s.value) === norm(evidence.email)) return false;
+  const matches = contacts.filter(c => displayPersonKey(nameOf(c)) === displayPersonKey(s.name));
+  return matches.length === 1 && matches[0]!.id === evidence.contact_id && !matches[0]!.dismissed_at
+    && matches[0]!.email === evidence.email;
+}
 const ROLE_MAILBOXES = new Set(['privacy','gdpr','dpo','legal','compliance','careers','jobs','recruitment','press','media','abuse','postmaster','webmaster','noreply','no-reply','donotreply','unsubscribe']);
 
 /** Canonical keys shared by review, automatic fills and Undo. */
@@ -105,7 +114,8 @@ export function visibleSuggestions<T extends ReviewSuggestion>(suggestions: T[],
     if (seen.has(key)) return false;
     seen.add(key);
     const same = contacts.find((c) => displayPersonKey(nameOf(c)) && displayPersonKey(nameOf(c)) === displayPersonKey(s.name));
-    return s.value ? !emails.has(norm(s.value)) && !(same && (same.dismissed_at || norm(same.email))) : !same;
+    if (s.replaces_saved_email && !canReplaceSavedEmail(s, contacts)) return false;
+    return s.value ? !emails.has(norm(s.value)) && !(same && (same.dismissed_at || (norm(same.email) && !canReplaceSavedEmail(s, contacts)))) : !same;
   });
 }
 
@@ -117,7 +127,7 @@ export type SuggestionAddPlan =
   | { kind: 'contact_update'; id: string; patch: { email: string; include_in_sequences: false } }
   | { kind: 'contact_insert'; patch: { source: 'manual'; kind: 'person'; first_name: string; last_name: string | null; title: string | null; email: string | null; linkedin_url?: string; include_in_sequences: false; is_primary: false } };
 
-/** Plans only blank fills or new rows. The caller supplies lead_id/created_by from the signed-in session. */
+/** Plans blank fills, new rows or explicit saved-email replacements. The caller supplies session scope. */
 export function planSuggestionAdd(s: ReviewSuggestion, lead: ReviewLead, contacts: ReviewContact[]): SuggestionAddPlan {
   if (!visibleSuggestions([s], lead, contacts).length) return { kind: 'none' };
   if (s.field === 'title') return { kind: 'title_update', id: contacts.find((c) => nameOf(c) === norm(s.name))!.id, patch: { title: s.value!.trim() } };
@@ -137,7 +147,7 @@ export function planSuggestionAdd(s: ReviewSuggestion, lead: ReviewLead, contact
       : { kind: 'lead_update', patch: { additional_emails: [...strings(lead.additional_emails), s.value!.trim()] } };
   }
   const same = contacts.find((c) => displayPersonKey(nameOf(c)) && displayPersonKey(nameOf(c)) === displayPersonKey(s.name));
-  if (same) return email && !norm(same.email) && !same.dismissed_at
+  if (same) return email && (!norm(same.email) || canReplaceSavedEmail(s, contacts)) && !same.dismissed_at
     ? { kind: 'contact_update', id: same.id, patch: { email, include_in_sequences: false } } : { kind: 'none' };
   const [first, ...rest] = s.name.trim().split(/\s+/);
   return { kind: 'contact_insert', patch: { source: 'manual', kind: 'person', first_name: first!, last_name: rest.join(' ') || null,

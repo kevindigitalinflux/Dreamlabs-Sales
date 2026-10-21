@@ -138,6 +138,90 @@ it('UKRM keeps one ranked suggestion per director after two invalid checks and o
   expect(out.domains.suggestions.filter(s => s.guess_rank === 'most_likely').map(s => s.name).sort()).toEqual(['Karthik Rao', 'Ravi Kumar']);
   expect(contacts.every(c => !c.email)).toBe(true);
 });
+it('UKRM retries invalid saved director guesses without circular format evidence or saved-email writes', async () => {
+  lead.business_name = 'UKRM'; lead.website = 'https://ukrmanagement.com'; lead.email = 'info@ukrmanagement.com';
+  contacts = [
+    { id: 'one', lead_id: 'lead', first_name: 'Karthik', last_name: 'Venkatapuram', source: 'companies_house', title: 'Director', email: 'karthik.venkatapuram@ukrmanagement.com' },
+    { id: 'two', lead_id: 'lead', first_name: 'Muhammad', last_name: 'Asif', source: 'companies_house', title: 'Director', email: 'muhammad.asif@ukrmanagement.com' },
+  ];
+  const originalEmails = contacts.map(c => c.email);
+  cachedMailProvider.mockReturnValue('microsoft');
+  discoverLeadDomains.mockResolvedValue({ domains: [{ domain: 'ukrmanagement.com', sources: ['site_confirms'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] });
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockImplementation(async email => ({ ok: true, value: email === lead.email
+    ? { status: 'unverifiable', reason: 'provider_blocked' }
+    : { status: 'invalid', reason: 'mailbox_missing', detail: 'PRIVATE PROVIDER TEXT' } }));
+  const out = await run('medium');
+  expect(out.domains.steps.join(' ')).not.toContain('Email format on');
+  expect(out.domains.steps.join(' ')).not.toContain('PRIVATE PROVIDER TEXT');
+  expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
+  expect(lookUpPeople.mock.calls[0][0].people.map(p => p.contactId)).toEqual(['one', 'two']);
+  for (const c of contacts) {
+    const name = `${c.first_name} ${c.last_name}`;
+    expect(out.domains.steps).toContain(`${name}: the saved address ${c.email} was checked and does not exist. Trying other formats.`);
+    expect(out.domains.people).toContainEqual(expect.objectContaining({ name, email_found: false, reason: 'Saved address does not exist.' }));
+    const proposals = out.domains.suggestions.filter(s => s.name === name && s.field === 'email');
+    const first = c.first_name.toLowerCase(), last = c.last_name.toLowerCase();
+    expect(proposals.map(s => s.value)).toEqual([`${first}@ukrmanagement.com`, `${first[0]}${last}@ukrmanagement.com`, `${first}${last}@ukrmanagement.com`]);
+    expect(proposals[0]).toMatchObject({ guess_rank: 'most_likely', label: expect.stringContaining('unverified') });
+    expect(proposals[0].label).toContain('Replaces the saved address that does not exist');
+  }
+  expect(out.domains.suggestions.map(s => s.value)).not.toEqual(expect.arrayContaining(originalEmails));
+  expect(contacts.map(c => c.email)).toEqual(originalEmails);
+  expect(writes.filter(w => w.table === 'decision_maker_candidates')).toEqual([]);
+  expect(out.domains.auto_applied).toEqual([]);
+  expect(worker.verifyEmail.mock.calls.filter(([email]) => email === 'info@ukrmanagement.com')).toHaveLength(1);
+  expect(lead.email).toBe('info@ukrmanagement.com');
+});
+it('does not infer a format from unchecked contacts explicitly sourced as guesses', async () => {
+  lead.website = null;
+  contacts = [
+    { id: 'one', lead_id: 'lead', first_name: 'Jane', last_name: 'Smith', email: 'jane.smith@acme.com', source: 'guess' },
+    { id: 'two', lead_id: 'lead', first_name: 'Alex', last_name: 'Brown', email: 'alex.brown@acme.com', source: 'manual', label: 'Most likely address, unverified' },
+  ];
+  const out = await run('medium');
+  expect(out.domains.steps.join(' ')).not.toContain('Email format on');
+});
+it.each(['valid', 'unverifiable'])('keeps a %s alternative to an invalid saved email reviewable without automatic writes', async status => {
+  lead.website = null;
+  contacts[0].email = 'jane.smith@acme.com';
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockImplementation(async email => ({ ok: true, value: email === 'jane@acme.com'
+    ? { status, reason: status === 'valid' ? 'mailbox_exists' : 'provider_blocked' }
+    : { status: 'invalid', reason: 'mailbox_missing' } }));
+  const out = await run('medium');
+  expect(worker.verifyEmail).toHaveBeenCalledWith('jane@acme.com', expect.anything());
+  expect(out.domains.suggestions).toContainEqual(expect.objectContaining({ value: 'jane@acme.com', guess_rank: 'most_likely',
+    label: expect.stringContaining('unverified'), replaces_saved_email: { contact_id: 'c', email: 'jane.smith@acme.com' } }));
+  expect(contacts[0].email).toBe('jane.smith@acme.com');
+  expect(writes.filter(w => w.table === 'decision_maker_candidates')).toEqual([]);
+  expect(out.domains.people).toContainEqual(expect.objectContaining({ name: 'Jane Smith', email_found: false, reason: 'Saved address does not exist.' }));
+});
+it('keeps firstlast then first_last after the saved first.last, first and flast are rejected', async () => {
+  lead.website = null;
+  contacts[0].email = 'jane.smith@acme.com';
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockImplementation(async email => ({ ok: true, value: ['jane.smith@acme.com', 'jane@acme.com', 'jsmith@acme.com'].includes(email)
+    ? { status: 'invalid', reason: 'mailbox_missing' } : { status: 'unverifiable', reason: 'provider_blocked' } }));
+  const out = await run('medium');
+  expect(out.domains.suggestions.filter(s => s.field === 'email').map(s => s.value)).toEqual(['janesmith@acme.com', 'jane_smith@acme.com']);
+});
+it.each(['unchecked', 'valid', 'lead', 'site'])('retains %s addresses as independent format evidence', async evidence => {
+  lead.website = null;
+  contacts[0].email = 'jane.smith@acme.com';
+  if (evidence === 'lead') { contacts[0].email = null; lead.owner_name = 'Jane Smith'; lead.email = 'jane.smith@acme.com'; }
+  if (evidence === 'site') {
+    contacts[0].email = null;
+    discoverLeadDomains.mockResolvedValue({ domains: [{ domain: 'acme.com', sources: ['site_confirms'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [{ domain: 'acme.com', pages: ['Email jane.smith@acme.com'] }] });
+  }
+  if (evidence === 'valid') {
+    contacts[0].source = 'guess';
+    resolveOrgWorkerConfig.mockResolvedValue({});
+    worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'mailbox_exists' } });
+  }
+  const out = await run('medium');
+  expect(out.domains.steps.join(' ')).toContain('Email format on acme.com looks like first.last@acme.com');
+});
 it('reports dismissed contacts and owner/person keys while skipping their checks and lookups', async () => {
   contacts[0].email = null; contacts[0].dismissed_at = 'yesterday';
   lead.additional_owners = ['Ravi Kumar', 'Karthik Rao'];

@@ -8,6 +8,11 @@ it('clears attention for rejected or non-UK company choices and reviewed suggest
   expect(needsAttention({ status: 'done', domains: { named_on_site: [{ name: 'Jane Smith' }] }, lead: { dismissed_suggestions: ['person:jane smith'] } })).toBe(false);
 });
 
+it('preserves bounded saved-email replacement evidence in suggestion parsing', () => {
+  const suggestion = { name: 'Jane Smith', field: 'email', value: 'jane@example.com', label: 'Most likely address, unverified',
+    replaces_saved_email: { contact_id: 'c', email: 'jane.smith@example.com' } };
+  expect(readDeepFindDetails({ suggestions: [suggestion] }).suggestions[0]).toMatchObject({ replaces_saved_email: suggestion.replaces_saved_email });
+});
 describe('readDeepFindDetails', () => {
   it('reads dismissed_people and fails soft when absent or odd', () => {
     expect(readDeepFindDetails({ dismissed_people: [{ name: 'Jane Smith', contact_id: 'c1' }, { name: 'Bob' }, { contact_id: 'x' }, 4] }).dismissedPeople)

@@ -7,6 +7,14 @@ const person = { first: 'Jane', last: 'Smith', title: null, source: 'owner', con
 const context = (overrides = {}) => ({ people: [person], domains: ['example.com'], left: () => 14_000,
   keys: {}, contacts: () => [], lead: {}, spend: {}, ...overrides });
 
+it('keeps rejected saved addresses out of wide-lookup format evidence without altering contacts', async () => {
+  const contacts = [{ id: 'c', first_name: 'Jane', last_name: 'Smith', email: 'jane.smith@example.com' }];
+  vi.mocked(runWideLookup).mockResolvedValue({ steps: [], suggestions: [] });
+  await lookUpPeople(context({ left: () => 60_000, contacts: () => contacts, emailFormatEvidence: () => false }));
+  expect(runWideLookup.mock.lastCall[0].knownAddresses).toEqual([]);
+  expect(contacts[0].email).toBe('jane.smith@example.com');
+});
+
 it('explains a skipped lookup for every known person, including people beyond the five-person run cap', async () => {
   const out = await lookUpPeople(context({ people: Array.from({ length: 6 }, (_, i) => ({ ...person, first: `Jane${i}` })) }));
   expect(out.results).toHaveLength(6);
