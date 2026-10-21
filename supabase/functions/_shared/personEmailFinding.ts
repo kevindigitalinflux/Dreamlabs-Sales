@@ -60,6 +60,8 @@ export class GuessChecks {
   readonly timedOut = new Set<string>();
   private timeoutAddresses = new Set<string>();
   private timeoutCounts = new Map<string, number>();
+  private unverifiableAddresses = new Set<string>();
+  private unverifiableCounts = new Map<string, number>();
   private counts = new Map<string, number>();
   private stopped = false;
   constructor(private maxChecks = 6) {}
@@ -88,8 +90,16 @@ export class GuessChecks {
       if (count >= 2) { this.blocked.add(d); this.timedOut.add(d); }
     }
     if (status !== null && reason === 'catch_all') this.catchAll.add(d);
-    if (status === 'unverifiable') this.blocked.add(d);
+    if (status === 'unverifiable') {
+      if (!this.unverifiableAddresses.has(key)) {
+        this.unverifiableAddresses.add(key);
+        this.unverifiableCounts.set(d, (this.unverifiableCounts.get(d) ?? 0) + 1);
+      }
+      if (reason === 'provider_blocks_checks' || (this.unverifiableCounts.get(d) ?? 0) >= 2) this.blocked.add(d);
+    }
   }
+  /** Preserve Hunter credit suppression while allowing another free checker attempt. */
+  hasUnverifiable(domain: string): boolean { return this.unverifiableCounts.has(domain.toLowerCase()); }
   stopWorker(): void { this.stopped = true; }
   shouldStopPerson(status: string | null): boolean { return status === 'valid'; }
 }
