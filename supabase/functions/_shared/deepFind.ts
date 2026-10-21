@@ -626,6 +626,13 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const peopleBeforeChecks = lookupPeople();
   const emailDetails = new Map<string, string[]>();
   const detail = (name: string, line: string) => emailDetails.set(name, [...(emailDetails.get(name) ?? []), line]);
+  const unverifiableReasons: Record<string, string> = {
+    catch_all: 'The mail server accepts any address, so it cannot be confirmed.',
+    provider_blocks_checks: 'The mail server does not allow checks.',
+    unknown: 'The mail server gave no clear answer.',
+    checker_error: 'The email checker could not finish this check.',
+    timeout: 'The email checker could not finish this check.',
+  };
   const checkerFailures: Record<WorkerFailure, string> = {
     not_configured: 'The email checker is not set up.', limit_reached: 'The email checker reached its limit.',
     busy: 'The email checker is busy.', unreachable: 'The email checker could not be reached.',
@@ -652,7 +659,6 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       const pattern = inferDomainPattern(d, samples.filter(s => formatEvidence(s.email)), knownNames);
       patterns.set(d, pattern);
       if (pattern) steps.push(patternLine(d, pattern));
-      if (['google', 'microsoft'].includes(cachedMailProvider(d) ?? '')) checks.blocked.add(d);
     }
     // Round-robin candidates across people. Both inferred and common formats share the same three slots.
     const guessPeople = lookupPeople().slice(0, 5);
@@ -667,8 +673,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : checked.failure);
         if (!checked.ok) {
           if (checked.failure !== 'timeout') { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
-          else detail(name, checkerFailures.timeout);
+          else detail(name, unverifiableReasons.timeout!);
         }
+        else if (checked.value.status === 'unverifiable') detail(name, unverifiableReasons[checked.value.reason] ?? unverifiableReasons.unknown!);
         else if (checked.value.status === 'invalid') invalidGuesses.add(guess);
         else if (checked.value.status === 'valid') validCheckPeople.add(name);
       });
@@ -744,16 +751,18 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
           if (!checked) continue;
           checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : checked.failure);
           if (!checked.ok) {
-            if (checked.failure === 'timeout') { detail(name, checkerFailures.timeout); continue; }
+            if (checked.failure === 'timeout') { detail(name, unverifiableReasons.timeout!); continue; }
             checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; break;
           }
           if (checked.value.status === 'invalid') invalidGuesses.add(guess);
           if (verifyAction(checked.value.status, false) !== 'accept') continue;
-          if (invalidSavedEmail(findSamePerson(all(), person.first, person.last))) break;
           valid = checks.shouldStopPerson(checked.value.status);
           if (valid) confirmedGuessPeople.add(name);
           const contact = person.contactId ? all().find((c) => c.id === person.contactId) : null;
-          if (contact) {
+          if (contact && invalidSavedEmail(contact)) {
+            suggestions.push({ name, field: 'email', value: guess, label: COMMON_GUESS_LABEL + ' Replaces the saved address that does not exist.',
+              replaces_saved_email: { contact_id: contact.id, email: str(contact.email)! } });
+          } else if (contact) {
             const saved = await saveContact(contact, { email: guess });
             if (saved) {
               Object.assign(contact, saved); touched.add(contact.id); stats.officerEmails++;
@@ -764,7 +773,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         }
         if (checks.timedOut.has(d)) detail(name, 'This mail server answers too slowly to check, so these are best guesses.');
         if (checks.catchAll.has(d)) {
-          detail(name, 'The mail server accepts any address, so guesses cannot be confirmed.');
+          detail(name, unverifiableReasons.catch_all!);
         } else if (tried > 0) detail(name, `Tried ${tried} common format${tried === 1 ? '' : 's'} on ${d} (${valid ? 'one confirmed for review' : 'none confirmed'}).`);
         else if (!checkerFailure && !checks.canCheck(candidates[0]!)) detail(name, 'The email check limit for this run or domain was reached.');
         if (valid) break;
@@ -1005,9 +1014,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     }
     if (suggestions.some(s => displayPersonKey(s.name) === displayPersonKey(name) && s.field === 'email')) continue;
     const provider = cachedMailProvider(domain) ?? 'unknown';
-    suggestions.push(...unverifiedEmailSuggestions(name, candidates.slice(0, 3), provider).map(s => invalidSavedEmail(savedPerson)
+    const includeProvider = ![...checkedEmails].some(([email, result]) => emailDomain(email) === domain && result.ok && result.value.status === 'valid');
+    suggestions.push(...unverifiedEmailSuggestions(name, candidates.slice(0, 3), provider, includeProvider).map(s => invalidSavedEmail(savedPerson)
       ? { ...s, replaces_saved_email: { contact_id: savedPerson!.id, email: str(savedPerson!.email)! }, label: s.label + ' Replaces the saved address that does not exist.' } : s));
-    detail(name, providerGuessLine(domain, provider));
+    if (includeProvider) detail(name, providerGuessLine(domain, provider));
   }
   const checkerNotConfigured = checkerFailure === checkerFailures.not_configured;
   if (checkerNotConfigured && peopleBeforeChecks.length > 0) {

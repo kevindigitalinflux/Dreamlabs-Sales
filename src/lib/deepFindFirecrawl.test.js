@@ -465,7 +465,7 @@ it('continues guesses after one local timeout and explains two slow answers per 
   expect(worker.verifyEmail.mock.calls.length).toBeGreaterThanOrEqual(2);
   const text = JSON.stringify(result);
   expect(text).toContain('This mail server answers too slowly to check, so these are best guesses.');
-  expect(text).toContain('The email checker took too long to answer for this address.');
+  expect(text).toContain('The email checker could not finish this check.');
   expect(text).not.toContain('could not be reached');
 });
 it('accepts a valid guess after an earlier timeout', async () => {

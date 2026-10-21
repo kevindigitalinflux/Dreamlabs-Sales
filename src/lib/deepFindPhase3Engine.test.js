@@ -191,8 +191,8 @@ it.each(['valid', 'unverifiable'])('keeps a %s alternative to an invalid saved e
     : { status: 'invalid', reason: 'mailbox_missing' } }));
   const out = await run('medium');
   expect(worker.verifyEmail).toHaveBeenCalledWith('jane@acme.com', expect.anything());
-  expect(out.domains.suggestions).toContainEqual(expect.objectContaining({ value: 'jane@acme.com', guess_rank: 'most_likely',
-    label: expect.stringContaining('unverified'), replaces_saved_email: { contact_id: 'c', email: 'jane.smith@acme.com' } }));
+  expect(out.domains.suggestions).toContainEqual(expect.objectContaining({ value: 'jane@acme.com', ...(status === 'valid' ? {} : { guess_rank: 'most_likely' }),
+    label: expect.stringContaining(status === 'valid' ? 'confirmed by our email checker' : 'unverified'), replaces_saved_email: { contact_id: 'c', email: 'jane.smith@acme.com' } }));
   expect(contacts[0].email).toBe('jane.smith@acme.com');
   expect(writes.filter(w => w.table === 'decision_maker_candidates')).toEqual([]);
   expect(out.domains.people).toContainEqual(expect.objectContaining({ name: 'Jane Smith', email_found: false, reason: 'Saved address does not exist.' }));
@@ -258,15 +258,88 @@ it('bounds dismissed_people to ten and skip steps to three plus a summary', asyn
   expect(out.domains.steps).toContain('and 8 more people were dismissed earlier.');
   expect(out.domains.steps.join(' ')).not.toContain('Use Start fresh');
 });
-it('skips guess verification for Google and Microsoft while retaining ranked proposals', async () => {
-  for (const provider of ['google', 'microsoft']) {
+it.each(['google', 'microsoft'])('checks %s guesses and fills a blank only once', async provider => {
     cachedMailProvider.mockReturnValue(provider);
     contacts[0].email = null;
     resolveOrgWorkerConfig.mockResolvedValue({});
+    worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
     const out = await run('low');
-    expect(out.domains.suggestions).toContainEqual(expect.objectContaining({ name: 'Jane Smith', guess_rank: 'most_likely' }));
+    expect(worker.verifyEmail).toHaveBeenCalled();
+    expect(writes.filter(w => 'email' in w.patch)).toHaveLength(1);
+    expect(contacts[0].email).toBe('jane.smith@acme.com');
+    expect(out.domains.suggestions.filter(s => s.field === 'email')).toHaveLength(0);
+    expect(out.domains.steps.join(' ')).not.toContain('where checks are less reliable');
+});
+
+it.each([['Venkatapuram', 'valid'], ['Asif', 'valid'], ['Venkatapuram', 'catch_all']])('checks UKRM alternatives for an invalid saved %s address: %s', async (last, verdict) => {
+  lead.website = null;
+  const first = last === 'Asif' ? 'Muhammad' : 'Karthik';
+  const saved = `${first.toLowerCase()}.${last.toLowerCase()}@ukrmanagement.com`;
+  const valid = `${first[0].toLowerCase()}${last.toLowerCase()}@ukrmanagement.com`;
+  contacts = [{ id: 'one', lead_id: 'lead', first_name: first, last_name: last, email: saved, title: 'Director' }];
+  cachedMailProvider.mockReturnValue('microsoft');
+  discoverLeadDomains.mockResolvedValue({ domains: [{ domain: 'ukrmanagement.com', sources: ['site_confirms'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] });
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockImplementation(async email => ({ ok: true, value: email === valid
+    ? { status: verdict === 'valid' ? 'valid' : 'unverifiable', reason: verdict === 'valid' ? 'deliverable' : 'catch_all' } : { status: 'invalid', reason: 'mailbox_missing' } }));
+  const out = await run('medium');
+  expect(worker.verifyEmail.mock.calls.map(([email]) => email)).toEqual(expect.arrayContaining([saved, `${first.toLowerCase()}@ukrmanagement.com`, valid]));
+  if (verdict === 'valid') {
+    expect(out.domains.suggestions.filter(s => s.field === 'email')).toEqual([expect.objectContaining({ value: valid,
+      label: expect.stringContaining('confirmed by our email checker'), replaces_saved_email: { contact_id: 'one', email: saved } })]);
+    expect(out.domains.steps.join(' ')).not.toContain('uses Microsoft 365');
+  } else {
+    expect(worker.verifyEmail.mock.calls.length).toBeLessThanOrEqual(4);
+    expect(out.domains.suggestions.filter(s => s.guess_rank === 'most_likely')).toHaveLength(1);
+    expect(out.domains.suggestions.every(s => s.label.includes('unverified'))).toBe(true);
+    expect(out.domains.steps.join(' ')).toContain('The mail server accepts any address, so it cannot be confirmed.');
+    expect(out.domains.steps.join(' ')).toContain('uses Microsoft 365, where checks are less reliable');
   }
-  expect(worker.verifyEmail).not.toHaveBeenCalled();
+  expect(contacts[0].email).toBe(saved);
+  expect(writes.filter(w => 'email' in w.patch)).toHaveLength(0);
+});
+
+it('fills one blank from a later valid Microsoft format and suppresses provider caution for the whole domain', async () => {
+  lead.website = null;
+  contacts[0].email = null;
+  contacts.push({ id: 'two', lead_id: 'lead', first_name: 'Alex', last_name: 'Brown', email: null });
+  cachedMailProvider.mockReturnValue('microsoft');
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockImplementation(async email => ({ ok: true, value: email === 'jsmith@acme.com'
+    ? { status: 'valid', reason: 'deliverable' } : { status: 'invalid', reason: 'mailbox_missing' } }));
+  const out = await run('low');
+  expect(worker.verifyEmail.mock.calls.map(([email]) => email)).toContain('jane@acme.com');
+  expect(contacts[0].email).toBe('jsmith@acme.com');
+  expect(writes.filter(w => 'email' in w.patch)).toHaveLength(1);
+  expect(out.domains.suggestions.some(s => s.name === 'Jane Smith' && s.field === 'email')).toBe(false);
+  expect(out.domains.suggestions.some(s => s.name === 'Alex Brown' && s.field === 'email')).toBe(true);
+  expect(JSON.stringify(out.domains)).not.toContain('uses Microsoft 365');
+  expect(worker.verifyEmail.mock.calls.length).toBeLessThanOrEqual(5);
+});
+
+it.each([
+  ['catch_all', 'The mail server accepts any address, so it cannot be confirmed.'],
+  ['provider_blocks_checks', 'The mail server does not allow checks.'],
+  ['unknown', 'The mail server gave no clear answer.'],
+  ['checker_error', 'The email checker could not finish this check.'],
+  ['timeout', 'The email checker could not finish this check.'],
+])('explains unverifiable %s on the person line and stops further domain guesses', async (reason, sentence) => {
+  lead.website = null;
+  contacts[0].email = 'jane.smith@acme.com';
+  cachedMailProvider.mockReturnValue('microsoft');
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  // Complete the first two guesses before admitting the next slot. Already-started checks may finish.
+  let calls = 0;
+  worker.verifyEmail.mockImplementation(async email => ({ ok: true, value: ++calls <= 2
+    ? { status: 'invalid', reason: 'mailbox_missing' } : { status: 'unverifiable', reason, detail: 'PRIVATE' } }));
+  const out = await run('medium');
+  expect(worker.verifyEmail.mock.calls.map(([email]) => email)).toContain('jane@acme.com');
+  expect(worker.verifyEmail.mock.calls.length).toBeLessThanOrEqual(4);
+  const line = out.domains.steps.find(s => s.startsWith('Jane Smith: no email found.'));
+  expect(line).toContain(sentence);
+  expect(line).not.toContain('PRIVATE');
+  expect(out.domains.suggestions.filter(s => s.field === 'email').every(s => s.label.includes('unverified'))).toBe(true);
+  expect(writes.filter(w => 'email' in w.patch)).toHaveLength(0);
 });
 it('caps concurrent guesses at the people reserve with an 18 second check cap', async () => {
   vi.useFakeTimers();

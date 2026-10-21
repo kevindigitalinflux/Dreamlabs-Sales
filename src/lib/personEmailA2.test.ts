@@ -28,7 +28,8 @@ it('ranks default and public formats; Medium Microsoft guesses remain review-onl
   expect(suggestions.filter(s => s.guess_rank === 'most_likely')).toHaveLength(1);
   expect(suggestions.slice(1).every(s => s.guess_rank === 'other')).toBe(true);
   expect(suggestions.every(s => s.label.includes('unverified'))).toBe(true);
-  expect(providerGuessLine('ukrmanagement.com', 'microsoft')).toContain('Microsoft 365');
+  expect(providerGuessLine('ukrmanagement.com', 'microsoft')).toBe('ukrmanagement.com uses Microsoft 365, where checks are less reliable, so treat any address as a best guess.');
+  expect(providerGuessLine('acme.com', 'google')).toBe('acme.com uses Google Workspace, where checks are less reliable, so treat any address as a best guess.');
 });
 it('accepts only complete domain addresses actually present in grounded evidence', () => {
   expect(groundedFormatSamples('ukrmanagement.com', 'karthik@ukrmanagement.com', [])).toEqual([]);

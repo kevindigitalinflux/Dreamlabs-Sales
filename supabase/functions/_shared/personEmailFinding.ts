@@ -108,17 +108,17 @@ export function rankedEmailCandidates(first: string, last: string, domain: strin
 
 export function providerGuessLine(domain: string, provider: MailProvider): string {
   const d = domain.toLowerCase().replace(/[^a-z0-9.-]/g, '').slice(0, 80);
-  if (provider === 'google') return `${d} uses Google Workspace, which does not allow mailboxes to be checked, so these are best guesses.`;
-  if (provider === 'microsoft') return `${d} uses Microsoft 365, which does not allow mailboxes to be checked, so these are best guesses.`;
+  if (provider === 'google') return `${d} uses Google Workspace, where checks are less reliable, so treat any address as a best guess.`;
+  if (provider === 'microsoft') return `${d} uses Microsoft 365, where checks are less reliable, so treat any address as a best guess.`;
   if (provider === 'hosted') return `${d} uses a hosted mail provider. These addresses could not be confirmed, so these are best guesses.`;
   return `${d}: these addresses could not be confirmed, so these are best guesses.`;
 }
 
 /** These values are proposals only. This helper has no write or automatic-fill path. */
-export function unverifiedEmailSuggestions(name: string, candidates: string[], provider: MailProvider) {
+export function unverifiedEmailSuggestions(name: string, candidates: string[], provider: MailProvider, includeProvider = true) {
   return candidates.map((value, index) => ({ name, field: 'email' as const, value,
     guess_rank: index === 0 ? 'most_likely' as const : 'other' as const,
-    label: `${index === 0 ? 'Most likely address' : 'Other possible format'} — Guess, unverified. ${providerGuessLine(value.split('@')[1] ?? '', provider)}` }));
+    label: `${index === 0 ? 'Most likely address' : 'Other possible format'} — Guess, unverified.${includeProvider ? ' ' + providerGuessLine(value.split('@')[1] ?? '', provider) : ''}` }));
 }
 
 /** Only source evidence supplies public addresses; model-only assertions never establish a format. */
