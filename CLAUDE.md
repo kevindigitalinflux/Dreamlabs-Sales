@@ -1762,5 +1762,5 @@ Kevin retained Codex as builder and Claude as architect/reviewer. Branch `codex/
 
 A3 final gates: TypeScript 0 diagnostics; Vitest 135 files / 2,112 tests / 0 failures; production build 0 errors (existing chunk-size warning). Edge import graph type-check passed; Deno, live-provider, independent Claude review and UI integration remain pending. No deployment.
 
-### 2026-10-21 — Guess domain block fix (local, uncommitted)
+### 2026-10-21 — Guess domain block fix (merged `5bf88fa`, deployed 2026-10-22)
 On `codex/guess-block-fix`, one unverifiable address no longer blocks other formats. Two distinct addresses block the domain; `provider_blocks_checks` still blocks immediately because SMTP cannot connect. Catch-all, timeout, six-per-lead/five-per-domain limits and worker stops remain. Hunter suppression after any unverifiable result and its three-verification cap remain. No user-facing copy changes. All gates pass: TypeScript, 2,178 tests, production build (existing chunk warning). Independent review and live UKRM verification remain pending. No commit or publication. Full evidence: docs/HANDOFF.md, Guess domain block fix.
