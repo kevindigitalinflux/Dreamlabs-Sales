@@ -53,7 +53,19 @@ export function DeepFindModal({ open, leadIds, onClose, onStarted }: DeepFindMod
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Deep find">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Deep find"
+      footer={runId ? undefined : (
+        <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
+          <Button variant="ghost" className="!text-offwhite" onClick={onClose}>Cancel</Button>
+          <Button className="min-w-40" onClick={() => void handleStart()} loading={starting} disabled={starting || !!capError || tooMany || leadIds.length === 0}>
+            {starting ? 'Starting…' : 'Start Deep find'}
+          </Button>
+        </div>
+      )}
+    >
       {runId ? (
         <div className="flex flex-col gap-3">
           {notice && <p role="status" className="text-sm">{notice}</p>}
@@ -73,12 +85,6 @@ export function DeepFindModal({ open, leadIds, onClose, onStarted }: DeepFindMod
             startFresh={startFresh} onStartFresh={setStartFresh}
           />
           {error && <p role="alert" className="text-sm text-danger-strong">{error}</p>}
-          <div className="sticky bottom-0 -mx-6 -mb-6 flex flex-col-reverse justify-end gap-2 border-t border-line bg-card px-6 py-3 sm:flex-row">
-            <Button variant="ghost" className="!text-offwhite" onClick={onClose}>Cancel</Button>
-            <Button className="min-w-40" onClick={() => void handleStart()} loading={starting} disabled={starting || !!capError || tooMany || leadIds.length === 0}>
-              {starting ? 'Starting…' : 'Start Deep find'}
-            </Button>
-          </div>
         </div>
       )}
     </Modal>
