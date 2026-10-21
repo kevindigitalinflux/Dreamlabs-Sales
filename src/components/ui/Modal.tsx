@@ -8,6 +8,8 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: ReactNode;
+  /** Optional actions pinned to the dialog's bottom edge, outside the scrolling body. */
+  footer?: ReactNode;
 }
 
 /**
@@ -15,7 +17,7 @@ interface ModalProps {
  * Shift+Tab stay inside the dialog; on close, focus returns to the control that opened it. An Escape already
  * handled inside (for example by the select listbox) closes only that, not the dialog.
  */
-export function Modal({ open, onClose, title, children }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer }: ModalProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -57,10 +59,12 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         aria-labelledby={titleId}
         tabIndex={-1}
         onKeyDown={onDialogKeyDown}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-line bg-card p-6 outline-none"
+        className={footer
+          ? 'flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-line bg-card outline-none'
+          : 'max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-line bg-card p-6 outline-none'}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between gap-4">
+        <div className={footer ? 'flex shrink-0 items-center justify-between gap-4 px-6 pb-4 pt-6' : 'mb-4 flex items-center justify-between gap-4'}>
           <h3 id={titleId} ref={titleRef} tabIndex={-1} className="text-lg font-bold outline-none">{title}</h3>
           <button
             type="button"
@@ -71,7 +75,12 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
             <X className="h-5 w-5" aria-hidden />
           </button>
         </div>
-        {children}
+        {footer ? (
+          <>
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">{children}</div>
+            <div className="shrink-0 border-t border-line bg-card px-6 py-4">{footer}</div>
+          </>
+        ) : children}
       </div>
     </div>
   );
