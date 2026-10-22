@@ -55,3 +55,6 @@ Vault: `C:/Users/kevin/OneDrive/Desktop/DI Dreamlabs Context Brain` (one vault, 
 - Put long detail in files (HANDOFF.md section, report file) and keep the final answer short: branch, HEAD hash, commits, gate counts, files changed, open questions, next action (under about 25 lines).
 - Use one run per branch; avoid re-running the full suite after every tiny edit (run the targeted test file, then the full gates once at the end).
 - Do not paste whole diffs, logs or file contents into the final answer.
+
+## Platform owners build checkpoint (2026-10-22)
+Tasks 1–6 built locally on codex/platform-owners. Read docs/HANDOFF.md section "Platform owners — local build" for exact commits, gates and review questions. Migration 066 and audit are drafts, not executed. Claude review and Kevin-approved rollout remain pending; no remote writes, push, merge, deployment or vault sync authorized for this build.

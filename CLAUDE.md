@@ -196,6 +196,10 @@ vite.config.ts
 ---
 
 ## Current Status (updated 2026-10-14 — newest work is the "Session 2026-10-12 → 2026-10-14" entry at the end of this section, after "Session 2026-09-29 → 2026-10-01")
+
+### Platform owners local build (2026-10-22)
+Tasks 1–6 built on `codex/platform-owners`; migration 066 and rollback audit written only. Server permission table and membership-derived UI added; org-api-settings changes only platform-wide caller detection, with all per-org key behavior preserved. Local gates: TypeScript clean, 142 files / 2,300 tests, build passed (existing chunk warning). Claude review, live ownership preflight, Deno, migration/audit, browser and deployment remain pending. No remote calls or writes. See docs/HANDOFF.md "Platform owners — local build" for commits, deviations and rollout order.
+
 **Working:** Cycle 1-2 (single-tenant foundation, full pipeline, email automation incl. AI-personalised
 composer/sequences/review queue) — see prior status below, all still functional. **Cycle 3 (multi-tenant
 foundation) is FULLY COMPLETE** — Tasks 1-12 done, controller-verified, and pushed:
