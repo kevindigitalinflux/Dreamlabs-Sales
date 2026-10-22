@@ -823,3 +823,7 @@ Write three specs in `docs/superpowers/specs/` (suggested: `2026-10-22-platform-
 **Remaining housekeeping (unchanged):** delete test lead "ZZ IRELAND TEST (delete me)"; refresh the Hostinger snapshot before any VPS change; VPS firewall reboot test; Build B (readiness badge migration 065, smart depth, parallel leads) needs Kevin's go-ahead.
 
 **Usage:** no reliable usage reading was visible this session; not asserted.
+
+### One-time role change: splash centring (2026-10-22)
+- Role change recorded at Kevin's instruction: Claude built the loading-screen centring itself instead of Codex. Old role: Claude architect/reviewer. New role: builder for this one task only (SplashLoader.tsx, commit `0277604`, merged to main). Scope: that file only. Kevin confirmed it was a one-time task; default roles (Claude architect/reviewer, Codex builder) apply again from now on, including for platform owners.
+- Change: the animated mark sits at the screen centre, wordmark and progress bar below it (11 px nudge so the inked flask centres). Checked locally at desktop width only (flask middle 395 px vs screen centre 393 px). Gates: tsc clean, 2,178 tests, build OK. Merge, push and Cloudflare auto-deploy authorized by Kevin.
