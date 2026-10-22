@@ -860,7 +860,7 @@ Write three specs in `docs/superpowers/specs/` (suggested: `2026-10-22-platform-
 
 ### Deviations and review rulings
 - Ruling: use the plan's service_role-only EXECUTE grant, although the earlier design text also allowed authenticated. The plan explicitly forbids arbitrary-user client lookups and the browser derives ownership from its own memberships. Cost if wrong: a future authenticated consumer must use an approved narrower interface; architect must reconcile the design wording before rollout.
-- Ruling: skip all live preflight queries, migration, audit and browser checks per Kevin's latest constraints; live preflight is a rollout prerequisite, not build evidence. Cost if wrong: Kevin could lose management access if deployment proceeds without the required ownership check.
+- Ruling: skip all live preflight queries, migration and audit per Kevin's latest constraints; live preflight is a rollout prerequisite, not build evidence. Browser checks were not performed; local rendered-control tests are not a substitute. Cost if wrong: Kevin could lose management access if deployment proceeds without the required ownership check.
 - Added local handler/rendered-control tests and a tested membership-query fallback to cover permission failures and missing-column login behavior. Tests are JavaScript where Node imports are needed, matching the existing endpoint-test convention; no dependency or global TypeScript changes.
 - Owner lookup errors in admin-users return fixed 500 for all admin actions, including list_orgs, rather than silently treating an unavailable ownership service as a membership-only listing. This fails closed. org-api-settings preserves membership access and treats RPC errors as non-owner, exactly as planned.
 - Architect review pending: exact two owner organisation names and their real admins, Kevin's DI Dreamlabs admin membership, service-only grant wording, and existing non-atomic read/count/write membership updates. Concurrent owner actions can race the last-admin check; atomic membership mutations require a separate database design. Do not claim concurrent last-admin safety.
@@ -875,3 +875,11 @@ Write three specs in `docs/superpowers/specs/` (suggested: `2026-10-22-platform-
 6. Rollback: redeploy previous functions from pre-branch main, revert frontend as needed; additive migration may remain. Nothing has been published by this build.
 
 Resume: open this section, the approved spec and plan. Review this branch first. All live steps and publication require Kevin's approval.
+
+
+### Platform owners final local review and gates (2026-10-22)
+- A read-only Codex subagent consultation, required by the executing-plans skill, reviewed `d7e94c9613afcc69a2332f8307d70415fd9541f9..89b4b5b431115bd93223f37d0d3b0c1949bcc77b`. No role transfer, remote call, edit, test or SQL execution by the reviewer. This is not Claude's pending architect approval.
+- One Important finding: organizations.name is not unique, so the migration's two-row guard alone could accept two duplicate names with the other intended name absent. Fixed by requiring two distinct expected names inside the same transaction. Source inspected and diff checked; SQL behavior was NOT executed, per Kevin's prohibition. The rollback audit already had the corresponding distinct-name assertion.
+- No other Critical/Important findings and no deferred minors. Reviewer confirmed the permission table, fail-closed reads, service-only RPC, missing-column fallback and exact preservation of per-org API-key behavior. The three existing architect questions above remain pending, not silently accepted as new architecture.
+- Final application gates after Task 6: npx tsc --noEmit 0 diagnostics; npx vitest run 142/142 files and 2,300/2,300 tests, zero failures; npm run build passed with the existing chunk-size warning; edge TypeScript shim passed. Repeated after the migration-source guard change as a final check; SQL/audit still unrun.
+- Build and documentation commits are local only. Final correction/documentation commit hash is available from git log. Working tree should be clean after that commit. No background jobs remain.

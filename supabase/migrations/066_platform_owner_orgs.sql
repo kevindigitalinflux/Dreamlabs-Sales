@@ -15,6 +15,10 @@ BEGIN
   IF (SELECT count(*) FROM public.organizations WHERE grants_platform_owner) <> 2 THEN
     RAISE EXCEPTION 'expected exactly two flagged owner organisations';
   END IF;
+  IF (SELECT count(DISTINCT name) FROM public.organizations
+      WHERE grants_platform_owner AND name IN ('Mr Brush & Co', 'DI Dreamlabs')) <> 2 THEN
+    RAISE EXCEPTION 'expected one owner organisation for each required name';
+  END IF;
 END $$;
 
 COMMENT ON COLUMN public.organizations.grants_platform_owner IS
