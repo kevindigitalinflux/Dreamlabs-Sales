@@ -1,5 +1,5 @@
 // supabase/functions/_shared/googlePlacesLookup.ts
-import { fetchWithTimeout } from './fetchWithTimeout.ts';
+import { searchPlaces, legacyPlaceDetails, PlacesError, type PlacesContext } from './placesClient.ts';
 import { isFuzzyNameMatch } from './fuzzyMatch.ts';
 
 export interface PlaceContact { website: string | null; phone: string | null; name: string; address: string; strength: 0 | 1 | 2; cityMatches: boolean }
@@ -45,50 +45,41 @@ export function placeMatchStrength(leadName: string, placeName: string): 0 | 1 |
 }
 
 /**
- * Finds a business's website and phone number on Google Places (the same legacy
- * Text Search + Details endpoints the lead scraper already uses, so no new API
- * needs enabling). Bulk enrichment's other steps all start from an existing
+ * Finds a business's website and phone number with Enterprise Text Search (New),
+ * retaining legacy Text Search + Details for projects where New is not enabled.
+ * Bulk enrichment's other steps all start from an existing
  * website, so this is what lets a lead that only has a name (e.g. one created
  * from a walk-in via Dream Agent) get any contact details at all.
  *
  * Only one of the top results whose name plausibly matches the lead's is used.
  * Returns null on no match or any error; never throws and never writes anywhere.
- * Logs what Google answered (names and API status only, never the key) so a
- * "found nothing" result can be diagnosed from the function logs.
+ * Emits only fixed error messages, never provider text, keys or request URLs.
  */
-export async function lookupPlaceContact(businessName: string, city: string | null, apiKey: string): Promise<PlaceContact | null> {
+export async function lookupPlaceContact(businessName: string, city: string | null, apiKey: string, context?: PlacesContext): Promise<PlaceContact | null> {
+  if (!context) { console.warn('Google Places skipped: no usage context'); return null; }
   try {
-    const query = city ? `${businessName} ${city}` : businessName;
-    const searchRes = await fetchWithTimeout(
-      `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${apiKey}`,
-    );
-    if (!searchRes.ok) { console.warn(`places search HTTP ${searchRes.status} for "${query}"`); return null; }
-    const search = await searchRes.json() as { status?: string; error_message?: string; results?: { place_id?: string; name?: string }[] };
-    const top = (search.results ?? []).slice(0, 3);
-    console.log(`places search "${query}": status=${search.status ?? '?'}${search.error_message ? ` (${search.error_message})` : ''} top=[${top.map((r) => r.name).join(' | ')}]`);
+    const query = city ? businessName + ' ' + city : businessName;
+    const search = await searchPlaces(apiKey, query, { context });
+    const named = search.results.slice(0, 3).filter(r => r.place_id && r.name);
     // Prefer a genuinely same-named result over one that only shares a word, even
     // if the latter ranked higher.
-    const named = top.filter((r) => r.place_id && r.name);
-    const match = named.find((r) => placeMatchStrength(businessName, r.name!) === 2)
-      ?? named.find((r) => placeMatchStrength(businessName, r.name!) === 1);
-    if (!match?.place_id) return null;
-
-    const detailsRes = await fetchWithTimeout(
-      `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(match.place_id)}&fields=name,formatted_address,address_components,website,formatted_phone_number&key=${apiKey}`,
-    );
-    if (!detailsRes.ok) { console.warn(`places details HTTP ${detailsRes.status} for "${match.name}"`); return null; }
-    const details = await detailsRes.json() as { status?: string; result?: { name?: string; formatted_address?: string; address_components?: { long_name?: string; types?: string[] }[]; website?: string; formatted_phone_number?: string } };
-    const website = details.result?.website ?? null;
-    const phone = details.result?.formatted_phone_number ?? null;
-    console.log(`places details "${match.name}": status=${details.status ?? '?'} website=${website ? 'yes' : 'no'} phone=${phone ? 'yes' : 'no'}`);
-    const name = details.result?.name ?? match.name!;
-    const address = details.result?.formatted_address ?? '';
-    const cityMatches = (details.result?.address_components ?? []).some(c =>
+    const match = named.find(r => placeMatchStrength(businessName, r.name) === 2)
+      ?? named.find(r => placeMatchStrength(businessName, r.name) === 1);
+    if (!match) return null;
+    const details = search.legacy ? await legacyPlaceDetails(match.place_id, apiKey) : null;
+    const website = search.legacy ? details?.website ?? null : match.website;
+    const phone = search.legacy ? details?.formatted_phone_number ?? null : match.phone;
+    const name = details?.name ?? match.name;
+    const address = details?.formatted_address ?? match.formatted_address ?? '';
+    const cityMatches = (details?.address_components ?? match.address_components ?? []).some(c =>
       c.types?.some(type => type === 'locality' || type === 'postal_town') && placeCityMatches(city, c.long_name ?? ''));
     return website || phone ? { website, phone, name, address, strength: placeMatchStrength(businessName, name), cityMatches } : null;
-  } catch {
+  } catch (err) {
     // Never log the error text: Deno network errors can include the request URL, which carries the API key.
-    console.warn('places lookup failed (network error or timeout)');
+    console.warn('places lookup failed (provider or usage check)');
+    // Only searchPlaces creates these safe messages; Details errors are suppressed.
+    if (err instanceof PlacesError) context.onMessage?.(err.message);
+    else context.onMessage?.('Google Places could not complete this lookup. Check the key, billing and quota in Organization settings.');
     return null;
   }
 }

@@ -1,3 +1,4 @@
+import { createPlacesContext } from '../_shared/placesClient.ts';
 // supabase/functions/scrape-cro/index.ts
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
@@ -30,12 +31,13 @@ async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: strin
       return seen.some((s) => s.business_name.toLowerCase() === businessName.toLowerCase());
     }
 
-    const googlePlaces = await resolveOrgApiKey(service, orgId, 'google_places');
+  const placesContext = createPlacesContext(service, orgId);
+    const googlePlaces = await resolveOrgApiKey(service, orgId, 'google_places', source => { placesContext.shared = source === 'global'; });
     const city = icp.city ?? null;
     const found = await runBounded(companies, 5, async (c) => {
       // CRO's open data may not expose directors: officers stays [] (normal, not an error).
       const officers: RegistryOfficer[] = [];
-      const contacts = await lookupCompanyContacts({ business_name: c.name, city }, { googlePlaces });
+      const contacts = await lookupCompanyContacts({ business_name: c.name, city }, { googlePlaces, placesContext });
       return { officers, contacts };
     });
 

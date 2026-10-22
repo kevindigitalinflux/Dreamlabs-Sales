@@ -1,3 +1,4 @@
+import { validatePlacesKey } from '../_shared/placesClient.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { croRejectionMessage, searchCroCompanies, splitCroSecret } from '../_shared/cro.ts';
@@ -20,9 +21,7 @@ async function validateKey(provider: Provider, key: string): Promise<string | nu
       return res.ok ? null : `Gemini rejected the key (HTTP ${res.status})`;
     }
     if (provider === 'google_places') {
-      const res = await fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?query=test&key=${key}`);
-      const data = await res.json() as { status?: string };
-      return data.status === 'REQUEST_DENIED' || data.status === 'INVALID_REQUEST' ? `Google rejected the key (${data.status})` : null;
+      return await validatePlacesKey(key);
     }
     if (provider === 'google_places_pro') {
       // Places API (New) bills per field requested — "places.id" alone stays

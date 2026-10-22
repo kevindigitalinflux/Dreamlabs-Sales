@@ -1,3 +1,4 @@
+import { createPlacesContext } from '../_shared/placesClient.ts';
 // supabase/functions/enrich-leads-bulk/index.ts
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
@@ -59,14 +60,15 @@ Deno.serve(async (req) => {
     .select('role').eq('org_id', orgId).eq('user_id', userData.user.id).maybeSingle();
   if (!membership) return json({ error: 'Not a member of this organization' }, 403, headers);
 
+  const placesContext = createPlacesContext(service, orgId);
   const [companiesHouse, openCorporates, apollo, hunter, googlePlaces] = await Promise.all([
     resolveOrgApiKey(service, orgId, 'companies_house'),
     resolveOrgApiKey(service, orgId, 'opencorporates'),
     resolveOrgApiKey(service, orgId, 'apollo'),
     resolveOrgApiKey(service, orgId, 'hunter'),
-    resolveOrgApiKey(service, orgId, 'google_places'),
+    resolveOrgApiKey(service, orgId, 'google_places', source => { placesContext.shared = source === 'global'; }),
   ]);
-  const keys = { companiesHouse, openCorporates, apollo, hunter, googlePlaces };
+  const keys = { companiesHouse, openCorporates, apollo, hunter, googlePlaces, placesContext };
 
   const enriched = await runBounded(resolvedLeads, 5, (lead) => enrichOneLead(lead, keys));
   const results = enriched.filter((r): r is EnrichResult => r !== null);

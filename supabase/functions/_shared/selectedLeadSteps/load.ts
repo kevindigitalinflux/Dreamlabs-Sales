@@ -1,3 +1,4 @@
+import { createPlacesContext } from '../placesClient.ts';
 // Step 1 and 2: load what the pipeline needs, and confirm the run's creator may send for this lead.
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { resolveOrgApiKey } from '../orgApiKeys.ts';
@@ -9,20 +10,20 @@ import type { CandidateRow, Lead, OrgKeys, SequenceRow, TemplateRow } from './ty
 export interface OrgContext { orgName: string; companyContext: string | null; senderName: string | null; keys: OrgKeys }
 
 /** Org name and context, the creator's first name (null when the profile has no name), and the org's API keys. */
-export async function loadOrgContext(service: SupabaseClient, run: PipelineRun): Promise<OrgContext> {
+export async function loadOrgContext(service: SupabaseClient, run: PipelineRun, placesContext = createPlacesContext(service, run.org_id)): Promise<OrgContext> {
   const [{ data: org }, { data: profile }, anthropic, gemini, hunter, apollo, companiesHouse, openCorporates, googlePlaces] = await Promise.all([
     service.from('organizations').select('name, company_context').eq('id', run.org_id).maybeSingle(),
     service.from('profiles').select('full_name').eq('id', run.created_by).maybeSingle(),
     resolveOrgApiKey(service, run.org_id, 'anthropic'), resolveOrgApiKey(service, run.org_id, 'gemini'),
     resolveOrgApiKey(service, run.org_id, 'hunter'), resolveOrgApiKey(service, run.org_id, 'apollo'),
     resolveOrgApiKey(service, run.org_id, 'companies_house'), resolveOrgApiKey(service, run.org_id, 'opencorporates'),
-    resolveOrgApiKey(service, run.org_id, 'google_places'),
+    resolveOrgApiKey(service, run.org_id, 'google_places', source => { placesContext.shared = source === 'global'; }),
   ]);
   return {
     orgName: (org as { name?: string } | null)?.name ?? 'our team',
     companyContext: (org as { company_context?: string | null } | null)?.company_context ?? null,
     senderName: senderFirstName((profile as { full_name?: string | null } | null)?.full_name),
-    keys: { anthropic, gemini, hunter, apollo, companiesHouse, openCorporates, googlePlaces },
+    keys: { anthropic, gemini, hunter, apollo, companiesHouse, openCorporates, googlePlaces, placesContext },
   };
 }
 

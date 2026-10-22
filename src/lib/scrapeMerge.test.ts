@@ -125,7 +125,7 @@ describe('source availability and durable group metadata', () => {
   });
   it.each([companiesHouseSource, croSource])('keeps per-company Places lookup independent of group metadata', (source) => {
     expect(source).not.toContain('registryContactKey');
-    expect(source).toContain("const googlePlaces = await resolveOrgApiKey(service, orgId, 'google_places');");
+    expect(source).toContain("const googlePlaces = await resolveOrgApiKey(service, orgId, 'google_places', source => { placesContext.shared = source === 'global'; });");
     expect(source).toMatch(/runBounded\(companies,[\s\S]*lookupCompanyContacts\(/);
   });
 });

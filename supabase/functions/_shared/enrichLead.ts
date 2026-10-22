@@ -6,6 +6,7 @@ import { lookupOpenCorporatesOfficer } from './openCorporates.ts';
 import { lookupApolloPhone, lookupHunterEmail, lookupHunterOwnerEmail } from './apolloHunterLookup.ts';
 import { lookupPlaceContact } from './googlePlacesLookup.ts';
 import { domainFromWebsite } from './knownPerson.ts';
+import type { PlacesContext } from './placesClient.ts';
 import type { FirecrawlTeam } from './firecrawlRules.ts';
 
 export interface EnrichLeadRow {
@@ -24,7 +25,7 @@ export interface EnrichResult {
   source: Partial<Record<EnrichField, string>>;
 }
 
-export interface EnrichKeys { companiesHouse: string | null; openCorporates: string | null; apollo: string | null; hunter: string | null; googlePlaces: string | null }
+export interface EnrichKeys { placesContext?: PlacesContext; companiesHouse: string | null; openCorporates: string | null; apollo: string | null; hunter: string | null; googlePlaces: string | null }
 
 /** Proposes missing contact details for one lead (website scrape, registry officer, paid keys when present). Writes nothing. */
 export async function enrichOneLead(
@@ -45,7 +46,7 @@ export async function enrichOneLead(
   let website = lead.website;
   await options?.checkpoint?.();
   if ((!website || !lead.phone) && keys.googlePlaces) {
-    const place = await lookupPlaceContact(lead.business_name, lead.city, keys.googlePlaces);
+    const place = await lookupPlaceContact(lead.business_name, lead.city, keys.googlePlaces, keys.placesContext);
     if (place?.website && !website) { proposed.website = place.website; source.website = 'google_places'; website = place.website; }
     if (place?.phone && !lead.phone) { proposed.phone = place.phone; source.phone = 'google_places'; }
   }

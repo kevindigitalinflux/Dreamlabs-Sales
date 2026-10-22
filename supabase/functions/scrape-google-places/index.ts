@@ -1,3 +1,4 @@
+import { createPlacesContext, searchPlaces, type PlacesContext } from '../_shared/placesClient.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
@@ -11,11 +12,6 @@ interface IcpParams {
   country: 'GB' | 'IE' | 'US' | 'other'; min_staff: number | null;
   min_rating: number | null; max_rating: number | null; max_reviews: number | null;
   keywords: string[];
-}
-
-interface PlaceResult {
-  place_id: string; name: string; formatted_address?: string;
-  rating?: number; user_ratings_total?: number;
 }
 
 async function fetchPlaceDetails(placeId: string, apiKey: string): Promise<{ phone: string | null; website: string | null }> {
@@ -35,33 +31,13 @@ function buildQuery(icp: IcpParams): string {
   return parts.join(' ');
 }
 
-async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: string, icp: IcpParams, apiKey: string, cap: number) {
+async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: string, icp: IcpParams, apiKey: string, cap: number, placesContext: PlacesContext) {
   try {
     await service.from('scrape_jobs').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', jobId);
 
     const query = buildQuery(icp);
-    const allPlaces: PlaceResult[] = [];
-    let pageToken: string | undefined;
-    for (let page = 0; page < 3 && allPlaces.length < cap; page++) {
-      const url = pageToken
-        ? `https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken=${pageToken}&key=${apiKey}`
-        : `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${apiKey}`;
-      const res = await fetch(url);
-      const data = await res.json() as { results?: PlaceResult[]; next_page_token?: string; status: string };
-      if (data.status === 'INVALID_REQUEST' && pageToken) {
-        // A too-early next_page_token is a documented, expected possibility —
-        // keep whatever we already collected instead of failing the whole job.
-        break;
-      }
-      if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-        throw new Error(`Google Places ${data.status}`);
-      }
-      allPlaces.push(...(data.results ?? []));
-      pageToken = data.next_page_token;
-      if (!pageToken) break;
-      // Google requires a short delay before a next_page_token becomes valid.
-      await new Promise((r) => setTimeout(r, 2000));
-    }
+    const search = await searchPlaces(apiKey, query, { context: placesContext, maxPages: 3, cap });
+    const allPlaces = search.results;
     // Apply the ICP's rating/review-count filters — parsed by parse-icp and shown
     // to the user as confirmed search criteria, so results must actually honour
     // them. min_staff has no Google Places equivalent and is intentionally left
@@ -92,7 +68,7 @@ async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: strin
     // background-task ceiling even if every site times out (concurrency 8 x
     // ~5s worst case per item = ~38s for 60 items).
     const enriched = await runBounded(places, 8, async (place) => {
-      const details = await fetchPlaceDetails(place.place_id, apiKey);
+      const details = search.legacy ? await fetchPlaceDetails(place.place_id, apiKey) : { phone: place.phone, website: place.website };
       const { email } = await scrapeWebsiteContact(details.website);
       return { place, details, email };
     });
@@ -179,7 +155,8 @@ Deno.serve(async (req) => {
     if (!membership) return json({ error: 'Not a member of this organization' }, 403, headers);
   }
 
-  const apiKey = await resolveOrgApiKey(service, orgId, 'google_places');
+  const placesContext = createPlacesContext(service, orgId);
+  const apiKey = await resolveOrgApiKey(service, orgId, 'google_places', source => { placesContext.shared = source === 'global'; });
   if (!apiKey) return json({ error: 'No Google Places API key configured for this organization' }, 400, headers);
 
   const { data: job, error: jobErr } = await service.from('scrape_jobs').insert({
@@ -195,7 +172,7 @@ Deno.serve(async (req) => {
   // the entire call including argument evaluation when `a` is nullish, so
   // hoisting this out ensures runScrapeJob always actually runs.
   const cap = Math.min(60, body.max_results ?? 60);
-  const task = runScrapeJob(service, job.id, orgId, body.icp_params, apiKey, cap);
+  const task = runScrapeJob(service, job.id, orgId, body.icp_params, apiKey, cap, placesContext);
   (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime?.waitUntil(task);
 
   return json({ job_id: job.id }, 200, headers);

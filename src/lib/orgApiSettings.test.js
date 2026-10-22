@@ -35,6 +35,23 @@ beforeEach(async () => {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const request = (body) => handler(new Request('https://local.test', { method: 'POST', body: JSON.stringify({ org_id: 'org', ...body }) }));
 
+it('validates a Places New key with IDs only before the unchanged Vault save', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ places: [] }))));
+  expect((await request({ action: 'save', provider: 'google_places', api_key: 'fake-new-places' })).status).toBe(200);
+  expect(fetch.mock.calls[0][0]).toBe('https://places.googleapis.com/v1/places:searchText');
+  expect(fetch.mock.calls[0][1].headers['X-Goog-FieldMask']).toBe('places.id');
+  expect(rpc).toHaveBeenCalledWith('app_set_org_api_key', { target_org: 'org', target_provider: 'google_places', secret: 'fake-new-places' });
+});
+it('refuses Places quota errors before Vault and never echoes raw Google text', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: 'fake-secret https://bad?key=fake-secret' } }), { status: 429 })));
+  const response = await request({ action: 'save', provider: 'google_places', api_key: 'fake-secret' });
+  expect(response.status).toBe(400);
+  const body = JSON.stringify(await response.json());
+  expect(body).toContain('quota');
+  expect(body).not.toContain('fake-secret');
+  expect(rpc).not.toHaveBeenCalled();
+});
+
 it('returns only host and status, never the saved worker credential', async () => {
   const response = await request({ action: 'get' });
   const data = await response.json();

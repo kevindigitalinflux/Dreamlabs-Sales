@@ -43,18 +43,19 @@ const GLOBAL_ENV_VARS: Partial<Record<ApiProvider, string>> = {
 export async function resolveOrgApiKey(
   // deno-lint-ignore no-explicit-any
   service: SupabaseClient<any>, orgId: string, provider: ApiProvider,
+  onSource?: (source: 'org' | 'global') => void,
 ): Promise<string | null> {
   const { data: settings } = await service
     .from('org_api_settings').select('is_configured').eq('org_id', orgId).eq('provider', provider).maybeSingle();
   if (settings?.is_configured) {
     const { data: key } = await service.rpc('app_get_org_api_key', { target_org: orgId, target_provider: provider });
-    if (key) return key as string;
+    if (key) { onSource?.('org'); return key as string; }
   }
   // BYO-only regardless of any current or future environment variable or organisation fallback flag.
   if (provider === 'firecrawl' || provider === 'lookup_worker') return null;
   const { data: org } = await service.from('organizations').select('use_global_api_fallback').eq('id', orgId).single();
   const variable = GLOBAL_ENV_VARS[provider];
-  if (org?.use_global_api_fallback && variable) return Deno.env.get(variable) ?? null;
+  if (org?.use_global_api_fallback && variable) { onSource?.('global'); return Deno.env.get(variable) ?? null; }
   return null;
 }
 

@@ -459,7 +459,7 @@ it('uses Places after discovery and records safe city-matched fills with Undo', 
   lookupPlaceContact.mockResolvedValue({ website: 'https://acme.com', phone: '+441234567890', strength: 2, cityMatches: true });
   discoverLeadDomains.mockResolvedValue({ domains: [], people: [], notes: [], problems: [], sitePages: [] });
   const out = await run();
-  expect(lookupPlaceContact).toHaveBeenCalledWith('Acme', 'London', 'fake');
+  expect(lookupPlaceContact).toHaveBeenCalledWith('Acme', 'London', 'fake', expect.objectContaining({ orgId: 'org' }));
   expect(discoverLeadDomains.mock.calls[0][1].website).toBeNull();
   expect(out.domains.auto_applied).toEqual(expect.arrayContaining([
     { table: 'leads', id: 'lead', field: 'phone', before: null, after: '+441234567890' },

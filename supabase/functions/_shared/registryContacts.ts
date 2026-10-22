@@ -1,4 +1,5 @@
 // supabase/functions/_shared/registryContacts.ts
+import type { PlacesContext } from './placesClient.ts';
 import { lookupPlaceContact } from './googlePlacesLookup.ts';
 import { scrapeWebsiteContact } from './websiteContact.ts';
 
@@ -8,11 +9,11 @@ const EMPTY: CompanyContacts = { website: null, email: null, phone: null };
 /** Hard ceiling per company so a slow site cannot eat the edge function's time budget. */
 const LOOKUP_TIMEOUT_MS = 12000;
 
-async function lookup(input: { business_name: string; city: string | null }, googlePlaces: string | null): Promise<CompanyContacts> {
+async function lookup(input: { business_name: string; city: string | null }, googlePlaces: string | null, context?: PlacesContext): Promise<CompanyContacts> {
   let website: string | null = null;
   let phone: string | null = null;
   if (googlePlaces) {
-    const place = await lookupPlaceContact(input.business_name, input.city, googlePlaces);
+    const place = await lookupPlaceContact(input.business_name, input.city, googlePlaces, context);
     website = place?.website ?? null;
     phone = place?.phone ?? null;
   }
@@ -29,11 +30,11 @@ async function lookup(input: { business_name: string; city: string | null }, goo
  */
 export async function lookupCompanyContacts(
   input: { business_name: string; city: string | null },
-  keys: { googlePlaces: string | null },
+  keys: { googlePlaces: string | null; placesContext?: PlacesContext },
 ): Promise<CompanyContacts> {
   try {
     const timeout = new Promise<CompanyContacts>((resolve) => setTimeout(() => resolve(EMPTY), LOOKUP_TIMEOUT_MS));
-    return await Promise.race([lookup(input, keys.googlePlaces), timeout]);
+    return await Promise.race([lookup(input, keys.googlePlaces, keys.placesContext), timeout]);
   } catch {
     return EMPTY;
   }

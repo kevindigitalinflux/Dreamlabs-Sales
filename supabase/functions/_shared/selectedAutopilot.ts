@@ -1,3 +1,4 @@
+import { createPlacesContext, type PlacesContext } from './placesClient.ts';
 // Orchestration for selected-leads autopilot: window, claim, caps, outcomes, completion.
 // The heavy per-lead work lives in selectedLeadPipeline.ts (Task 12b).
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
@@ -73,7 +74,7 @@ async function cancelRun(service: SupabaseClient, runId: string, reason: string)
 }
 
 /** Cheap per-lead checks, then the (12b) pipeline. Never trusts the row's own org_id. */
-export async function precheckLead(service: SupabaseClient, run: SelectedRun, row: RunLeadRow, hooks: Pick<PipelineContext, 'markSendStarted' | 'reserveSend' | 'releaseSend'>): Promise<PipelineOutcome> {
+export async function precheckLead(service: SupabaseClient, run: SelectedRun, row: RunLeadRow, hooks: Pick<PipelineContext, 'markSendStarted' | 'reserveSend' | 'releaseSend'>, placesContext?: PlacesContext): Promise<PipelineOutcome> {
   const { data, error: leadErr } = await service.from('leads').select('*').eq('id', row.lead_id).maybeSingle();
   if (leadErr) return { outcome: 'failed', reason: 'Could not load this lead' };
   const lead = data as (Record<string, unknown> & { id: string; org_id: string }) | null;
@@ -94,7 +95,7 @@ export async function precheckLead(service: SupabaseClient, run: SelectedRun, ro
   if (!verdict.eligible) return { outcome: 'skipped', reason: skipReasonFor(verdict.reason) };
 
   return processLeadPipeline({
-    service, run: { id: run.id, org_id: run.org_id, created_by: run.created_by, timezone: tz }, lead, enrollment, now,
+    service, placesContext, run: { id: run.id, org_id: run.org_id, created_by: run.created_by, timezone: tz }, lead, enrollment, now,
     deadlineMs: Date.now() + LEAD_DEADLINE_MS, ...hooks,
   });
 }
@@ -114,7 +115,7 @@ async function recordOutcome(service: SupabaseClient, run: SelectedRun, row: Run
   }
 }
 
-async function processOne(service: SupabaseClient, run: SelectedRun, row: RunLeadRow): Promise<void> {
+async function processOne(service: SupabaseClient, run: SelectedRun, row: RunLeadRow, placesContext?: PlacesContext): Promise<void> {
   const hooks = {
     async markSendStarted(emailLogId?: string): Promise<void> {
       const ok = await updateRow(service, row.id, { send_started_at: nowIso(), ...(emailLogId ? { email_log_id: emailLogId } : {}) });
@@ -130,7 +131,7 @@ async function processOne(service: SupabaseClient, run: SelectedRun, row: RunLea
     },
   };
   let out: PipelineOutcome;
-  try { out = await precheckLead(service, run, row, hooks); } catch (e) { out = { outcome: 'failed', reason: truncateError(e) }; }
+  try { out = await precheckLead(service, run, row, hooks, placesContext); } catch (e) { out = { outcome: 'failed', reason: truncateError(e) }; }
   try { await recordOutcome(service, run, row, out); } catch (e) {
     await updateRow(service, row.id, { status: 'failed', reason: truncateError(e) });
   }
@@ -205,6 +206,7 @@ async function decide(service: SupabaseClient, runId: string, bounds: Bounds): P
 
 /** Processes one active selected run for one tick. `startedAt` is the invocation start (ms epoch), shared across runs. */
 export async function processRun(service: SupabaseClient, run: SelectedRun, startedAt: number): Promise<void> {
+  const placesContext = createPlacesContext(service, run.org_id);
   if (run.mode !== 'selected' || run.status !== 'active') return;
   const bounds = computeBounds(run);
   if (!bounds) { await cancelRun(service, run.id, 'Invalid send window'); return; }
@@ -230,7 +232,7 @@ export async function processRun(service: SupabaseClient, run: SelectedRun, star
     }
     const row = await claimOne(service, run.id);
     if (!row) return;
-    await processOne(service, d.run, row);
+    await processOne(service, d.run, row, placesContext);
   }
 }
 

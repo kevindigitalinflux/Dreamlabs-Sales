@@ -1,3 +1,4 @@
+import { createPlacesContext, type PlacesContext } from './placesClient.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { enrichOneLead, type EnrichLeadRow } from './enrichLead.ts';
 import { findAndStoreDecisionMakers } from './findDecisionMakers.ts';
@@ -36,7 +37,7 @@ async function checkAuthorisation(service: SupabaseClient, row: Claimed, job: Jo
     throw new LookupSkipped('This job was stopped or this lookup is no longer current.');
 }
 
-async function processLead(service: SupabaseClient, row: Claimed, job: Job, startedAt: number): Promise<Outcome> {
+async function processLead(service: SupabaseClient, row: Claimed, job: Job, startedAt: number, placesContext = createPlacesContext(service, job.org_id)): Promise<Outcome> {
   const deadline = Math.min(Date.now() + LOOKUP_LIMITS.leadBudgetMs,
     startedAt + LOOKUP_LIMITS.wallBudgetMs - LOOKUP_LIMITS.checkpointMarginMs);
   const { data, error } = await service.from('leads').select('id, org_id, business_name, website, email, phone, owner_name, city, blocked_domains')
@@ -73,15 +74,17 @@ async function processLead(service: SupabaseClient, row: Claimed, job: Job, star
   }
   const [companiesHouse, openCorporates, googlePlaces, firecrawlKey] = await Promise.all([
     resolveOrgApiKey(service, job.org_id, 'companies_house'), resolveOrgApiKey(service, job.org_id, 'opencorporates'),
-    resolveOrgApiKey(service, job.org_id, 'google_places'),
+    resolveOrgApiKey(service, job.org_id, 'google_places', source => { placesContext.shared = source === 'global'; }),
     resolveOrgApiKey(service, job.org_id, 'firecrawl'),
   ]);
+  const placesLines: string[] = [];
+  placesContext.onMessage = message => placesLines.push(message);
   const worker = makeWorkerClient({ usage: service, orgId: job.org_id,
     config: await resolveOrgWorkerConfig(service, job.org_id, Deno.env.get('WORKER_SHARED_ORG_IDS')) });
   // enrichOneLead catches optional Firecrawl checkpoint failures and preserves earlier proposals.
   const firecrawl = makeFirecrawlClient({ key: firecrawlKey, checkpoint,
     reserve: () => checkRateLimit(service, `firecrawl-pages:${job.org_id}`, FIRECRAWL_DAILY_PAGES, 1440, true) });
-  const found = await enrichOneLead(lead, { hunter, apollo, companiesHouse, openCorporates, googlePlaces }, {
+  const found = await enrichOneLead(lead, { hunter, apollo, companiesHouse, openCorporates, googlePlaces, placesContext }, {
     checkpoint,
     teamFallback: async (website, pages) => {
       const domain = domainFromWebsite(website);
@@ -101,12 +104,13 @@ async function processLead(service: SupabaseClient, row: Claimed, job: Job, star
   const proposed = found?.proposed ?? {};
   return { status: 'done', reason: Object.keys(proposed).length ? 'Found details to review.' : 'No additional details were found.',
     review: lookupReview('enrich', proposed) as 'none' | 'pending',
-    result: { proposed, source: found?.source ?? {}, steps: ['Checked available sources for contact details.', ...worker.lines(), ...firecrawl.lines()] } };
+    result: { proposed, source: found?.source ?? {}, steps: ['Checked available sources for contact details.', ...placesLines, ...worker.lines(), ...firecrawl.lines()] } };
 }
 
 /** Cron and create share this runner. SQL handles stale leases, cancellation and atomic completion. */
 export async function runLookupTick(service: SupabaseClient, startedAt = Date.now()): Promise<number> {
   let processed = 0;
+  const placesJobs = new Map<string, PlacesContext>();
   while (canStartLookupLead(startedAt, Date.now())) {
     const { data, error } = await service.rpc('lookup_job_claim', { max_leads: 1 });
     if (error) { console.error('lookup jobs: claim failed', lookupErrorKind(error)); break; }
@@ -116,9 +120,10 @@ export async function runLookupTick(service: SupabaseClient, startedAt = Date.no
     try {
       const { data: job, error: jobError } = await service.from('lookup_jobs').select('id, org_id, created_by, kind, status').eq('id', row.job_id).maybeSingle();
       if (jobError) throw jobError;
+      if (job && !placesJobs.has(job.id)) placesJobs.set(job.id, createPlacesContext(service, job.org_id));
       outcome = !job || job.status !== 'active' ? skipped('This job was stopped.')
         : !canStartLookupLead(startedAt, Date.now()) ? skipped('There was not enough time to start this lookup. Please try again.')
-        : await processLead(service, row, job as Job, startedAt);
+        : await processLead(service, row, job as Job, startedAt, placesJobs.get(job.id));
     } catch (err) {
       console.error('lookup jobs: lead processing failed', lookupErrorKind(err));
       outcome = err instanceof LookupSkipped ? skipped(err.message)

@@ -35,3 +35,24 @@ it('actual worker resolver fails closed and logs no raw database errors', async 
   expect(f.env).not.toHaveBeenCalled();
   expect(JSON.stringify(log.mock.calls)).not.toContain('private-test-error');
 });
+
+it('reports own Places provenance without changing Vault precedence or reading the global secret', async () => {
+  const f = fixture({ configured: true, value: 'fake-own-places' });
+  const source = vi.fn();
+  expect(await resolveOrgApiKey(f.service, 'org', 'google_places', source)).toBe('fake-own-places');
+  expect(source).toHaveBeenCalledExactlyOnceWith('org');
+  expect(f.rpc).toHaveBeenCalledExactlyOnceWith('app_get_org_api_key', { target_org: 'org', target_provider: 'google_places' });
+  expect(f.env).not.toHaveBeenCalled();
+});
+it('reports global Places provenance only through the unchanged fallback decision', async () => {
+  const f = fixture();
+  const source = vi.fn();
+  expect(await resolveOrgApiKey(f.service, 'org', 'google_places', source)).toBe('fake-global-must-not-be-read');
+  expect(source).toHaveBeenCalledExactlyOnceWith('global');
+  expect(f.env).toHaveBeenCalledExactlyOnceWith('GOOGLE_PLACES_API_KEY');
+  const blocked = fixture({ fallback: false });
+  source.mockClear();
+  expect(await resolveOrgApiKey(blocked.service, 'org', 'google_places', source)).toBeNull();
+  expect(source).not.toHaveBeenCalled();
+  expect(blocked.env).not.toHaveBeenCalled();
+});

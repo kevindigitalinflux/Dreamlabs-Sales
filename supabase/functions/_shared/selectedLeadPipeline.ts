@@ -1,3 +1,4 @@
+import type { PlacesContext } from './placesClient.ts';
 // The real per-lead pipeline for the selected-leads autopilot (Task 12b).
 // Safety first: whenever there is doubt the lead is parked (needs_input) or skipped with a plain reason. Never send on uncertainty.
 import { markLogInterrupted } from './interruptedSend.ts';
@@ -18,6 +19,7 @@ export interface PipelineRun {
 }
 
 export interface PipelineContext {
+  placesContext?: PlacesContext;
   service: SupabaseClient;
   run: PipelineRun;
   /** The lead freshly reloaded from the database; its org_id has already been verified against run.org_id. */
@@ -71,7 +73,7 @@ async function run(ctx: PipelineContext, progress: Progress): Promise<PipelineOu
   const stopped = (reason: string, outcome: 'skipped' | 'needs_input' = 'needs_input'): PipelineOutcome => ({ outcome, reason, sequenceId: progress.sequenceId, costCents: progress.costCents });
 
   // 1 and 2. Load the org, the sender and the keys; confirm the person who started the run may send for this lead.
-  const org = await loadOrgContext(service, ctx.run);
+  const org = await loadOrgContext(service, ctx.run, ctx.placesContext);
   if (!(await creatorCanSend(service, ctx.run, ctx.lead))) return stopped('The person who started this run cannot access this lead', 'skipped');
   if (!org.keys.anthropic) return stopped('No AI key is set up for this organization');
   if (!org.senderName) return stopped('The person who started this run has no name on their profile');

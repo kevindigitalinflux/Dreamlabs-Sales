@@ -1,3 +1,4 @@
+import { createPlacesContext, type PlacesContext } from './placesClient.ts';
 // supabase/functions/_shared/deepFind.ts
 // Deep find engine: claims queued leads, discovers the company's domains and people, stores people as contacts that are
 // NOT in sequences, and writes a plain-English summary per lead. Never emails anyone and never touches sequences.
@@ -108,7 +109,7 @@ async function insertContacts(service: SupabaseClient, rows: Record<string, unkn
 }
 
 /** One lead, start to finish. Returns the outcome to store; never throws for provider problems. */
-export async function processDeepFindLead(service: SupabaseClient, run: DeepFindRun, row: ClaimedRow): Promise<LeadOutcome> {
+export async function processDeepFindLead(service: SupabaseClient, run: DeepFindRun, row: ClaimedRow, placesContext = createPlacesContext(service, run.org_id)): Promise<LeadOutcome> {
   const effort = effortPolicy(row.domains);
   const metadata = { ...(row.domains?.start_fresh === true ? { start_fresh: true } : {}), effort, effort_caps: effort === 'custom' ? row.domains?.effort_caps : { hunter: EFFORT_LEVELS[effort].hunter, ai: EFFORT_LEVELS[effort].ai, firecrawl: EFFORT_LEVELS[effort].firecrawl } };
   const deadline = Date.now() + LEAD_BUDGET_MS;
@@ -135,7 +136,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     resolveOrgApiKey(service, run.org_id, 'companies_house'),
     resolveOrgApiKey(service, run.org_id, 'apollo'),
     resolveOrgApiKey(service, run.org_id, 'firecrawl'),
-    resolveOrgApiKey(service, run.org_id, 'google_places'),
+    resolveOrgApiKey(service, run.org_id, 'google_places', source => { placesContext.shared = source === 'global'; }),
     resolveOrgApiKey(service, run.org_id, 'opencorporates'),
   ]);
   const configured = { hunterKey, geminiKey, apolloKey, firecrawlKey, placesKey, ocKey };
@@ -185,7 +186,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (!name.trim()) return;
     const key = displayPersonKey(name);
     const contact = contactId ? rows.find(c => c.id === contactId) : null;
-    const automatic = !!contact?.dismissed_at && ['companies_house', 'cro', 'hunter', 'apollo'].includes(contact.source ?? '');
+    const automatic = !!contact?.dismissed_at && ['companies_house', 'cro', 'hunter', 'apollo'].includes(typeof contact.source === 'string' ? contact.source : '');
     const existing = dismissedNames.get(key);
     if (existing) { existing.automatic ||= automatic; return; }
     dismissedNames.set(key, { name, automatic });
@@ -476,7 +477,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       if (!await checkRateLimit(service, 'places-lookups:' + run.org_id, 300, 1440, true)) {
         steps.push("Google Places lookups reached today's limit for this organisation.");
       } else {
-        const place = await lookupPlaceContact(str(lead.business_name) ?? '', str(lead.city), placesKey);
+        placesContext.onMessage = message => steps.push(message);
+        const place = await lookupPlaceContact(str(lead.business_name) ?? '', str(lead.city), placesKey, placesContext);
         const automatic = !!str(lead.city) && place?.strength === 2 && place.cityMatches === true;
         const label = 'Google Places: ' + (place?.name ?? 'business match') + ', ' + (place?.address ?? 'address unavailable') + '. Review the match before adding.';
         const domain = domainFromWebsite(place?.website ?? null);
@@ -1228,6 +1230,7 @@ export async function runDeepFindTick(service: SupabaseClient, startedAt: number
   try { await housekeeping(service); } catch { console.error('deep find: housekeeping failed'); }
   let processed = 0;
   const members = new Map<string, boolean>();
+  const placesRuns = new Map<string, PlacesContext>();
   while (Date.now() - startedAt < WALL_BUDGET_MS - LEAD_RESERVE_MS) {
     const { data: claimed, error } = await service.rpc('deep_find_claim', { max_leads: 1 });
     if (error) { console.error('deep find: claim failed'); break; }
@@ -1251,7 +1254,10 @@ export async function runDeepFindTick(service: SupabaseClient, startedAt: number
       continue;
     }
     let out: LeadOutcome;
-    try { out = await processDeepFindLead(service, run, row); } catch { console.error('deep find: claimed lead processing failed'); out = { status: 'failed', reason: 'Something went wrong while searching this lead.' }; }
+    try {
+      if (!placesRuns.has(run.id)) placesRuns.set(run.id, createPlacesContext(service, run.org_id));
+      out = await processDeepFindLead(service, run, row, placesRuns.get(run.id));
+    } catch { console.error('deep find: claimed lead processing failed'); out = { status: 'failed', reason: 'Something went wrong while searching this lead.' }; }
     const effort = effortPolicy(row.domains);
     const label = effort === 'custom' ? 'Custom' : EFFORT_LEVELS[effort].label;
     const freshSteps = row.domains?.start_fresh === true && Array.isArray(row.domains.steps)

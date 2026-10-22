@@ -1,3 +1,4 @@
+import { createPlacesContext } from '../_shared/placesClient.ts';
 // supabase/functions/scrape-companies-house/index.ts
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
@@ -38,12 +39,13 @@ async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: strin
       return seen.some((s) => s.business_name.toLowerCase() === businessName.toLowerCase());
     }
 
-    const googlePlaces = await resolveOrgApiKey(service, orgId, 'google_places');
+  const placesContext = createPlacesContext(service, orgId);
+    const googlePlaces = await resolveOrgApiKey(service, orgId, 'google_places', source => { placesContext.shared = source === 'global'; });
     const city = icp.city ?? null;
     const found = await runBounded(companies, 5, async (c) => {
       const [officers, contacts] = await Promise.all([
         fetchActiveOfficers(c.company_number, apiKey),
-        lookupCompanyContacts({ business_name: c.title, city }, { googlePlaces }),
+        lookupCompanyContacts({ business_name: c.title, city }, { googlePlaces, placesContext }),
       ]);
       return { officers, contacts };
     });
