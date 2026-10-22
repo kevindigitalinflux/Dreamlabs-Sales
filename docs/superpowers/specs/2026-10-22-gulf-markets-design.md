@@ -1,6 +1,6 @@
 # Saudi Arabia and UAE: discovery and business data — Design
 
-Date: 2026-10-22. Author: Claude (architect). Status: DRAFT for Kevin's approval. Not built.
+Date: 2026-10-22. Author: Claude (architect). Status: DEFERRED by Kevin 2026-10-22 (build order 3 of 3, to-do list). When resumed, Claude asks Kevin the kickoff questions first. Not built.
 
 ## Request and decisions (kickoff, 2026-10-22)
 - Kevin wants the platform to start supporting Saudi Arabia and the UAE as target markets.

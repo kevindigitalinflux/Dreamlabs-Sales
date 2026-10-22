@@ -1,6 +1,6 @@
 # Platform owners: who can create organisations and invite admins — Design
 
-Date: 2026-10-22. Author: Claude (architect). Status: DRAFT for Kevin's approval. Not built.
+Date: 2026-10-22. Author: Claude (architect). Status: APPROVED by Kevin 2026-10-22 (build order 1 of 3). Plan not yet written. Not built.
 
 ## Kevin's decisions (kickoff, 2026-10-22)
 - Admins of the **Mr Brush & Co** and **DI Dreamlabs** organisations are platform owners.
@@ -34,7 +34,7 @@ Date: 2026-10-22. Author: Claude (architect). Status: DRAFT for Kevin's approval
 5. **UI.** `Admin.tsx`: New organisation button, org picker over all orgs, and the "Admin" choice in `InviteModal` and the role control in `UserTable` appear only for platform owners. Client-org admins see their own org's members, invite for non-admin roles, and a plain explanation ("Only Dreamlabs can add admins") where the admin option would be. The server rejects regardless.
 6. **Migration** `066_platform_owner_orgs.sql` (065 is reserved for the readiness badge). Additive: column, function, two updates with a row-count assertion. Kevin applies it in the SQL editor. An audit script (`supabase/audits/…` in the same style as the existing audits) checks: flag set on exactly two orgs; function true for a DI Dreamlabs admin, false for a UX Tree admin; function not executable by `anon`; client cannot update `grants_platform_owner` (column grant excludes it; RLS on organizations unchanged).
 
-## Risk to confirm with Kevin
+## Risk (confirmed by Kevin 2026-10-22: he is admin of both Mr Brush & Co and DI Dreamlabs; both are owner level)
 Mr Brush & Co is also a real client business. Whoever is admin of the Mr Brush & Co org in this app becomes a platform owner who can see and manage every organisation, including UX Tree and the Academy. Today Kevin is not even a member of Mr Brush & Co in this app. Ask: who are the admins of that org now, and should any Mr Brush staff ever be admin there? If staff may become admin, they should not get platform power; the alternative is flagging DI Dreamlabs only, with Mr Brush managed by its owners as an ordinary client. This spec follows Kevin's decision (both orgs) but this is the one thing worth a second look.
 
 ## Out of scope

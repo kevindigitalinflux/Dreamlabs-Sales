@@ -1,6 +1,6 @@
 # Phone numbers for leads and decision makers — Design
 
-Date: 2026-10-22. Author: Claude (architect). Status: DRAFT for Kevin's approval. Not built.
+Date: 2026-10-22. Author: Claude (architect). Status: DRAFT, build order 2 of 3. Kevin answered 2026-10-22: Suj request = leads but mostly decision makers; switchboard numbers are fine. WhatsApp sending is a separate spec (not yet written). Not built.
 
 ## Request and decisions
 - Source: Kevin relayed a request from Suj (Digital Influx Academy): the platform should be able to get phone numbers for leads and for decision makers. I found no written record of Suj's exact wording, so **Kevin should confirm the wording or paste it** before this spec is approved (see Open questions).

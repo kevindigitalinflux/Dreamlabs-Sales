@@ -91,3 +91,5 @@ Last updated 2026-10-14. Ask for any item by number or name.
 26. Power Dialer provider wiring and the AI voice agent (phase 2).
 27. Remove the temporary `/preview/splash-to-login` route.
 28. Pre-launch security items from the 2026-09-22 audit that are still open (leaked-password protection, `_headers`/CSP, rate limiting beyond `unsubscribe`, audit log for admin actions, error monitoring, backup plan).
+29. Saudi Arabia and UAE markets (deferred by Kevin 2026-10-22). Draft spec: `docs/superpowers/specs/2026-10-22-gulf-markets-design.md`. When resumed, Claude asks Kevin kickoff questions first (sectors, cities, first org, register source). Build after platform owners and phone numbers.
+30. WhatsApp outreach to decision makers (requested 2026-10-22, spec not yet written; follows the phone numbers spec). Needs kickoff on Meta rules (opt-in, approved templates), review-before-send and which org goes first.
