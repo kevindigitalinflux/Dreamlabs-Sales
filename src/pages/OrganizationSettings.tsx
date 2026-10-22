@@ -1,3 +1,4 @@
+import { PlacesUsageMeter } from '../components/settings/PlacesUsageMeter';
 import { useState } from 'react';
 import { CheckCircle2, KeyRound } from 'lucide-react';
 import { useOrgApiSettings } from '../hooks/useOrgApiSettings';
@@ -43,27 +44,15 @@ const PROVIDERS: {
     label: 'Google Places (lead scraper)',
     url: 'https://console.cloud.google.com/google/maps-apis/credentials',
     ctaLabel: 'Open Google Cloud Console for Places →',
-    freeText: "Google gives this specific API 5,000 free searches every month before any charge applies (confirmed 2026-09-24) — comfortably covers normal usage here. A payment method is still required to enable it (Google's anti-abuse requirement, not a cost to you unless you go over 5,000/month), but nothing is charged unless you exceed the free allowance. Usage bills to your own Google Cloud account, never Kevin's.",
+    freeText: "Uses Places API (New), with support for existing legacy-enabled projects. Google gives 1,000 free monthly searches at the tier this app uses, shared across projects on the same billing account. Each search returns up to 20 businesses. The app stops at your monthly limit (900 by default). Google charges apply above its free allowance; other projects using the account count too.",
     steps: [
-      'Click the button above and sign in with a Google account.',
-      'If asked to create a project, name it anything you’ll recognize, e.g. "[Your Company] Dreamlabs Sales" — if you already have one from setting up Gemini or another key, you can reuse it.',
-      'If prompted to set up billing, click "Link a billing account" → "Create a new billing account", add a debit or credit card, and confirm. This is required even though usage stays free under 5,000 searches/month.',
-      'Search for "Places API" and click Enable. Make sure it says "Places API" — not "Places API (New)", which is a different, non-free product covered separately under "Google Places Pro" below.',
-      'Google will show your new API key on a "Get started" screen right after enabling — copy it and paste it into the box below. If you miss it, find it later under "Credentials" on the same page.',
-      'If saving says the key was rejected right after creating it, wait a few minutes and try again — brand-new Google API keys can take a little while to activate.',
-    ],
-  },
-  {
-    key: 'google_places_pro',
-    label: 'Google Places Pro (optional, not yet used)',
-    url: 'https://console.cloud.google.com/google/maps-apis/credentials',
-    ctaLabel: 'Open Google Cloud Console for Places (New) →',
-    freeText: "Not used by any feature yet — configuring this key does nothing right now, it's just here for when it's worth switching on. This is the newer Places API, which returns richer results than the free Google Places key above (more place types, more data per result), but it has no free tier for the fields this app needs: every search costs real money from the first request (roughly $32-35 per 1,000 searches, billed to your own Google Cloud account). Worth turning on once your organization is generating enough revenue that the extra lead quality/quantity pays for itself — not recommended for a new or low-volume org.",
-    steps: [
-      'Click the button above and select the same Google Cloud project you used for the free Google Places key.',
-      'Search for and enable "Places API (New)" (not "Places API" without "(New)" — that’s the free one above).',
-      'Create a new API key for this project, or reuse the existing one — the same key works for both APIs.',
-      'Paste it into the box below. Nothing will use it until a future update adds a "Google Places Pro" scraper option.',
+      'Open Google Cloud Console and pick or create a project.',
+      'Enable billing by linking a billing account to that project.',
+      'In the API library, search for Places API (New) and click Enable.',
+      'Create or reuse an API key. Restrict it to Places API (New). Do not restrict it by website or app: searches run from our server.',
+      'Paste the key below. If it is new, wait two minutes and retry if Google has not activated it yet.',
+      'For a second limit on your Google account, open Billing → Budgets & alerts. Create a budget with email alerts at 50, 90 and 100 percent. Alerts do not stop charges.',
+      'Open APIs & Services → Places API (New) → Quotas. If Text Search requests per day is offered, set a small limit, for example 100. Check the available quota controls in your project.',
     ],
   },
   {
@@ -136,7 +125,8 @@ const PROVIDERS: {
   },
 ];
 
-function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configured, onSave, onRemove }: {
+function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configured, onSave, onRemove, children }: {
+  children?: import('react').ReactNode;
   provider: OrgApiSetting['provider']; label: string; url: string; ctaLabel: string; freeText: string; steps?: string[];
   onRemove?: () => Promise<string | null>;
   configured: boolean; onSave: (provider: OrgApiSetting['provider'], key: string) => Promise<string | null>;
@@ -191,6 +181,7 @@ function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configur
         <Button variant="secondary" onClick={() => void handleSave()} disabled={busy} loading={busy}>{busy ? 'Working…' : 'Save'}</Button>
         {configured && onRemove && <Button variant="secondary" aria-label="Remove Firecrawl key" disabled={busy} onClick={() => void handleRemove()}>Remove</Button>}
       </div>
+      {children}
       {msg && <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : 'text-success'}`}>{msg.text}</p>}
     </div>
   );
@@ -211,7 +202,7 @@ export function OrganizationSettings() {
       </header>
       <p className="text-muted">
         These keys power AI drafting and the lead scraper for this organization. Usage bills to
-        whichever key is configured here — never to Kevin's account.
+        the configured key's Google or provider account. Organisations with shared access may use the shared account.
       </p>
       {loadError && <p role="alert" className="text-sm text-danger">{loadError}</p>}
       {currentOrg?.role === 'admin' && !loadError && <LookupWorkerCard key={currentOrg.id}
@@ -231,7 +222,9 @@ export function OrganizationSettings() {
               configured={settings.find((s) => s.provider === p.key)?.is_configured ?? false}
               onSave={save}
               onRemove={p.key === 'firecrawl' && !loadError ? removeFirecrawl : undefined}
-            />
+            >
+              {p.key === 'google_places' && currentOrg && <PlacesUsageMeter key={currentOrg.id} orgId={currentOrg.id} admin={currentOrg.role === 'admin'} />}
+            </ProviderRow>
           ))}
         </div>
       </Card>

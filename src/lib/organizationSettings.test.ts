@@ -22,3 +22,14 @@ it('does not offer removal when no Firecrawl key is configured', () => {
   vi.mocked(useOrgApiSettings).mockReturnValue({ ...useOrgApiSettings(), settings: [] });
   expect(renderToStaticMarkup(createElement(OrganizationSettings))).not.toContain('Remove Firecrawl key');
 });
+
+it('explains New setup, Enterprise free searches, billing guardrails and one Places key slot', () => {
+  const markup = renderToStaticMarkup(createElement(OrganizationSettings));
+  expect(markup).toContain('Places API (New)');
+  expect(markup).toContain('1,000 free monthly searches');
+  expect(markup).toContain('Budgets &amp; alerts');
+  expect(markup).toContain('Quotas');
+  expect(markup).not.toContain('Google Places Pro');
+  expect(markup).not.toContain('5,000 free searches');
+  expect(markup).toContain('Loading Google search usage');
+});
