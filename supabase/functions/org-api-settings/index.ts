@@ -114,9 +114,10 @@ Deno.serve(async (req) => {
 
   const { data: membership } = await service
     .from('org_members').select('role').eq('org_id', orgId).eq('user_id', userData.user.id).maybeSingle();
-  const { data: profile } = await service.from('profiles').select('platform_role').eq('id', userData.user.id).single();
-  const isMember = !!membership || profile?.platform_role === 'platform_admin';
-  const canManage = membership?.role === 'admin' || profile?.platform_role === 'platform_admin';
+  const { data: owner, error: ownerError } = await service.rpc('is_platform_owner', { p_user: userData.user.id });
+  const isOwner = !ownerError && owner === true;
+  const isMember = !!membership || isOwner;
+  const canManage = membership?.role === 'admin' || isOwner;
   if (!isMember) return json({ error: 'Not a member of this organization' }, 403, headers);
 
   if (body.action === 'get') {
