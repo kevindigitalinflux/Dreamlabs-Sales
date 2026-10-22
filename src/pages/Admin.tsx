@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Building2, UserPlus, Users } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { useAuth } from '../hooks/useAuth';
 import { useOrg } from '../hooks/useOrg';
 import type { OrgMemberRow } from '../types';
 import { Button } from '../components/ui/Button';
@@ -18,9 +17,7 @@ interface OrgOption { id: string; name: string }
 
 /** Admin panel: org-scoped user management + lead assignment (SPEC.md §10). */
 export function Admin() {
-  const { profile } = useAuth();
-  const { currentOrg } = useOrg();
-  const isPlatformAdmin = profile?.platform_role === 'platform_admin';
+  const { currentOrg, isPlatformOwner } = useOrg();
 
   const [orgOptions, setOrgOptions] = useState<OrgOption[]>([]);
   const [manageOrgId, setManageOrgId] = useState<string>('');
@@ -39,8 +36,8 @@ export function Admin() {
     if (err) return setError(err.message);
     const orgs = (data as { orgs: OrgOption[] }).orgs;
     setOrgOptions(orgs);
-    setManageOrgId((prev) => prev || currentOrg?.id || orgs[0]?.id || '');
-  }, [currentOrg]);
+    setManageOrgId((prev) => isPlatformOwner ? (prev || currentOrg?.id || orgs[0]?.id || '') : (currentOrg?.id || orgs[0]?.id || ''));
+  }, [currentOrg, isPlatformOwner]);
 
   const loadMembers = useCallback(async (orgId: string) => {
     if (!orgId) return;
@@ -69,8 +66,8 @@ export function Admin() {
     <div className="flex max-w-4xl flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[28px] font-extrabold">Admin</h1>
-        <div className="flex items-center gap-2">
-          {isPlatformAdmin && (
+        <div className="flex flex-wrap items-center gap-2">
+          {isPlatformOwner && (
             <Button variant="secondary" onClick={() => setNewOrgOpen(true)}>
               <Building2 className="h-4 w-4" aria-hidden />
               New organization
@@ -86,10 +83,10 @@ export function Admin() {
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
       <Card>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-[18px] font-bold">Members</h2>
-          {isPlatformAdmin && orgOptions.length > 1 && (
-            <div className="w-64">
+          {isPlatformOwner && orgOptions.length > 1 && (
+            <div className="w-full sm:w-64">
               <SelectField label="Manage members of" value={manageOrgId} onChange={(e) => setManageOrgId(e.target.value)}>
                 {orgOptions.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
               </SelectField>
@@ -101,7 +98,7 @@ export function Admin() {
           <EmptyState icon={Users} title="No members yet" hint="Invite the first person to this organization." />
         )}
         {!loadingMembers && members.length > 0 && (
-          <UserTable members={members} orgId={manageOrgId} onChanged={() => void loadMembers(manageOrgId)} />
+          <UserTable isOwner={isPlatformOwner} members={members} orgId={manageOrgId} onChanged={() => void loadMembers(manageOrgId)} />
         )}
       </Card>
 
@@ -110,8 +107,8 @@ export function Admin() {
         <AssignmentPanel contractors={currentOrgContractors} />
       </Card>
 
-      <InviteModal open={inviteOpen} onClose={() => setInviteOpen(false)} orgId={manageOrgId} onInvited={() => void loadMembers(manageOrgId)} />
-      {isPlatformAdmin && (
+      <InviteModal canInviteAdmin={isPlatformOwner} open={inviteOpen} onClose={() => setInviteOpen(false)} orgId={manageOrgId} onInvited={() => void loadMembers(manageOrgId)} />
+      {isPlatformOwner && (
         <NewOrgModal open={newOrgOpen} onClose={() => setNewOrgOpen(false)} onCreated={(org) => { setManageOrgId(org.id); void loadOrgs(); }} />
       )}
     </div>
