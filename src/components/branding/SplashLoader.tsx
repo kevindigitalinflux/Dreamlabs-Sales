@@ -203,8 +203,9 @@ function LoaderScene() {
         }}
       />
 
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ position: 'relative', width: W * LOGO_SCALE, height: visibleH * LOGO_SCALE, overflow: 'visible' }}>
+      <div style={{ position: 'absolute', inset: 0 }}>
+        {/* The animated mark sits at the exact centre of the screen; the wordmark and bar hang below it. */}
+        <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, calc(-50% + 11px))', width: W * LOGO_SCALE, height: visibleH * LOGO_SCALE, overflow: 'visible' }}>
         <div style={{ position: 'absolute', top: 0, left: 0, width: W, height: visibleH, transform: `scale(${LOGO_SCALE})`, transformOrigin: 'top left' }}>
         <div style={{ position: 'relative', width: W, height: visibleH, overflow: 'visible' }}>
           <div style={{ position: 'absolute', left: 0, top: -CROP * W, width: W, height: W }}>
@@ -285,6 +286,9 @@ function LoaderScene() {
         </div>
         </div>
 
+        <div
+          style={{ position: 'absolute', left: '50%', top: `calc(50% + 11px + ${(visibleH * LOGO_SCALE) / 2}px)`, transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+        >
         <h1 className="m-0 mt-5 text-[32px] font-extrabold text-nav-text">
           Dreamlabs<span className="text-cyan">Sales</span>
         </h1>
@@ -312,6 +316,7 @@ function LoaderScene() {
               background: 'linear-gradient(90deg,#64378B 0%,#8B32FF 72%,#A559FF 100%)',
             }}
           />
+        </div>
         </div>
       </div>
     </div>
