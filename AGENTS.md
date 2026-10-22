@@ -55,3 +55,7 @@ Vault: `C:/Users/kevin/OneDrive/Desktop/DI Dreamlabs Context Brain` (one vault, 
 - Put long detail in files (HANDOFF.md section, report file) and keep the final answer short: branch, HEAD hash, commits, gate counts, files changed, open questions, next action (under about 25 lines).
 - Use one run per branch; avoid re-running the full suite after every tiny edit (run the targeted test file, then the full gates once at the end).
 - Do not paste whole diffs, logs or file contents into the final answer.
+
+
+## Places build checkpoint (2026-10-22)
+This branch is codex/places-new in C:/Users/kevin/Projects/dreamlabs-sales-places, not the older default checkout above. Read docs/PLACES-NEW-BUILD-REPORT.md and the latest docs/HANDOFF.md section. Enterprise Places is built locally; migration 067 and its rollback audit are written only. All local gates pass (141 files, 2,216 tests). Claude review and runtime/database/browser/provider checks remain pending. Do not touch the platform-owners checkout, call Supabase, run SQL/audits, push, merge or deploy under this task's authorization. Stage explicit paths only; this task's requested trailer is Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>.

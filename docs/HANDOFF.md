@@ -827,3 +827,16 @@ Write three specs in `docs/superpowers/specs/` (suggested: `2026-10-22-platform-
 ### One-time role change: splash centring (2026-10-22)
 - Role change recorded at Kevin's instruction: Claude built the loading-screen centring itself instead of Codex. Old role: Claude architect/reviewer. New role: builder for this one task only (SplashLoader.tsx, commit `0277604`, merged to main). Scope: that file only. Kevin confirmed it was a one-time task; default roles (Claude architect/reviewer, Codex builder) apply again from now on, including for platform owners.
 - Change: the animated mark sits at the screen centre, wordmark and progress bar below it (11 px nudge so the inked flask centres). Checked locally at desktop width only (flask middle 395 px vs screen centre 393 px). Gates: tsc clean, 2,178 tests, build OK. Merge, push and Cloudflare auto-deploy authorized by Kevin.
+
+
+## Places API (New) local build — 2026-10-22, Codex builder
+
+Kevin authorized the Enterprise Text Search spec on codex/places-new in C:/Users/kevin/Projects/dreamlabs-sales-places. Base: 9bafbf4b910eb02b27b2e17f751b78d5ca637579. Roles are unchanged; Claude remains architect/reviewer. The other checkout was not accessed or changed. No Supabase/provider calls, SQL application/audit execution, remote writes, push, merge, deployment or paid fallback occurred.
+
+Exact implementation, full code hashes, changed-file inventory, gate counts, deviations and architect questions: docs/PLACES-NEW-BUILD-REPORT.md. Helpers/tests came first; the final client uses Enterprise New search and an existing legacy fallback. Migration 067 is written only. API-key/Vault handling, fallback eligibility and google_places_pro remain unchanged; an optional source callback supplies shared-pool provenance. Scrapes reserve three search events and refund unused pages; business lookups reserve one. The Settings meter tolerates a missing migration.
+
+Final gates: TypeScript zero diagnostics; Vitest 141 files / 2,216 tests / zero failures; build 2,785 modules with the existing chunk-size warning; local edge shim across nine entrypoints zero diagnostics; whitespace check passed. The shim is reproducible with node scripts/places-edge-typecheck.mjs. Deno, migration, audit, concurrency, browser and provider behavior remain unverified. Independent review is pending.
+
+Architect must resolve snapshot grants (member UI versus the spec's service-only wording), legacy Details accounting, invocation-scoped capability caching across cron ticks, and review additive reservation signatures/ledger/lock order. Full provider error text is sanitized. Hooks are disabled per commit to prevent unfinished branch notes replacing accepted vault references. Subscription telemetry is unavailable; no percentage is inferred. Task-specific vault notes may be saved without updating accepted Repo references or the other checkout.
+
+Resume here: open this worktree, read AGENTS.md, the Places spec and PLACES-NEW-BUILD-REPORT.md, verify the branch and clean status, then have Claude review the exact final commit. Rebase only after platform-owners merges and Kevin authorizes that next step. No publication or database execution is authorized. No jobs remain running at handoff.

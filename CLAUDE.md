@@ -1764,3 +1764,7 @@ A3 final gates: TypeScript 0 diagnostics; Vitest 135 files / 2,112 tests / 0 fai
 
 ### 2026-10-21 — Guess domain block fix (merged `5bf88fa`, deployed 2026-10-22)
 On `codex/guess-block-fix`, one unverifiable address no longer blocks other formats. Two distinct addresses block the domain; `provider_blocks_checks` still blocks immediately because SMTP cannot connect. Catch-all, timeout, six-per-lead/five-per-domain limits and worker stops remain. Hunter suppression after any unverifiable result and its three-verification cap remain. No user-facing copy changes. All gates pass: TypeScript, 2,178 tests, production build (existing chunk warning). Independent review and live UKRM verification remain pending. No commit or publication. Full evidence: docs/HANDOFF.md, Guess domain block fix.
+
+
+### 2026-10-22 — Places API (New), local build
+Kevin authorized Codex as builder on codex/places-new in the separate dreamlabs-sales-places worktree. Enterprise Text Search, legacy fallback, monthly organisation/shared guardrails (unapplied migration 067), Settings meter and safe key validation are built locally. Gates pass: 141 files / 2,216 tests, TypeScript, build and nine-entrypoint edge shim. Independent review, Deno/database/audit/concurrency/browser/provider verification remain pending. No remote operation or publication occurred. See docs/PLACES-NEW-BUILD-REPORT.md for hashes, deviations and the architect's unresolved accounting/cache/grant decisions.

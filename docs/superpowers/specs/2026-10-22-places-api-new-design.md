@@ -91,3 +91,7 @@ Photos, reviews text, autocomplete, nearby search, Gulf region parameters (`regi
 - `rating` and `userRatingCount` are Enterprise fields; the field mask must be exactly what the spec lists so no accidental Atmosphere fields (reviews, opening hours) are requested, which would move requests to the more expensive Enterprise + Atmosphere tier ($40 per 1,000).
 - The cap must fail closed: any error from the reserve RPC counts as refused.
 - Free caps are per billing account, so two organisations on one account share them; the shared-pool row exists for exactly this.
+
+
+## Local implementation checkpoint (2026-10-22)
+Kevin explicitly authorized the Enterprise-tier design and helper-first local build. Implementation is on codex/places-new in the separate places worktree. The authoritative build/review report is docs/PLACES-NEW-BUILD-REPORT.md; it records migration 067, passing local gates and remaining grant/accounting/cache decisions. This checkpoint does not approve those clarifications, the migration, rollout or live operations. Independent architect review remains pending.
