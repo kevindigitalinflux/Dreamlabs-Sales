@@ -7,13 +7,14 @@ import { Modal } from '../ui/Modal';
 
 interface InviteModalProps {
   open: boolean;
+  canInviteAdmin: boolean;
   onClose: () => void;
   orgId: string;
   onInvited: () => void;
 }
 
 /** Sends an org invite via the admin-users Edge Function. */
-export function InviteModal({ open, onClose, orgId, onInvited }: InviteModalProps) {
+export function InviteModal({ open, onClose, orgId, onInvited, canInviteAdmin }: InviteModalProps) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [orgRole, setOrgRole] = useState<'admin' | 'contractor' | 'team_member'>('contractor');
@@ -52,8 +53,9 @@ export function InviteModal({ open, onClose, orgId, onInvited }: InviteModalProp
         <SelectField label="Role" value={orgRole} onChange={(e) => setOrgRole(e.target.value as 'admin' | 'contractor' | 'team_member')}>
           <option value="contractor">Contractor</option>
           <option value="team_member">Team Member</option>
-          <option value="admin">Admin</option>
+          {canInviteAdmin && <option value="admin">Admin</option>}
         </SelectField>
+        {!canInviteAdmin && <p className="text-sm text-muted">Only Dreamlabs platform owners can add admins.</p>}
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         <Button type="submit" disabled={submitting} loading={submitting}>
           {submitting ? 'Sending…' : 'Send invite'}

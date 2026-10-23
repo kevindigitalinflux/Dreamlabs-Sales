@@ -9,19 +9,19 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { validateWorkerConnection } from '../../supabase/functions/_shared/workerConfig';
 import { validateFirecrawlKey } from '../../supabase/functions/_shared/firecrawlClient';
 
-let handler, rpc, updates, member, platformRole, validationError, fallback, sharedIds;
+let handler, rpc, updates, member, isOwner, validationError, fallback, sharedIds;
 beforeEach(async () => {
   vi.resetModules(); vi.clearAllMocks();
   fallback = true; sharedIds = '';
-  member = 'admin'; platformRole = null; validationError = null;
-  rpc = vi.fn(async (name) => ({ data: name === 'app_get_org_api_key' ? 'https://own.example.com|fake-test-only' : null, error: null }));
+  member = 'admin'; isOwner = false; validationError = null;
+  rpc = vi.fn(async (name) => ({ data: name === 'is_platform_owner' ? isOwner : name === 'app_get_org_api_key' ? 'https://own.example.com|fake-test-only' : null, error: null }));
   updates = vi.fn(async () => ({ error: null }));
   vi.stubGlobal('Deno', { env: { get: (name) => name === 'WORKER_SHARED_ORG_IDS' ? sharedIds : undefined }, serve: (fn) => { handler = fn; } });
   vi.mocked(createClient).mockReturnValue({ auth: { getUser: async () => ({ data: { user: { id: 'user' } } }) }, rpc,
     from(table) {
       const query = { select: () => query, eq: () => query,
         maybeSingle: async () => ({ data: member ? { role: member } : null }),
-        single: async () => ({ data: table === 'profiles' ? { platform_role: platformRole } : { use_global_api_fallback: fallback } }),
+        single: async () => ({ data: table === 'profiles' ? { platform_role: isOwner } : { use_global_api_fallback: fallback } }),
         update: (value) => { updates(value); return query; }, upsert: updates,
         then: (resolve) => resolve({ data: [{ provider: 'lookup_worker', is_configured: true }], error: null }),
       };
@@ -62,30 +62,31 @@ it.each([null, 'contractor'])('prevents worker save and remove for role %s befor
   member = role;
   expect((await request({ action: 'save', provider: 'lookup_worker', api_key: 'https://own.example.com|fake' })).status).toBe(403);
   expect((await request({ action: 'remove', provider: 'lookup_worker' })).status).toBe(403);
-  expect(validateWorkerConnection).not.toHaveBeenCalled(); expect(rpc).not.toHaveBeenCalled();
+  expect(validateWorkerConnection).not.toHaveBeenCalled(); expect(rpc.mock.calls.filter(([name]) => name !== 'is_platform_owner')).toEqual([]);
 });
 it('does not save a connection when health validation fails', async () => {
   validationError = 'The worker rejected the connection.';
   expect((await request({ action: 'save', provider: 'lookup_worker', api_key: 'https://own.example.com|fake' })).status).toBe(400);
-  expect(rpc).not.toHaveBeenCalled(); expect(updates).not.toHaveBeenCalled();
+  expect(rpc.mock.calls.filter(([name]) => name !== 'is_platform_owner')).toEqual([]); expect(updates).not.toHaveBeenCalled();
 });
 it('validates before storing in Vault, and returns no credential', async () => {
   const response = await request({ action: 'save', provider: 'lookup_worker', api_key: 'https://own.example.com|fake' });
   expect(await response.json()).toEqual({ ok: true });
   expect(rpc).toHaveBeenCalledWith('app_set_org_api_key', { target_org: 'org', target_provider: 'lookup_worker', secret: 'https://own.example.com|fake' });
-  expect(validateWorkerConnection.mock.invocationCallOrder[0]).toBeLessThan(rpc.mock.invocationCallOrder[0]);
+  const setIndex = rpc.mock.calls.findIndex(([name]) => name === 'app_set_org_api_key');
+  expect(validateWorkerConnection.mock.invocationCallOrder[0]).toBeLessThan(rpc.mock.invocationCallOrder[setIndex]);
 });
 it('removes by clearing Vault and disabling the configured flag', async () => {
   expect((await request({ action: 'remove', provider: 'lookup_worker' })).status).toBe(200);
   expect(rpc).toHaveBeenCalledWith('app_set_org_api_key', { target_org: 'org', target_provider: 'lookup_worker', secret: '' });
   expect(updates).toHaveBeenCalledWith(expect.objectContaining({ is_configured: false }));
 });
-it('excludes platform admins without org admin membership from worker management and host disclosure', async () => {
-  member = null; platformRole = 'platform_admin';
+it('excludes platform owners without org admin membership from worker management and host disclosure', async () => {
+  member = null; isOwner = true;
   expect((await request({ action: 'save', provider: 'lookup_worker', api_key: 'https://own.example.com|fake' })).status).toBe(403);
   expect((await request({ action: 'remove', provider: 'lookup_worker' })).status).toBe(403);
   expect((await (await request({ action: 'get' })).json()).worker_host).toBeNull();
-  expect(rpc).not.toHaveBeenCalled();
+  expect(rpc.mock.calls.filter(([name]) => name !== 'is_platform_owner')).toEqual([]);
 });
 it('validates a Firecrawl key before storing, without returning the key', async () => {
   const result = await request({ action: 'save', provider: 'firecrawl', api_key: 'fake-firecrawl' });
@@ -96,13 +97,13 @@ it('validates a Firecrawl key before storing, without returning the key', async 
 it('rejects invalid Firecrawl keys without saving or returning raw provider text', async () => {
   validationError = 'Firecrawl rejected the key. Check it and try again.';
   const result = await request({ action: 'save', provider: 'firecrawl', api_key: 'fake-firecrawl' });
-  expect(result.status).toBe(400); expect(rpc).not.toHaveBeenCalled();
+  expect(result.status).toBe(400); expect(rpc.mock.calls.filter(([name]) => name !== 'is_platform_owner')).toEqual([]);
 });
-it.each(['contractor', null])('rejects Firecrawl management by role %s, including platform-only override', async (role) => {
-  member = role; platformRole = 'platform_admin';
+it.each(['contractor', null])('rejects Firecrawl management by role %s, including owner-only override', async (role) => {
+  member = role; isOwner = true;
   expect((await request({ action: 'save', provider: 'firecrawl', api_key: 'fake-firecrawl' })).status).toBe(403);
   expect((await request({ action: 'remove', provider: 'firecrawl' })).status).toBe(403);
-  expect(validateFirecrawlKey).not.toHaveBeenCalled(); expect(rpc).not.toHaveBeenCalled();
+  expect(validateFirecrawlKey).not.toHaveBeenCalled(); expect(rpc.mock.calls.filter(([name]) => name !== 'is_platform_owner')).toEqual([]);
 });
 
 it.each([[' 87da102c-0e27-45e6-8bea-e2609fe80c12 ', true], ['junk', false]])('reports worker-only shared access without changing the paid fallback flag: %s', async (list, allowed) => {
@@ -119,7 +120,8 @@ it('lets an org admin remove Firecrawl by clearing Vault before disabling metada
   expect(await result.json()).toEqual({ ok: true });
   expect(rpc).toHaveBeenCalledWith('app_set_org_api_key', { target_org: 'org', target_provider: 'firecrawl', secret: '' });
   expect(updates).toHaveBeenCalledWith(expect.objectContaining({ is_configured: false }));
-  expect(rpc.mock.invocationCallOrder[0]).toBeLessThan(updates.mock.invocationCallOrder[0]);
+  const setIndex = rpc.mock.calls.findIndex(([name]) => name === 'app_set_org_api_key');
+  expect(rpc.mock.invocationCallOrder[setIndex]).toBeLessThan(updates.mock.invocationCallOrder[0]);
   expect(validateFirecrawlKey).not.toHaveBeenCalled();
 });
 it('does not disable Firecrawl metadata if clearing Vault fails', async () => {
@@ -128,4 +130,18 @@ it('does not disable Firecrawl metadata if clearing Vault fails', async () => {
   expect(result.status).toBe(500);
   expect(JSON.stringify(await result.json())).not.toContain('private-key');
   expect(updates).not.toHaveBeenCalled();
+});
+
+it('detects platform-wide access through the service ownership RPC', async () => {
+  member = null; isOwner = true;
+  const response = await request({ action: 'get' });
+  expect(response.status).toBe(200);
+  expect(rpc).toHaveBeenCalledWith('is_platform_owner', { p_user: 'user' });
+});
+it('ownership lookup failure gives no platform-wide access', async () => {
+  member = null;
+  rpc.mockResolvedValue({ data: true, error: { message: 'private detail' } });
+  const response = await request({ action: 'get' });
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ error: 'Not a member of this organization' });
 });

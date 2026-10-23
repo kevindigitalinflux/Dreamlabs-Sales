@@ -840,3 +840,57 @@ Final gates: TypeScript zero diagnostics; Vitest 141 files / 2,216 tests / zero 
 Architect must resolve snapshot grants (member UI versus the spec's service-only wording), legacy Details accounting, invocation-scoped capability caching across cron ticks, and review additive reservation signatures/ledger/lock order. Full provider error text is sanitized. Hooks are disabled per commit to prevent unfinished branch notes replacing accepted vault references. Subscription telemetry is unavailable; no percentage is inferred. Task-specific vault notes may be saved without updating accepted Repo references or the other checkout.
 
 Resume here: open this worktree, read AGENTS.md, the Places spec and PLACES-NEW-BUILD-REPORT.md, verify the branch and clean status, then have Claude review the exact final commit. Rebase only after platform-owners merges and Kevin authorizes that next step. No publication or database execution is authorized. No jobs remain running at handoff.
+## Platform owners — local build (2026-10-22, Codex builder)
+
+### Authority and checkout
+- Kevin authorized Tasks 1–6 of `docs/superpowers/plans/2026-10-22-platform-owners.md`, with Codex building and Claude reviewing. No role change. No SQL, audit execution, Supabase calls, remote writes, push, merge, deployment, spending or vault writes are authorized or performed.
+- Actual initial checkout was clean main at `d7e94c9613afcc69a2332f8307d70415fd9541f9`; the requested branch did not exist. Created `codex/platform-owners` from that main. One writer; no background service started. Commit hooks disabled per invocation to prevent the existing sync hook overwriting accepted vault references. Claude owns the later vault sync.
+- Subscription usage is not exposed. No usage percentage asserted. This section is the proactive milestone checkpoint.
+
+### Tasks and commits
+1. `4f6b14c1ae07d4eb7242fdba41726b498d18fff1`: migration 066 and rollback audit, written only.
+2. `c5fd7f237969ffe95f8fec623244f727e4d2c8e8`: pure permission table and 98 named cases across owner, own-org admin, plain member, contractor and cross-org caller, including self and last-admin guards.
+3. `ff5684c65d55f1f797418aa40793d9de3eb65425`: admin-users service RPC, target-org context, authorization before writes, last-admin demotion guard, caller roles in list_orgs; 13 handler regressions.
+4. `832f0195336f78767f4cdfd4620acd81506029fc`: org-api-settings ownership detection only; 17 endpoint tests. Provider handling, Vault calls, key storage, membership requirements for worker/Firecrawl management, use_global_api_fallback and response shapes are unchanged.
+5. `b4edb2fc852d273886234946ff94ddeeeb947d94`: membership-derived UI, owner-only admin controls, visible explanations, responsive member rows and fallback to the old membership projection with owner=false when the new column query fails. Five membership tests and four rendered-control tests.
+6. This documentation commit records the build and rollout. Its hash is available from git log; the commit cannot contain its own hash.
+
+### Files
+- SQL: supabase/migrations/066_platform_owner_orgs.sql; supabase/audits/platform_owner_orgs.sql.
+- Server: supabase/functions/_shared/adminPolicy.ts; supabase/functions/admin-users/index.ts; supabase/functions/org-api-settings/index.ts.
+- UI: src/types/index.ts; src/hooks/useOrg.tsx; src/lib/orgOwnership.ts; src/pages/Admin.tsx; src/components/admin/InviteModal.tsx; src/components/admin/UserTable.tsx.
+- Tests: src/lib/adminPolicy.test.ts; src/lib/adminUsers.test.js; src/lib/orgApiSettings.test.js; src/lib/orgOwnership.test.ts; src/lib/adminControls.test.js.
+- Docs: this file; docs/NEXT-STEPS.md; docs/AUTOMATIONS.md; CLAUDE.md; AGENTS.md; implementation-plan completion notes.
+
+### Verification
+- Test-first: permission module initially failed to import because it did not exist; 98 cases then passed. Handler regressions produced 10 expected failures against the old endpoint, then 13/13 passed. Two ownership-detection API tests failed before the RPC replacement, then 17/17 passed. Membership tests initially failed on the absent helper; all five passed after implementation. Rendered controls reproduced two failures before UI changes, then 4/4 passed.
+- npx tsc --noEmit: 0 diagnostics. Edge TypeScript shim: 0 diagnostics with .superpowers/platform-owners/tsconfig.json (maps npm Supabase import to installed package and declares Deno env/serve). This is a compiler shim, not Deno execution.
+- Full suite at Task 5: 142 files, 2,300 tests, 0 failures. npm run build passed with the existing large-chunk warning. Final gates/review are recorded in the addendum below if further changes occur.
+- git diff --check passed. No application authorization code reads platform_role; only the retained type, historical SQL and old test fixtures mention it.
+- NOT verified: Deno runtime, live migration, live audit, browser rendering/keyboard/400px layout, deployment, live ownership of Kevin's account, actual organisation names/admins. Node handler tests use only fake clients; rendered UI tests mock the listbox and do not establish browser accessibility.
+
+### Deviations and review rulings
+- Ruling: use the plan's service_role-only EXECUTE grant, although the earlier design text also allowed authenticated. The plan explicitly forbids arbitrary-user client lookups and the browser derives ownership from its own memberships. Cost if wrong: a future authenticated consumer must use an approved narrower interface; architect must reconcile the design wording before rollout.
+- Ruling: skip all live preflight queries, migration and audit per Kevin's latest constraints; live preflight is a rollout prerequisite, not build evidence. Browser checks were not performed; local rendered-control tests are not a substitute. Cost if wrong: Kevin could lose management access if deployment proceeds without the required ownership check.
+- Added local handler/rendered-control tests and a tested membership-query fallback to cover permission failures and missing-column login behavior. Tests are JavaScript where Node imports are needed, matching the existing endpoint-test convention; no dependency or global TypeScript changes.
+- Owner lookup errors in admin-users return fixed 500 for all admin actions, including list_orgs, rather than silently treating an unavailable ownership service as a membership-only listing. This fails closed. org-api-settings preserves membership access and treats RPC errors as non-owner, exactly as planned.
+- Architect review pending: exact two owner organisation names and their real admins, Kevin's DI Dreamlabs admin membership, service-only grant wording, and existing non-atomic read/count/write membership updates. Concurrent owner actions can race the last-admin check; atomic membership mutations require a separate database design. Do not claim concurrent last-admin safety.
+- Existing AdminRoute/sidebar remain based on the selected org's admin membership. An owner with a non-admin selected membership must switch to an admin membership to open Admin. This existing route behavior was outside the plan's file list; architect should confirm whether a later navigation adjustment is wanted.
+
+### Rollout and resume
+1. Claude reviews the exact branch diff against main and the permission table, especially service-only EXECUTE and absence of API-key behavior changes. No independent Claude review has happened in this builder session.
+2. Kevin applies reviewed migration 066 in the SQL editor, then runs the rollback audit (expected final exception with PASS report). No SQL is authorized in this builder session.
+3. Before any function deployment, Claude verifies read-only that kevindigitalinflux@gmail.com is admin in DI Dreamlabs, and confirms both intended owner orgs/admins. Stop if the prerequisite fails.
+4. With Kevin's explicit approval, deploy admin-users and org-api-settings; perform the throwaway-client-admin denial/allow checks in the plan and remove fixtures.
+5. Only then, with Kevin's approval, merge/push the frontend. Verify owners and client admins, keyboard controls and 400px layout. The fallback is defense in depth and does not relax rollout order.
+6. Rollback: redeploy previous functions from pre-branch main, revert frontend as needed; additive migration may remain. Nothing has been published by this build.
+
+Resume: open this section, the approved spec and plan. Review this branch first. All live steps and publication require Kevin's approval.
+
+
+### Platform owners final local review and gates (2026-10-22)
+- A read-only Codex subagent consultation, required by the executing-plans skill, reviewed `d7e94c9613afcc69a2332f8307d70415fd9541f9..89b4b5b431115bd93223f37d0d3b0c1949bcc77b`. No role transfer, remote call, edit, test or SQL execution by the reviewer. This is not Claude's pending architect approval.
+- One Important finding: organizations.name is not unique, so the migration's two-row guard alone could accept two duplicate names with the other intended name absent. Fixed by requiring two distinct expected names inside the same transaction. Source inspected and diff checked; SQL behavior was NOT executed, per Kevin's prohibition. The rollback audit already had the corresponding distinct-name assertion.
+- No other Critical/Important findings and no deferred minors. Reviewer confirmed the permission table, fail-closed reads, service-only RPC, missing-column fallback and exact preservation of per-org API-key behavior. The three existing architect questions above remain pending, not silently accepted as new architecture.
+- Final application gates after Task 6: npx tsc --noEmit 0 diagnostics; npx vitest run 142/142 files and 2,300/2,300 tests, zero failures; npm run build passed with the existing chunk-size warning; edge TypeScript shim passed. Repeated after the migration-source guard change as a final check; SQL/audit still unrun.
+- Build and documentation commits are local only. Final correction/documentation commit hash is available from git log. Working tree should be clean after that commit. No background jobs remain.

@@ -10,11 +10,12 @@ import { Button } from '../ui/Button';
 interface UserTableProps {
   members: OrgMemberRow[];
   orgId: string;
+  isOwner: boolean;
   onChanged: () => void;
 }
 
 /** Org member list with per-row role editing and removal (via admin-users' set_org_role/remove_member actions). */
-export function UserTable({ members, orgId, onChanged }: UserTableProps) {
+export function UserTable({ members, orgId, onChanged, isOwner }: UserTableProps) {
   const { session } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -48,8 +49,8 @@ export function UserTable({ members, orgId, onChanged }: UserTableProps) {
   return (
     <div className="overflow-x-auto">
       {error && <p role="alert" className="mb-2 text-sm text-danger">{error}</p>}
-      <table className="w-full text-left text-sm">
-        <thead>
+      <table className="block w-full text-left text-sm sm:table">
+        <thead className="hidden sm:table-header-group">
           <tr className="border-b border-line text-xs font-semibold text-muted">
             <th className="px-3 py-2">Name</th>
             <th className="px-3 py-2">Email</th>
@@ -58,31 +59,34 @@ export function UserTable({ members, orgId, onChanged }: UserTableProps) {
             <th className="px-3 py-2" />
           </tr>
         </thead>
-        <tbody>
+        <tbody className="block sm:table-row-group">
           {members.map((m) => {
+            const protectedAdmin = !isOwner && m.role === 'admin';
             const isSelf = m.profiles.id === session?.user.id;
             return (
-              <tr key={m.profiles.id} className="border-b border-line">
-                <td className="px-3 py-3 font-semibold">{m.profiles.full_name ?? '—'}</td>
-                <td className="px-3 py-3 text-muted">{m.profiles.email}</td>
-                <td className="px-3 py-3">
+              <tr key={m.profiles.id} className="grid border-b border-line sm:table-row">
+                <td className="block break-words px-3 py-2 sm:table-cell sm:py-3 font-semibold">{m.profiles.full_name ?? '—'}</td>
+                <td className="block break-all px-3 py-2 sm:table-cell sm:py-3 text-muted">{m.profiles.email}</td>
+                <td className="block break-all px-3 py-2 sm:table-cell sm:py-3">
                   <Listbox
                     ariaLabel={`Role for ${m.profiles.email}`}
                     value={m.role}
-                    disabled={isSelf || busyId === m.profiles.id}
+                    disabled={isSelf || protectedAdmin || busyId === m.profiles.id}
                     onChange={(e) => void setRole(m.profiles.id, e.target.value as Role)}
                     fullWidth={false}
                   >
                     <option value="contractor">Contractor</option>
                     <option value="team_member">Team Member</option>
-                    <option value="admin">Admin</option>
+                    {(isOwner || m.role === 'admin') && <option value="admin">Admin</option>}
                   </Listbox>
+                  {protectedAdmin && <p className="mt-1 text-xs text-muted">Only Dreamlabs platform owners can change or remove admins.</p>}
                 </td>
-                <td className="px-3 py-3 text-muted">{formatShortDate(m.created_at)}</td>
-                <td className="px-3 py-3">
+                <td className="block break-all px-3 py-2 sm:table-cell sm:py-3 text-muted">{formatShortDate(m.created_at)}</td>
+                <td className="block break-all px-3 py-2 sm:table-cell sm:py-3">
                   <button
+                    title={protectedAdmin ? 'Only Dreamlabs platform owners can change or remove admins.' : undefined}
                     type="button"
-                    disabled={isSelf || busyId === m.profiles.id}
+                    disabled={isSelf || protectedAdmin || busyId === m.profiles.id}
                     onClick={() => setPendingRemoval(m)}
                     className="text-sm font-semibold text-danger hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:no-underline"
                   >

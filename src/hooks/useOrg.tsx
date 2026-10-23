@@ -2,23 +2,20 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import type { ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
-import type { OrgMembership, Role } from '../types';
+import type { OrgMembership } from '../types';
+import { isOwnerFromMemberships, loadOrgMemberships } from '../lib/orgOwnership';
 
 interface OrgContextValue {
   currentOrg: OrgMembership | null;
   orgs: OrgMembership[];
   loading: boolean;
+  isPlatformOwner: boolean;
   switchOrg: (orgId: string) => void;
   /** Updates an org's cached custom package list after a successful save. */
   setOrgPackages: (orgId: string, packages: string[] | null) => void;
 }
 
 const OrgContext = createContext<OrgContextValue | null>(null);
-
-interface MembershipRow {
-  role: Role;
-  organizations: { id: string; name: string; custom_packages: string[] | null };
-}
 
 /** Provides the signed-in user's org memberships and the currently-selected org. */
 export function OrgProvider({ children }: { children: ReactNode }) {
@@ -35,18 +32,22 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       return;
     }
     let cancelled = false;
-    void supabase
+    void loadOrgMemberships((includeOwnerFlag) => supabase
       .from('org_members')
-      .select('role, organizations(id, name, custom_packages)')
-      .eq('user_id', session.user.id)
-      .then(({ data }) => {
+      .select(includeOwnerFlag ? 'role, organizations(id, name, custom_packages, grants_platform_owner)' : 'role, organizations(id, name, custom_packages)')
+      .eq('user_id', session.user.id))
+      .then((memberships) => {
         if (cancelled) return;
-        const rows = (data as MembershipRow[] | null) ?? [];
-        const memberships = rows.map((r) => ({ id: r.organizations.id, name: r.organizations.name, role: r.role, custom_packages: r.organizations.custom_packages }));
         setOrgs(memberships);
         const saved = localStorage.getItem('current-org');
         const restored = memberships.find((m) => m.id === saved);
         setCurrentOrgId((restored ?? memberships[0])?.id ?? null);
+        setLoading(false);
+      }).catch((error: unknown) => {
+        console.error('Could not load organisation memberships', error);
+        if (cancelled) return;
+        setOrgs([]);
+        setCurrentOrgId(null);
         setLoading(false);
       });
     return () => {
@@ -66,7 +67,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const currentOrg = orgs.find((o) => o.id === currentOrgId) ?? null;
 
   return (
-    <OrgContext.Provider value={{ currentOrg, orgs, loading, switchOrg, setOrgPackages }}>
+    <OrgContext.Provider value={{ currentOrg, orgs, loading, isPlatformOwner: isOwnerFromMemberships(orgs), switchOrg, setOrgPackages }}>
       {children}
     </OrgContext.Provider>
   );

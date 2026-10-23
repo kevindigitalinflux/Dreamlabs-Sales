@@ -8,6 +8,7 @@ export interface OrgMembership {
   id: string;
   name: string;
   role: Role;
+  grants_platform_owner: boolean;
   /** Org-specific package names; null = use the built-in default list. */
   custom_packages: string[] | null;
 }
