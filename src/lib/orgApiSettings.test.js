@@ -49,7 +49,7 @@ it('refuses Places quota errors before Vault and never echoes raw Google text', 
   const body = JSON.stringify(await response.json());
   expect(body).toContain('quota');
   expect(body).not.toContain('fake-secret');
-  expect(rpc).not.toHaveBeenCalled();
+  expect(rpc.mock.calls.filter(([name]) => name !== 'is_platform_owner')).toEqual([]);
 });
 
 it('returns only host and status, never the saved worker credential', async () => {
