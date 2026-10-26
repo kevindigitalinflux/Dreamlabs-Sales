@@ -2,7 +2,7 @@
 
 Authoritative task record. The vault copy (`Dreamlabs Sales/Handoff.md`) is a snapshot of this file, labelled with the revision below. Workflow rules: vault `_Team/Shared agent workflow.md`.
 
-**Latest resume point:** the final section, **START HERE (2026-10-21 session close)**. Earlier sections are historical checkpoints.
+**Latest task resume point (this worktree only, 2026-10-26):** phone numbers on `codex/phone-numbers`; read `docs/PHONE-NUMBERS-BUILD-REPORT.md`. Tested code is `1774e5bc26477a794aedc07b1bac41c44efb9416`, based on `4d8cd004b48c97845d100398ab630819b22b8935`. Earlier sections are historical checkpoints. Codex remains builder; Claude remains architect/reviewer. Local gates pass: 150 files / 2,402 tests, TypeScript, 12-entrypoint edge shim, build and whitespace. Migration 068 and rollback audit are written only. Numeric Apollo credit balance is unavailable from the existing integration and is not implemented; Claude must resolve that requirement before acceptance. Browser inventory was empty; Deno/live/provider/database/browser verification and independent review remain pending. No publication, remote writes, other-checkout edits or vault sync occurred. The final documentation commit follows the tested code revision. No background jobs remain. Usage is not exposed; no allowance percentage is claimed. Resume with read-only Claude review of the report/diff; migration/deployment require Kevin's separate authorization. Builder stops after saving this report and handoff.
 
 ## Identity and authority
 - Task ID: `worker-programme` (lookup worker -> Deep find; Stage 1 done, Stage 2 next). Project: Dreamlabs Sales. Author: Claude. Time: 2026-10-15 ~15:15 (local clock shows GMT; Kevin's timezone not confirmed).

@@ -1,5 +1,9 @@
 # AGENTS.md — Dreamlabs Sales (read this first, Codex)
 
+## Phone numbers checkpoint (2026-10-26, this worktree)
+
+This checkout is `C:/Users/kevin/Projects/dreamlabs-sales-phone`, branch `codex/phone-numbers`. Kevin's phone build brief supersedes stale checkout/next-task notes below. Codex remains builder and Claude architect/reviewer. Read `docs/PHONE-NUMBERS-BUILD-REPORT.md` and the current `docs/HANDOFF.md` pointer. Tested code: `1774e5bc26477a794aedc07b1bac41c44efb9416`; local gates pass (150 files, 2,402 tests, TypeScript, build, 12-entrypoint edge shim, whitespace). Migration 068/audit are unapplied. Numeric Apollo allowance still needs an architect ruling; Deno/database/provider/browser checks and independent review remain pending. No push, merge, deploy, remote write, other-worktree edit or vault sync is authorized. All commits use explicit paths, disabled hooks and the Codex trailer. Builder has stopped for review; do not resume unrelated historical next steps.
+
 **First read, in the Obsidian vault: `_Team/Shared agent workflow.md`, then `docs/HANDOFF.md` in this repo (the exact resume point).** Those supersede the older fixed-role split. Summary of the shared workflow (Kevin's decision, 2026-10-15): by default Claude is architect/reviewer and Codex is builder, but EITHER agent may plan, build, review, merge or deploy when Kevin confirms the role assignment or authorizes the action; every role change must be confirmed by Kevin and recorded (old role, new role, scope, reason, date) in `docs/HANDOFF.md` and the vault `Decisions.md`; ask Kevin a short kickoff at the start of each new task; paid API fallback always needs Kevin's approval; checkpoint near 90% of a usage limit. Kevin (non-engineer owner) holds all secrets. The project-specific safety rules below still apply to both agents. Obsidian is the shared second brain (see "Second brain").
 
 ## Where the project is

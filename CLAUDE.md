@@ -1,5 +1,9 @@
 # Dreamlabs Sales
 
+## Phone numbers — local review checkpoint (2026-10-26)
+
+Kevin authorized Codex's local build in `dreamlabs-sales-phone` on `codex/phone-numbers`, with Claude retained as architect/reviewer. Read `docs/PHONE-NUMBERS-BUILD-REPORT.md` before the historical status below. Shared phone parsing, metadata migration/audit, reviewed person phones, explicit own-key Apollo controls, phone chips/filters, dialer normalization and subscriber flags are built locally. Tested code: `1774e5bc26477a794aedc07b1bac41c44efb9416`; 150 files / 2,402 tests and all local gates pass. Numeric Apollo allowance is not implemented because the current integration exposes no balance; the UI states that remaining credits must be checked in Apollo. Migration 068/audit, independent review and Deno/database/provider/browser verification remain pending. No push, merge, deploy, SQL, remote write, other-checkout edit or vault sync occurred. The builder stops after the report/documentation commit; see `docs/HANDOFF.md` for the exact review scope.
+
 ## What This Is
 Dreamlabs Sales is a standalone internal sales operations web app for Digital Influx Dreamlabs Ltd and its commission-based sales contractors. It solves three problems in one tool: finding qualified SME prospects via a multi-source lead scraper (powered by public APIs and an AI ICP parser), managing those prospects through a full sales pipeline with both Kanban and list views, and automating tailored email follow-ups using session notes and AI-generated drafts. The app is built desktop-first with full ADHD and dyslexia-friendly design principles, and a mobile-optimised note-taking flow for contractors in the field. It will eventually serve as a white-label template for Dreamlabs client products.
 
