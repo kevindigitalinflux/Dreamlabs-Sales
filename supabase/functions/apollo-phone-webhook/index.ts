@@ -7,6 +7,7 @@
 // boundary. Never log its value.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { computeWebhookToken } from '../_shared/webhookToken.ts';
+import { apolloPhonePatch } from '../_shared/apolloPhone.ts';
 
 interface ApolloPhoneNumber { raw_number?: string; type_cd?: string }
 interface ApolloWebhookPerson { id?: string; phone_numbers?: ApolloPhoneNumber[] }
@@ -49,29 +50,26 @@ Deno.serve(async (req) => {
     const body = await req.json() as { people?: ApolloWebhookPerson[] };
     const person = body.people?.[0];
     const phones = person?.phone_numbers ?? [];
-    const mobile = phones.find((p) => p.type_cd === 'mobile');
-    const chosen = mobile ?? phones[0];
 
     const service = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
 
-    const { data: candidate } = await service
-      .from('decision_maker_candidates').select('id, lead_id').eq('id', candidateId).maybeSingle();
+    const { data: candidate, error: readError } = await service
+      .from('decision_maker_candidates').select('id, lead_id, phone, phone_status, dismissed_at, leads!inner(country)').eq('id', candidateId).maybeSingle();
+    if (readError) { console.error('Apollo phone callback: contact could not be read'); return new Response(null, { status: 500 }); }
     if (!candidate) return new Response(null, { status: 200 }); // nothing to update, not Apollo's problem
 
-    if (chosen?.raw_number) {
-      await service.from('decision_maker_candidates')
-        .update({ phone: chosen.raw_number, phone_status: 'revealed', updated_at: new Date().toISOString() })
-        .eq('id', candidateId);
-    } else {
-      await service.from('decision_maker_candidates')
-        .update({ phone_status: 'not_found', updated_at: new Date().toISOString() })
-        .eq('id', candidateId);
-    }
+    if (candidate.dismissed_at || candidate.phone || candidate.phone_status !== 'pending') return new Response(null, { status: 200 });
+    const lead = candidate.leads as unknown as { country?: unknown };
+    const { error } = await service.from('decision_maker_candidates')
+      .update({ ...apolloPhonePatch(phones, lead.country, new Date().toISOString()), updated_at: new Date().toISOString() })
+      .eq('id', candidateId).eq('phone_status', 'pending').is('dismissed_at', null).is('phone', null);
+    if (error) { console.error('Apollo phone callback: phone could not be saved'); return new Response(null, { status: 500 }); }
     return new Response(null, { status: 200 });
-  } catch {
+  } catch (error) {
+    console.error('Apollo phone callback: invalid callback', error instanceof Error ? error.name : 'UnknownError');
     // Never let a parsing error surface as a 5xx that might make Apollo
     // retry indefinitely — this is a best-effort callback, not a
     // caller-facing API.

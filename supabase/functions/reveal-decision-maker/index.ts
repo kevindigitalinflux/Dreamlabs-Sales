@@ -1,13 +1,16 @@
 // supabase/functions/reveal-decision-maker/index.ts
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
-import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
+import { resolveOwnApolloKey } from '../_shared/apolloPhone.ts';
+import { domainFromWebsite, isDirectoryDomain } from '../_shared/knownPerson.ts';
 import { revealApolloPerson } from '../_shared/apolloPeopleSearch.ts';
 import { computeWebhookToken } from '../_shared/webhookToken.ts';
 
 interface CandidateRow {
   id: string; lead_id: string; source: string; apollo_person_id: string | null;
-  leads: { org_id: string };
+  first_name: string | null; last_name: string | null; name_obfuscated: boolean; kind: string;
+  phone: string | null; phone_status: string; dismissed_at: string | null;
+  leads: { org_id: string; website: string | null };
 }
 
 Deno.serve(async (req) => {
@@ -44,11 +47,17 @@ Deno.serve(async (req) => {
 
   const { data: candidate, error: readErr } = await service
     .from('decision_maker_candidates')
-    .select('id, lead_id, source, apollo_person_id, leads!inner(org_id)')
+    .select('id, lead_id, source, apollo_person_id, first_name, last_name, name_obfuscated, kind, phone, phone_status, dismissed_at, leads!inner(org_id, website)')
     .eq('id', candidateId).single();
   if (readErr || !candidate) return json({ error: 'Candidate not found' }, 404, headers);
   const row = candidate as unknown as CandidateRow;
-  if (row.source !== 'apollo' || !row.apollo_person_id) return json({ error: 'This candidate has nothing to reveal' }, 400, headers);
+  if (row.dismissed_at || row.kind !== 'person') return json({ error: 'This contact cannot be revealed' }, 400, headers);
+  if (revealEmail && (row.source !== 'apollo' || !row.apollo_person_id)) return json({ error: 'This candidate has nothing to reveal' }, 400, headers);
+  const domain = domainFromWebsite(row.leads.website);
+  const identity = row.apollo_person_id ?? (!row.name_obfuscated && row.first_name && row.last_name && domain && !isDirectoryDomain(domain)
+    ? { firstName: row.first_name, lastName: row.last_name, domain } : null);
+  if (!identity) return json({ error: 'Add a full name and company website before revealing a phone.' }, 400, headers);
+  if (revealPhone && (row.phone || !['not_requested', 'failed'].includes(row.phone_status))) return json({ error: 'This phone was already found or requested.' }, 409, headers);
 
   const orgId = row.leads.org_id;
   const { data: membership } = await service.from('org_members')
@@ -61,7 +70,7 @@ Deno.serve(async (req) => {
   const { data: visibleLead } = await client.from('leads').select('id').eq('id', row.lead_id).maybeSingle();
   if (!visibleLead) return json({ error: 'Lead not found' }, 404, headers);
 
-  const apiKey = await resolveOrgApiKey(service, orgId, 'apollo');
+  const apiKey = await resolveOwnApolloKey(service, orgId);
   if (!apiKey) return json({ error: 'No Apollo API key configured for this organization' }, 400, headers);
 
   const webhookSecret = Deno.env.get('APOLLO_WEBHOOK_SECRET');
@@ -70,8 +79,21 @@ Deno.serve(async (req) => {
     ? `${Deno.env.get('SUPABASE_URL')}/functions/v1/apollo-phone-webhook?candidate_id=${candidateId}&token=${await computeWebhookToken(webhookSecret!, candidateId)}`
     : undefined;
 
-  const result = await revealApolloPerson(row.apollo_person_id, apiKey, { revealEmail, revealPhone, webhookUrl });
-  if (!result) return json({ error: 'Apollo could not reveal this contact' }, 502, headers);
+  // Reserve this explicit request before spending. Concurrent clicks cannot reveal the same phone twice.
+  if (revealPhone) {
+    const claimed = await service.from('decision_maker_candidates').update({ phone_status: 'pending' })
+      .eq('id', candidateId).eq('phone_status', row.phone_status).is('dismissed_at', null).is('phone', null).select('id').maybeSingle();
+    if (claimed.error) return json({ error: 'Could not start phone reveal. Try again.' }, 500, headers);
+    if (!claimed.data) return json({ error: 'This phone was already found or requested.' }, 409, headers);
+  }
+  const result = await revealApolloPerson(identity, apiKey, { revealEmail, revealPhone, webhookUrl });
+  if (!result) {
+    if (revealPhone) {
+      const failed = await service.from('decision_maker_candidates').update({ phone_status: 'failed' }).eq('id', candidateId).eq('phone_status', 'pending');
+      if (failed.error) console.error('phone reveal: failed status could not be saved');
+    }
+    return json({ error: 'Apollo could not reveal this contact. Check your Apollo allowance and plan.' }, 502, headers);
+  }
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (revealEmail) {
@@ -81,7 +103,7 @@ Deno.serve(async (req) => {
     patch.email = result.email;
     patch.email_revealed = result.email != null;
   }
-  if (revealPhone) patch.phone_status = 'pending';
+  // Pending was saved before the request; never clobber a faster webhook's revealed status.
 
   const { data: updated, error: updateErr } = await service
     .from('decision_maker_candidates').update(patch).eq('id', candidateId).select('*').single();

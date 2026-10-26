@@ -19,7 +19,7 @@ import { savedDomains } from './domainChecks.ts';
 import { discoverLeadDomains } from './domainDiscoveryLookup.ts';
 import { discoveryDetail, type DomainCandidate } from './domainDiscovery.ts';
 
-type Row = Record<string, unknown>;
+type Row = Record<string, unknown> & { id: string };
 /** Who supplied a value: Hunter (finder or company list), Apollo, the email pattern, the company website, or the user. */
 type Source = 'hunter' | 'apollo' | 'pattern' | 'website' | 'you';
 type Fields3 = { email?: string; phone?: string; linkedin_url?: string };
@@ -110,7 +110,7 @@ export async function runKnownPerson(
       }
     }
     const revive = Boolean(match.dismissed_at);
-    const patch: Row = { ...fill, updated_at: new Date().toISOString() };
+    const patch: Record<string, unknown> = { ...fill, updated_at: new Date().toISOString() };
     if (revive) { patch.dismissed_at = null; patch.include_in_sequences = true; }
     // The caller's client always runs the update (a no-op for provider rows), so RLS proves they can edit this lead.
     const probe = await client.from('decision_maker_candidates')
@@ -166,7 +166,7 @@ export async function runKnownPerson(
 
   let extraEmail: string | undefined;
   const pending: { applied: FoundFields; step: StepId }[] = [];
-  const patch: Row = {};
+  const patch: Record<string, unknown> = {};
   const absorb = (from: FoundFields, step: StepId): FoundFields => {
     const merged = mergeFoundIntoPerson(work, from);
     if (merged.patch.email && emailTakenByOther(merged.patch.email, allRows, saved.id as string)) {
@@ -226,9 +226,9 @@ export async function runKnownPerson(
   if (Object.keys(patch).length > 0) {
     const apolloApplied = pending.find((p) => p.step === 'apollo')?.applied ?? {};
     const emailStep = pending.find((p) => p.applied.email)?.step;
-    const write = async (cols: Row) => service.from('decision_maker_candidates')
+    const write = async (cols: Record<string, unknown>) => service.from('decision_maker_candidates')
       .update({ ...cols, updated_at: new Date().toISOString() }).eq('id', saved.id as string).select('*').single();
-    const cols: Row = { ...patch };
+    const cols: Record<string, unknown> = { ...patch };
     if (apolloApplied.email && patch.email === apolloApplied.email) cols.email_revealed = true;
     if (apolloApplied.phone && patch.phone === apolloApplied.phone) cols.phone_status = 'revealed';
     // An address found on the company list, by pattern or on the website is never emailed by a sequence until switched on.

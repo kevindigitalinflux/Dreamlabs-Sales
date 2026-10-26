@@ -92,12 +92,13 @@ export interface ApolloRevealResult {
  * only returns the synchronous parts (name, email).
  */
 export async function revealApolloPerson(
-  personId: string,
+  personId: string | { firstName: string; lastName: string; domain: string },
   apiKey: string,
   opts: { revealEmail: boolean; revealPhone: boolean; webhookUrl?: string },
 ): Promise<ApolloRevealResult | null> {
   try {
-    const body: Record<string, unknown> = { id: personId };
+    const body: Record<string, unknown> = typeof personId === 'string' ? { id: personId }
+      : { first_name: personId.firstName, last_name: personId.lastName, domain: personId.domain };
     if (opts.revealEmail) body.reveal_personal_emails = true;
     if (opts.revealPhone) {
       body.reveal_phone_number = true;
