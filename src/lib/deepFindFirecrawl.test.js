@@ -21,14 +21,14 @@ import { makeWorkerClient } from '../../supabase/functions/_shared/workerClient'
 import { fetchActiveOfficers } from '../../supabase/functions/_shared/companiesHouse';
 import { GuessBudget } from '../../supabase/functions/_shared/personEmailFinding';
 import { processDeepFindLead } from '../../supabase/functions/_shared/deepFind';
-let request, service, write, contacts, checkpointError, checkpointReads, accessLostAt, cancelledAt, worker, leadOverrides;
+let request, service, write, readinessWrite, contacts, checkpointError, checkpointReads, accessLostAt, cancelledAt, worker, leadOverrides;
 beforeEach(() => {
   vi.clearAllMocks(); contacts = []; leadOverrides = {}; checkpointError = false; checkpointReads = 0;
   accessLostAt = 0; cancelledAt = 0;
   worker = { scrapeSite: vi.fn(async () => ({ ok: false, failure: 'not_configured' })),
     verifyEmail: vi.fn(async () => ({ ok: false, failure: 'not_configured' })), lines: () => [] };
   vi.mocked(makeWorkerClient).mockReturnValue(worker);
-  vi.stubGlobal('Deno', { env: { get: () => undefined } }); write = vi.fn();
+  vi.stubGlobal('Deno', { env: { get: () => undefined } }); write = vi.fn(); readinessWrite = vi.fn();
   vi.mocked(resolveOrgApiKey).mockImplementation(async (_s, _o, provider) => provider === 'firecrawl' ? 'fake-key' : null);
   vi.mocked(resolveOrgWorkerConfig).mockResolvedValue(null);
   vi.mocked(checkRateLimit).mockResolvedValue(true);
@@ -43,7 +43,8 @@ beforeEach(() => {
   request = vi.fn(async () => Response.json({ success: true, data: { rawHtml: '<p>Jane Smith, Director</p>', metadata: { url: 'https://example.com/team' } } }));
   vi.stubGlobal('fetch', request);
   service = { rpc: vi.fn(async (name) => ({ data: !(name === 'deep_find_creator_can_edit' && checkpointReads > 0 && checkpointReads === accessLostAt), error: null })), from(table) {
-    const data = table === 'leads' ? { id: 'lead', org_id: 'org', website: 'https://example.com', business_name: 'Example', owner_name: null, ...leadOverrides }
+    let updating = false;
+    const data = table === 'leads' ? { id: 'lead', org_id: 'org', updated_at: 'version', website: 'https://example.com', business_name: 'Example', owner_name: null, ...leadOverrides }
       : table === 'deep_find_runs' ? { status: 'active' } : contacts;
     const query = { select: () => query, eq: () => query, is: () => query, maybeSingle: async () => {
       if (table === 'deep_find_runs') {
@@ -53,13 +54,24 @@ beforeEach(() => {
       }
       return { data, error: null };
     }, insert: (rows) => { write('insert', rows); contacts.push(...rows); return query; },
-      upsert: (rows) => { write('upsert', rows); return query; }, update: (patch) => { write('update', patch); return query; },
-      then: (resolve) => resolve({ data, error: null }) };
+      upsert: (rows) => { write('upsert', rows); return query; }, update: (patch) => {
+        updating = true;
+        // This spy tracks contact/detail mutations. Readiness is now a separate, expected engine write.
+        if (table === 'leads' && Object.hasOwn(patch, 'readiness') && Object.keys(patch).every(k => ['readiness', 'readiness_missing'].includes(k))) readinessWrite(patch);
+        else write('update', patch);
+        return query;
+      },
+      then: (resolve) => resolve({ data: updating && table === 'leads' ? [data] : data, error: null }) };
     return query;
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const process = () => processDeepFindLead(service, { id: 'run', org_id: 'org', created_by: 'user', status: 'active' }, { id: 'row', lead_id: 'lead', org_id: 'org' });
+it('finishes the Firecrawl path with one readiness assessment and no contact mutation', async () => {
+  expect((await process()).status).toBe('done');
+  expect(readinessWrite).toHaveBeenCalledExactlyOnceWith({ readiness: 'needs_work', readiness_missing: ['decision_maker', 'verified_email', 'confirmed_website'] });
+  expect(write).not.toHaveBeenCalled();
+});
 it('tries common formats without an inferred pattern and fills only the existing blank contact', async () => {
   vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
   contacts = [{ id: 'contact', first_name: 'Valentina', last_name: 'Antunovic', title: 'Founder', email: null, include_in_sequences: true }];

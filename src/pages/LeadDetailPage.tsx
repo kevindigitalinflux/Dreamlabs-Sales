@@ -12,6 +12,7 @@ import { SelectField } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
 import { StageBadge } from '../components/pipeline/StageBadge';
+import { ReadinessBadge } from '../components/pipeline/ReadinessBadge';
 import { NextActionEditor } from '../components/pipeline/NextActionEditor';
 import { ContactInfo, PipelineInfo } from '../components/pipeline/LeadPanelSections';
 import { DecisionMakersCard } from '../components/pipeline/DecisionMakersCard';
@@ -47,6 +48,7 @@ export function LeadDetailPage() {
       <header className="flex flex-wrap items-center gap-3">
         <h1 className="text-[28px] font-extrabold">{lead.business_name}</h1>
         <StageBadge stage={lead.stage} />
+        <ReadinessBadge readiness={lead.readiness} missing={lead.readiness_missing} />
         {assignedProfile && (
           <span title={assignedProfile.full_name ?? assignedProfile.email} className="flex h-8 w-8 items-center justify-center rounded-full bg-purple text-xs font-bold text-on-accent">
             {initials(assignedProfile.full_name ?? assignedProfile.email)}

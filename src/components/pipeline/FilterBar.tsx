@@ -67,6 +67,13 @@ export function FilterBar({ filters, onChange, profiles, icps = [] }: FilterBarP
         className={`min-h-11 cursor-pointer rounded-lg border px-3 text-sm font-semibold ${filters[key] ? 'border-cyan text-offwhite' : 'border-line text-muted'}`}>
         {key === 'hasPhone' ? 'Has phone' : 'Has direct line'}
       </button>)}
+      <MultiSelect
+        label="Readiness"
+        options={[{ value: 'ready', label: 'Ready' }, { value: 'almost', label: 'Almost' },
+          { value: 'needs_work', label: 'Needs work' }, { value: 'not_checked', label: 'Not checked' }]}
+        selected={filters.readiness ?? []}
+        onChange={(readiness) => onChange({ ...filters, readiness: readiness as LeadFilters['readiness'] })}
+      />
     </div>
   );
 }

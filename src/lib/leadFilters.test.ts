@@ -22,6 +22,19 @@ function makeLead(overrides: Partial<Lead>): Lead {
 
 const NONE = { search: '', stages: [], assignees: [], overdueOnly: false };
 
+it('filters readiness including not checked while preserving phone filtering', () => {
+  const ready = makeLead({ readiness: 'ready', phone: '020 7946 0958' });
+  const unchecked = makeLead({ readiness: null });
+  expect(filterLeads([ready, unchecked], { ...NONE, readiness: ['ready'], hasPhone: true })).toEqual([ready]);
+  expect(filterLeads([ready, unchecked], { ...NONE, readiness: ['not_checked'] })).toEqual([unchecked]);
+});
+
+it('sorts readiness by useful order with unchecked last in both directions', () => {
+  const leads = ['needs_work', null, 'ready', 'almost'].map(readiness => makeLead({ readiness: readiness as Lead['readiness'] }));
+  expect(sortLeads(leads, 'readiness', 'asc').map(l => l.readiness)).toEqual(['ready', 'almost', 'needs_work', null]);
+  expect(sortLeads(leads, 'readiness', 'desc').map(l => l.readiness)).toEqual(['needs_work', 'almost', 'ready', null]);
+});
+
 describe('filterLeads', () => {
   const leads = [
     makeLead({ business_name: 'Shiny Cleaners', email: 'info@shiny.co.uk', stage: 'contacted', assigned_to: 'u1', next_action_date: '2026-07-10' }),

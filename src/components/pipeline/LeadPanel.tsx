@@ -10,6 +10,7 @@ import type { Lead, Stage } from '../../types';
 import { Button } from '../ui/Button';
 import { SelectField } from '../ui/Input';
 import { StageBadge } from './StageBadge';
+import { ReadinessBadge } from './ReadinessBadge';
 import { NextActionEditor } from './NextActionEditor';
 import { ContactInfo, NotesPreview, PipelineInfo } from './LeadPanelSections';
 import { NoteComposer } from './NoteComposer';
@@ -54,8 +55,9 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
           <div>
             <h2 className="text-[22px] font-bold">{lead.business_name}</h2>
             {lead.owner_name && <p className="text-sm text-muted">{lead.owner_name}</p>}
-            <div className="mt-2 flex items-center gap-2">
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               <StageBadge stage={lead.stage} />
+              <ReadinessBadge readiness={lead.readiness} missing={lead.readiness_missing} />
               <button
                 type="button"
                 onClick={() => void onUpdate(lead.id, { is_priority: !lead.is_priority })}

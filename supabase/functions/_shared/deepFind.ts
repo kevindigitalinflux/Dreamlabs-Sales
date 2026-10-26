@@ -45,6 +45,7 @@ import { lookupApolloPhone } from './apolloHunterLookup.ts';
 import { searchApolloDecisionMakers } from './apolloPeopleSearch.ts';
 import { lookupOpenCorporatesOfficer } from './openCorporates.ts';
 import { linkedinMatch, planWebsiteAutoUpdate, type AutoApplied } from './deepFindAutoApply.ts';
+import { evaluateReadiness, readinessText } from './leadReadiness.ts';
 
 export const WALL_BUDGET_MS = 130_000;
 /** A lead is only started when at least this much of the invocation is left. */
@@ -1172,12 +1173,29 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
 
   const finalSuggestions = reviewableSuggestions().slice(0, 25);
   steps.push(...dismissedStepLines());
+  // Re-read saved facts after automatic fills; unsaved suggestions cannot make a lead ready.
+  await checkpoint();
+  const [finalLead, finalContacts] = await Promise.all([
+    service.from('leads').select('*').eq('id', lead.id).eq('org_id', run.org_id).maybeSingle(),
+    service.from('decision_maker_candidates').select('*').eq('lead_id', lead.id),
+  ]);
+  if (finalLead.error || !finalLead.data || finalContacts.error) throw new Error('Could not read final readiness facts');
+  const readiness = evaluateReadiness({ lead: finalLead.data, contacts: finalContacts.data ?? [], domains: discovery.domains,
+    validEmails: [...checkedEmails].filter(([, c]) => c.ok && c.value.status === 'valid').map(([email]) => email),
+    websiteSuspect: suspicion.suspect && domainFromWebsite(finalLead.data.website) === siteDomain });
+  await checkpoint();
+  const { data: savedReadiness, error: readinessError } = await service.from('leads').update(readiness)
+    .eq('id', lead.id).eq('org_id', run.org_id).eq('updated_at', finalLead.data.updated_at).select('id');
+  if (readinessError || !savedReadiness?.length) throw new Error('Could not save lead readiness');
+  const readinessLine = readinessText(readiness.readiness, readiness.readiness_missing);
+  steps.push(readinessLine);
   return {
     status: 'done',
-    reason: (apolloPeople ? `Apollo added ${apolloPeople} decision-maker contacts. ` : '') + (suspicion.suspect ? "The lead's website may belong to another company, so it was not used. " : '') + deepFindSummary(stats),
+    reason: readinessLine + '. ' + (apolloPeople ? `Apollo added ${apolloPeople} decision-maker contacts. ` : '') + (suspicion.suspect ? "The lead's website may belong to another company, so it was not used. " : '') + deepFindSummary(stats),
     people_found: stats.hunterPeople + stats.officersAdded + apolloPeople,
     domains: {
       ...metadata,
+      ...readiness,
       dismissed_people: dismissedPeople,
       registry_evidence: registryEvidence,
       auto_applied: autoApplied.slice(0, 100),

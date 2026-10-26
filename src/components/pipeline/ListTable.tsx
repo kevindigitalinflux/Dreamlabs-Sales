@@ -3,6 +3,7 @@ import type { SortKey } from '../../lib/leadFilters';
 import { dueLabel, formatCurrency, formatShortDate, initials, isOverdue, packageLabel } from '../../lib/utils';
 import type { Lead, Profile } from '../../types';
 import { StageBadge } from './StageBadge';
+import { ReadinessBadge } from './ReadinessBadge';
 
 interface ListTableProps {
   leads: Lead[];
@@ -22,6 +23,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'business_name', label: 'Company' },
   { key: 'owner_name', label: 'Owner' },
   { key: 'stage', label: 'Stage' },
+  { key: 'readiness', label: 'Readiness' },
   { key: 'package_tier', label: 'Package' },
   { key: 'deal_value', label: 'Value' },
   { key: 'next_action_date', label: 'Next action' },
@@ -80,6 +82,7 @@ export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen, s
               </td>
               <td className="px-3 py-3 text-muted">{lead.owner_name ?? '—'}</td>
               <td className="px-3 py-3"><StageBadge stage={lead.stage} /></td>
+              <td className="min-w-36 max-w-64 px-3 py-3"><ReadinessBadge readiness={lead.readiness} missing={lead.readiness_missing} /></td>
               <td className="px-3 py-3 text-muted">{packageLabel(lead.package_tier)}</td>
               <td className="px-3 py-3">{lead.deal_value !== null ? formatCurrency(lead.deal_value) : '—'}</td>
               <td className={`px-3 py-3 ${isOverdue(lead.next_action_date) ? 'font-semibold text-danger' : 'text-muted'}`}>

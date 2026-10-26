@@ -14,12 +14,14 @@ export interface LeadFilters {
   icps?: string[];
   hasPhone?: boolean;
   hasDirectLine?: boolean;
+  readiness?: ('ready' | 'almost' | 'needs_work' | 'not_checked')[];
 }
 
 /** Applies search + stage + assignee + customer profile + overdue filters. Empty arrays mean "all". */
 export function filterLeads(leads: Lead[], filters: LeadFilters, today: Date = new Date()): Lead[] {
   const q = filters.search.trim().toLowerCase();
   return leads.filter((lead) => {
+    if (filters.readiness?.length && !filters.readiness.includes(lead.readiness ?? 'not_checked')) return false;
     if (filters.hasPhone || filters.hasDirectLine) {
       const phones = [lead.phone, ...(lead.additional_phones ?? [])].flatMap(value => {
         const phone = parsePhone(value, lead.country);
@@ -43,11 +45,12 @@ export function filterLeads(leads: Lead[], filters: LeadFilters, today: Date = n
 
 export type SortKey =
   | 'business_name' | 'owner_name' | 'stage' | 'package_tier'
-  | 'deal_value' | 'next_action_date' | 'last_contacted_at';
+  | 'deal_value' | 'next_action_date' | 'last_contacted_at' | 'readiness';
 
 const STAGE_ORDER = new Map(STAGES.map((s, i) => [s.value, i]));
 
 function sortValue(lead: Lead, key: SortKey): string | number | null {
+  if (key === 'readiness') return lead.readiness ? ['ready', 'almost', 'needs_work'].indexOf(lead.readiness) : null;
   if (key === 'stage') return STAGE_ORDER.get(lead.stage) ?? null;
   return lead[key];
 }

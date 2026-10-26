@@ -1,5 +1,6 @@
 import type { EmailAttachment, EmailLink } from '../lib/emailAttachments';
 import type { PhoneKind, PhoneMetadata, PhoneSource } from '../../supabase/functions/_shared/phoneNumbers';
+import type { Readiness } from '../../supabase/functions/_shared/leadReadiness';
 
 export type Role = 'admin' | 'contractor' | 'team_member';
 
@@ -44,6 +45,9 @@ export interface Lead {
   owner_name: string | null;
   phone: string | null;
   phone_meta?: Record<string, PhoneMetadata>;
+  /** Last completed Deep find assessment; absent/null means not checked. */
+  readiness?: Readiness | null;
+  readiness_missing?: string[] | null;
   /** RLS-scoped nested contacts for pipeline phone filters; never persisted on leads. */
   phone_contacts?: { phone: string | null; phone_kind: PhoneKind; dismissed_at: string | null }[];
   email: string | null;

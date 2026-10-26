@@ -31,6 +31,20 @@ import { registryWebNumbers } from '../../supabase/functions/_shared/registryWeb
 import { undoDeepFindChange } from './deepFindReview';
 
 let lead, contacts, writes, service, deny, aiAllowed, beforeWebsiteWrite, worker, revoked;
+it('stores final readiness and explains the missing verified email in the run result', async () => {
+  lead.website = 'https://acme.com';
+  const out = await run('low');
+  expect(lead.readiness).toBe('almost');
+  expect(lead.readiness_missing).toEqual(['verified_email']);
+  expect(out.reason).toContain('Almost: no verified email');
+});
+it('a checked saved email plus a confirmed saved site makes the lead ready', async () => {
+  lead.website = 'https://acme.com';
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
+  const out = await run('low');
+  expect(lead.readiness).toBe('ready');
+  expect(out.domains.readiness).toBe('ready');
+});
 const profile = 'https://www.linkedin.com/in/jane-smith';
 const run = (effort) => processDeepFindLead(service, { id: 'run', org_id: 'org', created_by: 'user', status: 'active' }, { id: 'result', lead_id: 'lead', org_id: 'org', domains: effort ? { effort } : {} });
 it('suggests a person direct phone from a fetched staff page without writing it or fetching another page', async () => {

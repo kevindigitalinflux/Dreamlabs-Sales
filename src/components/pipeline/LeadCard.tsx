@@ -5,6 +5,7 @@ import { parsePhone } from '../../../supabase/functions/_shared/phoneNumbers';
 import type { Lead } from '../../types';
 import { dueLabel, initials, isDueToday, isOverdue } from '../../lib/utils';
 import { STAGE_BORDER_CLASSES } from './stageStyles';
+import { ReadinessBadge } from './ReadinessBadge';
 
 interface LeadCardProps {
   lead: Lead;
@@ -46,6 +47,7 @@ export function LeadCard({ lead, assigneeName, onOpen }: LeadCardProps) {
           </span>
         )}
       </div>
+      <ReadinessBadge readiness={lead.readiness} missing={lead.readiness_missing} />
       {lead.phone && (
         <PhoneChip value={lead.phone} country={lead.country} metadata={lead.phone_meta?.[parsePhone(lead.phone, lead.country)?.value ?? '']} />
       )}
