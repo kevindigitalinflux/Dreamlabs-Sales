@@ -15,6 +15,7 @@ import { IdealCustomerProfilesCard } from '../components/settings/IdealCustomerP
 import { CustomPlaceholdersCard } from '../components/settings/CustomPlaceholdersCard';
 import { UsageLimitsCard } from '../components/settings/UsageLimitsCard';
 import { DesktopNotificationsCard } from '../components/settings/DesktopNotificationsCard';
+import { ImportSetupButton } from '../components/mdImport/ImportSetupButton';
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
@@ -86,6 +87,7 @@ function CompanyContextCard({ orgId, orgName, isOrgAdmin }: { orgId: string; org
 export function Settings() {
   const { profile, refreshProfile } = useAuth();
   const { currentOrg } = useOrg();
+  const [importRevision, setImportRevision] = useState(0);
   const [fullName, setFullName] = useState('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [avatarStatus, setAvatarStatus] = useState<'idle' | 'uploading' | 'error'>('idle');
@@ -180,8 +182,13 @@ export function Settings() {
           </form>
         </div>
       </Card>
-      {currentOrg && <CompanyContextCard orgId={currentOrg.id} orgName={currentOrg.name} isOrgAdmin={currentOrg.role === 'admin'} />}
-      {currentOrg && <IdealCustomerProfilesCard isOrgAdmin={currentOrg.role === 'admin'} />}
+      {currentOrg?.role === 'admin' && <Card><div className="flex flex-col items-start gap-3">
+        <h2 className="text-[18px] font-bold">Import setup files</h2>
+        <p className="text-sm text-muted">Add company context, customer profiles and email templates from .md files. This content feeds AI email drafting. Review before saving.</p>
+        <ImportSetupButton onApplied={() => setImportRevision((v) => v + 1)} />
+      </div></Card>}
+      {currentOrg && <CompanyContextCard key={`context-${importRevision}`} orgId={currentOrg.id} orgName={currentOrg.name} isOrgAdmin={currentOrg.role === 'admin'} />}
+      {currentOrg && <IdealCustomerProfilesCard key={`icps-${importRevision}`} isOrgAdmin={currentOrg.role === 'admin'} />}
       <CompanyProfileCard />
       {currentOrg && <CustomPlaceholdersCard isOrgAdmin={currentOrg.role === 'admin'} />}
       {currentOrg && <UsageLimitsCard orgId={currentOrg.id} isOrgAdmin={currentOrg.role === 'admin'} />}

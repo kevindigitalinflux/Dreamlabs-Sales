@@ -4,6 +4,8 @@ import { useAuth } from './useAuth';
 import { useOrg } from './useOrg';
 import type { EmailAttachment, EmailLink } from '../lib/emailAttachments';
 import type { EmailTemplate } from '../types';
+import { duplicateTemplates } from '../lib/mdImport/duplicate';
+import type { NamedProfile } from '../lib/mdImport/types';
 
 export interface TemplateInput {
   name: string;
@@ -54,5 +56,12 @@ export function useTemplates() {
     return null;
   }, [refresh]);
 
-  return { templates, loading, error, save, remove };
+  /** Makes org-owned copies; callers surface failures without silently retrying. */
+  const copy = useCallback(async (sources: EmailTemplate[], target?: NamedProfile): Promise<EmailTemplate[]> => {
+    const created = await duplicateTemplates(supabase, sources, currentOrg?.id ?? '', session?.user.id ?? '', target);
+    await refresh();
+    return created;
+  }, [currentOrg, session, refresh]);
+
+  return { templates, loading, error, save, remove, refresh, copy };
 }

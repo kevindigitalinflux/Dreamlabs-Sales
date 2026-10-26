@@ -894,3 +894,17 @@ Resume: open this section, the approved spec and plan. Review this branch first.
 - No other Critical/Important findings and no deferred minors. Reviewer confirmed the permission table, fail-closed reads, service-only RPC, missing-column fallback and exact preservation of per-org API-key behavior. The three existing architect questions above remain pending, not silently accepted as new architecture.
 - Final application gates after Task 6: npx tsc --noEmit 0 diagnostics; npx vitest run 142/142 files and 2,300/2,300 tests, zero failures; npm run build passed with the existing chunk-size warning; edge TypeScript shim passed. Repeated after the migration-source guard change as a final check; SQL/audit still unrun.
 - Build and documentation commits are local only. Final correction/documentation commit hash is available from git log. Working tree should be clean after that commit. No background jobs remain.
+
+## MD setup import and template duplicate — local build (2026-10-26)
+
+This is the current checkpoint for `C:/Users/kevin/Projects/dreamlabs-sales-md-import`, branch `codex/md-import-build`. Older task sections describe other branches and are not instructions to resume those tasks here.
+
+Kevin explicitly instructed Codex to follow `docs/MD-IMPORT-BUILD-BRIEF.md`, build the approved design, test first, run all gates, write the build report and stop. Default roles remain Codex builder and Claude architect/reviewer. No role change or further kickoff answer was needed; outcome, acceptance criteria and publishing limits were already specified.
+
+Read `docs/MD-IMPORT-BUILD-REPORT.md` first, then the design/format documents it references. Application commits are `3da6e3f` and `6ed94a5ac7da6f115afb1d7af5395d6978a7e7c6`, based on `2ca184c`. Final documentation follows in a separate commit. The parser, wizard, apply and both copy flows are built. Attachment references are retained because template deletion does not delete stored objects. Import replacements preserve default flags and attachments. Full reruns skip previously saved matches/context; explicit consent is needed for unresolved ICPs.
+
+Final gates: TypeScript 0 diagnostics; 152 test files / 2,390 tests / 0 failures; production build successful with 2,803 modules and the existing chunk-size warning; diff check 0 whitespace errors. The seven new test files contain 52 tests. Full suite/build used dummy local environment values. No dependency installation was required.
+
+Independent review is pending. Browser interactions/mobile/focus, live Supabase/RLS/storage, uncertain network outcomes and concurrent users were not tested. No remote operation, external service, real credential, migration, email, message, push, merge or deployment was used. No other checkout or vault file was touched; the usual vault sync was not run because the brief restricts work to this worktree. Subscription usage was unavailable; no percentage is asserted.
+
+At session close, verify `git status --short --branch` is clean and use `git log` for the documentation HEAD. No background jobs remain. Next action: Claude reviews this branch against the approved design and format contract, with the report's decisions and limitations in view. Codex stops here; no publication is authorized.
