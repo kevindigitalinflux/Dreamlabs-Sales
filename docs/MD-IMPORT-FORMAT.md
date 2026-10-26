@@ -81,7 +81,7 @@ Kind regards,
 - `subject:` is required. `## Body` is required.
 - Optional `links:` lines after the body: `- [Label](https://example.com)`. Only `https` links.
 - Attachments are not imported. Add them in the app afterwards.
-- Allowed placeholders: `{{first_name}}`, `{{business_name}}`, `{{owner_name}}`, `{{package_name}}`, `{{deal_value}}`, `{{contractor_name}}`, `{{pain_point}}`, `{{cal_link}}`, `{{unsubscribe_url}}`, plus any custom placeholder the organisation has already created. An unknown placeholder is flagged in the preview as a warning.
+- Allowed placeholders: `{{first_name}}`, `{{business_name}}`, `{{owner_name}}`, `{{package_name}}`, `{{deal_value}}`, `{{contractor_name}}`, `{{pain_point}}`, `{{unsubscribe_url}}`, plus any custom placeholder the organisation has already created. An unknown placeholder is flagged in the preview as a warning. `{{cal_link}}` and `{{audit_date}}` exist in the app but can be empty when an email is sent, so files should describe the call to action in words instead and avoid both.
 - Every cold email must include `{{unsubscribe_url}}` somewhere in the body.
 
 ## Guidance for the Claude skill (interview)
