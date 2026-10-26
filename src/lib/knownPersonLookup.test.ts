@@ -3,6 +3,7 @@ import {
   hunterAccount,
   hunterDomainList,
   hunterVerifyEmail,
+  readCompanyPages,
   scanWebsiteForPerson,
   webSearchForPerson,
   webSearchPrompt,
@@ -21,6 +22,15 @@ function stubFetch(handler: (url: string, init?: RequestInit) => Response) {
 const urls = (fn: ReturnType<typeof stubFetch>) => fn.mock.calls.map((c) => String(c[0]));
 
 afterEach(() => vi.unstubAllGlobals());
+
+it('captures each fetched source URL without fetching again for phone provenance', async () => {
+  const fetched: { html: string; url: string }[] = [];
+  const fn = stubFetch(url => html(url.endsWith('/team') ? '<article>Jane Smith 02079460958</article>' : '<a href="/team">Our team</a>'));
+  const pages = await readCompanyPages('https://acme.test', 5_000, 3, (html, url) => fetched.push({ html, url }));
+  expect(urls(fn)).toEqual(['https://acme.test/', 'https://acme.test/team', 'https://acme.test/about', 'https://acme.test/contact']);
+  expect(fetched.map(page => page.url)).toEqual(['https://acme.test/', 'https://acme.test/team', 'https://acme.test/about', 'https://acme.test/contact']);
+  expect(fetched.map(page => page.html)).toEqual(pages);
+});
 
 describe('hunterDomainList', () => {
   it('sends the key only in the header and returns the list and pattern', async () => {

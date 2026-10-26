@@ -93,8 +93,8 @@ const failure = (error: unknown, message = FAILURE) => Object.assign(new Error(m
 /** Session client only. Read failures must not turn existing contacts into an empty list. */
 export async function loadDeepFindReview(client: SupabaseClient, leadId: string): Promise<ReviewState> {
   const [lead, contacts] = await Promise.all([
-    client.from('leads').select('id, phone, website, email, additional_emails, dismissed_suggestions, country, registry_candidates_rejected, owner_name, updated_at').eq('id', leadId).single(),
-    client.from('decision_maker_candidates').select('id, first_name, last_name, title, email, dismissed_at, linkedin_url').eq('lead_id', leadId),
+    client.from('leads').select('id, phone, phone_meta, website, email, additional_emails, dismissed_suggestions, country, registry_candidates_rejected, owner_name, updated_at').eq('id', leadId).single(),
+    client.from('decision_maker_candidates').select('id, first_name, last_name, title, email, phone, dismissed_at, linkedin_url').eq('lead_id', leadId),
   ]);
   if (lead.error || contacts.error || !lead.data || !contacts.data) throw failure(lead.error ?? contacts.error, 'Could not load this lead’s review details. Refresh and try again.');
   return { lead: lead.data as ReviewState['lead'], contacts: contacts.data as ReviewContact[] };
@@ -120,6 +120,12 @@ export async function saveDeepFindReview(client: SupabaseClient, userId: string 
   if (plan.kind === 'none' && !newTitle) return 'none';
   if (plan.kind === 'lead_update') {
     const { error } = await client.from('leads').update(plan.patch).eq('id', leadId).eq('updated_at', state.lead.updated_at).select('id').single();
+    if (error) throw failure(error);
+  } else if (plan.kind === 'phone_update') {
+    const old = state.contacts.find((c) => c.id === plan.id)!;
+    let query = client.from('decision_maker_candidates').update(plan.patch).eq('id', plan.id).eq('lead_id', leadId).is('dismissed_at', null);
+    query = old.phone == null ? query.is('phone', null) : query.eq('phone', old.phone);
+    const { error } = await query.select('id').single();
     if (error) throw failure(error);
   } else if (plan.kind === 'title_update') {
     const old = state.contacts.find((c) => c.id === plan.id)!;

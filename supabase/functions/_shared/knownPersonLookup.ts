@@ -386,21 +386,25 @@ export async function hunterCompanySearch(company: string, apiKey: string, timeo
  * the shared SSRF-guarded fetcher. Returns the HTML of every page read (pages that redirect to another origin are
  * dropped). Never throws; an unreadable site gives [].
  */
-export async function readCompanyPages(website: string, budgetMs: number, extra = 3): Promise<string[]> {
+export async function readCompanyPages(website: string, budgetMs: number, extra = 3, onPage?: (html: string, finalUrl: string) => void): Promise<string[]> {
   try {
     const deadline = AbortSignal.timeout(Math.max(1, budgetMs));
     const w = website.trim();
     const home = await fetchPageHtml(/^[a-z][a-z0-9+.-]*:\/\//i.test(w) ? w : `https://${w}`, deadline);
     if (!home) return [];
+    onPage?.(home.html, home.finalUrl);
     const origin = new URL(home.finalUrl).origin;
     const links = pickPersonPages(home.finalUrl, extractHrefs(home.html), extra);
     const pages = await runBounded(links, 3, async (link) => {
       if (deadline.aborted) return null;
       const page = await fetchPageHtml(link, deadline);
-      return page && new URL(page.finalUrl).origin === origin ? page.html : null;
+      if (!page || new URL(page.finalUrl).origin !== origin) return null;
+      onPage?.(page.html, page.finalUrl);
+      return page.html;
     });
     return [home.html, ...pages.filter((p): p is string => typeof p === 'string')];
-  } catch {
+  } catch (error) {
+    console.warn('company page reader: pages could not be read', error instanceof Error ? error.name : 'UnknownError');
     return [];
   }
 }

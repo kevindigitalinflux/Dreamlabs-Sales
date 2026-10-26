@@ -1,4 +1,5 @@
 import type { DeepFindLeadRow } from '../types';
+import { readPhoneEvidence, type BusinessPhone } from '../../supabase/functions/_shared/phoneNumbers';
 import { isReviewPhone, registrySkipReason, visibleSuggestions } from '../../supabase/functions/_shared/deepFindSuggestions';
 import type { ReviewLead, ReviewContact } from '../../supabase/functions/_shared/deepFindSuggestions';
 import { readAutoApplied, type AutoApplied } from '../../supabase/functions/_shared/deepFindAutoApply';
@@ -47,7 +48,7 @@ export interface DeepFindDetails {
 export interface DeepFindDismissedPerson { name: string; contactId?: string }
 
 /** One address offered to check, with where it came from (a fixed label). */
-export interface DeepFindSuggestion { replaces_saved_email?: { contact_id: string; email: string }; guess_rank?: 'most_likely' | 'other'; name: string; value: string; label: string; field?: string }
+export interface DeepFindSuggestion { phone?: BusinessPhone; replaces_saved_email?: { contact_id: string; email: string }; guess_rank?: 'most_likely' | 'other'; name: string; value: string; label: string; field?: string }
 
 /** One Companies House company offered with "Use this company". */
 export interface DeepFindCompanyCandidate { company_number: string; name: string; address: string | null; status: string | null; why?: string }
@@ -106,7 +107,9 @@ export function readDeepFindDetails(value: unknown): DeepFindDetails {
     const contactId = text(replacement.contact_id, 80), savedEmail = text(replacement.email, 200);
     const replaces = x.field === 'email' && contactId && savedEmail ? { replaces_saved_email: { contact_id: contactId, email: savedEmail } } : {};
     if (x.field === 'phone' && !isReviewPhone(value)) return [];
-    return name && value && label && ['email', 'linkedin_url', 'phone', 'owner_name', 'website', 'title'].includes(String(x.field)) ? [{ name, value, label, ...replaces, ...((x.guess_rank === 'most_likely' || x.guess_rank === 'other') ? { guess_rank: x.guess_rank as 'most_likely' | 'other' } : {}), ...(x.field !== 'email' ? { field: String(x.field) } : {}) }] : [];
+    const phone = readPhoneEvidence(x.phone, x.field === 'person_phone' ? value : (x.phone as BusinessPhone | undefined)?.value);
+    if (x.field === 'person_phone' && !phone) return [];
+    return name && value && label && ['email', 'linkedin_url', 'phone', 'person_phone', 'owner_name', 'website', 'title'].includes(String(x.field)) ? [{ name, value, label, ...replaces, ...(phone ? { phone } : {}), ...((x.guess_rank === 'most_likely' || x.guess_rank === 'other') ? { guess_rank: x.guess_rank as 'most_likely' | 'other' } : {}), ...(x.field !== 'email' ? { field: String(x.field) } : {}) }] : [];
   });
   return {
     autoApplied: readAutoApplied(o.auto_applied),

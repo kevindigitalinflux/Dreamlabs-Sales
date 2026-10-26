@@ -1,4 +1,5 @@
 import type { EmailAttachment, EmailLink } from '../lib/emailAttachments';
+import type { PhoneKind, PhoneMetadata, PhoneSource } from '../../supabase/functions/_shared/phoneNumbers';
 
 export type Role = 'admin' | 'contractor' | 'team_member';
 
@@ -42,6 +43,9 @@ export interface Lead {
   business_name: string;
   owner_name: string | null;
   phone: string | null;
+  phone_meta?: Record<string, PhoneMetadata>;
+  /** RLS-scoped nested contacts for pipeline phone filters; never persisted on leads. */
+  phone_contacts?: { phone: string | null; phone_kind: PhoneKind; dismissed_at: string | null }[];
   email: string | null;
   /** True once the lead has unsubscribed (migration 010). */
   opted_out?: boolean;
@@ -118,6 +122,10 @@ export interface DecisionMakerCandidate {
   email_revealed: boolean;
   phone: string | null;
   phone_status: 'not_requested' | 'pending' | 'revealed' | 'not_found' | 'failed';
+  phone_kind?: PhoneKind;
+  phone_source?: PhoneSource;
+  phone_source_url?: string | null;
+  phone_found_at?: string | null;
   linkedin_url: string | null;
   /** Set when the user removed this person as not relevant; hidden everywhere and kept so a re-search doesn't re-add them. */
   dismissed_at: string | null;

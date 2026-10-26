@@ -22,6 +22,7 @@ import { hunterAccountEmpty, hunterAccountLine, type HunterAccount } from './hun
 import { cleanEmail, cleanLinkedinProfile, emailDomain, extractWebsiteFindings, isFreeMailDomain, pickWebsiteFindings } from './knownPersonWide.ts';
 import { domainEmailsOnPages } from './domainSiteCheck.ts';
 import { extractPhone } from './websiteContact.ts';
+import { personPhoneSuggestion, phoneMetadata, type BusinessPhone, type PhonePage } from './phoneNumbers.ts';
 import { domainFromWebsite, isDirectoryDomain } from './knownPerson.ts';
 import { rankPeople } from './peopleRanking.ts';
 import { DOMAIN_SOURCE_LABELS, safeFailure, websiteSuspicion, type KnownPersonName, type WebPerson } from './domainDiscovery.ts';
@@ -175,7 +176,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const problems: ProblemInput[] = [];
   /** Contacts this run created or filled, the only ones whose LinkedIn link is captured. */
   const touched = new Set<string>();
-  const suggestions: { name: string; field: string; value: string; label: string; guess_rank?: 'most_likely' | 'other'; replaces_saved_email?: { contact_id: string; email: string } }[] = [];
+  const suggestions: { phone?: BusinessPhone; name: string; field: string; value: string; label: string; guess_rank?: 'most_likely' | 'other'; replaces_saved_email?: { contact_id: string; email: string } }[] = [];
   const autoApplied: AutoApplied[] = [];
   let apolloPeople = 0;
   /** Plain-English step lines shown with the results. */
@@ -221,9 +222,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   for (const contact of rows) if (contact.dismissed_at) recordDismissed([str(contact.first_name), str(contact.last_name)].filter(Boolean).join(' '), contact.id);
   for (const raw of [lead.owner_name, ...(Array.isArray(lead.additional_owners) ? lead.additional_owners : [])]) if (typeof raw === 'string') ownerSuppressed(raw);
 
-  const applyLead = async (field: string, value: string) => {
+  const applyLead = async (field: string, value: string, phone?: BusinessPhone) => {
     if (field === 'owner_name' && ownerSuppressed(value)) return false;
-    const saved = await applyDeepFindBlank(service, scope, 'leads', lead, field, value, autoApplied, checkpoint);
+    const saved = await applyDeepFindBlank(service, scope, 'leads', lead, field, value, autoApplied, checkpoint, phone);
     if (field === 'website' && !saved) {
       const { data: current } = await service.from('leads').select('website').eq('id', lead.id).eq('org_id', run.org_id).maybeSingle();
       if (current && current.website !== lead.website) steps.push('The saved website changed while Deep find ran, so it was left as is.');
@@ -365,7 +366,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   if (siteBlocked) steps.push('The lead\'s website domain was marked as not theirs, so the website was not used. You can restore it from the lead page.');
   const siteReadable = !!siteDomain && !siteBlocked && DOMAIN_CHECKS.usable(siteDomain);
   const siteChecked = siteReadable && left() > 30_000;
-  const sitePages = siteChecked ? await readCompanyPages(str(lead.website)!, 12_000) : [];
+  const fetchedPhonePages: PhonePage[] = [];
+  const sitePages = siteChecked ? await readCompanyPages(str(lead.website)!, 12_000, 3, (html, url) => {
+    if (domainFromWebsite(url) === siteDomain) fetchedPhonePages.push({ html, url, source: 'own_site' });
+  }) : [];
   // A website that shows clear signs of another company is only a weak signal: not read for people or other domains.
   const suspicion = websiteSuspicion(sitePages, [str(lead.business_name) ?? '', knownRegistry?.name ?? ''].filter(Boolean), lead.country, lead);
   if (suspicion.suspect) steps.push(`This website may belong to a different company: ${suspicion.reasons.join(' ')}`);
@@ -489,8 +493,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         }
         if (place?.phone && isReviewPhone(place.phone)) {
           placesSuppliedPhone = true;
-          if (automatic) await applyLead('phone', place.phone);
-          else suggestions.push({ name: 'Company contact', field: 'phone', value: place.phone, label });
+          if (automatic) await applyLead('phone', place.phone, phoneMetadata(place.phone, lead.country, 'company_line', 'places', null, nowIso()) ?? undefined);
+          else suggestions.push({ name: 'Company contact', field: 'phone', value: place.phone, label, phone: phoneMetadata(place.phone, lead.country, 'company_line', 'places', null, nowIso()) ?? undefined });
         }
         steps.push(place ? 'Checked Google Places for missing website and phone.' : 'Google Places found no matching contact details.');
       }
@@ -509,6 +513,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     for (const html of s.pages) extraSitePeople.push(...extractTeamMembers(html));
   }
   const ownSites = [...confirmedSites, ...(siteDomain && verified.has(siteDomain) ? [{ domain: siteDomain, pages }] : [])];
+  const businessPhones: BusinessPhone[] = [];
   const ownerSites = new Set(discovery.domains.filter((d) => !d.needs_check && d.sources.includes('site_confirms')).map((d) => d.domain));
   const trustedOwnerPeople = ownSites.filter((s) => ownerSites.has(s.domain)).flatMap((s) => s.pages.flatMap(extractTeamMembers));
   const registryPages = [...pages, ...confirmedSites.filter(s => ownerSites.has(s.domain)).flatMap(s => s.pages)];
@@ -526,7 +531,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       suggestions.push({ name: 'Company contact', field: 'email', value: email, label: `Found on ${site.domain}, check it` });
     }
     const phone = extractPhone(html);
-    if (phone && !str(lead.phone)) suggestions.push({ name: 'Company contact', field: 'phone', value: phone, label: 'Found on the company website; review before adding.' });
+    const pageUrl = [...fetchedPhonePages, ...confirmedSites.flatMap(s => s.phonePages ?? [])].find(p => p.html === html)?.url ?? null;
+    const evidence = phoneMetadata(phone, lead.country, 'company_line', 'own_site', pageUrl, nowIso());
+    if (evidence) businessPhones.push(evidence);
+    if (phone && !str(lead.phone)) suggestions.push({ name: 'Company contact', field: 'phone', value: phone, label: 'Found on the company website; review before adding.', ...(evidence ? { phone: evidence } : {}) });
   }
   // (1b-scrape) A confirmed domain whose pages gave no address (a site that needs a browser, or one we could not read):
   // one browser scrape per lead. Only addresses on that domain are kept; they are suggestions with their source page
@@ -556,7 +564,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         suggestions.push({ name: 'Company contact', field: 'email', value: e.value, label: `Found by the browser scraper on ${scrapeDomain}${pageOf(e.source)}, check it` });
       }
       siteEmails.set(scrapeDomain, [...(siteEmails.get(scrapeDomain) ?? []), ...scraped.value.emails.map((e) => e.value)]);
-      for (const phone of scraped.value.phones) if (!str(lead.phone)) suggestions.push({ name: 'Company contact', field: 'phone', value: phone.value, label: 'Found by the browser scraper; review before adding.' });
+      for (const phone of scraped.value.phones) {
+        const evidence = phoneMetadata(phone.value, lead.country, 'company_line', 'worker_scrape', phone.source, nowIso());
+        if (evidence) businessPhones.push(evidence);
+        if (!str(lead.phone)) suggestions.push({ name: 'Company contact', field: 'phone', value: phone.value, label: 'Found by the browser scraper; review before adding.', ...(evidence ? { phone: evidence } : {}) });
+      }
     }
   }
   const readDeeperPages = async () => {
@@ -863,10 +875,13 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         const supplied = deeper.sitePages.find(s => s.domain === domain)?.pages ?? [];
         const pageBudget = Math.min(8_000, optionalBudget() - 30_000);
         if (!supplied.length && pageBudget >= 2_000) await checkpoint();
-        const newPages = supplied.length ? supplied : pageBudget >= 2_000 ? await readCompanyPages('https://' + domain, pageBudget) : [];
+        const newPhonePages: PhonePage[] = [];
+        const newPages = supplied.length ? supplied : pageBudget >= 2_000 ? await readCompanyPages('https://' + domain, pageBudget, 3, (html, url) => {
+          if (domainFromWebsite(url) === domain) newPhonePages.push({ html, url, source: 'own_site' });
+        }) : [];
         if (newPages.length) {
           siteEmails.set(domain, domainEmailsOnPages(newPages, domain));
-          if (!confirmedSites.some(s => s.domain === domain)) confirmedSites.push({ domain, pages: newPages });
+          if (!confirmedSites.some(s => s.domain === domain)) confirmedSites.push({ domain, pages: newPages, phonePages: newPhonePages });
           extraSitePeople.push(...newPages.flatMap(extractTeamMembers));
           for (const email of siteEmails.get(domain) ?? []) {
             if (!emailOnLead(all(), email) && !suggestions.some(s => s.value === email)) suggestions.push({ name: 'Company contact', field: 'email', value: email, label: 'Found on ' + domain + ', check it' });
@@ -1117,6 +1132,23 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     } else suggestions.push({ name, field: 'linkedin_url', value: match.url, label: match.evidence });
   }
   stats.namedOnSite = namedOnSite.length;
+  // Reuse only confirmed business pages and the worker's company-level phone results. Never reveal a person automatically.
+  const phonePages = [
+    ...(usableSite && siteDomain && verified.has(siteDomain) ? fetchedPhonePages : []),
+    ...confirmedSites.flatMap(site => site.phonePages ?? []),
+  ];
+  const companyPhone = str(lead.phone) ?? businessPhones[0]?.value;
+  const companyKey = phoneMetadata(companyPhone, lead.country, 'company_line', 'manual', null, null)?.value;
+  const fallbackEvidence = businessPhones.find(phone => phone.value === companyKey) ?? (companyKey ? lead.phone_meta?.[companyKey] : undefined);
+  const phoneNames = new Set([
+    ...all().filter(c => c.kind !== 'general' && !c.name_obfuscated).map(c => `${str(c.first_name) ?? ''} ${str(c.last_name) ?? ''}`.trim()),
+    ...namedOnSite.map(p => p.name), ...namedByWeb.map(p => p.name), ...roles.map(p => p.name),
+  ]);
+  for (const name of phoneNames) {
+    if (ownerSuppressed(name)) continue;
+    const proposal = personPhoneSuggestion(name, phonePages, companyPhone, lead.country, nowIso(), fallbackEvidence);
+    if (proposal) suggestions.push(proposal);
+  }
   stats.namedByWeb = namedByWeb.length;
   stats.hunterCapHit = spend.hunterHit;
   stats.aiCapHit = spend.aiHit;

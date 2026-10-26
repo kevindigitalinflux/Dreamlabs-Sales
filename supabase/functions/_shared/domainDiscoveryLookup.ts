@@ -10,6 +10,7 @@ import { companyNameVariants } from './nameVariants.ts';
 import { lookupMx } from './dnsLookup.ts';
 import { runDomainDiscovery, type DiscoveryOutcome, type DomainCandidate, type KnownPersonName } from './domainDiscovery.ts';
 import { DOMAIN_CHECKS, savedDomains } from './domainChecks.ts';
+import type { PhonePage } from './phoneNumbers.ts';
 
 export { DOMAIN_CHECKS, savedDomains };
 
@@ -71,6 +72,10 @@ export async function discoverLeadDomains(
   const variants = companyNameVariants(names).map((v) => v.text);
   const blocked = savedDomains(lead.blocked_domains);
   const spendHunter = async () => !opts.guard || await opts.guard.hunter();
+  const phonePages = new Map<string, PhonePage[]>();
+  const capturePhonePage = (domain: string) => (html: string, url: string) => {
+    if (domainFromWebsite(url) === domain) phonePages.set(domain, [...(phonePages.get(domain) ?? []), { html, url, source: 'own_site' }]);
+  };
   const outcome = await runDomainDiscovery({
     names, variants, hunterCap: Math.min(opts.hunterCap ?? 12, websiteDomain || already.length || confirmedEmailDomain ? 2 : 12), registeredName: opts.registeredName ?? null, people: opts.people ?? [], websiteSuspect: !!opts.websiteSuspect, blocked,
     website: websiteDomain ? lead.website : null, websiteDomain, known,
@@ -88,7 +93,7 @@ export async function discoverLeadDomains(
     }, geminiKey ?? '', t),
     apolloOrg: (n, t) => apolloOrgSearch(n, apolloKey ?? '', t),
     // Free: the discovered domain's own pages, through the SSRF-guarded page reader (home + up to 5 team pages).
-    readDomainSite: (d, t) => readCompanyPages(`https://${d}`, t, 5),
+    readDomainSite: (d, t) => readCompanyPages(`https://${d}`, t, 5, capturePhonePage(d)),
     mx: (d, t) => lookupMx(d, t),
     // Each Hunter call reserves a credit first (limit 10 = at most about one credit); a refusal stops the probing.
     hunterList: async (d, t) => {
@@ -109,5 +114,5 @@ export async function discoverLeadDomains(
     if (error) console.error('Could not save discovered domains');
     else saved = savedDomains(data);
   }
-  return { ...outcome, saved };
+  return { ...outcome, sitePages: outcome.sitePages.map(site => ({ ...site, phonePages: phonePages.get(site.domain) ?? [] })), saved };
 }

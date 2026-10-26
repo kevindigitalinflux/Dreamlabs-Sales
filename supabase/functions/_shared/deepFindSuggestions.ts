@@ -1,33 +1,22 @@
 import { displayPersonKey, fullestPeople } from './personIdentity.ts';
+import { contactPhonePatch, isPlausiblePhone, parsePhone, readPhoneEvidence, type BusinessPhone, type PhoneMetadata } from './phoneNumbers.ts';
 // Import-free review and country rules shared by Deep find and its session UI.
 export interface SavedEmailReplacement { contact_id: string; email: string }
-export interface ReviewSuggestion { replaces_saved_email?: SavedEmailReplacement; guess_rank?: 'most_likely' | 'other'; name: string; value?: string; role?: string | null; label?: string; field?: string }
+export interface ReviewSuggestion { phone?: BusinessPhone; replaces_saved_email?: SavedEmailReplacement; guess_rank?: 'most_likely' | 'other'; name: string; value?: string; role?: string | null; label?: string; field?: string }
 export interface ReviewLead {
   email?: unknown; additional_emails?: unknown; dismissed_suggestions?: unknown;
   country?: unknown; registry_candidates_rejected?: unknown; owner_name?: unknown;
-  phone?: unknown; website?: unknown;
+  phone?: unknown; phone_meta?: Record<string, PhoneMetadata>; website?: unknown;
 }
 export interface ReviewContact {
-  id: string; first_name?: unknown; last_name?: unknown; email?: unknown; dismissed_at?: unknown; title?: unknown; linkedin_url?: unknown;
+  id: string; first_name?: unknown; last_name?: unknown; email?: unknown; phone?: unknown; dismissed_at?: unknown; title?: unknown; linkedin_url?: unknown;
 }
 const norm = (v: unknown): string => typeof v === 'string' ? v.trim().toLowerCase().replace(/\s+/g, ' ') : '';
 const strings = (v: unknown): string[] => Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [];
 const validEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 /** Accept phone shapes only, never arbitrary numbers extracted from page text. */
 export function isReviewPhone(value: unknown): boolean {
-  if (typeof value !== 'string') return false;
-  const raw = value.trim();
-  if (/^\s*\d{1,2}\s*[-./]\s*\d{1,2}\s*[-./]\s*\d{2,4}\s*$/.test(raw)) return false;
-  if (!/^\+?[\d\s().-]+$/.test(raw) || /\d{4}-\d{2}-\d{2}|^\d{4}-\d{4}$/.test(raw)) return false;
-  let digits = raw.replace(/\D/g, '');
-  if (/^(\d)\1+$/.test(digits) || /(\d)\1{6}/.test(digits)) return false;
-  if (raw.startsWith('+44')) {
-    digits = digits.slice(2).replace(/^0/, '');
-    return /^[12378]\d{9}$/.test(digits);
-  }
-  if (raw.startsWith('+353')) return /^[1-9]\d{7,9}$/.test(digits.slice(3).replace(/^0/, ''));
-  if (raw.startsWith('+')) return /^[1-9]\d{7,14}$/.test(digits);
-  return /^0[12378]\d{8,9}$/.test(digits) || /^0[1-9]\d{6,8}$/.test(digits);
+  return isPlausiblePhone(value);
 }
 const nameOf = (c: ReviewContact) => norm(`${norm(c.first_name)} ${norm(c.last_name)}`);
 /** Replacement evidence only authorizes the reviewed value while this exact saved contact still matches. */
@@ -47,6 +36,7 @@ export function suggestionKey(s: ReviewSuggestion): string {
   if (s.field === 'title') return 'title:' + norm(s.name);
   if (s.field === 'owner_name') return 'owner:' + value;
   if (s.field === 'phone') return 'phone:' + value.replace(/\D/g, '');
+  if (s.field === 'person_phone') return 'person_phone:' + norm(s.name) + ':' + value.replace(/\D/g, '');
   if (s.field === 'website' || s.field === 'additional_websites') {
     try { return 'website:' + new URL(/^https?:\/\//.test(value) ? value : 'https://' + value).hostname.replace(/^www\./, ''); }
     catch { return 'website:' + value; }
@@ -72,7 +62,10 @@ export function isSuggestionDismissed(s: ReviewSuggestion, lead: ReviewLead): bo
     : (s.field ?? 'email') + ':' + norm(s.value);
   const displayKey = displayPersonKey(s.field === 'owner_name' ? s.value : s.name);
   const personDismissed = !!displayKey && keys.some(key => key.startsWith('person:') && displayPersonKey(key.slice(7)) === displayKey);
-  return personDismissed || keys.includes(suggestionKey(s)) || keys.includes(legacy)
+  const canonicalPhone = (value: string) => parsePhone(value, lead.country)?.value ?? parsePhone('+' + value.replace(/\D/g, ''), 'OTHER')?.value;
+  const normalizedPhone = s.field === 'phone' && s.value ? canonicalPhone(s.value) : null;
+  const phoneDismissed = !!normalizedPhone && keys.some(key => key.startsWith('phone:') && canonicalPhone(key.slice(6)) === normalizedPhone);
+  return personDismissed || phoneDismissed || keys.includes(suggestionKey(s)) || keys.includes(legacy)
     || ((s.field === 'owner_name' || s.field === 'title') && keys.includes('person:' + norm(s.field === 'owner_name' ? s.value : s.name)));
 }
 export function isRoleMailbox(email: string | undefined): boolean {
@@ -87,6 +80,13 @@ export function visibleSuggestions<T extends ReviewSuggestion>(suggestions: T[],
   const owners = new Set(fullestPeople(suggestions.filter(s => s.field === 'owner_name'), s => s.value ?? s.name));
   return fullestPeople(suggestions.filter(s => s.field !== 'owner_name' || owners.has(s)), s => !s.value && !s.field ? s.name : '').sort((a, b) => Number(a.guess_rank === 'other') - Number(b.guess_rank === 'other') || priority(a) - priority(b) || Number(isRoleMailbox(a.value)) - Number(isRoleMailbox(b.value))).filter((s) => {
     if (isSuggestionDismissed(s, lead)) return false;
+    if (s.field === 'person_phone') {
+      const key = suggestionKey(s);
+      const matches = contacts.filter(c => displayPersonKey(nameOf(c)) === displayPersonKey(s.name));
+      if (!norm(s.name) || s.name === 'Company contact' || !readPhoneEvidence(s.phone, s.value) || seen.has(key)
+        || matches.length > 1 || matches.some(c => c.dismissed_at || norm(c.phone))) return false;
+      seen.add(key); return true;
+    }
     if (s.field === 'title') {
       const same = contacts.find((c) => nameOf(c) === norm(s.name));
       const key = suggestionKey(s);
@@ -121,17 +121,30 @@ export function visibleSuggestions<T extends ReviewSuggestion>(suggestions: T[],
 
 export type SuggestionAddPlan =
   | { kind: 'none' }
+  | { kind: 'phone_update'; id: string; patch: ReturnType<typeof contactPhonePatch> }
   | { kind: 'title_update'; id: string; patch: { title: string } }
   | { kind: 'linkedin_update'; id: string; patch: { linkedin_url: string } }
-  | { kind: 'lead_update'; patch: { email: string } | { additional_emails: string[] } | { phone: string } | { owner_name: string } | { website: string } }
+  | { kind: 'lead_update'; patch: { email: string } | { additional_emails: string[] } | { phone: string; phone_meta?: Record<string, PhoneMetadata> } | { owner_name: string } | { website: string } }
   | { kind: 'contact_update'; id: string; patch: { email: string; include_in_sequences: false } }
-  | { kind: 'contact_insert'; patch: { source: 'manual'; kind: 'person'; first_name: string; last_name: string | null; title: string | null; email: string | null; linkedin_url?: string; include_in_sequences: false; is_primary: false } };
+  | { kind: 'contact_insert'; patch: { source: 'manual'; kind: 'person'; first_name: string; last_name: string | null; title: string | null; email: string | null; linkedin_url?: string; include_in_sequences: false; is_primary: false } & Partial<ReturnType<typeof contactPhonePatch>> };
 
 /** Plans blank fills, new rows or explicit saved-email replacements. The caller supplies session scope. */
 export function planSuggestionAdd(s: ReviewSuggestion, lead: ReviewLead, contacts: ReviewContact[]): SuggestionAddPlan {
   if (!visibleSuggestions([s], lead, contacts).length) return { kind: 'none' };
+  if (s.field === 'person_phone') {
+    const patch = contactPhonePatch(readPhoneEvidence(s.phone, s.value)!);
+    const same = contacts.find(c => displayPersonKey(nameOf(c)) === displayPersonKey(s.name));
+    if (same) return { kind: 'phone_update', id: same.id, patch };
+    const [first, ...rest] = s.name.trim().split(/\s+/);
+    return { kind: 'contact_insert', patch: { source: 'manual', kind: 'person', first_name: first!, last_name: rest.join(' ') || null,
+      title: s.role?.trim() || null, email: null, include_in_sequences: false, is_primary: false, ...patch } };
+  }
   if (s.field === 'title') return { kind: 'title_update', id: contacts.find((c) => nameOf(c) === norm(s.name))!.id, patch: { title: s.value!.trim() } };
-  if (s.field === 'phone') return { kind: 'lead_update', patch: { phone: s.value!.trim() } };
+  if (s.field === 'phone') {
+    const evidence = readPhoneEvidence(s.phone, s.phone?.value);
+    return { kind: 'lead_update', patch: evidence ? { phone: evidence.value, phone_meta: { ...lead.phone_meta, [evidence.value]: evidence } }
+      : { phone: parsePhone(s.value, lead.country)?.value ?? s.value!.trim() } };
+  }
   if (s.field === 'owner_name') return { kind: 'lead_update', patch: { owner_name: s.value!.trim() } };
   if (s.field === 'website') return { kind: 'lead_update', patch: { website: s.value!.trim() } };
   if (s.field === 'linkedin_url') {

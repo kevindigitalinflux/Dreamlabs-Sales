@@ -38,6 +38,17 @@ function database(options: { owner?: string | null; email?: string | null; conta
   return { client: { from } as unknown as SupabaseClient, writes };
 }
 const s = { name: 'Company contact', value: 'hello@example.com' };
+it('adds a reviewed phone only to the still-blank named contact, with phone CAS and no sequence edits', async () => {
+  const suggestion = { name: 'Jane Smith', field: 'person_phone', value: '+442079460958', label: 'Company line',
+    phone: { value: '+442079460958', original: '020 7946 0958', kind: 'company_line' as const, source: 'own_site' as const, source_url: 'https://acme.test/team', found_at: '2026-10-26T12:00:00Z' } };
+  const contact = { id: 'c', first_name: 'Jane', last_name: 'Smith', phone: null };
+  const db = database({ contacts: [contact] });
+  expect(await saveDeepFindReview(db.client, 'user', 'lead', suggestion, 'add')).toBe('saved');
+  expect(db.writes).toEqual([{ table: 'decision_maker_candidates', operation: 'update', patch: {
+    phone: '+442079460958', phone_kind: 'company_line', phone_source: 'own_site', phone_source_url: 'https://acme.test/team', phone_found_at: '2026-10-26T12:00:00Z',
+  }, filters: [['id', 'c'], ['lead_id', 'lead'], ['dismissed_at', null], ['phone', null]] }]);
+  await expect(saveDeepFindReview(database({ contacts: [contact], writeError: true }).client, 'user', 'lead', suggestion, 'add')).rejects.toThrow('Could not save');
+});
 it('saves provider title proposals only through the session with exact blank-value CAS', async () => {
   const db = database({ contacts: [{ id: 'c', first_name: 'Jane', last_name: 'Smith', title: '' }] });
   await saveDeepFindReview(db.client, 'user', 'lead', { name: 'Jane Smith', field: 'title', value: 'Founder' }, 'add');

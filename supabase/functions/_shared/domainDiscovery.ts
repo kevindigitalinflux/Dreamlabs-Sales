@@ -601,7 +601,7 @@ export interface DiscoveryOutcome {
   aiCalls: number;
   apolloCalls: number;
   /** Pages of discovered domains whose own website confirmed them (for the team scan and email format). */
-  sitePages: { domain: string; pages: string[] }[];
+  sitePages: { domain: string; pages: string[]; phonePages?: import('./phoneNumbers.ts').PhonePage[] }[];
   /** Search steps that gave no answer (failures and domains with no mail server), for the "why" lines. */
   problems: StepProblem[];
   /** Plain-English lines about how domains were found or checked. */

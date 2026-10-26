@@ -33,6 +33,50 @@ import { undoDeepFindChange } from './deepFindReview';
 let lead, contacts, writes, service, deny, aiAllowed, beforeWebsiteWrite, worker, revoked;
 const profile = 'https://www.linkedin.com/in/jane-smith';
 const run = (effort) => processDeepFindLead(service, { id: 'run', org_id: 'org', created_by: 'user', status: 'active' }, { id: 'result', lead_id: 'lead', org_id: 'org', domains: effort ? { effort } : {} });
+it('suggests a person direct phone from a fetched staff page without writing it or fetching another page', async () => {
+  const html = '<article><h2>Jane Smith</h2><a href="tel:02079460958">Business line</a></article>';
+  discoverLeadDomains.mockResolvedValue({ domains: [{ domain: 'acme.com', sources: ['site_confirms'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [{ domain: 'acme.com', pages: [html], phonePages: [{ html, url: 'https://acme.com/team', source: 'own_site' }] }] });
+  const out = await run('low');
+  expect(out.domains.suggestions).toContainEqual(expect.objectContaining({ name: 'Jane Smith', field: 'person_phone', value: '+442079460958', phone: expect.objectContaining({ kind: 'direct', source_url: 'https://acme.com/team' }) }));
+  expect(writes.some(w => w.table === 'decision_maker_candidates' && 'phone' in w.patch)).toBe(false);
+  expect(readCompanyPages).toHaveBeenCalledTimes(1); // Existing saved-site read only.
+});
+it('suggests a saved company phone as company line, never as a direct line', async () => {
+  lead.phone = '020 7946 0958';
+  const out = await run('low');
+  expect(out.domains.suggestions).toContainEqual(expect.objectContaining({ name: 'Jane Smith', field: 'person_phone', phone: expect.objectContaining({ kind: 'company_line', source: 'manual' }) }));
+  expect(writes.some(w => w.table === 'decision_maker_candidates' && 'phone' in w.patch)).toBe(false);
+});
+it('offers no person phone when free sources have none', async () => {
+  const out = await run('low');
+  expect(out.domains.suggestions.filter(s => s.field === 'person_phone')).toEqual([]);
+});
+it('does not restore a dismissed phone suggestion on rerun', async () => {
+  lead.phone = '020 7946 0958';
+  lead.dismissed_suggestions = ['person_phone:jane smith:442079460958'];
+  const out = await run('low');
+  expect(out.domains.suggestions.filter(s => s.field === 'person_phone')).toEqual([]);
+});
+it('stores Places provenance beside a normalized automatic phone with Undo and no person writes', async () => {
+  lead.phone = null; lead.city = 'London';
+  resolveOrgApiKey.mockImplementation(async (_s, _o, p) => p === 'google_places' ? 'fake' : null);
+  lookupPlaceContact.mockResolvedValue({ website: 'https://acme.com', phone: '020 7946 0958', name: 'Acme', address: 'London', strength: 2, cityMatches: true });
+  const out = await run();
+  expect(lead.phone).toBe('+442079460958');
+  expect(lead.phone_meta).toMatchObject({ '+442079460958': { kind: 'company_line', source: 'places', original: '020 7946 0958' } });
+  expect(out.domains.auto_applied).toContainEqual(expect.objectContaining({ field: 'phone', before: null, after: '+442079460958' }));
+});
+it('Undo of a normalized phone still suppresses a formatted Places number on rerun', async () => {
+  lead.phone = null; lead.city = 'London'; lead.dismissed_suggestions = [];
+  resolveOrgApiKey.mockImplementation(async (_s, _o, p) => p === 'google_places' ? 'fake' : null);
+  lookupPlaceContact.mockResolvedValue({ website: null, phone: '020 7946 0958', name: 'Acme', address: 'London', strength: 2, cityMatches: true });
+  const first = await run();
+  const phone = first.domains.auto_applied.find(c => c.field === 'phone');
+  expect(await undoDeepFindChange(service, 'user', 'lead', phone)).toBe('Undone.');
+  expect(lead.phone).toBeNull();
+  await run();
+  expect(lead.phone).toBeNull();
+});
 it('Medium on Microsoft 365 offers one most likely unverified address without any email write', async () => {
   contacts[0].email = null;
   cachedMailProvider.mockReturnValue('microsoft');
