@@ -68,9 +68,13 @@ Last updated 2026-10-14. Ask for any item by number or name.
 ## C. Follow-ups from the autopilot build (not urgent)
 
 8. A database blip while checking the sender's mailbox cancels the whole day's run; it should retry instead (`loadSenderMailbox` read/RPC error vs a real "not verified").
+   Local fix built 2026-10-26 on `codex/readiness-and-fixes`: bounded retry and retryable exhaustion preserve the day's run. Independent review and live verification pending.
 9. A parked lead can skip a follow-up step if the daily `check-sequences` job runs before the parked draft is reviewed (it drafts step N and advances; Review and send then advances again).
+   Local fix built 2026-10-26: the daily tick defers leads with unsent linked Autopilot drafts. Regression covers step 2 held until review, then the existing review action advances to step 3 once. Independent review and live verification pending.
 10. Parked and interrupted autopilot drafts also appear in "Waiting to release" and can be bulk-released without the needs-input context. Filter them out of bulk release.
+   Local fix built 2026-10-26: bulk-safe queue loading and release-time recheck exclude Autopilot links and the interrupted-send marker; the queue links to individual Autopilot review. Independent review and browser verification pending.
 11. A later run can pick a lead that still has an unsent parked draft from an earlier run. Add a guard.
+   Local fix built 2026-10-26: the picker hides pending-review leads and the server independently rejects them before pipeline work. All four fixes are documented in READINESS-AND-FIXES-BUILD-REPORT.md; no additional migration was needed.
 12. A few older functions return or store network error text that could include an API key in the URL: `parse-icp`, `scrape-google-places` (`scrape_jobs.error_message`), `org-api-settings`.
 13. Send cap is per run, not per organization per day.
 14. Overlapping tick invocations weaken the 20-second pacing between sends.
