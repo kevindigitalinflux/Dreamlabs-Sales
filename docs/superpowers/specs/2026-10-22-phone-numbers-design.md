@@ -1,6 +1,13 @@
 # Phone numbers for leads and decision makers — Design
 
-Date: 2026-10-22. Author: Claude (architect). Status: DRAFT, build order 2 of 3. Kevin answered 2026-10-22: Suj request = leads but mostly decision makers; switchboard numbers are fine. WhatsApp sending is a separate spec (not yet written). Not built.
+Date: 2026-10-22. Author: Claude (architect). Status: APPROVED by Kevin 2026-10-26 (decisions below). Build order 2 of 3. Builder: Codex on `codex/phone-numbers`; reviewer: Claude. WhatsApp sending is a separate spec (not yet written). Not built.
+
+## Decisions (Kevin, 2026-10-22 and 2026-10-26)
+1. Suj's request covers leads but mostly decision makers. A company switchboard number is acceptable for a decision maker if clearly labelled "Company line"; it is never presented as a direct line, and appears only as an Add / Dismiss suggestion.
+2. Free sources always run first. Apollo click-to-reveal stays as an additional enrichment for people whom the free sources returned no phone for. Reveals stay per person, confirmed by a click, spending only the organisation's own Apollo credits. No automatic reveals (architect's reading of "additional enrichment once free sources come back empty": the reveal button becomes the prominent next step, it does not run itself). Other providers, especially ones with a free tier, are to be evaluated as a separate research task after this build, not in it.
+3. All four organisations get the features at once. No per-organisation switch.
+4. `libphonenumber-js` may be added as a dependency for parsing and formatting.
+5. Architect's calls (not Kevin's): lead phone details are stored in one new column `leads.phone_meta JSONB` keyed by the E.164 number (value `{kind, source, source_url, found_at}`), because a side table adds joins and policies for little benefit; contacts get the four new columns named in the Design section. The next free migration number is 068 (065 stays reserved for the readiness badge).
 
 ## Request and decisions
 - Source: Kevin relayed a request from Suj (Digital Influx Academy): the platform should be able to get phone numbers for leads and for decision makers. I found no written record of Suj's exact wording, so **Kevin should confirm the wording or paste it** before this spec is approved (see Open questions).
@@ -24,10 +31,8 @@ Date: 2026-10-22. Author: Claude (architect). Status: DRAFT, build order 2 of 3.
 ## Out of scope
 Automated dialing, AI voice agent, phone verification by calling or SMS, buying data lists, any new paid provider, bulk enrichment outside Deep find.
 
-## Open questions for Kevin
-1. Suj's exact request: leads only, decision makers only, or both? Is a switchboard number acceptable for a decision maker, or must it be a direct dial?
-2. Is it acceptable that direct dials mostly need a paid Apollo plan on the org's own key, or should we evaluate another provider first?
-3. Should Digital Influx Academy be the first org to get this, or all four at once?
+## Open questions
+None blocking. Suj's exact wording was never recorded; Kevin's summary (leads, mostly decision makers) is the working requirement. Follow-up research, separate from this build: free or free-tier phone sources and providers.
 
 ## Tests and delivery
 Pure tests for `phoneNumbers.ts` (formats for GB/IE/US/AE/SA, junk rejection, kind classification); engine tests for the three suggestion cases (direct beside name, company line fallback, nothing found); RLS audit for the new columns; UI checks at phone width. Branch `codex/phone-numbers`; Claude reviews; migration applied by Kevin; `run-deep-find` and any reveal function deployed only with Kevin's yes.
