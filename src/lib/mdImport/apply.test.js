@@ -35,9 +35,9 @@ it('applies company then profiles then templates and attaches new profiles; reru
   expect(db.tables.email_templates[0]).toMatchObject({ org_id: 'org', created_by: 'user', template_type: 'custom', is_default: false, icp_id: 'ideal_customer_profiles-0' });
   expect(result.saved).toHaveLength(3);
   db.calls.length = 0;
-  const again = await applyImport(db.client, batch.slice(0, 2), options);
+  const again = await applyImport(db.client, batch, options);
   expect(db.calls).toEqual([]);
-  expect(again.skipped).toHaveLength(2);
+  expect(again.skipped).toHaveLength(3);
 });
 it('replaces template fields but preserves default and attachments', async () => {
   const db = database();
@@ -86,6 +86,22 @@ it('replaces profiles by id, skips unticked rows, and imports unresolved ICP onl
   expect(db.tables.ideal_customer_profiles[0].summary).toBe('Customers');
   expect(db.tables.email_templates).toEqual([]);
   const lone = files().slice(0, 1);
+  lone[0].withoutIcp = [true];
   const other = database(); await applyImport(other.client, lone, options);
   expect(other.tables.email_templates[0].icp_id).toBeNull();
+});
+it('does not append already-imported context on a second run', async () => {
+  const db = database(); const batch = files().slice(2); batch[0].append = true;
+  await applyImport(db.client, batch, options); db.calls.length = 0;
+  const r = await applyImport(db.client, batch, options);
+  expect(db.tables.organizations[0].company_context).toBe('Old\n\nNew context');
+  expect(db.calls).toEqual([]); expect(r.skipped).toEqual(['Company context']);
+});
+it('stops before saving if a previously-resolved ICP disappeared without consent to leave it empty', async () => {
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    const db = database();
+    const r = await applyImport(db.client, [files()[0], files()[2]], options);
+    expect(r.error).toContain('Offices'); expect(db.calls).toEqual([]);
+  } finally { log.mockRestore(); }
 });

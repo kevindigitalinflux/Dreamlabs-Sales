@@ -31,10 +31,11 @@ interface TemplateEditorProps {
   onSave: (input: TemplateInput, id?: string) => Promise<string | null>;
   onDelete: (id: string) => Promise<string | null>;
   onClose: () => void;
+  onDuplicate?: () => Promise<string | null>;
 }
 
 /** Modal template editor with variable-insert buttons + live sample preview. */
-export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }: TemplateEditorProps) {
+export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose, onDuplicate }: TemplateEditorProps) {
   const { currentOrg } = useOrg();
   const [form, setForm] = useState<TemplateInput>({
     name: template?.name ?? '', subject: template?.subject ?? '',
@@ -127,6 +128,12 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose }:
           )}
         </div>
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+        {template && onDuplicate && <Button variant="secondary" disabled={busy} onClick={async () => {
+          setBusy(true);
+          try { const problem = await onDuplicate(); if (problem) setError(problem); }
+          catch (error) { console.error('Could not duplicate template', { templateId: template.id, error }); setError('Could not duplicate template. Check the list before trying again.'); }
+          finally { setBusy(false); }
+        }}>Duplicate</Button>}
         <div className="flex items-center justify-between">
           {template && !template.is_default ? (
             <Button variant="ghost" onClick={() => void handleDelete()} disabled={busy} loading={busy}>Delete</Button>

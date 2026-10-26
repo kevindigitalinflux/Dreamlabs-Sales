@@ -69,5 +69,5 @@ export function useIcps() {
     return null;
   }, [refresh]);
 
-  return { icps, loading, error, save, remove };
+  return { icps, loading, error, save, remove, refresh };
 }

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ImportFile, ImportedTemplate } from './types';
 import type { IcpInput } from '../../hooks/useIcps';
-import { matchProfile, matchTemplate } from './matching';
+import { matchProfile, matchTemplate, resolveProfile } from './matching';
 import { checkedRows, loadImportSnapshot } from './store';
 export interface ApplyResult { saved: string[]; skipped: string[]; notSaved: string[]; error: string | null }
 export interface ApplyOptions { orgId: string; userId: string; isAdmin: boolean }
@@ -14,10 +14,10 @@ export async function applyImport(client: SupabaseClient, files: ImportFile[], o
   const contexts = files.filter((f) => f.parsed.type === 'company-context' && f.selected[0]);
   if (contexts.length > 1) return { ...result, error: 'Choose only one company context file.' };
   const profiles: { value: IcpInput; replace: boolean; label: string }[] = [];
-  const templates: { value: ImportedTemplate; replace: boolean; label: string }[] = [];
+  const templates: { value: ImportedTemplate; replace: boolean; label: string; withoutIcp: boolean }[] = [];
   for (const f of files) {
     if (f.parsed.type === 'icp-profiles') f.parsed.data.forEach((value, i) => { if (f.selected[i]) profiles.push({ value, replace: f.replace, label: `Profile: ${value.name}` }); });
-    if (f.parsed.type === 'email-templates') f.parsed.data.forEach((value, i) => { if (f.selected[i]) templates.push({ value, replace: f.replace, label: `Template: ${value.name}` }); });
+    if (f.parsed.type === 'email-templates') f.parsed.data.forEach((value, i) => { if (f.selected[i]) templates.push({ value, replace: f.replace, label: `Template: ${value.name}`, withoutIcp: !!f.withoutIcp?.[i] }); });
   }
   result.notSaved = [...contexts.map(() => 'Company context'), ...profiles.map((p) => p.label), ...templates.map((t) => t.label)];
   function done(label: string, message: string, skip = false) {
@@ -26,8 +26,16 @@ export async function applyImport(client: SupabaseClient, files: ImportFile[], o
   }
   try {
     const snapshot = await loadImportSnapshot(client, orgId);
+    for (const t of templates) {
+      if (resolveProfile(t.value.icp, snapshot.profiles, profiles.map((p) => p.value.name)) === 'unresolved' && !t.withoutIcp) {
+        throw new Error(`ICP not found: ${t.value.icp}. Reopen the import and choose whether to import without an ICP.`);
+      }
+    }
     for (const f of contexts) {
       if (f.parsed.type !== 'company-context') continue;
+      if (snapshot.context === f.parsed.data || (f.append && snapshot.context.endsWith(`\n\n${f.parsed.data}`))) {
+        done('Company context', 'Company context', true); continue;
+      }
       const context = f.append && snapshot.context ? `${snapshot.context}\n\n${f.parsed.data}` : f.parsed.data;
       if (context.length > 8000) throw new Error('Combined company context exceeds 8,000 characters. Choose Replace or shorten the file.');
       checkedRows(await client.from('organizations').update({ company_context: context }).eq('id', orgId).select('id'), 1);

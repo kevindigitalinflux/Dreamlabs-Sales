@@ -10,4 +10,4 @@ export type ParsedFile =
   | { type: null; data: null; errors: Issue[]; warnings: Issue[] };
 export interface NamedProfile { id: string; name: string }
 export interface NamedTemplate { id: string; name: string; icp_id: string | null }
-export interface ImportFile { id: string; filename: string; parsed: ParsedFile; selected: boolean[]; replace: boolean; append: boolean }
+export interface ImportFile { id: string; filename: string; parsed: ParsedFile; selected: boolean[]; replace: boolean; append: boolean; withoutIcp?: boolean[] }
