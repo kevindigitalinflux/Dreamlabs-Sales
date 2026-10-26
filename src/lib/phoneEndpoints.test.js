@@ -12,7 +12,7 @@ beforeEach(() => {
   configured = true; canSee = true; failWrite = false; vaultError = false; writes = [];
   row = { id: 'person', lead_id: 'lead', source: 'manual', kind: 'person', apollo_person_id: null,
     first_name: 'Jane', last_name: 'Smith', name_obfuscated: false, dismissed_at: null, phone: null, phone_status: 'not_requested',
-    leads: { org_id: 'org', website: 'https://acme.test', country: 'GB' } };
+    leads: { id: 'lead', org_id: 'org', website: 'https://acme.test', country: 'GB', phone_meta: {} } };
   vi.stubGlobal('Deno', { serve: fn => { handler = fn; }, env: { get: name => name === 'SUPABASE_URL' ? 'http://127.0.0.1:54321' : 'local-test-placeholder' } });
   vi.stubGlobal('fetch', () => { throw new Error('Network forbidden'); });
   revealApolloPerson.mockResolvedValue({ firstName: 'Jane', lastName: 'Smith', email: null });
@@ -20,12 +20,13 @@ beforeEach(() => {
     let patch; const filters = [];
     const result = () => {
       const data = table === 'decision_maker_candidates' ? row : table === 'org_api_settings' ? { is_configured: configured }
-        : table === 'org_members' ? { role: 'contractor' } : table === 'leads' ? canSee ? { id: 'lead' } : null : null;
+        : table === 'org_members' ? { role: 'contractor' } : table === 'leads' ? canSee ? row.leads : null : null;
       if (patch) {
-        const matches = filters.every(([key, value]) => row[key] === value);
+        const target = table === 'leads' ? row.leads : row;
+        const matches = filters.every(([key, value]) => target[key] === value);
         if (failWrite) return { data: null, error: { message: 'dummy failure' } };
         if (!matches) return { data: null, error: null };
-        writes.push({ ...patch }); Object.assign(row, patch);
+        writes.push({ ...patch }); Object.assign(target, patch);
       }
       return { data: data ? { ...data } : null, error: null };
     };
@@ -74,6 +75,7 @@ it('saves normalized Apollo metadata only for a pending blank phone and ignores 
   row.phone_status = 'pending';
   expect((await callback([{ raw_number: '07911 123456', type_cd: 'mobile' }])).status).toBe(200);
   expect(row).toMatchObject({ phone: '+447911123456', phone_kind: 'mobile', phone_source: 'apollo', phone_status: 'revealed' });
+  expect(row.leads.phone_meta['+447911123456']).toMatchObject({ original: '07911 123456', source: 'apollo' });
   const before = writes.length;
   await callback([{ raw_number: '020 7946 0958' }]);
   expect(writes).toHaveLength(before);

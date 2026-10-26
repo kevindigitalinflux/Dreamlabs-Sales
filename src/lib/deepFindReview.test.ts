@@ -44,7 +44,7 @@ it('adds a reviewed phone only to the still-blank named contact, with phone CAS 
   const contact = { id: 'c', first_name: 'Jane', last_name: 'Smith', phone: null };
   const db = database({ contacts: [contact] });
   expect(await saveDeepFindReview(db.client, 'user', 'lead', suggestion, 'add')).toBe('saved');
-  expect(db.writes).toEqual([{ table: 'decision_maker_candidates', operation: 'update', patch: {
+  expect(db.writes).toEqual([{ table: 'leads', operation: 'update', patch: { phone_meta: { '+442079460958': suggestion.phone } }, filters: [['id', 'lead'], ['updated_at', 'version']] }, { table: 'decision_maker_candidates', operation: 'update', patch: {
     phone: '+442079460958', phone_kind: 'company_line', phone_source: 'own_site', phone_source_url: 'https://acme.test/team', phone_found_at: '2026-10-26T12:00:00Z',
   }, filters: [['id', 'c'], ['lead_id', 'lead'], ['dismissed_at', null], ['phone', null]] }]);
   await expect(saveDeepFindReview(database({ contacts: [contact], writeError: true }).client, 'user', 'lead', suggestion, 'add')).rejects.toThrow('Could not save');

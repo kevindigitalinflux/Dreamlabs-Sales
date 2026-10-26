@@ -7,7 +7,8 @@
 // boundary. Never log its value.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { computeWebhookToken } from '../_shared/webhookToken.ts';
-import { apolloPhonePatch } from '../_shared/apolloPhone.ts';
+import { apolloPhoneEvidence, apolloPhonePatch } from '../_shared/apolloPhone.ts';
+import type { PhoneMetadata } from '../_shared/phoneNumbers.ts';
 
 interface ApolloPhoneNumber { raw_number?: string; type_cd?: string }
 interface ApolloWebhookPerson { id?: string; phone_numbers?: ApolloPhoneNumber[] }
@@ -57,14 +58,23 @@ Deno.serve(async (req) => {
     );
 
     const { data: candidate, error: readError } = await service
-      .from('decision_maker_candidates').select('id, lead_id, phone, phone_status, dismissed_at, leads!inner(country)').eq('id', candidateId).maybeSingle();
+      .from('decision_maker_candidates').select('id, lead_id, phone, phone_status, dismissed_at, leads!inner(country, phone_meta)').eq('id', candidateId).maybeSingle();
     if (readError) { console.error('Apollo phone callback: contact could not be read'); return new Response(null, { status: 500 }); }
     if (!candidate) return new Response(null, { status: 200 }); // nothing to update, not Apollo's problem
 
     if (candidate.dismissed_at || candidate.phone || candidate.phone_status !== 'pending') return new Response(null, { status: 200 });
-    const lead = candidate.leads as unknown as { country?: unknown };
+    const lead = candidate.leads as unknown as { country?: unknown; phone_meta: Record<string, PhoneMetadata> };
+    const foundAt = new Date().toISOString();
+    const evidence = apolloPhoneEvidence(phones, lead.country, foundAt);
+    if (evidence) {
+      const previous = lead.phone_meta[evidence.value];
+      const saved = await service.from('leads').update({ phone_meta: { ...lead.phone_meta,
+        [evidence.value]: { ...evidence, ...previous, original: previous?.original ?? evidence.original },
+      } }).eq('id', candidate.lead_id).eq('phone_meta', lead.phone_meta).select('id').maybeSingle();
+      if (saved.error || !saved.data) { console.error('Apollo phone callback: original phone evidence could not be saved'); return new Response(null, { status: 500 }); }
+    }
     const { error } = await service.from('decision_maker_candidates')
-      .update({ ...apolloPhonePatch(phones, lead.country, new Date().toISOString()), updated_at: new Date().toISOString() })
+      .update({ ...apolloPhonePatch(phones, lead.country, foundAt), updated_at: foundAt })
       .eq('id', candidateId).eq('phone_status', 'pending').is('dismissed_at', null).is('phone', null);
     if (error) { console.error('Apollo phone callback: phone could not be saved'); return new Response(null, { status: 500 }); }
     return new Response(null, { status: 200 });

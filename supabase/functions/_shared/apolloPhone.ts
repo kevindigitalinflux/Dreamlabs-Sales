@@ -10,14 +10,19 @@ export async function resolveOwnApolloKey(service: SupabaseClient, orgId: string
 }
 
 /** Phone webhook data is untrusted; invalid first choices never hide a later usable business number. */
-export function apolloPhonePatch(numbers: { raw_number?: string; type_cd?: string }[], country: unknown, foundAt: string) {
+export function apolloPhoneEvidence(numbers: { raw_number?: string; type_cd?: string }[], country: unknown, foundAt: string) {
   const ranked = [...numbers].sort((a, b) => Number(b.type_cd === 'mobile') - Number(a.type_cd === 'mobile'));
   for (const candidate of ranked) {
     const parsed = parsePhone(candidate.raw_number, country);
     if (!parsed) continue;
     const kind = candidate.type_cd === 'mobile' || parsed.lineType === 'mobile' ? 'mobile' : 'direct';
-    const phone = phoneMetadata(candidate.raw_number, country, kind, 'apollo', null, foundAt)!;
-    return { ...contactPhonePatch(phone), phone_status: 'revealed' as const };
+    return phoneMetadata(candidate.raw_number, country, kind, 'apollo', null, foundAt)!;
   }
-  return { phone_status: 'not_found' as const };
+  return null;
+}
+
+/** Contact columns only; original text is retained separately in the owning lead's per-number metadata. */
+export function apolloPhonePatch(numbers: { raw_number?: string; type_cd?: string }[], country: unknown, foundAt: string) {
+  const phone = apolloPhoneEvidence(numbers, country, foundAt);
+  return phone ? { ...contactPhonePatch(phone), phone_status: 'revealed' as const } : { phone_status: 'not_found' as const };
 }

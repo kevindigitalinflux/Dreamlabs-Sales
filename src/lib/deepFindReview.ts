@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { readPhoneEvidence } from '../../supabase/functions/_shared/phoneNumbers';
 import { deepFindErrorCode } from './deepFindErrors';
 import { planOwnerFromSuggestion, planTitleUpgrade, planSuggestionAdd, registrySkipReason, roleForPerson, suggestionKey } from '../../supabase/functions/_shared/deepFindSuggestions';
 import type { ReviewContact, ReviewLead, ReviewSuggestion } from '../../supabase/functions/_shared/deepFindSuggestions';
@@ -118,6 +119,15 @@ export async function saveDeepFindReview(client: SupabaseClient, userId: string 
     : state.contacts.find((c) => `${String(c.first_name ?? '').trim()} ${String(c.last_name ?? '').trim()}`.trim().replace(/\s+/g, ' ').toLowerCase() === personName);
   const newTitle = existing ? planTitleUpgrade(existing, foundRole(suggestion, roles)) : null;
   if (plan.kind === 'none' && !newTitle) return 'none';
+  if (suggestion.field === 'person_phone' && plan.kind !== 'none') {
+    const phone = readPhoneEvidence(suggestion.phone, suggestion.value)!;
+    const previous = state.lead.phone_meta?.[phone.value];
+    // Preserve original source text before normalizing a reviewed contact, without relabelling the lead's own line.
+    const { error } = await client.from('leads').update({ phone_meta: { ...state.lead.phone_meta,
+      [phone.value]: { ...phone, ...previous, original: previous?.original ?? phone.original },
+    } }).eq('id', leadId).eq('updated_at', state.lead.updated_at).select('id').single();
+    if (error) throw failure(error);
+  }
   if (plan.kind === 'lead_update') {
     const { error } = await client.from('leads').update(plan.patch).eq('id', leadId).eq('updated_at', state.lead.updated_at).select('id').single();
     if (error) throw failure(error);

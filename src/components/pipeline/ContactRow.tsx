@@ -5,6 +5,7 @@ import { ContactForm } from './ContactForm';
 import { ContactRevealButtons } from './ContactRevealButtons';
 import { PhoneChip } from './PhoneChip';
 import { PhoneBusinessNotice } from './PhoneBusinessNotice';
+import { parsePhone } from '../../../supabase/functions/_shared/phoneNumbers';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import { contactDisplayName } from '../../../supabase/functions/_shared/contacts';
 import { candidateSourceLabel, hasNoContactDetails, isProviderSource, isRegistrySource } from '../../lib/candidateSource';
@@ -56,7 +57,7 @@ export function ContactRow({ contact, lead, isMain, busy, apolloConfigured, erro
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
         {contact.email && <a href={`mailto:${contact.email}`} className="text-success">{contact.email}</a>}
-        {contact.phone && <PhoneChip value={contact.phone} country={lead.country} metadata={{ kind: contact.phone_kind ?? 'unknown', source: contact.phone_source ?? 'manual', source_url: contact.phone_source_url ?? null, found_at: contact.phone_found_at ?? null }} />}
+        {contact.phone && <PhoneChip value={contact.phone} country={lead.country} metadata={{ ...lead.phone_meta?.[parsePhone(contact.phone, lead.country)?.value ?? ''], kind: contact.phone_kind ?? 'unknown', source: contact.phone_source ?? 'manual', source_url: contact.phone_source_url ?? null, found_at: contact.phone_found_at ?? null }} />}
         {contact.linkedin_url && (safeLinkedinHref(contact.linkedin_url) ? (
           <a href={safeLinkedinHref(contact.linkedin_url)!} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-cyan">
             <ExternalLink className="h-3.5 w-3.5" aria-hidden /> LinkedIn
