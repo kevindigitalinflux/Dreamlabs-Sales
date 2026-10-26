@@ -22,6 +22,7 @@ export function groupSelectableLeads(
   blocked: Set<string>,
   endOfToday: Date,
   now: Date,
+  pendingReview: ReadonlySet<string> = new Set(),
 ): PipelineGroup[] {
   const groups: PipelineGroup[] = [];
   for (const p of pipelines) {
@@ -31,6 +32,7 @@ export function groupSelectableLeads(
     for (const lead of leads) {
       if (lead.pipeline_id !== p.id) continue;
       total += 1;
+      if (pendingReview.has(lead.id)) { hiddenCount += 1; continue; }
       const res = classifyLead({ ...lead, opted_out: lead.opted_out === true }, enrollmentByLead.get(lead.id) ?? null, blocked, endOfToday, now);
       if (res.eligible) eligible.push({ ...lead, reason: res.reason });
       else hiddenCount += 1;

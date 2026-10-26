@@ -22,12 +22,23 @@ export async function loadSenderMailbox(
   service: ServiceClient,
   senderId: string,
 ): Promise<({ ok: true } & SenderMailbox) | { ok: false; error: string; status: number }> {
-  const { data: settings } = await service
-    .from('user_email_settings').select('*').eq('user_id', senderId).maybeSingle();
-  if (!settings?.is_verified) return { ok: false, error: 'Set up and verify your email in Settings → Email sending first', status: 400 };
-  const { data: pass } = await service.rpc('app_get_smtp_secret', { uid: senderId });
-  if (!pass) return { ok: false, error: 'No stored email password — re-save your settings', status: 400 };
-  return { ok: true, settings, pass: pass as string };
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const { data: settings, error: settingsError } = await service
+        .from('user_email_settings').select('*').eq('user_id', senderId).maybeSingle();
+      if (settingsError) throw new Error('Mailbox settings read failed');
+      if (!settings?.is_verified) return { ok: false, error: 'Set up and verify your email in Settings → Email sending first', status: 400 };
+      const { data: pass, error: secretError } = await service.rpc('app_get_smtp_secret', { uid: senderId });
+      if (secretError) throw new Error('Mailbox password read failed');
+      if (!pass) return { ok: false, error: 'No stored email password — re-save your settings', status: 400 };
+      return { ok: true, settings, pass: pass as string };
+    } catch {
+      // Never log a database/Vault payload: it can include credential material.
+      console.error(`sender mailbox: database read failed (attempt ${attempt}/3)`);
+      if (attempt < 3) await new Promise(resolve => setTimeout(resolve, attempt * 250));
+    }
+  }
+  return { ok: false, error: 'Could not check your email settings. Please try again.', status: 503 };
 }
 
 export interface SendLeadEmailInput {

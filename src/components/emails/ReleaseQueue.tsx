@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { readableInvokeError } from '../../lib/invokeError';
 import { supabase } from '../../lib/supabase';
 import { useDrafts } from '../../hooks/useDrafts';
@@ -10,6 +11,8 @@ import { EmailComposer } from './EmailComposer';
 import { PostSendPreview } from './PostSendPreview';
 import { mergePostSend, parsePostSend } from '../../lib/postSendPreview';
 import type { PostSendReport } from '../../lib/postSendPreview';
+import { useOrg } from '../../hooks/useOrg';
+import { loadReleaseDrafts } from '../../lib/releaseDrafts';
 
 /**
  * Same underlying draft queue as the Dashboard's "Emails ready to review"
@@ -18,7 +21,8 @@ import type { PostSendReport } from '../../lib/postSendPreview';
  * replacement for the Dashboard's quick one-by-one triage.
  */
 export function ReleaseQueue() {
-  const { drafts, loading, refresh } = useDrafts();
+  const { drafts, loading, error, refresh } = useDrafts(true);
+  const { currentOrg } = useOrg();
   const { leads } = useOrgLeads();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [reviewing, setReviewing] = useState<DraftLog | null>(null);
@@ -60,7 +64,10 @@ export function ReleaseQueue() {
     let sent = 0;
     let failed = 0;
     let firstFailReason: string | null = null;
-    for (const draft of drafts) {
+    // Recheck immediately before release: a draft may have acquired an Autopilot link since selection.
+    const fresh = await loadReleaseDrafts(supabase, currentOrg?.id ?? null);
+    if (fresh.error) { setSummary(fresh.error); setReleasing(false); return; }
+    for (const draft of fresh.drafts) {
       if (!selected.has(draft.id)) continue;
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
@@ -89,6 +96,8 @@ export function ReleaseQueue() {
 
   return (
     <div className="flex flex-col gap-3">
+      <p className="text-sm text-muted">Autopilot drafts need individual review. <Link className="underline" to="/outreach/autopilot">Review Autopilot drafts</Link></p>
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {selected.size > 0 && (
         <div className="flex items-center justify-end">
           <Button onClick={() => void handleRelease()} disabled={releasing} loading={releasing}>

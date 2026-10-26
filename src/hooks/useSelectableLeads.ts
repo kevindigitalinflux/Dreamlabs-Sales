@@ -16,7 +16,7 @@ export function useSelectableLeads(timeZone: string = Intl.DateTimeFormat().reso
   const { currentOrg } = useOrg();
   const { pipelines, loading: pipelinesLoading } = usePipeline();
   const { leads, loading: leadsLoading, error: leadsError } = useOrgLeads();
-  const [loaded, setLoaded] = useState<{ orgId: string; enrollments: Map<string, EligibilityEnrollment>; blocked: Set<string> } | null>(null);
+  const [loaded, setLoaded] = useState<{ orgId: string; enrollments: Map<string, EligibilityEnrollment>; blocked: Set<string>; pendingReview: Set<string> } | null>(null);
   const [extraError, setExtraError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,13 +25,15 @@ export function useSelectableLeads(timeZone: string = Intl.DateTimeFormat().reso
     setExtraError(null);
     let cancelled = false;
     void (async () => {
-      const [enrRes, blRes] = await Promise.all([
+      const [enrRes, blRes, draftRes] = await Promise.all([
         supabase.from('sequence_enrollments').select('lead_id,status,next_send_at,leads!inner(org_id)')
           .eq('leads.org_id', currentOrg.id).in('status', ['active', 'paused']),
         supabase.from('outreach_blocklist').select('value').eq('org_id', currentOrg.id),
+        supabase.from('email_logs').select('lead_id, autopilot_run_leads!inner(id)')
+          .eq('org_id', currentOrg.id).in('status', ['draft', 'failed']),
       ]);
       if (cancelled) return;
-      const err = enrRes.error ?? blRes.error;
+      const err = enrRes.error ?? blRes.error ?? draftRes.error;
       if (err) { setExtraError(err.message); return; }
       const map = new Map<string, EligibilityEnrollment>();
       for (const r of (enrRes.data ?? []) as unknown as EnrollmentRow[]) {
@@ -39,8 +41,12 @@ export function useSelectableLeads(timeZone: string = Intl.DateTimeFormat().reso
         if (map.get(r.lead_id)?.status === 'active') continue;
         map.set(r.lead_id, { status: r.status, next_send_at: r.next_send_at });
       }
-      setLoaded({ orgId: currentOrg.id, enrollments: map, blocked: new Set(((blRes.data ?? []) as { value: string }[]).map((b) => b.value)) });
-    })();
+      setLoaded({ orgId: currentOrg.id, enrollments: map, blocked: new Set(((blRes.data ?? []) as { value: string }[]).map((b) => b.value)),
+        pendingReview: new Set((draftRes.data ?? []).flatMap(row => typeof row.lead_id === 'string' ? [row.lead_id] : [])) });
+    })().catch(() => {
+      console.error('autopilot picker: eligibility lookup failed');
+      if (!cancelled) setExtraError('Could not check which leads are ready for Autopilot. Please try again.');
+    });
     return () => { cancelled = true; };
   }, [currentOrg]);
 
@@ -48,7 +54,7 @@ export function useSelectableLeads(timeZone: string = Intl.DateTimeFormat().reso
     if (!currentOrg || !loaded || loaded.orgId !== currentOrg.id) return [];
     const now = new Date();
     const orgPipelines = pipelines.filter((p) => p.org_id === currentOrg.id);
-    return groupSelectableLeads(orgPipelines, leads, loaded.enrollments, loaded.blocked, endOfLocalDay(now, timeZone), now);
+    return groupSelectableLeads(orgPipelines, leads, loaded.enrollments, loaded.blocked, endOfLocalDay(now, timeZone), now, loaded.pendingReview);
   }, [currentOrg, pipelines, leads, loaded, timeZone]);
 
   const error = leadsError ?? extraError;

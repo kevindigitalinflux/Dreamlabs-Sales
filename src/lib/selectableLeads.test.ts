@@ -9,6 +9,12 @@ const ld = (id: string, pipeline_id: string, o: Partial<Lead> = {}) =>
   ({ id, pipeline_id, business_name: id, email: 'a@x.com', stage: 'new_lead', opted_out: false, last_contacted_at: null, ...o }) as Lead;
 
 describe('groupSelectableLeads', () => {
+  it('hides pending Autopilot review from later selection and prunes stale picks', () => {
+    const groups = groupSelectableLeads([pl('1')], [ld('parked', '1'), ld('clear', '1')], new Map(), new Set(), end, now, new Set(['parked']));
+    expect(groups[0]!.eligible.map(l => l.id)).toEqual(['clear']);
+    expect(groups[0]!.hiddenCount).toBe(1);
+    expect(pruneSelection(new Set(['parked', 'clear']), groups)).toEqual(['clear']);
+  });
   it('groups, hides ineligible and counts them, omits empty pipelines', () => {
     const groups = groupSelectableLeads(
       [pl('1'), pl('2'), pl('3')],

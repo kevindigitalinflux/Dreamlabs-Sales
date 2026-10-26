@@ -7,6 +7,7 @@ import { buildTemplateVars, substituteVariables } from '../_shared/templateVars.
 import { appendLinks, onlyOrgAttachments, parseAttachments, parseLinks } from '../_shared/emailAttachments.ts';
 import { formatIcpContext, loadIcp, resolveIcpId, topPainPoint } from '../_shared/icp.ts';
 import { applyCustomVariables, loadCustomVariables } from '../_shared/customVariables.ts';
+import { unsentAutopilotDraft } from '../_shared/autopilotDrafts.ts';
 import type { Contact } from '../_shared/contacts.ts';
 import { capDecision, capLimitedNoteText, isSequenceSystemNote, noRecipientsNoteText, planStepDrafts, recipientNaming, recipientsWithoutDraft, shouldAdvance } from '../_shared/sequenceRecipients.ts';
 
@@ -100,6 +101,12 @@ Deno.serve(async (req) => {
     const step = steps[enrollment.current_step - 1];
     const lead = enrollment.lead;
     if (!step || !lead) { skipped.push({ id: enrollment.id, reason: 'missing step or lead' }); continue; }
+    // Parked Autopilot drafts have NOT advanced their step. Human review owns that advance.
+    const draftState = await unsentAutopilotDraft(service, String(lead.org_id), String(lead.id));
+    if (draftState !== 'clear') {
+      skipped.push({ id: enrollment.id, reason: draftState === 'blocked' ? 'Autopilot email needs review' : 'Autopilot draft check failed' });
+      continue;
+    }
     // The lead's live contacts decide who is written to. Fail closed: if they cannot be read, draft nothing
     // (an excluded person must never be written to by mistake); the next daily run retries.
     const { data: contactRows, error: contactsErr } = await service.from('decision_maker_candidates')

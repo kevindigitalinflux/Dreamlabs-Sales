@@ -5,6 +5,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { classifyLead, endOfLocalDay, windowBounds, type EligibilityEnrollment, type EligibilityLead } from './autopilotEligibility.ts';
 import { markLogInterrupted } from './interruptedSend.ts';
 import { loadSenderMailbox } from './sendLeadEmail.ts';
+import { unsentAutopilotDraft } from './autopilotDrafts.ts';
 import { plainReason } from './selectedLeadPipelineRules.ts';
 import { processLeadPipeline, type PipelineContext, type PipelineOutcome } from './selectedLeadPipeline.ts';
 import {
@@ -80,6 +81,9 @@ export async function precheckLead(service: SupabaseClient, run: SelectedRun, ro
   const lead = data as (Record<string, unknown> & { id: string; org_id: string }) | null;
   if (!lead) return { outcome: 'skipped', reason: 'Lead no longer exists' };
   if (lead.org_id !== run.org_id) return { outcome: 'skipped', reason: 'Lead is not in this organization' };
+  const draftState = await unsentAutopilotDraft(service, run.org_id, lead.id);
+  if (draftState === 'unavailable') return { outcome: 'failed', reason: 'Could not check earlier Autopilot drafts. Try again later.' };
+  if (draftState === 'blocked') return { outcome: 'skipped', reason: 'An earlier Autopilot email still needs review. Send or discard it first.' };
 
   const { data: enr, error: enrErr } = await service.from('sequence_enrollments').select('*')
     .eq('lead_id', lead.id).in('status', ['active', 'paused']).order('created_at', { ascending: false }).limit(1);
@@ -217,7 +221,13 @@ export async function processRun(service: SupabaseClient, run: SelectedRun, star
 
   // The sender mailbox must be verified before any lead is touched; otherwise every send would fail and burn research cost.
   const mailbox = await loadSenderMailbox(service, run.created_by);
-  if (!mailbox.ok) { await cancelRun(service, run.id, plainReason(mailbox.error)); return; }
+  if (!mailbox.ok) {
+    if (mailbox.status === 503) {
+      console.error('run-selected-autopilot: mailbox check unavailable, will retry next tick');
+      return;
+    }
+    await cancelRun(service, run.id, plainReason(mailbox.error)); return;
+  }
 
   await recoverStuckRows(service, run.id);
   const budget = { budgetMs: WALL_BUDGET_MS, reserveMs: LEAD_RESERVE_MS };
