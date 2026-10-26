@@ -37,7 +37,7 @@ export function useLeads() {
   const refresh = useCallback(async () => {
     if (!currentOrg || !currentPipeline) { setLeads([]); setLoading(false); return; }
     const { data, error: err } = await supabase
-      .from('leads').select('*').eq('pipeline_id', currentPipeline.id).order('kanban_position').order('created_at');
+      .from('leads').select('*, phone_contacts:decision_maker_candidates(phone, phone_kind, dismissed_at)').eq('pipeline_id', currentPipeline.id).order('kanban_position').order('created_at');
     if (err) setError(err.message);
     else { setLeads(data as Lead[]); setError(null); }
     setLoading(false);
@@ -48,6 +48,7 @@ export function useLeads() {
     const channel = supabase
       .channel('leads-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => void refresh())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'decision_maker_candidates' }, () => void refresh())
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);

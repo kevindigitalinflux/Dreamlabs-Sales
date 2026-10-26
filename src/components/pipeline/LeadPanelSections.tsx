@@ -12,6 +12,9 @@ import { EditableNote } from './EditableNote';
 import { Input, SelectField } from '../ui/Input';
 import { Skeleton } from '../ui/Skeleton';
 import { websiteHref } from '../../lib/websiteHref';
+import { PhoneChip } from './PhoneChip';
+import { PhoneBusinessNotice } from './PhoneBusinessNotice';
+import { parsePhone } from '../../../supabase/functions/_shared/phoneNumbers';
 
 /** Label/value row used for the read-only (derived) fields. */
 export function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -91,8 +94,10 @@ export function ContactInfo({ lead, onSave }: EditableSectionProps) {
     <div className="flex flex-col gap-3">
       <div className="flex items-end gap-2">
         <Input label="Phone" type="tel" value={form.phone} onChange={set('phone')} onBlur={() => blurSave('phone')} />
-        {lead.phone && <a href={`tel:${lead.phone}`} aria-label="Call" className={action}><Phone className="h-4 w-4" aria-hidden /></a>}
+        {lead.phone && parsePhone(lead.phone, lead.country) && <a href={`tel:${parsePhone(lead.phone, lead.country)!.value}`} aria-label="Call" className={action}><Phone className="h-4 w-4" aria-hidden /></a>}
       </div>
+      {lead.phone && <><PhoneChip value={lead.phone} country={lead.country} metadata={lead.phone_meta?.[parsePhone(lead.phone, lead.country)?.value ?? '']} />
+        <PhoneBusinessNotice value={lead.phone} lead={lead} onSave={onSave} /></>}
       <div className="flex items-end gap-2">
         <Input label="Email" type="email" value={form.email} onChange={set('email')} onBlur={() => blurSave('email')} />
         {lead.email && <a href={`mailto:${lead.email}`} aria-label="Send email" className={action}><Mail className="h-4 w-4" aria-hidden /></a>}

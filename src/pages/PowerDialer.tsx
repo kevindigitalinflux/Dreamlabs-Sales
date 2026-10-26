@@ -43,6 +43,7 @@ export function PowerDialer() {
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <h1 className="text-[28px] font-extrabold">Power dialer</h1>
       <p className="text-muted">Pick who to call, see how many leads match, then start a session.</p>
+      <p className="rounded-lg border border-line p-3 text-sm text-offwhite">Business numbers only. Before cold calling in the UK, check TPS/CTPS and any opt-outs. Sole traders and partnerships need extra care.</p>
 
       <Card>
         <div className="flex flex-wrap items-end gap-3">

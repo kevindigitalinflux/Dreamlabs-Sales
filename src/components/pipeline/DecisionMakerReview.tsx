@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { DecisionMakerCandidate, Lead } from '../../types';
 import { readableInvokeError } from '../../lib/invokeError';
-import { additionsFor, additionsPatchFor, alreadyOnLead, candidateName } from '../../lib/decisionMakerAdditions';
+import { additionsPatchFor, candidateName } from '../../lib/decisionMakerAdditions';
 import { candidateSourceLabel, hasNoContactDetails, isRegistrySource } from '../../lib/candidateSource';
 import { dismissDecisionMaker } from '../../lib/dismissDecisionMaker';
 import { ConfirmDeleteButton } from '../ui/ConfirmDeleteButton';
+import { ContactRevealButtons } from './ContactRevealButtons';
+import { PhoneChip } from './PhoneChip';
+import { useOrgApiSettings } from '../../hooks/useOrgApiSettings';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
@@ -31,6 +34,8 @@ interface DecisionMakerReviewProps {
  * polling.
  */
 export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, onAddToLead }: DecisionMakerReviewProps) {
+  const api = useOrgApiSettings();
+  const apolloConfigured = !api.loading && !api.loadError && api.settings.some(s => s.provider === 'apollo' && s.is_configured);
   const [candidatesByLead, setCandidatesByLead] = useState<Record<string, DecisionMakerCandidate[]>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorByCandidate, setErrorByCandidate] = useState<Record<string, string>>({});
@@ -144,42 +149,9 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
                     {isRegistrySource(candidate.source) && hasNoContactDetails(candidate) && (
                       <p className="mt-1 text-xs text-muted">No contact details found yet.</p>
                     )}
-                    {candidate.source === 'apollo' && (
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <Button
-                          variant="secondary"
-                          onClick={() => void handleReveal(candidate, 'reveal_email')}
-                          disabled={busyId === candidate.id || candidate.email_revealed}
-                          loading={busyId === candidate.id}
-                        >
-                          {candidate.email_revealed ? candidate.email! : busyId === candidate.id ? 'Revealing…' : 'Reveal email'}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={() => void handleReveal(candidate, 'reveal_phone')}
-                          disabled={busyId === candidate.id || candidate.phone_status !== 'not_requested'}
-                          loading={busyId === candidate.id}
-                        >
-                          {candidate.phone_status === 'revealed' ? candidate.phone!
-                            : candidate.phone_status === 'pending' ? 'Waiting for phone number…'
-                            : candidate.phone_status === 'not_found' ? 'No phone found'
-                            : busyId === candidate.id ? 'Revealing…' : 'Reveal phone'}
-                        </Button>
-                      </div>
-                    )}
-                    {(() => {
-                      const lead = leadsById[candidate.lead_id];
-                      const additions = additionsFor(candidate);
-                      if (!lead || additions.length === 0) return null;
-                      const added = alreadyOnLead(lead, additions);
-                      return (
-                        <div className="mt-1">
-                          <Button variant="secondary" onClick={() => void handleAddOne(candidate)} disabled={added || busyId === candidate.id || addingAll} loading={busyId === candidate.id}>
-                            {added ? 'Added to lead ✓' : 'Add to lead'}
-                          </Button>
-                        </div>
-                      );
-                    })()}
+                    {candidate.phone && <PhoneChip value={candidate.phone} country={lead?.country} metadata={{ kind: candidate.phone_kind ?? 'unknown', source: candidate.phone_source ?? 'manual', source_url: candidate.phone_source_url ?? null, found_at: candidate.phone_found_at ?? null }} />}
+                    {lead && <ContactRevealButtons contact={candidate} lead={lead} apolloConfigured={apolloConfigured}
+                      busy={busyId === candidate.id || addingAll} onReveal={field => void handleReveal(candidate, field)} onAddToLead={() => void handleAddOne(candidate)} />}
                     <div className="mt-1">
                       <ConfirmDeleteButton
                         label="Remove"

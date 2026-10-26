@@ -10,6 +10,7 @@ import { buildKnownPersonPayload } from '../../lib/knownPersonForm';
 import { savePhoneAfterLookup } from '../../lib/knownPersonPhone';
 import { mainContact, sequenceRecipients } from '../../../supabase/functions/_shared/contacts';
 import { useLeadContacts } from '../../hooks/useLeadContacts';
+import { useOrgApiSettings } from '../../hooks/useOrgApiSettings';
 import { useKnownPersonFlow } from '../../hooks/useKnownPersonFlow';
 import type { ContactResult } from '../../hooks/useLeadContacts';
 import type { DecisionMakerCandidate, Lead } from '../../types';
@@ -31,6 +32,8 @@ type Adding = 'person' | 'general' | null;
  */
 export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; lead: Lead; onSave: (patch: LeadPatch) => Promise<string | null> }) {
   const hook = useLeadContacts(leadId);
+  const api = useOrgApiSettings();
+  const apolloConfigured = !api.loading && !api.loadError && api.settings.some(s => s.provider === 'apollo' && s.is_configured);
   const { contacts } = hook;
   const [adding, setAdding] = useState<Adding>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -108,6 +111,7 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
             lead={lead}
             isMain={main?.contactId === c.id}
             busy={busyId === c.id}
+            apolloConfigured={apolloConfigured}
             error={errors[c.id]}
             onMakeMain={() => void run(c.id, () => hook.setPrimary(c.id))}
             onToggleSequences={(on) => void run(c.id, () => hook.setIncludeInSequences(c.id, on))}
@@ -115,6 +119,7 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
             onRemove={async () => (await run(c.id, () => hook.removeContact(c))).error}
             onReveal={(field) => void handleReveal(c, field)}
             onAddToLead={() => void handleAddToLead(c)}
+            onSaveLead={onSave}
           />
         ))}
       </ul>

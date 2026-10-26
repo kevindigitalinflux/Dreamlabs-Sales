@@ -62,6 +62,11 @@ export function FilterBar({ filters, onChange, profiles, icps = [] }: FilterBarP
         <AlertCircle className="h-4 w-4" aria-hidden />
         Overdue only
       </button>
+      {(['hasPhone', 'hasDirectLine'] as const).map(key => <button key={key} type="button"
+        aria-pressed={!!filters[key]} onClick={() => onChange({ ...filters, [key]: !filters[key] })}
+        className={`min-h-11 cursor-pointer rounded-lg border px-3 text-sm font-semibold ${filters[key] ? 'border-cyan text-offwhite' : 'border-line text-muted'}`}>
+        {key === 'hasPhone' ? 'Has phone' : 'Has direct line'}
+      </button>)}
     </div>
   );
 }

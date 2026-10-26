@@ -3,6 +3,9 @@ import { ExternalLink, Pencil } from 'lucide-react';
 import { ConfirmDeleteButton } from '../ui/ConfirmDeleteButton';
 import { ContactForm } from './ContactForm';
 import { ContactRevealButtons } from './ContactRevealButtons';
+import { PhoneChip } from './PhoneChip';
+import { PhoneBusinessNotice } from './PhoneBusinessNotice';
+import type { LeadPatch } from '../../lib/leadUpdates';
 import { contactDisplayName } from '../../../supabase/functions/_shared/contacts';
 import { candidateSourceLabel, hasNoContactDetails, isProviderSource, isRegistrySource } from '../../lib/candidateSource';
 import { contactToForm, isOwnSource, safeLinkedinHref } from '../../lib/leadContacts';
@@ -16,6 +19,7 @@ interface ContactRowProps {
   /** True when this is the contact emailed by default (marked, or the best-ranked one). */
   isMain: boolean;
   busy: boolean;
+  apolloConfigured?: boolean;
   error?: string;
   onMakeMain: () => void;
   onToggleSequences: (on: boolean) => void;
@@ -23,6 +27,7 @@ interface ContactRowProps {
   onRemove: () => Promise<string | null>;
   onReveal: (field: 'reveal_email' | 'reveal_phone') => void;
   onAddToLead: () => void;
+  onSaveLead: (patch: LeadPatch) => Promise<string | null>;
 }
 
 /**
@@ -30,7 +35,7 @@ interface ContactRowProps {
  * radio, "Include in sequences" switch, inline edit, provider actions, and a
  * confirmed remove (deletes your own contacts, dismisses ones a search found).
  */
-export function ContactRow({ contact, lead, isMain, busy, error, onMakeMain, onToggleSequences, onSave, onRemove, onReveal, onAddToLead }: ContactRowProps) {
+export function ContactRow({ contact, lead, isMain, busy, apolloConfigured, error, onMakeMain, onToggleSequences, onSave, onRemove, onReveal, onAddToLead, onSaveLead }: ContactRowProps) {
   const [editing, setEditing] = useState(false);
   const name = contactDisplayName(contact);
   if (editing) {
@@ -51,7 +56,7 @@ export function ContactRow({ contact, lead, isMain, busy, error, onMakeMain, onT
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
         {contact.email && <a href={`mailto:${contact.email}`} className="text-success">{contact.email}</a>}
-        {contact.phone && <a href={`tel:${contact.phone}`} className="text-muted">{contact.phone}</a>}
+        {contact.phone && <PhoneChip value={contact.phone} country={lead.country} metadata={{ kind: contact.phone_kind ?? 'unknown', source: contact.phone_source ?? 'manual', source_url: contact.phone_source_url ?? null, found_at: contact.phone_found_at ?? null }} />}
         {contact.linkedin_url && (safeLinkedinHref(contact.linkedin_url) ? (
           <a href={safeLinkedinHref(contact.linkedin_url)!} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-cyan">
             <ExternalLink className="h-3.5 w-3.5" aria-hidden /> LinkedIn
@@ -61,7 +66,8 @@ export function ContactRow({ contact, lead, isMain, busy, error, onMakeMain, onT
       {isRegistrySource(contact.source) && hasNoContactDetails(contact) && (
         <p className="mt-1 text-xs text-muted">No contact details found yet. Use "Deep find" to look them up.</p>
       )}
-      <ContactRevealButtons contact={contact} lead={lead} busy={busy} onReveal={onReveal} onAddToLead={onAddToLead} />
+      <ContactRevealButtons contact={contact} lead={lead} busy={busy} apolloConfigured={apolloConfigured} onReveal={onReveal} onAddToLead={onAddToLead} />
+      {contact.phone && <PhoneBusinessNotice value={contact.phone} lead={lead} onSave={onSaveLead} />}
       <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
         <label className="flex min-h-8 cursor-pointer items-center gap-1.5 text-xs">
           <input type="radio" name={`main-contact-${contact.lead_id}`} checked={contact.is_primary} disabled={!contact.email} onChange={onMakeMain} />

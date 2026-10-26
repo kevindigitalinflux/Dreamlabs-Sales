@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { AlertCircle, Copy, Phone } from 'lucide-react';
+import { AlertCircle, Copy } from 'lucide-react';
+import { PhoneChip } from './PhoneChip';
+import { parsePhone } from '../../../supabase/functions/_shared/phoneNumbers';
 import type { Lead } from '../../types';
 import { dueLabel, initials, isDueToday, isOverdue } from '../../lib/utils';
 import { STAGE_BORDER_CLASSES } from './stageStyles';
@@ -45,10 +47,7 @@ export function LeadCard({ lead, assigneeName, onOpen }: LeadCardProps) {
         )}
       </div>
       {lead.phone && (
-        <a href={`tel:${lead.phone}`} onClick={(e) => e.stopPropagation()} className="flex min-h-6 items-center gap-1.5 text-sm text-muted hover:text-cyan">
-          <Phone className="h-3.5 w-3.5" aria-hidden />
-          {lead.phone}
-        </a>
+        <PhoneChip value={lead.phone} country={lead.country} metadata={lead.phone_meta?.[parsePhone(lead.phone, lead.country)?.value ?? '']} />
       )}
       {lead.email && (
         <button type="button" onClick={copyEmail} title="Copy email" className="flex min-h-6 cursor-pointer items-center gap-1.5 text-sm text-muted hover:text-cyan">

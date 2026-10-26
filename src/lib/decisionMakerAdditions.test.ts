@@ -31,6 +31,10 @@ describe('additionsFor', () => {
 });
 
 describe('alreadyOnLead / additionsPatchFor', () => {
+  it('preserves phone provenance when explicitly copying a contact onto the lead', () => {
+    const patch = additionsPatchFor(lead(), [candidate({ phone: '+442079460958', phone_kind: 'direct', phone_source: 'own_site', phone_source_url: 'https://acme.test/team', phone_found_at: '2026-10-26T12:00:00Z' })]);
+    expect(patch?.phone_meta).toMatchObject({ '+442079460958': { kind: 'direct', source: 'own_site', source_url: 'https://acme.test/team', found_at: '2026-10-26T12:00:00Z' } });
+  });
   it('is true when values are the primary or already in additional lists (any case)', () => {
     const adds = additionsFor(candidate({}));
     expect(alreadyOnLead(lead({ owner_name: 'jane smith (director)', additional_emails: ['JANE@x.com'] }), adds)).toBe(true);

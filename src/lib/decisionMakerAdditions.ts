@@ -2,6 +2,7 @@ import { ADDITIONAL_COLUMN, mergeAdditions } from './enrichmentGrouping';
 import type { AdditionalDetail } from './enrichmentGrouping';
 import type { LeadPatch } from './leadUpdates';
 import type { DecisionMakerCandidate, Lead } from '../types';
+import { phoneMetadata } from '../../supabase/functions/_shared/phoneNumbers';
 
 /** Display name for a candidate, or 'Unknown name' when neither part is known. */
 export function candidateName(c: DecisionMakerCandidate): string {
@@ -36,5 +37,12 @@ export function alreadyOnLead(lead: Lead, additions: AdditionalDetail[]): boolea
  */
 export function additionsPatchFor(lead: Lead, candidates: DecisionMakerCandidate[]): LeadPatch | null {
   const additions = candidates.flatMap(additionsFor).filter((a) => !alreadyOnLead(lead, [a]));
-  return additions.length > 0 ? mergeAdditions(lead, additions) : null;
+  if (additions.length === 0) return null;
+  const patch: LeadPatch = mergeAdditions(lead, additions);
+  for (const candidate of candidates) {
+    if (!additions.some(a => a.field === 'phone' && a.value === candidate.phone)) continue;
+    const evidence = phoneMetadata(candidate.phone, lead.country, candidate.phone_kind ?? 'unknown', candidate.phone_source ?? 'manual', candidate.phone_source_url ?? null, candidate.phone_found_at ?? null);
+    if (evidence) patch.phone_meta = { ...lead.phone_meta, ...patch.phone_meta, [evidence.value]: evidence };
+  }
+  return patch;
 }

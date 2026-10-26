@@ -2,6 +2,8 @@ import { X } from 'lucide-react';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import type { Lead } from '../../types';
 import { websiteHref } from '../../lib/websiteHref';
+import { PhoneChip } from './PhoneChip';
+import { parsePhone } from '../../../supabase/functions/_shared/phoneNumbers';
 
 type Column = 'additional_emails' | 'additional_phones' | 'additional_websites' | 'additional_owners';
 
@@ -31,7 +33,7 @@ export function AdditionalDetails({ lead, onSave }: { lead: Lead; onSave: (patch
           <ul className="flex flex-wrap gap-1.5">
             {g.values.map((value) => (
               <li key={value} className="flex items-center gap-1 rounded-full border border-line bg-card py-0.5 pl-2.5 pr-1 text-sm">
-                {g.href?.(value)
+                {g.column === 'additional_phones' ? <PhoneChip value={value} country={lead.country} metadata={lead.phone_meta?.[parsePhone(value, lead.country)?.value ?? '']} /> : g.href?.(value)
                   ? <a href={g.href(value)!} target={g.column === 'additional_websites' ? '_blank' : undefined} rel="noreferrer noopener" className="text-cyan hover:underline">{value}</a>
                   : <span>{value}</span>}
                 <button

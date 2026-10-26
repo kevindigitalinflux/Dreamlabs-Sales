@@ -1,4 +1,5 @@
 import type { Lead, Stage } from '../types';
+import { parsePhone } from '../../supabase/functions/_shared/phoneNumbers';
 
 export interface DialerFilters {
   stages: Stage[];
@@ -18,13 +19,14 @@ export function filterDialableLeads(
   currentUserId: string | undefined,
   today: Date = new Date(),
 ): Lead[] {
-  return leads.filter((lead) => {
-    if (!lead.phone) return false;
-    if (filters.stages.length > 0 && !filters.stages.includes(lead.stage)) return false;
-    if (filters.assignedToMeOnly && lead.assigned_to !== currentUserId) return false;
+  return leads.flatMap((lead) => {
+    const phone = parsePhone(lead.phone, lead.country);
+    if (!phone) return [];
+    if (filters.stages.length > 0 && !filters.stages.includes(lead.stage)) return [];
+    if (filters.assignedToMeOnly && lead.assigned_to !== currentUserId) return [];
     if (filters.notCalledInDays !== 'any') {
-      if (lead.last_contacted_at && daysSince(lead.last_contacted_at, today) < filters.notCalledInDays) return false;
+      if (lead.last_contacted_at && daysSince(lead.last_contacted_at, today) < filters.notCalledInDays) return [];
     }
-    return true;
+    return [{ ...lead, phone: phone.value }];
   });
 }

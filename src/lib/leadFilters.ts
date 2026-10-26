@@ -1,5 +1,6 @@
 import { isOverdue, STAGES } from './utils';
 import type { Lead, Stage } from '../types';
+import { parsePhone } from '../../supabase/functions/_shared/phoneNumbers';
 
 /** Filter value meaning "leads with no customer profile". */
 export const NO_PROFILE = '__none__';
@@ -11,12 +12,23 @@ export interface LeadFilters {
   overdueOnly: boolean;
   /** Customer profile ids (or NO_PROFILE). Empty/absent means all. */
   icps?: string[];
+  hasPhone?: boolean;
+  hasDirectLine?: boolean;
 }
 
 /** Applies search + stage + assignee + customer profile + overdue filters. Empty arrays mean "all". */
 export function filterLeads(leads: Lead[], filters: LeadFilters, today: Date = new Date()): Lead[] {
   const q = filters.search.trim().toLowerCase();
   return leads.filter((lead) => {
+    if (filters.hasPhone || filters.hasDirectLine) {
+      const phones = [lead.phone, ...(lead.additional_phones ?? [])].flatMap(value => {
+        const phone = parsePhone(value, lead.country);
+        return phone ? [{ phone: phone.value, phone_kind: lead.phone_meta?.[phone.value]?.kind ?? 'unknown' }] : [];
+      });
+      const contacts = (lead.phone_contacts ?? []).filter(c => !c.dismissed_at && !!parsePhone(c.phone, lead.country));
+      if (filters.hasPhone && phones.length + contacts.length === 0) return false;
+      if (filters.hasDirectLine && ![...phones, ...contacts].some(p => p.phone_kind === 'direct' || p.phone_kind === 'mobile')) return false;
+    }
     if (q) {
       const haystack = `${lead.business_name} ${lead.owner_name ?? ''} ${lead.email ?? ''}`.toLowerCase();
       if (!haystack.includes(q)) return false;
