@@ -5,6 +5,7 @@ ALTER TABLE public.leads ADD CONSTRAINT leads_stage_check CHECK (stage IN (
   'new_lead','contacted','replied','audit_booked','proposal_sent','negotiating','won','lost','not_now_nurture'
 ));
 ALTER TABLE public.user_email_settings
+  ADD COLUMN reply_alerts_after timestamptz NOT NULL DEFAULT now(),
   ADD COLUMN last_imap_ok_at timestamptz,
   ADD COLUMN last_imap_error text CHECK (last_imap_error IN ('wrong_password','imap_disabled','cannot_connect','check_failed')),
   ADD COLUMN last_imap_error_at timestamptz;
@@ -34,7 +35,8 @@ CREATE TABLE public.reply_notifications (
 );
 ALTER TABLE public.reply_notifications ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.reply_notifications FROM PUBLIC, anon, authenticated;
-GRANT SELECT, UPDATE(read_at) ON public.reply_notifications TO authenticated;
+GRANT SELECT ON public.reply_notifications TO authenticated;
+GRANT UPDATE(read_at) ON public.reply_notifications TO authenticated;
 GRANT ALL ON public.reply_notifications TO service_role;
 CREATE POLICY reply_notifications_own_read ON public.reply_notifications FOR SELECT TO authenticated
   USING (user_id = auth.uid() AND public.is_org_member(org_id) AND EXISTS (

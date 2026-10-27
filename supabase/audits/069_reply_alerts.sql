@@ -4,6 +4,7 @@ DO $$
 BEGIN
   ASSERT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.reply_notifications'::regclass), 'notification RLS';
   ASSERT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.email_replies'::regclass), 'reply RLS';
+  ASSERT EXISTS (SELECT FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'user_email_settings' AND column_name = 'reply_alerts_after' AND is_nullable = 'NO'), 'release cutoff persists per mailbox';
   ASSERT EXISTS (SELECT FROM pg_policies WHERE schemaname = 'public' AND tablename = 'email_replies'
     AND policyname = 'email_replies_visible_only' AND permissive = 'RESTRICTIVE' AND qual LIKE '%can_view_lead%'), 'admin SELECT cannot bypass lead visibility';
   ASSERT has_column_privilege('authenticated','public.reply_notifications','read_at','UPDATE'), 'own read state editable';

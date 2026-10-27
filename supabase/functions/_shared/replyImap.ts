@@ -9,8 +9,9 @@ export function makeReplyInbox(host: string, port: number, user: string, pass: s
   return {
     get highestUid() { return client.mailbox ? Math.max(0, client.mailbox.uidNext - 1) : 0; },
     connect: () => client.connect().then(() => undefined), lock: () => client.getMailboxLock('INBOX'),
-    fetch: range => client.fetch(range, { envelope: true, source: { maxLength: 1_000_000 } }, { uid: true }),
+    fetch: range => client.fetch(range, { envelope: true, internalDate: true, source: { maxLength: 1_000_000 } }, { uid: true }),
     logout: () => client.logout().then(() => undefined),
+    abort: () => client.close(),
   };
 }
 /** Proper MIME decoding, with a one-megabyte source ceiling and plain-text storage downstream. */

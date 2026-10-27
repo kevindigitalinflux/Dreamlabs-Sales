@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
           orgId: r.org_id, leadId: r.lead_id, logId, userId: user.id, subject: r.subject, toEmail: r.to_email,
           recipientLabel: r.to_email, templateId: templateId ?? null,
         });
-      })().catch((): PostSendResult | null => null);
+      })().catch((): PostSendResult | null => { console.error('send email: follow-up work failed'); return null; });
       // The work keeps running after the response is sent (like scrape-google-places). The next send for the same lead may
       // run concurrently with it: the repeat-send template check and the one-open-enrolment index cover that.
       (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime?.waitUntil(work);
@@ -138,6 +138,7 @@ Deno.serve(async (req) => {
       if (outcome === 'timeout') postSend = { lines: [], warnings: ['Follow-up updates took too long and may be incomplete'] };
       else if (outcome) postSend = { lines: outcome.lines, warnings: outcome.warnings };
     } catch {
+      console.error('send email: follow-up result unavailable');
       postSend = { lines: [], warnings: ['Follow-up updates could not be completed'] };
     } finally {
       if (timer !== undefined) clearTimeout(timer);

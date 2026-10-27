@@ -14,7 +14,7 @@ Deno.serve(async req => {
   const deadline = Date.now() + 110_000;
   const service = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const { data: users, error } = await service.from('user_email_settings')
-    .select('user_id,imap_host,imap_port,smtp_user,last_imap_check_uid,last_imap_ok_at')
+    .select('user_id,imap_host,imap_port,smtp_user,last_imap_check_uid,last_imap_ok_at,reply_alerts_after')
     .eq('is_verified', true).not('imap_host', 'is', null).order('last_imap_ok_at', { ascending: true, nullsFirst: true });
   if (error) { console.error('reply check: mailbox list failed'); return json({ error: 'Could not load mailbox checks' }, 503, headers); }
   const totals = { matched: 0, bounces: 0, automatic: 0, checked: 0 };
@@ -26,7 +26,7 @@ Deno.serve(async req => {
       const { data: pass, error: passError } = await service.rpc('app_get_smtp_secret', { uid: user.user_id });
       if (passError || !pass || !user.imap_port || !user.smtp_user) throw new Error('Mailbox configuration unavailable');
       const result = await pollMailbox(service, user, makeReplyInbox(user.imap_host, user.imap_port, user.smtp_user, String(pass)),
-        parseReplyMime, context => autoDraftReply(service, context), deadline);
+        parseReplyMime, context => autoDraftReply(service, context, Math.max(1, deadline - Date.now() - 5000)), deadline);
       totals.matched += result.matched; totals.bounces += result.bounces; totals.automatic += result.automatic; totals.checked++;
       if (result.error) errors.push({ user_id: user.user_id, error: result.error });
     } catch {

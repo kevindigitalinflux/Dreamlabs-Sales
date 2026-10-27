@@ -14,7 +14,7 @@ export interface ReplyContext {
 export type AutoDraftReply = (context: ReplyContext) => Promise<string | null>;
 export interface ReplyInbox {
   highestUid: number; connect(): Promise<void>; lock(): Promise<{ release(): void }>;
-  fetch(range: string): AsyncIterable<{ uid: number; source?: Uint8Array }>; logout(): Promise<void>;
+  fetch(range: string): AsyncIterable<{ uid: number; source?: Uint8Array; internalDate?: Date | string }>; logout(): Promise<void>; abort?(): void;
 }
 const checked = async (query: PromiseLike<{ error: unknown }>) => { const result = await query; if (result.error) throw new Error('Reply database operation failed'); };
 /** Effects are independent after the durable insert; payloads never enter logs. */
@@ -95,20 +95,25 @@ export async function processReplyMessage(service: SupabaseClient, userId: strin
 }
 
 /** Scan a bounded ascending UID span; save the watermark only after all admitted messages were handled. */
-export async function pollMailbox(service: SupabaseClient, user: { user_id: string; last_imap_check_uid: number | null }, inbox: ReplyInbox,
+export async function pollMailbox(service: SupabaseClient, user: { user_id: string; last_imap_check_uid: number | null; reply_alerts_after?: string }, inbox: ReplyInbox,
   parse: (source: Uint8Array) => Promise<ParsedReply>, autoDraft: AutoDraftReply, deadline: number) {
   const totals = { matched: 0, automatic: 0, bounces: 0, error: null as string | null };
   let lock: { release(): void } | undefined;
   let watermark = user.last_imap_check_uid;
+  const abortTimer = setTimeout(() => inbox.abort?.(), Math.max(1, deadline - Date.now() - 1000));
   try {
     await inbox.connect(); lock = await inbox.lock();
     const window = uidWindow(watermark, inbox.highestUid);
     if (window?.baseline) watermark = window.to;
     else if (window) {
-      const messages: { uid: number; source?: Uint8Array }[] = [];
+      const messages: { uid: number; source?: Uint8Array; internalDate?: Date | string }[] = [];
       for await (const message of inbox.fetch(`${window.from}:${window.to}`)) messages.push(message);
       for (const message of messages.sort((a,b) => a.uid - b.uid)) {
         if (message.uid < window.from || message.uid > window.to) continue;
+        // Use IMAP's server receipt time, not the sender-controlled Date header, to keep pre-release mail quiet.
+        if (user.reply_alerts_after && message.internalDate && new Date(message.internalDate).getTime() < Date.parse(user.reply_alerts_after)) {
+          watermark = message.uid; continue;
+        }
         if (Date.now() >= deadline - 5000 || !message.source) throw new Error('Reply check budget or source unavailable');
         const counts = await processReplyMessage(service, user.user_id, await parse(message.source), autoDraft);
         totals.matched += counts.matched; totals.automatic += counts.automatic; totals.bounces += counts.bounces;
@@ -126,6 +131,7 @@ export async function pollMailbox(service: SupabaseClient, user: { user_id: stri
   } finally {
     lock?.release();
     try { await inbox.logout(); } catch { console.error('reply check: mailbox close failed'); }
+    clearTimeout(abortTimer);
   }
   return totals;
 }

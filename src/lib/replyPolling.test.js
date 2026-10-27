@@ -68,6 +68,13 @@ it('fetches by bounded UID range, not date, and records mailbox success', async 
   expect(client.fetch).toHaveBeenCalledWith('101:101');
   expect(db.tables.user_email_settings[0].last_imap_ok_at).toBeTruthy();
 });
+it('mail that arrived before the release cutoff advances the watermark silently without parsing or alerts', async () => {
+  const client = inbox([{ uid: 101, source: new Uint8Array([1]), internalDate: new Date('2026-10-26T12:00:00Z') }]);
+  const parse = vi.fn(async () => mail); db.tables.user_email_settings.push({ user_id: 'sender' });
+  await pollMailbox(db.service, { user_id: 'sender', last_imap_check_uid: 100, reply_alerts_after: '2026-10-27T00:00:00Z' }, client, parse, draft, Date.now() + 60_000);
+  expect(parse).not.toHaveBeenCalled(); expect(db.tables.email_replies).toEqual([]);
+  expect(db.tables.user_email_settings[0].last_imap_check_uid).toBe(101);
+});
 it('a parse failure leaves the failed UID for a later tick and stores only a safe health code', async () => {
   const client = inbox([{ uid: 101, source: new Uint8Array([1]) }]); db.tables.user_email_settings.push({ user_id: 'sender', last_imap_check_uid: 100 });
   await pollMailbox(db.service, { user_id: 'sender', last_imap_check_uid: 100 }, client, async () => { throw new Error('private-mailbox-text'); }, draft, Date.now() + 60_000);

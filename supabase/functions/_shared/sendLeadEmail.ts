@@ -183,7 +183,8 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
     messageId = result.messageId;
   } catch (e) {
     status = 'failed';
-    errorMessage = e instanceof Error ? e.message : String(e);
+    console.error('mail sender: send or attachment loading failed');
+    errorMessage = 'Email could not be sent. Check your mailbox settings and try again.';
   }
 
   const row: Record<string, unknown> = {
@@ -214,14 +215,14 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
     // email would send but the log would stay stuck on 'draft' forever.
     const { error: logErr } = await service.from('email_logs').update(row).eq('id', logId).or(`sent_by.is.null,sent_by.eq.${senderId}`);
     if (logErr) {
-      console.error('email_logs update failed:', logErr.message);
+      console.error('mail sender: email log update failed');
       logFailed = true;
     }
   } else {
     if (input.templateId) row.template_id = input.templateId;
     const { data: inserted, error: logErr } = await service.from('email_logs').insert(row).select('id').single();
     if (logErr) {
-      console.error('email_logs insert failed:', logErr.message);
+      console.error('mail sender: email log insert failed');
       logFailed = true;
     }
     logId = (inserted as { id: string } | null)?.id ?? null;
