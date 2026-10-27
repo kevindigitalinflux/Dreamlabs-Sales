@@ -21,6 +21,7 @@ import { NoteComposer } from '../components/pipeline/NoteComposer';
 import { ActivityHistory, CallHistorySection, EmailLogSection } from '../components/pipeline/LeadDetailSections';
 import { EmailComposer } from '../components/emails/EmailComposer';
 import { EnrollmentControl } from '../components/emails/EnrollmentControl';
+import { LeadReplies } from '../components/emails/LeadReplies';
 
 /** Full lead record (SPEC.md §6 "Lead Detail Page") — 8 sections, vertical scroll. */
 export function LeadDetailPage() {
@@ -69,6 +70,7 @@ export function LeadDetailPage() {
         <h2 className="mb-2 text-[18px] font-bold">Contact</h2>
         <ContactInfo lead={lead} onSave={(patch) => updateLead(patch)} />
       </Card>
+      <LeadReplies leadId={lead.id} />
 
       <Card>
         <h2 className="mb-2 text-[18px] font-bold">Decision Makers</h2>

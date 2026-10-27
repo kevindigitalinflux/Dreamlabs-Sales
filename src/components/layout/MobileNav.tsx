@@ -1,15 +1,19 @@
 import { NavLink } from 'react-router';
-import { KanbanSquare, LayoutDashboard, Settings } from 'lucide-react';
+import { KanbanSquare, LayoutDashboard, Settings, Mail } from 'lucide-react';
+import { useReplyAlerts } from '../../hooks/useReplyAlerts';
+import { ReplyCountBadge } from '../emails/ReplyAlertParts';
 import type { LucideIcon } from 'lucide-react';
 
 const ITEMS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
   { to: '/', label: 'Today', icon: LayoutDashboard, end: true },
   { to: '/pipeline/list', label: 'Pipeline', icon: KanbanSquare },
+  { to: '/emails', label: 'Emails', icon: Mail },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
 /** Bottom tab bar for mobile (spec: mobile is note-taking first — Dashboard, List, Settings). */
 export function MobileNav() {
+  const { count } = useReplyAlerts();
   return (
     <nav
       aria-label="Mobile"
@@ -28,6 +32,7 @@ export function MobileNav() {
         >
           <Icon className="h-5 w-5" aria-hidden />
           {label}
+          {to === '/emails' && <ReplyCountBadge count={count} />}
         </NavLink>
       ))}
     </nav>

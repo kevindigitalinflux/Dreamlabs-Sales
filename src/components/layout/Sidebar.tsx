@@ -5,6 +5,8 @@ import { useOrg } from '../../hooks/useOrg';
 import { useJobs } from '../../hooks/useJobs';
 import { useNeedsInputCount } from '../../hooks/useNeedsInputCount';
 import logoIcon from '../../assets/logo/logo-icon.png';
+import { useReplyAlerts } from '../../hooks/useReplyAlerts';
+import { ReplyCountBadge } from '../emails/ReplyAlertParts';
 
 interface NavItem {
   to: string;
@@ -38,6 +40,7 @@ export function Sidebar() {
   const { currentOrg } = useOrg();
   const { count: needsInput } = useNeedsInputCount();
   const { counts } = useJobs();
+  const { count: replies } = useReplyAlerts();
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r border-nav-line bg-nav-bg p-4 md:flex">
       <img src={logoIcon} alt="" className="mb-2 h-9 w-auto self-start px-2" />
@@ -49,6 +52,7 @@ export function Sidebar() {
           <NavLink key={to} to={to} end={end} className={navClass}>
             <Icon className="h-5 w-5" aria-hidden />
             {label}
+            {to === '/emails' && <ReplyCountBadge count={replies} />}
             {to === '/outreach/autopilot' && needsInput ? (
               <span className="ml-auto rounded-full bg-cyan/20 px-2 py-0.5 text-[11px] font-bold text-cyan" aria-label={`${needsInput} autopilot leads need your input`}>{needsInput}</span>
             ) : null}

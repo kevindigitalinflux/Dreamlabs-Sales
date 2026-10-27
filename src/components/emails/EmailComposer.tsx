@@ -27,6 +27,7 @@ import type { PostSendReport } from '../../lib/postSendPreview';
 import { PostSendPreview } from './PostSendPreview';
 import { TemplatePicker } from './TemplatePicker';
 import { SuggestedSequence } from './SuggestedSequence';
+import { MailboxStatus } from '../settings/MailboxStatus';
 
 interface DiffLine { kind: 'same' | 'removed' | 'added'; text: string }
 
@@ -61,7 +62,8 @@ interface EmailComposerProps {
    * recipient instead of defaulting to the lead's own email (see the
    * effect below, which seeds `selectedRecipients` from these fields once
    * `decisionMakers` has loaded). */
-  draft?: { log_id: string; subject: string; body: string; to_email: string; decision_maker_candidate_id: string | null; attachments?: EmailAttachment[] } | null;
+  draft?: { log_id?: string; reply_id?: string; subject: string; body: string; to_email: string; decision_maker_candidate_id: string | null; attachments?: EmailAttachment[] } | null;
+  answer?: { replyId: string; to_email: string; subject: string; body: string; logId?: string };
 }
 
 type StatusMsg = { kind: 'ok' | 'warn' | 'err'; text: string };
@@ -77,7 +79,8 @@ type GenerateResult = {
  * director and one to an office manager aren't the same text. With one recipient it looks
  * exactly as it always did.
  */
-export function EmailComposer({ lead, open, onClose, draft = null }: EmailComposerProps) {
+export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, answer }: EmailComposerProps) {
+  const draft = answer ? { log_id: answer.logId, reply_id: answer.replyId, to_email: answer.to_email, subject: answer.subject, body: answer.body, decision_maker_candidate_id: null } : savedDraft;
   const { templates, loading: tplLoading, error: tplError } = useTemplates();
   const { sequences, loading: seqLoading, error: seqError } = useSequences();
   const { enrollment, loading: enrLoading, enroll } = useEnrollments(lead.id);
@@ -95,7 +98,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
   const [report, setReport] = useState<PostSendReport | null>(null);
   const { contacts, loading: contactsLoading } = useLeadContacts(lead.id);
   const [selectedRecipients, setSelectedRecipients] = useState<Set<string>>(new Set(!draft && lead.email ? ['lead'] : []));
-  const recipients = useMemo(() => buildRecipients(lead, contacts), [lead, contacts]);
+  const recipients = useMemo(() => answer ? [{ key: 'reply', email: answer.to_email, label: answer.to_email, candidateId: null, name: null, title: null, kind: 'lead' as const }] : buildRecipients(lead, contacts), [lead, contacts, answer]);
 
   // Once the contacts have loaded, tick the main contact; or, when reviewing an existing draft, the
   // person it was actually written for (never guess a default for a draft whose recipient is gone).
@@ -196,6 +199,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
           lead_id: lead.id, to_email: target.email, subject: d.subject, body: d.body, status: 'draft', attachments: d.attachments,
           decision_maker_candidate_id: target.candidateId,
           template_id: templateId || null,
+          ...(draft?.reply_id ? { reply_id: draft.reply_id } : {}),
           sent_by: (await supabase.auth.getUser()).data.user?.id,
           org_id: currentOrg?.id,
         });
@@ -209,6 +213,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
           decision_maker_candidate_id: target.candidateId, attachments: d.attachments,
           template_id: templateId || undefined,
           log_id: targets.length === 1 ? draft?.log_id : undefined,
+          reply_id: draft?.reply_id,
         },
       });
       if (error) { if (!firstFailReason) firstFailReason = await readableInvokeError(error); continue; }
@@ -236,9 +241,9 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
     <Modal open={open} onClose={onClose} title={`Email — ${lead.business_name}`}>
       <div className="flex flex-col gap-4">
         {recipients.length === 0 && <p role="alert" className="text-sm text-danger">No email addresses available for this lead or its contacts.</p>}
-        {recipients.length > 0 && <RecipientPicker recipients={recipients} selected={selectedRecipients} onToggle={toggleRecipient} multi={multi} />}
+        {answer ? <p className="break-all text-sm">Answer to: {answer.to_email}</p> : recipients.length > 0 && <RecipientPicker recipients={recipients} selected={selectedRecipients} onToggle={toggleRecipient} multi={multi} />}
         {!draft && !enrLoading && !enrollment && <SuggestedSequence leadId={lead.id} onEnroll={(sequenceId) => enroll(sequenceId, 1)} />}
-        <TemplatePicker
+        {!answer && <><TemplatePicker
           templates={templates} sequences={sequences} enrollment={enrollment} orgId={currentOrg?.id}
           loading={tplLoading || seqLoading || enrLoading} error={tplError ?? seqError} value={templateId} onChange={setTemplateId} autoSelect={!draft}
         />
@@ -250,6 +255,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
             <Sparkles className="h-4 w-4" aria-hidden />{busy === 'ai' ? 'Personalising…' : multi ? `Personalise ${n} with AI` : 'Personalise with AI'}
           </Button>
         </div>
+        </>}
         {missing.length > 0 && (
           <p className="text-xs text-warning">No value for: {missing.map((m) => `{{${m}}}`).join(', ')} — those spots are blank. You can set your own in Settings, Custom placeholders.</p>
         )}
@@ -312,6 +318,7 @@ export function EmailComposer({ lead, open, onClose, draft = null }: EmailCompos
                   : 'Send'}
           </Button>
         </div>
+        <MailboxStatus warningOnly compact />
       </div>
     </Modal>
   );
