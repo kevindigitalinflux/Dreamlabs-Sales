@@ -7,7 +7,7 @@ describe('real reply admission', () => {
     [['Auto-Submitted', 'auto-replied']], [['Auto-Submitted', 'auto-generated']], [['X-Autoreply', 'yes']],
     [['X-Autorespond', 'yes']], [['Precedence', 'bulk']], [['Precedence', 'auto_reply']], [['Precedence', 'junk']],
     [['X-Auto-Response-Suppress', 'All']], [['Content-Type', 'multipart/report; report-type=delivery-status']],
-  ])('rejects automatic headers: %j', header => expect(automaticMail([header], 'Hello', 'local@example.invalid')).not.toBeNull());
+  ])('rejects automatic headers: %j', header => expect(automaticMail([header as [string, string]], 'Hello', 'local@example.invalid')).not.toBeNull());
   it.each(['Out of office', 'Automatic reply: Hello', 'Auto-reply', 'Autoreply', 'Away from the office'])('rejects automatic subject %s', subject => {
     expect(automaticMail([], subject, 'a@example.invalid')).toBe('automatic');
   });

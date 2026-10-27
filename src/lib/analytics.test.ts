@@ -57,10 +57,10 @@ describe('periodStart / inPeriod', () => {
 });
 
 describe('computeLeadsByStage', () => {
-  it('counts leads per stage, all 8 stages present even at 0', () => {
+  it('counts leads per stage, including Replied even at zero', () => {
     const leads = [makeLead({ stage: 'contacted' }), makeLead({ stage: 'contacted' }), makeLead({ stage: 'won' })];
     const result = computeLeadsByStage(leads);
-    expect(result).toHaveLength(8);
+    expect(result).toHaveLength(9);
     expect(result.find((r) => r.stage === 'contacted')!.count).toBe(2);
     expect(result.find((r) => r.stage === 'won')!.count).toBe(1);
     expect(result.find((r) => r.stage === 'lost')!.count).toBe(0);
@@ -92,6 +92,10 @@ describe('computeLeadsByContractor', () => {
 });
 
 describe('computeFunnel', () => {
+  it('places a replied lead after Contacted and before Audit Booked', () => {
+    const funnel = computeFunnel([makeLead({ stage: 'replied' })], new Map());
+    expect(funnel.map(row => [row.stage, row.count])).toEqual([['contacted', 1], ['replied', 1], ['audit_booked', 0], ['proposal_sent', 0], ['won', 0]]);
+  });
   it('a lead currently at a stage with no history still counts as having reached it', () => {
     const lead = makeLead({ id: 'lead-1', stage: 'proposal_sent' });
     const funnel = computeFunnel([lead], new Map());

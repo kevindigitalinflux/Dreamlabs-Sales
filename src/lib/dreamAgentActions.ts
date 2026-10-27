@@ -5,7 +5,7 @@ import type { AdditionalDetail } from './enrichmentGrouping';
 import type { DreamAgentAction, DreamAgentUpdatePatch, Lead, PackageTier, Stage } from '../types';
 
 const STAGE_VALUES = new Set<Stage>([
-  'new_lead', 'contacted', 'audit_booked', 'proposal_sent',
+  'new_lead', 'contacted', 'replied', 'audit_booked', 'proposal_sent',
   'negotiating', 'won', 'lost', 'not_now_nurture',
 ]);
 const DEFAULT_PACKAGE_VALUES = new Set<PackageTier>(PACKAGE_TIERS.map((t) => t.value));

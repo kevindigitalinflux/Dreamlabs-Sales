@@ -1,5 +1,5 @@
 import {
-  CalendarCheck, Clock, FileText, Handshake, PhoneCall, Sparkles, Trophy, XCircle,
+  CalendarCheck, Clock, FileText, Handshake, PhoneCall, Sparkles, Trophy, XCircle, MessageSquare,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Stage } from '../../types';
@@ -10,6 +10,7 @@ import type { Stage } from '../../types';
 export const STAGE_BADGE_CLASSES: Record<Stage, string> = {
   new_lead: 'bg-stage-new-lead/15 text-stage-new-lead',
   contacted: 'bg-stage-contacted/15 text-stage-contacted',
+  replied: 'bg-stage-replied/15 text-stage-replied',
   audit_booked: 'bg-stage-audit-booked/15 text-stage-audit-booked',
   proposal_sent: 'bg-stage-proposal-sent/15 text-stage-proposal-sent',
   negotiating: 'bg-stage-negotiating/15 text-stage-negotiating',
@@ -22,6 +23,7 @@ export const STAGE_BADGE_CLASSES: Record<Stage, string> = {
 export const STAGE_BORDER_CLASSES: Record<Stage, string> = {
   new_lead: 'border-l-[#94A3B8]',
   contacted: 'border-l-[#8B32FF]',
+  replied: 'border-l-[#14B8A6]',
   audit_booked: 'border-l-[#00DFDF]',
   proposal_sent: 'border-l-[#F59E0B]',
   negotiating: 'border-l-[#F97316]',
@@ -34,6 +36,7 @@ export const STAGE_BORDER_CLASSES: Record<Stage, string> = {
 export const STAGE_ICONS: Record<Stage, LucideIcon> = {
   new_lead: Sparkles,
   contacted: PhoneCall,
+  replied: MessageSquare,
   audit_booked: CalendarCheck,
   proposal_sent: FileText,
   negotiating: Handshake,

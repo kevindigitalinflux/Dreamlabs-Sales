@@ -16,7 +16,7 @@ export interface OrgMembership {
 }
 
 export type Stage =
-  | 'new_lead' | 'contacted' | 'audit_booked' | 'proposal_sent'
+  | 'new_lead' | 'contacted' | 'replied' | 'audit_booked' | 'proposal_sent'
   | 'negotiating' | 'won' | 'lost' | 'not_now_nurture';
 
 /**
@@ -282,6 +282,7 @@ export interface SequenceEnrollment {
 export type EmailLogStatus = 'draft' | 'sent' | 'failed';
 
 export interface EmailLog {
+  reply_id?: string | null;
   id: string;
   lead_id: string | null;
   sequence_enrollment_id: string | null;
@@ -316,6 +317,9 @@ export interface UserEmailSettings {
   imap_host: string | null;
   imap_port: number | null;
   last_imap_check_at: string | null;
+  last_imap_ok_at?: string | null;
+  last_imap_error?: string | null;
+  last_imap_error_at?: string | null;
   created_at: string;
   updated_at: string;
 }

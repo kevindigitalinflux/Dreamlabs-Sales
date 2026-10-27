@@ -64,7 +64,7 @@ export function useAnalytics(period: AnalyticsPeriod) {
         supabase.from('leads').select('id, stage, vertical, assigned_to, deal_value').eq('org_id', currentOrg.id),
         supabase.from('lead_notes').select('lead_id, note_type, content, created_at, leads!inner(org_id)').eq('leads.org_id', currentOrg.id),
         supabase.from('email_logs').select('status, sent_at').eq('org_id', currentOrg.id),
-        supabase.from('email_replies').select('received_at, email_logs!inner(id)').eq('org_id', currentOrg.id),
+        supabase.from('email_replies').select('received_at, email_logs!email_replies_email_log_id_fkey!inner(id)').eq('org_id', currentOrg.id),
         supabase.from('sequence_enrollments').select('status, leads!inner(org_id)').eq('leads.org_id', currentOrg.id),
         supabase.from('linkedin_drafts').select('status, sent_at').eq('org_id', currentOrg.id),
         supabase.from('scrape_jobs').select('results_count, approved_count, created_at').eq('org_id', currentOrg.id),

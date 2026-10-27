@@ -63,7 +63,7 @@ export function computeLeadsByContractor(leads: AnalyticsLead[], nameFor: (id: s
     .sort((a, b) => b.count - a.count);
 }
 
-const FUNNEL_STAGES: Stage[] = ['contacted', 'audit_booked', 'proposal_sent', 'won'];
+const FUNNEL_STAGES: Stage[] = ['contacted', 'replied', 'audit_booked', 'proposal_sent', 'won'];
 const STAGE_CHANGE_PREFIX = 'Stage changed: ';
 
 interface StageChange { toLabel: string; createdAt: string; }

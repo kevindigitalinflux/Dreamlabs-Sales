@@ -229,7 +229,7 @@ FOLLOW-UP: if the note states a timeframe ("end of this week", "Monday next week
 export async function parseNotes(input: { note: string; lead: Record<string, unknown>; customPackages?: string[] | null; icpContext?: string | null; profilesBlock?: string | null; apiKey: string }): Promise<Record<string, unknown>> {
   return await geminiJson(
 `You extract CRM field updates from a sales call note. Compare the note against the current lead and output ONLY fields that should change, as JSON with any of these keys:
-stage (one of: new_lead, contacted, audit_booked, proposal_sent, negotiating, won, lost, not_now_nurture),
+stage (one of: new_lead, contacted, replied, audit_booked, proposal_sent, negotiating, won, lost, not_now_nurture),
 deal_value (number, GBP), package_tier (exactly one of: ${packageChoices(input.customPackages)}; omit it if none clearly fits),
 next_action_date (YYYY-MM-DD), next_action_note (string), pain_point (string),${input.profilesBlock ? ' icp_id (exactly one of the profile ids listed under CUSTOMER PROFILES below; omit it unless one clearly fits),' : ''}
 rationale (string, ALWAYS present: one sentence explaining the suggestions).
@@ -269,7 +269,7 @@ For each company/person mentioned, decide one of these action types:
 1. "update" — confidently matches one of the leads in LEAD INDEX below. Output:
    {"type":"update","lead_id":<id from LEAD INDEX>,"business_name":<their name>,
    "patch":{<only fields that should change, keys from: stage (one of new_lead,
-   contacted, audit_booked, proposal_sent, negotiating, won, lost,
+   contacted, replied, audit_booked, proposal_sent, negotiating, won, lost,
    not_now_nurture), deal_value (number, GBP), package_tier (exactly one of
    ${packageChoices(input.customPackages)}; omit it if none clearly fits), next_action_date
    (YYYY-MM-DD), next_action_note (string), pain_point (string), owner_name,

@@ -10,6 +10,7 @@ export interface StageInfo {
 export const STAGES: StageInfo[] = [
   { value: 'new_lead', label: 'New Lead', hex: '#94A3B8' },
   { value: 'contacted', label: 'Contacted', hex: '#8B32FF' },
+  { value: 'replied', label: 'Replied', hex: '#14B8A6' },
   { value: 'audit_booked', label: 'Audit Booked', hex: '#00DFDF' },
   { value: 'proposal_sent', label: 'Proposal Sent', hex: '#F59E0B' },
   { value: 'negotiating', label: 'Negotiating', hex: '#F97316' },

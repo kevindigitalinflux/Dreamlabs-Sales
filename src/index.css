@@ -54,6 +54,7 @@
      self-consistent contrast calculation, not eyeballed or checked against white. */
   --color-stage-new-lead: #566781;
   --color-stage-contacted: #7E1CFF;
+  --color-stage-replied: #006B5B;
   --color-stage-audit-booked: #007474;
   --color-stage-proposal-sent: #8A5906;
   --color-stage-negotiating: #AB4A04;
@@ -85,6 +86,7 @@
   /* Original dark-mode stage/status hues, unchanged from before this theme feature. */
   --color-stage-new-lead: #94A3B8;
   --color-stage-contacted: #B57BFF;
+  --color-stage-replied: #5EEAD4;
   --color-stage-audit-booked: #00DFDF;
   --color-stage-proposal-sent: #F59E0B;
   --color-stage-negotiating: #F97316;

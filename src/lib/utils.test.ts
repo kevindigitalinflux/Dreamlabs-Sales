@@ -8,14 +8,14 @@ import {
 const TODAY = new Date(2026, 6, 12); // 12 Jul 2026 (local)
 
 describe('stages', () => {
-  it('has all 8 pipeline stages in spec order', () => {
+  it('places Replied between Contacted and Audit Booked', () => {
     expect(STAGES.map((s) => s.value)).toEqual([
-      'new_lead', 'contacted', 'audit_booked', 'proposal_sent',
+      'new_lead', 'contacted', 'replied', 'audit_booked', 'proposal_sent',
       'negotiating', 'won', 'lost', 'not_now_nurture',
     ]);
   });
   it('has unique hex colours', () => {
-    expect(new Set(STAGES.map((s) => s.hex)).size).toBe(8);
+    expect(new Set(STAGES.map((s) => s.hex)).size).toBe(9);
   });
   it('stageInfo returns the right entry', () => {
     expect(stageInfo('won')).toEqual({ value: 'won', label: 'Won', hex: '#22C55E' });
