@@ -110,6 +110,7 @@ export async function pollMailbox(service: SupabaseClient, user: { user_id: stri
       for await (const message of inbox.fetch(`${window.from}:${window.to}`)) messages.push(message);
       for (const message of messages.sort((a,b) => a.uid - b.uid)) {
         if (message.uid < window.from || message.uid > window.to) continue;
+        if (user.reply_alerts_after && (!message.internalDate || !Number.isFinite(new Date(message.internalDate).getTime()))) throw new Error('Reply receipt time unavailable');
         // Use IMAP's server receipt time, not the sender-controlled Date header, to keep pre-release mail quiet.
         if (user.reply_alerts_after && message.internalDate && new Date(message.internalDate).getTime() < Date.parse(user.reply_alerts_after)) {
           watermark = message.uid; continue;

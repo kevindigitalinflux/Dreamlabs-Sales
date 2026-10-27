@@ -6,6 +6,7 @@ export function MailboxStatusView({ settings, warningOnly = false, compact = fal
 }) {
   const status = mailboxState(settings, now);
   if (warningOnly && (!settings?.is_verified || status === 'working')) return null;
+  if (compact && status !== 'working') return <p role="status" className="text-xs text-muted">Replies to this email will not be picked up: <a className="underline" href="/settings/email">connect your inbox</a>.</p>;
   const label = status === 'working' ? 'Working' : status === 'problem' ? 'Problem' : 'Not connected';
   const code = settings?.last_imap_error;
   const problem = code && Object.hasOwn(IMAP_MESSAGES, code) ? IMAP_MESSAGES[code as ImapError] : IMAP_MESSAGES.check_failed;

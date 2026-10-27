@@ -50,7 +50,7 @@ export function ReplyDetail({ reply, onChanged }: { reply: EmailReply; onChanged
     {reply.handled_at && <p className="text-sm font-semibold">Handled</p>}
     <p className="whitespace-pre-wrap break-words text-sm">{reply.body}</p>
     {reply.attachment_count > 0 && <p className="text-sm text-muted">{reply.attachment_count} attachments — open your inbox to view them.</p>}
-    {reply.original && <details className="rounded-lg border border-line p-3"><summary className="min-h-11 cursor-pointer font-semibold">Email this answers: {reply.original.subject}</summary>
+    {reply.original && <details className="rounded-lg border border-line p-3"><summary className="min-h-11 cursor-pointer break-words font-semibold">Email this answers: {reply.original.subject}</summary>
       <p className="text-xs text-muted">Sent {new Date(reply.original.sent_at).toLocaleString('en-GB')}</p><p className="whitespace-pre-wrap break-words text-sm">{reply.original.body}</p></details>}
     <Link className="underline" to={`/pipeline/leads/${reply.lead_id}`}>Open lead</Link>
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}

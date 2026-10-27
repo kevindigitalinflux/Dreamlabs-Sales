@@ -20,3 +20,8 @@ it('unread badge is explicit for screen readers and absent at zero', () => {
   expect(renderToStaticMarkup(createElement(ReplyCountBadge, { count: 2 }))).toContain('2 unread replies');
   expect(renderToStaticMarkup(createElement(ReplyCountBadge, { count: 0 }))).toBe('');
 });
+it('the composer warning is one short note pointing to inbox setup', () => {
+  const html = renderToStaticMarkup(createElement(MailboxStatusView, { settings: { is_verified: true, imap_host: null }, warningOnly: true, compact: true, now }));
+  expect(html).toContain('Replies to this email will not be picked up:');
+  expect(html).not.toContain('Reply detection:');
+});

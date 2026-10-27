@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { parseSessionNotes } from '../_shared/ai.ts';
 import type { SessionLeadIndexEntry } from '../_shared/ai.ts';
@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
  * any read fails the index is left without contacts and the request carries on: the app
  * also drops a proposed contact whose email the lead already has, so this is not a gate.
  */
-async function attachContacts(client: ReturnType<typeof createClient>, leadIndex: SessionLeadIndexEntry[]): Promise<void> {
+async function attachContacts(client: SupabaseClient, leadIndex: SessionLeadIndexEntry[]): Promise<void> {
   try {
     const byLead = new Map<string, Contact[]>();
     for (let i = 0; i < leadIndex.length; i += LEAD_CHUNK) {
