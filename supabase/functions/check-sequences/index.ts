@@ -304,7 +304,7 @@ Deno.serve(async (req) => {
       const { count: humanNoteCount } = await service.from('lead_notes')
         .select('id', { count: 'exact', head: true })
         .eq('lead_id', lead.id as string).neq('note_type', 'ai_summary')
-        .not('content', 'eq', noRecipientsNoteText()).not('content', 'like', 'Sequence follow-up limited:%').not('content', 'like', 'Email sent:%');
+        .not('content', 'eq', noRecipientsNoteText()).not('content', 'like', 'Sequence follow-up limited:%').not('content', 'like', 'Email sent:%').not('content', 'like', 'Reply received:%');
       const hasHumanNote = (humanNoteCount ?? 0) > 0;
 
       // Compatible-lead gate for the notes pass: priority flag, OR tight ICP

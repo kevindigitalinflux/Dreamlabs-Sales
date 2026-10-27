@@ -2,6 +2,10 @@
 
 Authoritative task record. The vault copy (`Dreamlabs Sales/Handoff.md`) is a snapshot of this file, labelled with the revision below. Workflow rules: vault `_Team/Shared agent workflow.md`.
 
+## Reply alerts build — active local checkpoint (2026-10-27)
+
+Codex is builder; Claude remains architect/reviewer. Kevin authorized this worktree only, tests first, small local commits and a final report, with no publication, migration execution or real mailbox/provider use. `git fetch origin` succeeded, but `origin/main` remained `ece88ed` without readiness. Kevin explicitly authorized using local `codex/readiness-and-fixes` instead. Rebase onto `546d7be8b6543feaa04af20b507322dae0ee9250` completed without conflicts; rebased brief HEAD is `0dac5a86c156dfb1744ee577497e83f0862a15db`. Baseline: 163 files / 2,501 tests pass with dummy local environment values. Dependencies were missing; the brief-authorized `npm ci` completed. No role changed, no other checkout was edited, and commit hooks/vault synchronization remain disabled. Subscription usage is unavailable; no percentage is asserted. Current step: pure reply rules before migration 069 and the remaining brief order. This section supersedes historical pointers in this checkout.
+
 ## Current task: readiness 3d and Autopilot C8–11 — local build (2026-10-26)
 
 This section supersedes historical task pointers for this checkout only. Kevin's current request and `docs/READINESS-AND-FIXES-BUILD-BRIEF.md` authorize Codex as builder, Claude as architect/reviewer, local work only, then a stop after the build report. No role changed and no consultation transferred ownership.
