@@ -17,6 +17,7 @@ ALTER TABLE public.email_replies
   ADD COLUMN handled_at timestamptz,
   ADD COLUMN ai_draft_log_id uuid REFERENCES public.email_logs(id) ON DELETE SET NULL;
 CREATE UNIQUE INDEX email_replies_message_id_unique ON public.email_replies(message_id);
+ALTER TABLE public.email_logs ADD COLUMN reply_id uuid REFERENCES public.email_replies(id) ON DELETE SET NULL;
 -- Existing rows are not backfilled into alerts. The admin FOR ALL policy otherwise bypasses a permissive SELECT policy.
 ALTER POLICY email_replies_org_read ON public.email_replies USING (public.is_org_member(org_id) AND public.can_view_lead(lead_id));
 CREATE POLICY email_replies_visible_only ON public.email_replies AS RESTRICTIVE FOR SELECT TO authenticated
