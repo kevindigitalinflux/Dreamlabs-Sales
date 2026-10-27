@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { loadSenderMailbox, sendLeadEmail } from '../_shared/sendLeadEmail.ts';
 import { applyPostSendUpdates, type PostSendResult } from '../_shared/postSendUpdates.ts';
+import { loadVisibleReply } from '../_shared/replyAccess.ts';
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -18,7 +19,7 @@ Deno.serve(async (req) => {
   const user = userData?.user;
   if (!user) return json({ error: 'Not signed in' }, 401, headers);
 
-  const body = (await req.json()) as { to_email?: string; subject?: string; body?: string; lead_id?: string; log_id?: string; decision_maker_candidate_id?: string; attachments?: unknown; template_id?: string };
+  const body = (await req.json()) as { to_email?: string; subject?: string; body?: string; lead_id?: string; log_id?: string; decision_maker_candidate_id?: string; attachments?: unknown; template_id?: string; reply_id?: string };
   if (!body.to_email || !body.subject || !body.body) {
     return json({ error: 'to_email, subject and body are required' }, 400, headers);
   }
@@ -55,7 +56,7 @@ Deno.serve(async (req) => {
   // owner-only.
   let draft: { org_id: string | null; attachments: unknown } | undefined;
   if (body.log_id) {
-    const { data: log } = await service.from('email_logs').select('sent_by, org_id, attachments, status').eq('id', body.log_id).single();
+    const { data: log } = await service.from('email_logs').select('sent_by, org_id, attachments, status, reply_id').eq('id', body.log_id).single();
     if (!log) return json({ error: 'Draft not found' }, 404, headers);
     draft = { org_id: log.org_id as string | null, attachments: log.attachments };
     if (log.sent_by !== null && log.sent_by !== user.id) {
@@ -67,6 +68,19 @@ Deno.serve(async (req) => {
     }
     // Defence in depth: an already sent email is never sent again (no screen re-sends a sent log; queues only list draft and failed).
     if (log.status === 'sent') return json({ error: 'This email was already sent' }, 400, headers);
+    if (log.reply_id) body.reply_id = log.reply_id;
+  }
+
+  let thread: { inReplyTo?: string; references?: string; replyId?: string } = {};
+  if (body.reply_id) {
+    const visible = await loadVisibleReply(service, anonClient, user.id, body.reply_id);
+    if (!visible || !visible.messageId || visible.context.sent.to_email.trim().toLowerCase() !== body.to_email.trim().toLowerCase()
+      || (body.lead_id && body.lead_id !== visible.context.sent.lead_id) || (draft && draft.org_id !== visible.context.sent.org_id)) {
+      return json({ error: 'Reply not found or recipient changed' }, 404, headers);
+    }
+    body.lead_id = visible.context.sent.lead_id; orgId = visible.context.sent.org_id;
+    leadStage = String(visible.context.lead.stage);
+    thread = { replyId: body.reply_id, inReplyTo: visible.messageId, references: visible.references };
   }
 
   // Optional: which template this new email came from. Stored only if it is a template of the lead's org or a global one.
@@ -90,10 +104,16 @@ Deno.serve(async (req) => {
     orgId,
     leadStage,
     draft,
+    ...thread,
   });
   if (!result.ok) {
     const warning = result.warning;
     return json({ error: result.error, ...(result.logId !== undefined ? { log_id: result.logId } : {}), ...(warning ? { warning } : {}) }, result.status ?? 400, headers);
+  }
+  if (body.reply_id) {
+    const { error: handledError } = await service.from('email_replies').update({ handled_at: new Date().toISOString() }).eq('id', body.reply_id).eq('org_id', orgId);
+    const { error: readError } = await service.from('reply_notifications').update({ read_at: new Date().toISOString() }).eq('reply_id', body.reply_id).eq('user_id', user.id);
+    if (handledError || readError) console.error('send reply: could not mark handled or read');
   }
   // Post-send platform updates (note, sequence, follow-up date): additive, never fails the response; waits at most 8s for it.
   let postSend: { lines: string[]; warnings: string[] } | undefined;

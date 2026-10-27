@@ -47,6 +47,10 @@ export interface SendLeadEmailInput {
   to: string;
   subject: string;
   body: string;
+  /** Trusted stored reply context, validated by send-email before calling this shared sender. */
+  inReplyTo?: string;
+  references?: string;
+  replyId?: string;
   /**
    * The lead being emailed. Normally a real lead id. send-email's update-only
    * calls (log_id with no lead_id) pass null/undefined, which is preserved
@@ -173,7 +177,8 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
     const mail = buildMailContent(input.body);
     const result = await sendMail(
       { host: settings.smtp_host, port: settings.smtp_port, user: settings.smtp_user, pass, fromName: settings.from_name },
-      { to: input.to, subject: input.subject, body: mail.content, html: mail.html, attachments: files },
+      { to: input.to, subject: input.subject, body: mail.content, html: mail.html, attachments: files,
+        ...(input.inReplyTo ? { inReplyTo: input.inReplyTo, references: input.references } : {}) },
     );
     messageId = result.messageId;
   } catch (e) {
@@ -198,6 +203,7 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
     row.decision_maker_candidate_id = input.decisionMakerCandidateId;
   }
   if (orgId) row.org_id = orgId; // omitted on update-only calls where org_id is already set on the existing row
+  if (input.replyId) row.reply_id = input.replyId;
   let logId = input.logId ?? null;
   let logFailed = false;
   if (logId) {

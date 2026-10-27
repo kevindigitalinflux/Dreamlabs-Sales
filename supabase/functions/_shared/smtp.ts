@@ -1,4 +1,5 @@
 import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
+import { threadingHeaders } from './replyRules.ts';
 
 export interface SmtpConfig {
   host: string;
@@ -17,8 +18,9 @@ export interface SmtpConfig {
  */
 export async function sendMail(
   cfg: SmtpConfig,
-  msg: { to: string; subject: string; body: string; html?: string; attachments?: { filename: string; contentType: string; content: Uint8Array }[] },
+  msg: { to: string; subject: string; body: string; html?: string; inReplyTo?: string; references?: string; attachments?: { filename: string; contentType: string; content: Uint8Array }[] },
 ): Promise<{ messageId: string }> {
+  const thread = threadingHeaders(msg.inReplyTo, msg.references);
   const client = new SMTPClient({
     connection: {
       hostname: cfg.host,
@@ -40,7 +42,7 @@ export async function sendMail(
       subject,
       content: msg.body,
       ...(msg.html ? { html: msg.html } : {}),
-      headers: { 'Message-ID': messageId },
+      headers: { 'Message-ID': messageId, ...thread },
       // denomailer base64-encodes 'binary' attachments itself. Filenames must already be
       // safe (see safeFilename): it writes them into MIME headers unquoted.
       ...(msg.attachments && msg.attachments.length > 0
@@ -52,6 +54,7 @@ export async function sendMail(
       await client.close();
     } catch {
       // ignore close errors — the send result above is what matters
+      console.error('mail sender: connection close failed');
     }
   }
   return { messageId };
