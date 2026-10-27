@@ -7,6 +7,8 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Input, SelectField } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
+import { MailboxStatusView } from '../components/settings/MailboxStatusView';
+import { IMAP_PRESETS } from '../../supabase/functions/_shared/replyRules';
 
 const PRESETS: Record<EmailProvider, { host: string; port: number }> = {
   gmail: { host: 'smtp.gmail.com', port: 465 },
@@ -29,19 +31,21 @@ const OUTLOOK_STEPS = [
 
 /** SMTP config wizard (SPEC.md §7 Email Config) — non-technical, provider-guided. */
 export function EmailConfig() {
-  const { settings, loading, error, save, sendTest } = useEmailSettings();
+  const { settings, loading, error, save, sendTest, testImap } = useEmailSettings();
   const [form, setForm] = useState<SaveInput>({ provider: 'gmail', smtp_host: PRESETS.gmail.host, smtp_port: PRESETS.gmail.port, smtp_user: '', from_name: '', password: '', imap_host: '', imap_port: 993 });
-  const [busy, setBusy] = useState<'save' | 'test' | null>(null);
+  const [busy, setBusy] = useState<'save' | 'test' | 'imap' | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
+    if (!loading && !settings) setForm({ provider: 'gmail', smtp_host: PRESETS.gmail.host, smtp_port: PRESETS.gmail.port, smtp_user: '', from_name: '', password: '', imap_host: 'imap.gmail.com', imap_port: 993 });
     if (settings) {
-      setForm((f) => ({ ...f, provider: settings.provider, smtp_host: settings.smtp_host ?? '', smtp_port: settings.smtp_port, smtp_user: settings.smtp_user ?? '', from_name: settings.from_name ?? '', imap_host: settings.imap_host ?? '', imap_port: settings.imap_port ?? 993 }));
+      setForm((f) => ({ ...f, provider: settings.provider, smtp_host: settings.smtp_host ?? '', smtp_port: settings.smtp_port, smtp_user: settings.smtp_user ?? '', from_name: settings.from_name ?? '', imap_host: settings.imap_host ?? IMAP_PRESETS[settings.provider]?.host ?? '', imap_port: settings.imap_port ?? 993 }));
     }
-  }, [settings]);
+  }, [settings, loading]);
 
   function pickProvider(p: EmailProvider) {
-    setForm((f) => ({ ...f, provider: p, smtp_host: PRESETS[p].host || f.smtp_host, smtp_port: PRESETS[p].port }));
+    setForm((f) => ({ ...f, provider: p, smtp_host: PRESETS[p].host || f.smtp_host, smtp_port: PRESETS[p].port,
+      imap_host: IMAP_PRESETS[p]?.host ?? '', imap_port: IMAP_PRESETS[p]?.port ?? 993 }));
   }
 
   async function handleSave() {
@@ -56,6 +60,11 @@ export function EmailConfig() {
     const err = await sendTest();
     setBusy(null);
     setMsg(err ? { kind: 'err', text: err } : { kind: 'ok', text: 'Test email sent — check your inbox!' });
+  }
+  async function handleImapTest() {
+    setBusy('imap'); setMsg(null);
+    const err = await testImap(); setBusy(null);
+    setMsg(err ? { kind: 'err', text: err } : { kind: 'ok', text: 'Reply detection is connected. Your INBOX will be checked about every five minutes.' });
   }
 
   if (loading) return <Skeleton className="h-80 w-full max-w-2xl" />;
@@ -84,6 +93,18 @@ export function EmailConfig() {
         )}
       </header>
       <p className="text-muted">Connect your own email address — everything you send goes out from it, not from a robot address.</p>
+      <MailboxStatusView settings={settings} />
+      <section className="rounded-lg border border-line bg-surface p-4 text-sm" aria-label="Connect reply detection">
+        <h2 className="font-bold">Connect your inbox for replies</h2>
+        {form.provider === 'gmail' && <ol className="list-inside list-decimal">
+          <li>Open Gmail Settings, then Forwarding and POP/IMAP. Enable IMAP if the option is shown; some accounts keep it on automatically.</li>
+          <li>Use the same Google app password as email sending. A Workspace administrator may need to allow IMAP.</li>
+          <li>Save these settings, then choose Test reply detection.</li>
+        </ol>}
+        {form.provider !== 'smtp' && <p>Inbox settings are filled in for {form.provider === 'outlook' ? 'Outlook / Office 365' : form.provider}.</p>}
+        <p>Only your INBOX is checked. Replies moved by a mail rule, or received in spam or another folder, will not be picked up.</p>
+        <Button variant="secondary" onClick={() => void handleImapTest()} disabled={busy !== null || !settings} loading={busy === 'imap'}>Test reply detection</Button>
+      </section>
 
       <Card>
         <div className="flex flex-col gap-4">
