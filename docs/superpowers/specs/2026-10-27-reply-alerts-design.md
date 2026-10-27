@@ -1,6 +1,6 @@
 # Reply alerts and Replies inbox — Design
 
-Date: 2026-10-27. Author: Claude (architect). Status: DRAFT, awaiting Kevin's approval. Builder: Codex on `codex/reply-alerts` (worktree `dreamlabs-sales-replies`); reviewer: Claude. Migration number 069 (065 is taken by the readiness badge, 066 to 068 are applied). Not built.
+Date: 2026-10-27. Author: Claude (architect). Status: APPROVED by Kevin 2026-10-27, with two changes applied below (replies live inside the Emails page; no email notifications). Builder: Codex on `codex/reply-alerts` (worktree `dreamlabs-sales-replies`); reviewer: Claude. Migration number 069 (065 is the readiness badge, 066 to 068 are applied). Not built.
 
 ## Why
 When a lead answers an email, nobody finds out unless they happen to read their inbox. Replies are already detected and saved (`check-replies` writes `email_replies`), but nothing in the app shows them, the check runs once a day, and replies to one-off emails (not sent through a sequence) are ignored altogether. Kevin wants users told quickly when a sent email gets a real reply, with an easy way to answer from the platform.
@@ -9,7 +9,7 @@ WhatsApp was dropped on 2026-10-27 (Kevin's decision); this feature is independe
 
 ## Decisions (Kevin, 2026-10-27)
 1. Alerts should arrive quickly, if that is free and manageable: target a few minutes.
-2. Three alert kinds: in-app badge and banner, desktop popup, and email.
+2. Two alert kinds, in the app only: badge and banner, and desktop popup. No email notifications: users already see the reply in their own inbox (Kevin, 2026-10-27, which replaced the earlier answer).
 3. Notify both the person who sent the email and the organisation's admins.
 4. Only real replies alert. Out-of-office replies, bounces and other automatic mail never alert.
 5. A reply also moves the lead on: pauses its sequence (already true), sets the stage to Replied, sets the follow-up to today, and adds a note.
@@ -21,8 +21,8 @@ WhatsApp was dropped on 2026-10-27 (Kevin's decision); this feature is independe
 - A. New lead stage `replied`, placed between Contacted and Audit Booked. A reply moves a lead there only from `new_lead` or `contacted`; it never moves a lead backward or overwrites a later stage. (Kevin said yes to "set the stage"; a new stage is the cleanest reading. If he prefers no new stage, the fallback is a "Replied" badge on the lead with no stage change.)
 - B. Follow-up "today" uses the Europe/London date (the app is UK-first and orgs have no stored timezone).
 - C. A suspected "remove me" or "stop emailing" reply gets a warning chip and a one-click "Mark as opted out" button (uses the existing `leads.opted_out`). It never opts anyone out automatically.
-- D. Desktop popups and email notifications show the business name and the first line only, never the whole reply.
-- E. Email notifications are sent from the recipient's own verified mailbox to their own address, one summary email per person per check, never one email per reply. A person with no verified mailbox still gets in-app and desktop alerts.
+- D. Desktop popups and the banner show the business name and the first line only, never the whole reply.
+- E. (Removed on 2026-10-27: email notifications are not wanted.)
 - F. Replies are only seen in the INBOX folder. A reply that a mail rule files elsewhere, or that lands in spam, is not detected. The setup guide says so.
 - G. The check interval is 5 minutes. Edge functions cannot hold an IMAP IDLE connection open, so this is the practical floor. Typical delay from reply to alert is 5 to 7 minutes.
 
@@ -54,21 +54,21 @@ For each new real reply, in one place, in this order, each step guarded so a fai
 6. If the sequence has `auto_draft_on_reply`, keep the existing auto-draft behaviour. The draft is a draft only; nothing is sent.
 
 ### 3. Alerts (decisions 2, 3, 7)
-- New table `reply_notifications` (migration 069): `id`, `reply_id` (FK `email_replies`, cascade), `org_id`, `user_id`, `read_at`, `emailed_at`, `created_at`, unique `(reply_id, user_id)`. Recipients: the user who sent the original email (`email_logs.sent_by`) and every admin of the org, de-duplicated, who still belongs to the org and can see the lead. RLS: a user reads and updates only their own rows (update limited to `read_at`); inserts by the service role only. Add the table to the `supabase_realtime` publication.
-- In-app: a "Replies" item in the Sidebar and mobile nav with an unread count badge, plus a banner under the top bar ("2 new replies", links to the inbox, dismissible per session) built the same way as the Jobs bar. Every hook that subscribes to realtime uses a per-instance channel name (known project rule).
+- New table `reply_notifications` (migration 069): `id`, `reply_id` (FK `email_replies`, cascade), `org_id`, `user_id`, `read_at`, `created_at`, unique `(reply_id, user_id)`. Recipients: the user who sent the original email (`email_logs.sent_by`) and every admin of the org, de-duplicated, who still belongs to the org and can see the lead. RLS: a user reads and updates only their own rows (update limited to `read_at`); inserts by the service role only. Add the table to the `supabase_realtime` publication.
+- In-app: the existing Emails item in the Sidebar and mobile nav shows an unread-replies count badge (same pattern as the Autopilot needs-input badge), plus a banner under the top bar ("2 new replies", opens Emails > Replies, dismissible per session) built the same way as the Jobs bar. Every hook that subscribes to realtime uses a per-instance channel name (known project rule).
 - Desktop popup: extend the existing opt-in popup logic with a reply source. Same switch, same first-load baseline (no popups for what was already there), background-tab only like Jobs. Text per call D.
-- Email: after a check, for each recipient with unsent alerts, send one summary email from their own verified mailbox to their own address through a minimal send helper (plain text: business names, first lines, a link to `/replies`). Set `emailed_at`. A per-user switch `user_email_settings.reply_alert_email` (default on) turns it off; it appears in Email settings.
+- No email notifications (Kevin's decision). Do not build a notification email, a send helper for it, an `emailed_at` column or a per-user email switch.
 - Reading a reply, opening the lead's reply, or "Mark all read" sets `read_at`.
 
-### 4. Replies inbox and answering (decision 6)
-- New page `/replies` (and a "Replies" section on the lead's page): unread first, each row shows business, contact, time, preview, a chip for "AI draft ready" and a warning chip for suspected opt-out. Opening one shows the reply text, the email it answers (subject, body, sent date), a link to the lead, and buttons: "Draft an answer with AI", "Write my own", "Mark opted out" (when flagged), "Mark handled".
+### 4. Replies section in the Emails page and answering (decision 6)
+- No new top-level page. `src/pages/EmailsHub.tsx` (tabs templates / sequences / release / logs, selected by `?tab=`) gets a new `replies` tab, shown first when there are unread replies. The banner and desktop popup link to `/emails?tab=replies`. The lead's page also gets a short "Replies" section. In the tab: unread first, each row shows business, contact, time, preview, a chip for "AI draft ready" and a warning chip for suspected opt-out. Opening one shows the reply text, the email it answers (subject, body, sent date), a link to the lead, and buttons: "Draft an answer with AI", "Write my own", "Mark opted out" (when flagged), "Mark handled".
 - New edge function `draft-reply` (user JWT): checks org membership and `can_view_lead`, uses the org's own Anthropic key through `resolveOrgApiKey` (no global fallback change), reuses the classify-then-draft logic and `stripAiPunctuation`, company context and customer profile as `check-replies` does, returns subject and body. It never sends and never writes `email_logs` itself.
 - The answer opens in the existing `EmailComposer`, prefilled and editable; the user clicks Send. Nothing is sent automatically (review-before-send). `sendLeadEmail` gains optional `inReplyTo` and `references` so the answer threads under the original in the lead's mail client; the reply's `Message-ID` is passed through `send-email`. Sending marks the reply handled.
 - RLS tightening in the same migration: `email_replies` SELECT becomes membership AND `can_view_lead(lead_id)` (matching the 2026-09-29 decision-maker precedent). The analytics reply-rate query must keep working; the builder checks `useAnalytics` and adds a test.
 
 ### 5. Mailbox status, warnings and guided setup (decision 8)
 - Status per user: Not connected (no `imap_host`, or never checked), Working (recent `last_imap_ok_at`), Problem (`last_imap_error`).
-- Warnings, in plain words: a banner on `/replies` and on Email settings; a one-line note under the composer's Send button ("Replies to this email will not be picked up: connect your inbox"); a notice in Settings. Shown only when the user has a verified sending mailbox but reply detection is not working.
+- Warnings, in plain words: a banner at the top of the Emails > Replies tab and on Email settings; a one-line note under the composer's Send button ("Replies to this email will not be picked up: connect your inbox"); a notice in Settings. Shown only when the user has a verified sending mailbox but reply detection is not working.
 - Guided setup in `EmailConfig.tsx`: IMAP host and port filled automatically from the provider (Gmail `imap.gmail.com:993`; Outlook/Office 365 and Yahoo presets; custom shows the fields), the real steps for Gmail (turn on IMAP in Gmail Settings > Forwarding and POP/IMAP; use the same app password as sending), and a "Test reply detection" button. The test is a new `test_imap` action on `email-settings`: it logs in over IMAP with the saved credentials and returns a plain-English result (connected; wrong password; IMAP switched off in Gmail; cannot reach the server). It never returns raw server text. Saving settings auto-fills IMAP for existing Gmail users, which fixes older mailboxes that have `imap_host` null.
 - Explicitly tell the user the limits from call F.
 
@@ -91,7 +91,7 @@ Quick, accurate alerts; no missed replies to one-off emails; readable replies; f
 - Do not apply migrations or deploy; Claude reviews, Kevin approves each. Throwaway auth users must never be created on production, so the RLS audit keeps its fixture part separate from its read-only assertions.
 
 ## Tests and delivery
-Failing tests first. Pure tests: auto-reply and bounce detection with realistic header sets, quote stripping and preview, opt-out phrase detection, stage rule (forward-only), note exclusion from AI context, recipient selection (sender plus admins, de-duplicated, lead visibility), email summary batching, IMAP error mapping. Integration-style tests for `check-replies` planning with injected IMAP and database. UI tests for badge count, banner, popup baseline, status banner states. RLS audit for `email_replies` and `reply_notifications`.
+Failing tests first. Pure tests: auto-reply and bounce detection with realistic header sets, quote stripping and preview, opt-out phrase detection, stage rule (forward-only), note exclusion from AI context, recipient selection (sender plus admins, de-duplicated, lead visibility), IMAP error mapping. Integration-style tests for `check-replies` planning with injected IMAP and database. UI tests for badge count, banner, popup baseline, status banner states. RLS audit for `email_replies` and `reply_notifications`.
 
 Edge functions to deploy when approved: `check-replies`, `draft-reply` (new), `send-email`, `email-settings`; plus any function importing the changed `sendLeadEmail` (`run-selected-autopilot`). Migration 069: columns, table, RLS, realtime, stage constraint, cron change.
 
