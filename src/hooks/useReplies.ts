@@ -6,7 +6,7 @@ import type { EmailReply } from '../lib/replies';
 
 /** Lead-scoped summary or reply detail. Explicit FK names avoid the two email_logs relationships being ambiguous. */
 export function useReplies(leadId?: string, replyId?: string | null) {
-  const { currentOrg } = useOrg(); const { revision } = useReplyAlerts();
+  const { currentOrg } = useOrg(); const { revision, alerts } = useReplyAlerts();
   const scope = `${currentOrg?.id ?? ''}:${leadId ?? ''}:${replyId ?? ''}`;
   const [state, setState] = useState<{ scope: string; rows: EmailReply[]; error: string | null }>({ scope: '', rows: [], error: null });
   const [version, setVersion] = useState(0);
@@ -16,20 +16,30 @@ export function useReplies(leadId?: string, replyId?: string | null) {
     if (!currentOrg) return;
     void (async () => {
       try {
-        let query = supabase.from('email_replies').select('*,lead:leads(*),original:email_logs!email_replies_email_log_id_fkey(id,subject,body,sent_at,to_email),draft:email_logs!email_replies_ai_draft_log_id_fkey(id,status,subject,body)')
+        const columns = '*,lead:leads(*),original:email_logs!email_replies_email_log_id_fkey(id,subject,body,sent_at,to_email),draft:email_logs!email_replies_ai_draft_log_id_fkey(id,status,subject,body)';
+        let query = supabase.from('email_replies').select(columns)
           .eq('org_id', currentOrg.id).order('received_at', { ascending: false }).limit(100);
         if (leadId) query = query.eq('lead_id', leadId);
         if (replyId) query = query.eq('id', replyId);
         const { data, error } = await query;
         if (error) throw new Error('Reply lookup failed');
-        if (!cancelled) setState({ scope, rows: (data ?? []) as unknown as EmailReply[], error: null });
+        let rows = (data ?? []) as unknown as EmailReply[];
+        // Include the current unread batch even when those replies predate the recent-message window.
+        // Marking that batch read refreshes notifications and exposes the next unread batch.
+        if (!leadId && !replyId && alerts.length) {
+          const { data: unread, error: unreadError } = await supabase.from('email_replies').select(columns)
+            .eq('org_id', currentOrg.id).in('id', alerts.map(alert => alert.reply_id));
+          if (unreadError) throw new Error('Unread reply lookup failed');
+          rows = [...new Map([...rows, ...((unread ?? []) as unknown as EmailReply[])].map(row => [row.id, row])).values()];
+        }
+        if (!cancelled) setState({ scope, rows, error: null });
       } catch {
         console.error('replies: reply lookup failed');
         if (!cancelled) setState({ scope, rows: [], error: 'Could not load replies. Please try again.' });
       }
     })();
     return () => { cancelled = true; };
-  }, [currentOrg, leadId, replyId, scope, revision, version]);
+  }, [currentOrg, leadId, replyId, scope, revision, version, alerts]);
   const ready = state.scope === scope;
   return { rows: ready ? state.rows : [], error: ready ? state.error : null, loading: !!currentOrg && !ready, refresh };
 }
