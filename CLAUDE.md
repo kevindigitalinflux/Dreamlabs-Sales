@@ -1,5 +1,13 @@
 # Dreamlabs Sales
 
+## Status (2026-10-27, Claude review)
+
+**Live on main (`546d7be`):** readiness badge and Autopilot fixes C8–11. Migration 065 applied to production (read-only audit passed); edge functions `run-deep-find`, `run-selected-autopilot`, `check-sequences`, `send-email` deployed (v27/v9/v35/v26); frontend bundle `index-crdPw0zt.js` confirmed live. Checkpoint tag `checkpoint-2026-10-27-before-readiness` (`ece88ed`). Not yet verified live: a real Deep find run showing the badge, and the Waiting-to-release filter.
+
+**Reply alerts: reviewed, approved to merge, NOT yet applied.** Branch `codex/reply-alerts` (`421e4f8` plus docs) is based on current main. Gates re-run by Claude: tsc clean, 176 files / 2,580 tests, build 2,915 modules. Live read-only checks confirmed the migration's assumptions (stage constraint values, policy names, cron job, `cron_secret`, tables and columns). `email_replies` has 0 rows in production, so replies have never been exercised live. Waiting on Kevin's yes for: migration 069, merge/push, deploying the 15 functions listed in `docs/REPLY-ALERTS-BUILD-REPORT.md` (migration first, then functions straight away, then frontend). Kevin's own mailbox must have IMAP set up in Settings before alerts appear.
+
+Review notes (minor, not blocking): reply `received_at` is processing time; a message with no IMAP receipt time stops that mailbox until fixed; `Out of office`-style subjects are always treated as automatic; replies to emails sent before release stay quiet by design.
+
 ## Reply alerts and mailbox status — local review checkpoint (2026-10-27)
 
 Built the approved reply-alerts design sections 1–5 on `codex/reply-alerts` in `dreamlabs-sales-replies`, based on Kevin's explicitly authorized local readiness revision `546d7be`. Application revision `421e4f802e240c77bd137b961540376ab4c29039` passes all local gates: 176 files / 2,580 tests, TypeScript, build (2,915 modules), 24-entrypoint edge shim and whitespace. Read `docs/REPLY-ALERTS-BUILD-REPORT.md`. Bounded UID/MIME polling, real-reply filters, lead effects, own-row alerts, Replies tab, desktop/mobile badges, reviewed threaded answers and guided inbox testing are built. No notification email or new top-level page was added. Reserved migration 069 and its production-safe/read-only versus disposable-local-fixture audit blocks are written only. Claude review, actual Deno/IMAP/SMTP/provider/browser/popup/RLS/database checks and separately authorized rollout remain pending. No publication, remote application write, SQL, actual send or vault sync occurred. The full handoff records the authorized base change and exact deployment manifest; builder stops after saving the report.

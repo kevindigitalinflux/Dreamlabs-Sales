@@ -2,6 +2,14 @@
 
 Authoritative task record. The vault copy (`Dreamlabs Sales/Handoff.md`) is a snapshot of this file, labelled with the revision below. Workflow rules: vault `_Team/Shared agent workflow.md`.
 
+## Status (2026-10-27, Claude review)
+
+**Live on main (`546d7be`):** readiness badge and Autopilot fixes C8–11. Migration 065 applied to production (read-only audit passed); edge functions `run-deep-find`, `run-selected-autopilot`, `check-sequences`, `send-email` deployed (v27/v9/v35/v26); frontend bundle `index-crdPw0zt.js` confirmed live. Checkpoint tag `checkpoint-2026-10-27-before-readiness` (`ece88ed`). Not yet verified live: a real Deep find run showing the badge, and the Waiting-to-release filter.
+
+**Reply alerts: reviewed, approved to merge, NOT yet applied.** Branch `codex/reply-alerts` (`421e4f8` plus docs) is based on current main. Gates re-run by Claude: tsc clean, 176 files / 2,580 tests, build 2,915 modules. Live read-only checks confirmed the migration's assumptions (stage constraint values, policy names, cron job, `cron_secret`, tables and columns). `email_replies` has 0 rows in production, so replies have never been exercised live. Waiting on Kevin's yes for: migration 069, merge/push, deploying the 15 functions listed in `docs/REPLY-ALERTS-BUILD-REPORT.md` (migration first, then functions straight away, then frontend). Kevin's own mailbox must have IMAP set up in Settings before alerts appear.
+
+Review notes (minor, not blocking): reply `received_at` is processing time; a message with no IMAP receipt time stops that mailbox until fixed; `Out of office`-style subjects are always treated as automatic; replies to emails sent before release stay quiet by design.
+
 ## Reply alerts build — final local checkpoint (2026-10-27)
 
 Codex is builder; Claude remains architect/reviewer. Kevin authorized this worktree only, tests first, small local commits and a final report, with no publication, migration execution or real mailbox/provider use. `git fetch origin` succeeded, but `origin/main` remained `ece88ed` without readiness. Kevin explicitly authorized using local `codex/readiness-and-fixes` instead. Rebase onto `546d7be8b6543feaa04af20b507322dae0ee9250` completed without conflicts; rebased brief HEAD is `0dac5a86c156dfb1744ee577497e83f0862a15db`. Baseline: 163 files / 2,501 tests pass with dummy local environment values. Dependencies were missing; the brief-authorized `npm ci` completed. No role changed, no other checkout was edited, and commit hooks/vault synchronization remain disabled. Subscription usage is unavailable; no percentage is asserted. All build steps are now complete locally; this section supersedes historical pointers in this checkout.
