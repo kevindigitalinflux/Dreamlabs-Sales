@@ -55,7 +55,7 @@ export async function processReplyMessage(service: SupabaseClient, userId: strin
   if (leadError) throw new Error('Could not check reply lead');
   // Second forgery guard: a leaked Message-ID alone cannot authorize a different From address.
   if (!lead || !replySenderMatches(mail.from?.address, sent.to_email, lead.email)) return result;
-  const body = (mail.text || htmlReplyText(mail.html ?? '')).slice(0, 100_000);
+  const body = mail.text || htmlReplyText(mail.html ?? '');
   const preview = replyPreview(body);
   const { data: inserted, error: insertError } = await service.from('email_replies').upsert({
     email_log_id: sent.id, lead_id: sent.lead_id, org_id: sent.org_id, from_email: mail.from.address,

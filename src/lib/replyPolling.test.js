@@ -52,6 +52,12 @@ it('save failure stops effects so the watermark can retry', async () => {
   await expect(process()).rejects.toThrow();
   expect(db.writes).toEqual([]);
 });
+it('retains the complete readable text of an admitted message while keeping its preview short', async () => {
+  const body = 'A'.repeat(100_100);
+  await process({ ...mail, text: body });
+  expect(db.tables.email_replies[0].body).toBe(body);
+  expect(db.tables.email_replies[0].preview).toHaveLength(200);
+});
 function inbox(messages) {
   return { highestUid: 101, connect: vi.fn(async () => {}), lock: vi.fn(async () => ({ release: vi.fn() })), logout: vi.fn(async () => {}),
     fetch: vi.fn(async function* () { for (const row of messages) yield row; }) };
