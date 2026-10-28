@@ -1,8 +1,9 @@
+import { preservedQueue, resumedDecision } from './runPauseRules.ts';
 import { createPlacesContext, type PlacesContext } from './placesClient.ts';
 // Orchestration for selected-leads autopilot: window, claim, caps, outcomes, completion.
 // The heavy per-lead work lives in selectedLeadPipeline.ts (Task 12b).
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { classifyLead, endOfLocalDay, windowBounds, type EligibilityEnrollment, type EligibilityLead } from './autopilotEligibility.ts';
+import { classifyLead, endOfLocalDay, localDateString, windowBounds, type EligibilityEnrollment, type EligibilityLead } from './autopilotEligibility.ts';
 import { markLogInterrupted } from './interruptedSend.ts';
 import { loadSenderMailbox } from './sendLeadEmail.ts';
 import { unsentAutopilotDraft } from './autopilotDrafts.ts';
@@ -18,6 +19,7 @@ export const LEAD_RESERVE_MS = 90_000;
 export const LEAD_DEADLINE_MS = 75_000;
 
 export interface SelectedRun {
+  resumed_at?: string | null;
   id: string; org_id: string; created_by: string; mode: string; status: string; started_at: string;
   window_start: string | null; window_end: string | null; timezone: string | null; window_date: string | null;
   daily_send_cap: number | null; max_total_spend_cents: number | null;
@@ -32,7 +34,7 @@ const nowIso = () => new Date().toISOString();
 
 function computeBounds(run: SelectedRun): Bounds | null {
   if (!run.window_date || !run.window_start || !run.window_end || !run.timezone) return null;
-  try { return windowBounds(run.window_date, run.window_start, run.window_end, run.timezone); } catch { return null; }
+  try { return windowBounds(run.resumed_at ? localDateString(new Date(), 'Europe/London') : run.window_date, run.window_start, run.window_end, run.resumed_at ? 'Europe/London' : run.timezone); } catch { return null; }
 }
 
 /** Row update that checks the returned error (supabase-js does not throw). Logs one short line on failure. */
@@ -62,14 +64,11 @@ const FINISH_NOTES: Partial<Record<RunDecision, { reason: string; cancel?: strin
 /** Marks remaining queued rows not_reached and completes the run (only if it is still active). */
 async function finishRun(service: SupabaseClient, runId: string, decision: RunDecision): Promise<void> {
   const note = FINISH_NOTES[decision];
-  if (note) await markQueuedNotReached(service, runId, note.reason);
-  const { error } = await service.from('autopilot_runs')
-    .update({ status: 'completed', ...(note?.cancel ? { cancel_reason: note.cancel } : {}) }).eq('id', runId).eq('status', 'active');
+  const { error } = await service.rpc('autopilot_finish_selected', { target_run: runId, finish_reason: note?.reason ?? null, cancel_note: note?.cancel ?? null });
   if (error) console.error('complete run failed');
 }
 
 async function cancelRun(service: SupabaseClient, runId: string, reason: string): Promise<void> {
-  await markQueuedNotReached(service, runId, reason);
   const { error } = await service.from('autopilot_runs').update({ status: 'cancelled', cancel_reason: reason }).eq('id', runId).eq('status', 'active');
   if (error) console.error('cancel run failed');
 }
@@ -120,6 +119,7 @@ async function recordOutcome(service: SupabaseClient, run: SelectedRun, row: Run
 }
 
 async function processOne(service: SupabaseClient, run: SelectedRun, row: RunLeadRow, placesContext?: PlacesContext): Promise<void> {
+  let reservationDenied = false;
   const hooks = {
     async markSendStarted(emailLogId?: string): Promise<void> {
       const ok = await updateRow(service, row.id, { send_started_at: nowIso(), ...(emailLogId ? { email_log_id: emailLogId } : {}) });
@@ -127,7 +127,8 @@ async function processOne(service: SupabaseClient, run: SelectedRun, row: RunLea
     },
     async reserveSend(): Promise<boolean> {
       const { data, error } = await service.rpc('autopilot_reserve_send', { run_id: run.id });
-      return !error && data === true;
+      reservationDenied = !!error || data !== true;
+      return !reservationDenied;
     },
     async releaseSend(): Promise<void> {
       const { error } = await service.rpc('autopilot_release_send', { run_id: run.id });
@@ -136,23 +137,24 @@ async function processOne(service: SupabaseClient, run: SelectedRun, row: RunLea
   };
   let out: PipelineOutcome;
   try { out = await precheckLead(service, run, row, hooks, placesContext); } catch (e) { out = { outcome: 'failed', reason: truncateError(e) }; }
-  try { await recordOutcome(service, run, row, out); } catch (e) {
+  try {
+    await recordOutcome(service, run, row, out);
+    if (reservationDenied && out.outcome === 'skipped' && !out.emailLogId) {
+      const { data: fresh } = await service.from('autopilot_runs').select('status,cancel_reason').eq('id', run.id).maybeSingle();
+      if (fresh && preservedQueue(fresh as {status: string; cancel_reason: string | null})) {
+        await updateRow(service, row.id, { status: 'queued', reason: null, claimed_at: null });
+      }
+    }
+  } catch (e) {
     await updateRow(service, row.id, { status: 'failed', reason: truncateError(e) });
   }
 }
 
 /** Claims ONE queued row just-in-time (oldest first). The conditional update is the double-send guard. */
-async function claimOne(service: SupabaseClient, runId: string): Promise<RunLeadRow | null> {
-  const { data: queued } = await service.from('autopilot_run_leads').select('id')
-    .eq('run_id', runId).eq('status', 'queued').order('updated_at', { ascending: true }).order('id', { ascending: true }).limit(3);
-  for (const q of queued ?? []) {
-    const ts = nowIso();
-    const { data } = await service.from('autopilot_run_leads')
-      .update({ status: 'working', claimed_at: ts, updated_at: ts })
-      .eq('id', (q as { id: string }).id).eq('status', 'queued').select('id, run_id, lead_id');
-    if (data && data.length > 0) return data[0] as RunLeadRow;
-  }
-  return null;
+export async function claimOne(service: SupabaseClient, runId: string): Promise<RunLeadRow | null> {
+  const { data, error } = await service.rpc('autopilot_claim_lead', { target_run: runId });
+  if (error) { console.error('autopilot: claim failed'); return null; }
+  return (data as RunLeadRow[] | null)?.[0] ?? null;
 }
 
 type StuckRow = { id: string; claimed_at: string | null; send_started_at: string | null; email_log_id?: string | null };
@@ -180,18 +182,14 @@ async function recoverStuckRows(service: SupabaseClient, runId: string): Promise
 }
 
 /** Rows stuck in working on runs that are no longer active (window closed, then the worker died). */
-async function recoverEndedRunRows(service: SupabaseClient): Promise<void> {
-  const { data } = await service.from('autopilot_run_leads').select('id, claimed_at, send_started_at, email_log_id, autopilot_runs!inner(status)')
-    .eq('status', 'working').neq('autopilot_runs.status', 'active');
-  await applyStuck(service, (data ?? []) as StuckRow[], true);
-  // Queued rows have no work in flight: once their run has ended (finished, stopped or cancelled) they will never run.
-  const { data: queued } = await service.from('autopilot_run_leads').select('id, autopilot_runs!inner(status)')
-    .eq('status', 'queued').neq('autopilot_runs.status', 'active');
-  const ids = ((queued ?? []) as { id: string }[]).map((q) => q.id);
-  if (ids.length > 0) {
-    const { error } = await service.from('autopilot_run_leads')
-      .update({ status: 'not_reached', reason: 'Run ended before this lead was processed', updated_at: nowIso() }).in('id', ids).eq('status', 'queued');
-    if (error) console.error('mark queued rows of ended runs failed');
+export async function recoverEndedRunRows(service: SupabaseClient): Promise<void> {
+  const { data, error } = await service.from('autopilot_run_leads').select('id, claimed_at, send_started_at, email_log_id, status, autopilot_runs!inner(status,cancel_reason)')
+    .in('status', ['working','queued']).neq('autopilot_runs.status', 'active');
+  if (error) { console.error('autopilot: recovery lookup failed'); return; }
+  for (const row of (data ?? []) as unknown as (StuckRow & { status: string; autopilot_runs: {status: string; cancel_reason: string | null} })[]) {
+    const keep = preservedQueue(row.autopilot_runs);
+    if (row.status === 'working') await applyStuck(service, [row], !keep);
+    else if (!keep) await updateRow(service, row.id, {status: 'not_reached', reason: 'Run ended before this lead was processed'});
   }
 }
 
@@ -205,7 +203,8 @@ async function decide(service: SupabaseClient, runId: string, bounds: Bounds): P
     now: new Date(), bounds, runStartedAt: new Date(fresh.started_at), sentTotal: fresh.outreach_sent_total, sendCap: fresh.daily_send_cap,
     spentCents: fresh.actual_ai_cost_cents, spendCap: fresh.max_total_spend_cents, queuedCount, workingCount,
   });
-  return { decision, run: fresh };
+  if (fresh.resumed_at && queuedCount === 0 && workingCount === 0) return { decision: 'complete_no_leads', run: fresh };
+  return { decision: workingCount > 0 ? 'wait' : resumedDecision(decision, !!fresh.resumed_at), run: fresh };
 }
 
 /** Processes one active selected run for one tick. `startedAt` is the invocation start (ms epoch), shared across runs. */

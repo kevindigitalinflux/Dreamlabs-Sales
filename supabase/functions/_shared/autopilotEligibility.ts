@@ -5,7 +5,7 @@ export interface EligibilityLead { id: string; opted_out: boolean; email: string
 export interface EligibilityEnrollment { status: 'active' | 'paused' | 'completed' | 'cancelled'; next_send_at: string | null }
 export type EligibilityResult =
   | { eligible: true; reason: 'new' | 'due' }
-  | { eligible: false; reason: 'opted_out' | 'blocked' | 'closed' | 'paused' | 'not_due' | 'recently_contacted' };
+  | { eligible: false; reason: 'replied' | 'opted_out' | 'blocked' | 'closed' | 'paused' | 'not_due' | 'recently_contacted' };
 
 export const RECENT_CONTACT_DAYS = 14;
 
@@ -19,6 +19,7 @@ export const RECENT_CONTACT_DAYS = 14;
  * Recently contacted means strictly less than RECENT_CONTACT_DAYS * 24h ago, so exactly 14 days ago is eligible.
  */
 export function classifyLead(lead: EligibilityLead, enrollment: EligibilityEnrollment | null, blocked: Set<string>, endOfToday: Date, now: Date): EligibilityResult {
+  if (lead.stage === 'replied') return { eligible: false, reason: 'replied' };
   if (lead.opted_out) return { eligible: false, reason: 'opted_out' };
   if (lead.stage === 'won' || lead.stage === 'lost') return { eligible: false, reason: 'closed' };
   if (lead.email) {

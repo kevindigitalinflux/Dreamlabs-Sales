@@ -7,6 +7,7 @@ export const NEW_RUN_GRACE_MS = 60 * 1000;
 export const STUCK_SEND_REASON = 'Interrupted during send. Check Email logs before retrying.';
 
 const SKIP_REASONS: Record<string, string> = {
+  replied: 'Lead has replied to an email',
   opted_out: 'Lead has opted out of emails',
   blocked: 'Lead is on the blocklist',
   closed: 'Lead is already won or lost',

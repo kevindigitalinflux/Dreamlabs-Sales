@@ -1,0 +1,9 @@
+# Run pause implementation design
+
+Round 2 binding contract: pause commits status paused immediately. The UI derives Pausing while a working row remains. An existing reservation may finish; claims and reservations serialize on the run row. Claim admits only one working row per run, including concurrent ticks. The existing reserve UPDATE already locks this row and rechecks active after contention. A service-only claim RPC takes the same lock and rejects paused, non-selected and already-working runs. Queue ordering uses a new immutable queue timestamp initialized from existing updated_at; recovery cannot reorder it.
+
+Authenticated controls use a fixed-search-path SECURITY DEFINER RPC with explicit creator/admin and organisation membership checks. The status trigger also enforces ownership for direct browser updates, prevents same-status reason forgery, sets pause/resume timestamps itself and permits user-stopped resume only through the privileged RPC, only with queued leads. The unique partial index covers active and paused. No RLS or UPDATE grants expand.
+
+Paused and user-stopped queues are preserved. Stuck working rows on these runs are recovered with the existing send-marker policy; unstarted rows requeue, ambiguous sends fail. An unreserved pipeline stopped at reservation because of pause requeues without losing recorded research cost. A resumed run uses today's Europe/London window and waits outside it or at its unchanged cap; counters/spend never reset. Every resumed claim still uses the existing membership/mailbox, eligibility, draft, reply/opt-out, 14-day address and send safeguards. No new send path is introduced.
+
+SQL is written and structurally inspected only, never executed under this task. Tests of JS orchestration and lock-order models are supplementary; real PostgreSQL concurrency remains a reviewer/runtime gate.
