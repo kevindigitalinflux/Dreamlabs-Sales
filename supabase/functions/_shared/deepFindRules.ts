@@ -153,7 +153,7 @@ const NOT_NAME_WORDS = new Set([
   'and', 'of', 'for', 'with', 'all', 'rights', 'reserved', 'cookie', 'cookies', 'login', 'sign', 'register', 'welcome',
 ]);
 
-const GREETING = /\b(?:kia\s+ora|hola|bonjour|g['’]?day|namaste|ni\s+hao|aloha|howdy|cheers|thanks|thank\s+you|hello|hi|hey|welcome|dear|good\s+(?:morning|afternoon|evening|day))\b/i;
+const GREETING = /^(?:(?:mr|mrs|ms|miss|dr)\.?\s+)*(?:kia\s+ora|hola|bonjour|g['’]?day|namaste|ni\s+hao|aloha|howdy|cheers|thanks|thank\s+you|hello|hi|hey|welcome|dear|good\s+(?:morning|afternoon|evening|day))\b/i;
 
 function personName(value: unknown): string | null {
   if (typeof value !== 'string') return null;

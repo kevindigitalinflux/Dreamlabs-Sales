@@ -11,3 +11,8 @@ it('retains real names with explicit roles', () => {
 });
 
 it('rejects a greeting disguised with an honorific', () => { expect(parseLeadPersonName('Dr Kia Ora')).toBeNull(); });
+
+it.each(['Mary Dear','John Hey','Jane Thanks','Alice Cheers','Hilary Hill','Hiroshi Tanaka'])('retains surname in %s', name => {
+  expect(parseLeadPersonName(name)).not.toBeNull();
+  expect(extractTeamMembers('<p>'+name+' | Owner</p>')).toEqual([{name,role:'Owner'}]);
+});
