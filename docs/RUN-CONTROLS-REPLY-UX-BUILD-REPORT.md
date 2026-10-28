@@ -1,89 +1,97 @@
-# Run controls and reply UX — partial build report
+# Run controls and reply UX — round 2 build report
 
-Date: 2026-10-28. Worktree: `C:/Users/kevin/Projects/dreamlabs-sales-ux`. Branch: `codex/run-controls-reply-ux`. Starting revision: `5414122` (brief), based on `c678d73`. Tested application revision: `91d72f8`. Codex is builder; Claude is architect/reviewer. Independent review is pending.
+Date: 2026-10-28. Worktree: `C:/Users/kevin/Projects/dreamlabs-sales-ux`; branch `codex/run-controls-reply-ux`. Round 1 began at `5414122`, based on `c678d73`; round 2 began from `f3a13c9` plus the supplied round 2 brief. Tested application revision: `81abb5d`. Documentation-only commits follow. Codex remains builder; Claude remains architect/reviewer. Independent review is pending. No release is authorized.
 
-**The brief is not fully implemented. Do not merge or deploy this as the completed run-controls feature.** The in-flight-send decision below remains pending. The builder has stopped after this report as requested.
+## Part 1 / Round 2 A — Pause, Resume, serialization
 
-## Part 1 — not implemented; decision required
+Implemented migration `supabase/migrations/070_autopilot_run_pause.sql`, its separated rollback audit, service-side claim/finish RPC integration and authenticated controls. Design precedes implementation in `docs/RUN-PAUSE-IMPLEMENTATION-DESIGN.md`.
 
-No Pause/Resume controls, paused status, migration 070 or audit 070 were written. Existing run behaviour remains in place.
+The architect's binding ruling replaces the round 1 question. Pause means do not start the next lead. Status changes immediately to paused; the screen says **Pausing, finishing the current email** while a working row remains. **At most one email can complete after Pause commits:** a reservation acquired before Pause may finish SMTP, notes, enrolment, row outcome and counter recording normally. No later claim or send reservation may succeed.
 
-The current engine claims a lead, performs asynchronous work and reserves a send before handing off to SMTP. A browser status change cannot recall SMTP already in flight. `autopilot_reserve_send` checks active status, but a reservation already acquired can outlive that status. Recovery also currently treats every non-active run as ended, including queued rows. Merely allowing a paused status would lose queue rows and would not establish the required send boundary.
+Migration definitions were traced to 006 (status CHECK), 048 (per-mode unique index/queue), and 049 (status guard, column grants and reserve RPC); repository searches found no later replacements. No live service/database query was made. Migration 070 adds paused, nullable server-managed paused_at/resumed_at and an immutable queued_at ordering column initialized from existing updated_at. The unique partial index now covers active and paused. No RLS, existing UPDATE grant, cap amount or reserve counter arithmetic changes. A new insert guard prevents browsers from supplying pause/resume timestamps through inherited table INSERT rights.
 
-Question sent to Kevin: **If Pause is pressed while an email is already sending, may that email finish before the run becomes paused?** Choices were finishing the current lead before pausing, or rejecting Pause while a lead is processing. No answer arrived before this checkpoint. This is an unresolved user-visible safety contract, not permission to publish. The brief explicitly allows stopping an item needing Kevin's decision.
+`autopilot_control_run` is a fixed-search-path SECURITY DEFINER RPC. It verifies authenticated membership and creator/admin authority, locks the run, and allows only supported controls. Stopped-run resume requires exactly `stopped by user` plus queued rows. Failure/completed runs cannot resume. A competing live run produces a plain error; the index also closes concurrent cross-run races. The status trigger independently checks direct browser ownership, rejects same-status reason forgery and restricts stopped-run resume to privileged execution. Browser column UPDATE grants remain status/cancel_reason only. Sensitive transitions use the RPC rather than giving the browser broader grants.
 
-Next implementation must serialize claiming and pause transitions, preserve queued rows for paused/user-stopped runs, preserve send markers and reservations, narrowly constrain resuming user-stopped runs, and test concurrent pause/reserve/claim and stale-worker cases. It must also resolve daily/window rollover without increasing allowance or resetting spend history. The recommended policy remains a proposal: stay paused across days/windows until explicit resume. No auto-resume policy has been implemented.
+### Lock reasoning and test scope
 
-The original index and guard were read from migrations 048 and 049. No live database was queried, consistent with the prohibition on external services. No RLS, grants, guards, caps, reserve logic or cron was changed.
+- Pause UPDATE, `autopilot_claim_lead` SELECT FOR UPDATE and the existing `autopilot_reserve_send` conditional UPDATE all lock the same run row. Under PostgreSQL row-lock semantics, an operation waiting behind Pause observes/rechecks paused and cannot pass its active predicate.
+- Claim checks active/selected after locking and refuses any run with a working row. Concurrent ticks therefore cannot own two leads or have two previously reserved emails in flight for the same run.
+- If claim wins before Pause but reserve follows Pause, reserve fails. The unreserved row returns to queued after recording research cost; queued_at preserves its position.
+- If reserve wins before Pause, that one working row may finish. Resume before it finishes still cannot admit a second worker while its working row exists.
+- Completion uses `autopilot_finish_selected`, taking the same run lock and checking active/no working rows before completing or consuming queued rows. A stale completion cannot discard a queue after Pause commits.
+- Recovery preserves paused and user-stopped queues. Stuck working rows retain the existing marker policy: unstarted work requeues; a send that may have started fails and is never automatically retried. Terminal failure/completion queues become not reached.
 
-## Part 2 — disclosures built; state actions pending Part 1
+Deterministic locked-row doubles exercise concurrent claims, pause-before-claim, claim-before-pause/stale-reserve, reserve-before-pause and second-worker denial through the real claim wrapper. Recovery tests call the real recovery function and assert only terminal queues change. Rule tests cover preserved queues and resumed waiting. Structural SQL assertions check lock placement, working-row exclusion, unique-index predicate and service-only access. These are **not an executed PostgreSQL concurrency proof**. Both SQL blocks and the documented two-session contention exercise remain unexecuted, as migration/database execution was prohibited. Real database verification is a required review/rollout gate.
 
-Each non-empty group uses a real button, count, chevron, `aria-expanded` and `aria-controls`. Groups with more than eight rows start closed; smaller groups start open. State is local to the mounted group and persists through row-count changes. The hidden list stays associated with its control. Loading, error and empty states remain.
+### Resume checks and scheduling decisions
 
-Run status/action changes and pause duration are not implemented. Phone-width, theme and keyboard execution in a browser remain unverified.
+Resume changes the same run to active and leaves its queue, counters, spend history and caps intact. The existing cron tick processes it through the original membership/mailbox, draft, eligibility, final send, address-history and reservation paths; control RPCs never send. No new cron or external send path exists. Explicitly replied leads now fail the shared eligibility check even when a sequence is due, with a plain skip reason. Reply detection/effects remain unchanged. Opt-outs, parked drafts and the existing 14-day address guard remain in their existing paths.
 
-## Part 3 — presentation improvements built, acceptance gaps remain
+Paused runs never auto-resume, including across days/windows/restarts. After explicit resume, the engine calculates today's Europe/London window. Outside it, or at an unchanged run send/spend cap, it waits without consuming queued rows. Empty resumed queues complete. No counter resets occur. The run send cap remains cumulative for that run; reaching it cannot manufacture a fresh allowance tomorrow. The UI states that no more emails send under that cap. Any existing downstream sender limits still apply; the UI also states that sending waits for the sender's daily allowance and safety checks. Resume processing starts on the next existing two-minute cron tick, rather than creating a second immediate worker.
 
-Replies list has a selection hint, whole-row button, chevron, hover/focus outline, explicit bold New label, preview and relative time with exact timestamp available on the time element. Detail has Back to replies, business name, lead stage label/chip, sender address, receipt time, larger readable reply text, a closed-by-default Show original email disclosure, and a distinct opt-out warning. Mark handled uses the tertiary ghost style. Existing AI/manual composer paths and handling/opt-out actions are unchanged.
+## Part 2 / Round 2 B — run screen
 
-Remaining gaps: sender display names are not present in the saved `EmailReply` model. The lead owner must not be presented as the sender. No ingestion/schema change was made to invent that identity. There was no existing automatic-reply warning in these components; automatic replies are filtered upstream, and detection was left unchanged. The existing AI-draft-ready label is retained. Browser interaction and complete component rendering coverage remain pending; the new relative-time helper is unit-tested.
+Active shows Pause and Stop; Pausing shows a disabled finishing message plus Stop; Paused shows Resume, Stop and elapsed pause minutes; user-stopped with queued rows shows Resume this run and Start a new run; completed shows Start a new run. Only creator/admin sees controls, independently of database enforcement. Status uses role=status. After requests, focus returns to a stable status paragraph. Paused runs remain selected/polled. The layout wraps controls and keeps shared theme tokens.
 
-## Part 4 — built
+Sections use real disclosure buttons, counts, chevrons, aria-expanded and aria-controls. Needs your input always starts open; other groups above eight rows start closed. State remains local and does not reset as row counts change. Loading, error and empty states remain. Browser focus/keyboard/phone-width execution is unverified.
 
-The shared ReadinessBadge now renders Ready green/check, Almost amber/triangle, Needs work red/cross and Not checked grey/question icon. Every current caller receives this shared change. Text remains intact, including missing-readiness reasons. It uses existing theme tokens on an opaque `bg-card` background.
+## Part 3 / Round 2 C5 — Replies
 
-Calculated WCAG text contrast, using sRGB relative luminance (light card `#FFFFFF`, dark card `#111C6A`):
+List rows retain whole-row buttons, chevrons, hover/focus states, New labels, preview and relative receipt time with exact timestamp available. Opened order is back link, large business heading, muted subject, compact From/time/stage/Open lead metadata, opt-out warning, readable reply card, action group, then closed-by-default original email. No fake sender name is shown. Primary AI/manual/handled actions and existing composer/threading/handling behaviour are retained. Automatic replies remain filtered upstream; no detection change or invented warning field was added. Server-rendered layout assertions verify reading/action/original order and closed original disclosure.
+
+## Part 4 / Round 2 C2 — readiness colours
+
+Shared badge retains text and icon, with matching 40% border and 10% colour tint. An opaque card-colour wrapper fixes the tint's base across all callers and parent surfaces. All current badge callers inherit the change.
+
+Calculated sRGB WCAG text contrast on the 10% tint over light card #FFFFFF / dark card #111C6A:
 
 | State | Light text | Light ratio | Dark text | Dark ratio |
 | --- | --- | --- | --- | --- |
-| Ready | #147739 | 5.63:1 | #22C55E | 6.59:1 |
-| Almost | #8A5906 | 5.98:1 | #F59E0B | 6.99:1 |
-| Needs work | #C40A0A | 6.19:1 | #F87171 | 5.43:1 |
-| Not checked | #566781 | 5.75:1 | #94A3B8 | 5.86:1 |
+| Ready | #147739 | 4.89:1 | #22C55E | 5.75:1 |
+| Almost | #8A5906 | 5.19:1 | #F59E0B | 6.20:1 |
+| Needs work | #C40A0A | 5.17:1 | #F87171 | 4.87:1 |
+| Not checked | #566781 | 5.03:1 | #94A3B8 | 5.05:1 |
 
-All exceed AA 4.5:1. These are calculated token ratios, not browser measurements.
+All exceed 4.5:1. These are calculated token/composite ratios, not browser measurements.
 
-## Part 5 — greeting and switchboard fixes built
+## Part 5 / Round 2 C3–4 — names and phones
 
-Reproduced Kia Ora as a Person JSON-LD entry and as visible role-adjacent text before changing production code. Seven greeting cases failed first. The cause is that capitalised phrases with a nearby owner/manager role passed the existing name-shape guard; greeting words were absent from its exclusions. The same phrase also passed the broader saved-name parser.
+Original cause: capitalised greetings adjacent to roles passed the website name-shape parser; the broader saved-name parser accepted them too. Both now reject greeting phrases at word boundaries, including honorific-disguised greetings. Website extraction retains Person/jobTitle or visible name/decision-maker-role context requirements. Added hola, bonjour, g'day/g’day/gday, namaste, ni hao, aloha, howdy, cheers, thanks and thank you to the original Kia Ora/English cases. Hilary Hill and Hiroshi Tanaka remain accepted. No live website or saved contact was inspected/repaired.
 
-Both parsers now reject greeting prefixes, including Kia Ora, hello, hi, hey, welcome, dear and good morning/afternoon/evening/day. Website extraction retains its existing structural requirements: Person plus jobTitle, or visible name adjacent to a decision-maker role. This is a prefix guard layered on the existing context rules, not a general semantic name classifier. Real Jane Smith/Owner remains accepted. Existing callers of extractTeamMembers inherit this guard, including the Firecrawl reader. No live 24/7 Fitness page or persisted record was inspected or repaired.
+Company-line deduplication now passes the lead's country through existing phoneNumbers.ts parsing, so GB national 020 and +44 versions share a canonical key. Existing lead-level phone evidence/match labels take precedence, direct lines remain per person and saved numbers are suppressed by existing visibility rules. No automatic contact-phone fill was introduced.
 
-Deep find now deduplicates company-line suggestions through phoneNumbers.ts, using its existing phone parser. A shared switchboard is offered once as Company line with a company-level phone action. Existing company-phone proposals take precedence and retain their source/match warning. Direct-line suggestions remain per person. Already-saved company numbers are suppressed by existing visibility rules instead of repeated as person proposals. No contact phone is automatically filled.
+## Files and commits
 
-## Files changed
+Round 2 application commits: `65da774` serialization/schema/recovery; `b8e34c4` controls/status UI; `4ee4771` review fixes; `81abb5d` insertion-metadata protection. `661611f` updates existing handoffs and automation register in place. This report receives a final documentation-only commit.
 
-- `src/components/autopilot/RunLeadGroups.tsx`
-- `src/components/emails/RepliesPanel.tsx`, `ReplyDetail.tsx`
-- `src/components/pipeline/ReadinessBadge.tsx`
-- `src/lib/replyAlertsView.ts`
-- `src/lib/runUx.test.ts`, `greetingPerson.test.ts`, `companyPhoneDedupe.test.ts`, `replyTime.test.ts`
-- `src/lib/deepFindPhase3Engine.test.js` (saved-switchboard expectation updated)
-- `supabase/functions/_shared/deepFind.ts`, `deepFindRules.ts`, `phoneNumbers.ts`
-- `AGENTS.md`, `CLAUDE.md`, `docs/HANDOFF.md`, this report
+Changed or added across both rounds:
 
-## Verification
+- `supabase/migrations/070_autopilot_run_pause.sql`, `supabase/audits/070_autopilot_run_pause.sql`
+- Shared edge modules: `selectedAutopilot.ts`, `runPauseRules.ts`, `selectedAutopilotRules.ts`, `autopilotEligibility.ts`, `deepFind.ts`, `deepFindRules.ts`, `phoneNumbers.ts`
+- Autopilot UI: `RunControls.tsx`, `RunHeader.tsx`, `RunLeadGroups.tsx`, `SelectedRunSection.tsx`; `useSelectedRun.ts`, `AutopilotStatus.tsx`, shared types
+- Replies/readiness UI: `RepliesPanel.tsx`, `ReplyDetail.tsx`, `ReadinessBadge.tsx`
+- UI helpers: `runControlState.ts`, `runLeadGroups.ts`, `replyAlertsView.ts`
+- Tests: `runPause.test.js`, `runPauseEngine.test.js`, `runControlState.test.ts`, `resumedReplyGuard.test.ts`, `runUxRound2.test.ts`, `replyLayout.test.ts`, original round 1 greeting/phone/time/disclosure tests and updated saved-phone expectation in `deepFindPhase3Engine.test.js`
+- Design, this report, existing `AGENTS.md`/`CLAUDE.md`/`docs/HANDOFF.md` checkpoint blocks and `docs/AUTOMATIONS.md`
 
-Initial baseline: 176 files discovered; 175 passed, one failed to load (`replyMime.test.js`, missing local ImapFlow scratch dependency); 2,579 tests passed. Thus the expected 2,580-test baseline was not fully executed initially. Restored existing edge dependencies from the local npm cache with `npm install --offline --prefix .superpowers/reply-edge-deps --no-save --ignore-scripts --no-audit --no-fund postal-mime@2.4.3 imapflow@1`. No new application dependency or manifest change; no network service call.
+## Gates and limits
 
-New greeting, disclosure/icon, company-phone and relative-time regressions were observed failing before implementation. Four inherited engine expectations initially failed after company-phone conversion: one expected the old per-person fallback; three exposed lost Places match labels. The implementation now preserves existing lead-level phone evidence; the saved-number test now asserts suppression. Targeted engine tests pass, 129/129.
-
-Final gates with dummy local Supabase values:
+Round 2 baseline: **180 files / 2,592 tests passed**. Final: **186 files / 2,635 tests passed** (+6 files / +43 tests). Initial red regressions covered needs-input disclosure, tint styles, greeting variants, national/international phone dedupe, preserved queues, resumed waiting, control states, replied eligibility and metadata insertion protection. Supplementary orchestration/source/layout checks do not substitute for runtime/database tests.
 
 | Gate | Result |
 | --- | --- |
 | `npx tsc --noEmit` | PASS, no diagnostics |
-| `npx vitest run` | PASS, 180 files / 2,592 tests |
-| `npm run build` | PASS; existing >500 kB chunk warning |
-| `node scripts/places-edge-typecheck.mjs` | PASS, existing 24-entrypoint shim |
-| `git diff --check` | PASS |
+| `npx vitest run` | PASS, 186 files / 2,635 tests |
+| `npm run build` | PASS, 2,917 modules; existing >500 kB chunk warning |
+| `node scripts/places-edge-typecheck.mjs` | PASS, 24 entrypoints; no new entrypoint |
+| `git diff --check`, round 2 range check | PASS |
 
-Not verified: Deno runtime, browser, keyboard interactions, phone width, either rendered theme, live runs, SMTP/IMAP/AI, actual database constraints/privileges or migration execution. Migration 070 and its audit do not exist. No production or other-checkout change, push, merge, deployment, real message, vault sync or paid fallback occurred. Subscription usage is unavailable; no percentage is inferred.
+Not verified: SQL syntax/runtime, actual constraints/grants/RLS/audit fixtures, real PostgreSQL lock contention, migration 070 execution, Deno runtime, browser/focus/keyboard, phone width, rendered themes, real IMAP/SMTP/AI, live runs or deployment. Read-only and disposable-local audit blocks are clearly separated and neither was run. No application dependency was added. Round 1's existing MIME/IMAP scratch dependencies remain local; round 2 made no external service calls or installation. No push, merge, deployment, remote/database write, real mail/message, other-checkout edit, vault sync or paid fallback occurred. Subscription usage is unavailable; no percentage is inferred.
 
-## Review and eventual deployment
+## Review and safe rollout order
 
-No release is authorized. Static relative-import traversal from changed shared modules identifies these affected function bundles: `apollo-phone-webhook`, `enrich-leads-bulk`, `find-decision-makers`, `org-api-settings`, `reveal-decision-maker`, `run-deep-find`, `run-lookup-jobs`, `run-selected-autopilot`, `scrape-companies-house`. This conservative bundle list includes shared/type-only dependencies; all are covered by the current edge shim. No new edge entrypoint was added.
+Claude reviews this report, design and code/SQL diff before any merge. No remaining product decision from round 1 is pending; database/runtime verification is still required.
 
-For these implemented changes alone, no new migration is needed; reviewed functions precede the frontend. For the full brief, complete and review migration/audit 070 and run controls first, then separately authorize migration, functions, frontend in that order. Review-before-send must remain unchanged.
+When Kevin separately authorizes rollout: **migration 070 first**, then affected edge functions, then frontend. Keep old worker invocations drained before enabling controls, so no pre-070 direct-claim worker can bypass the new claim RPC. The existing cron schedule is unchanged. Audit execution requires separate authorization; only its first block is production-safe/read-only, and fixture/two-session tests belong on a disposable local database.
 
-Commits: `5acf9f0` disclosures/readiness; `ea1b067` greeting/phone fixes; `91d72f8` reply presentation; `1e58ffb` handoff. This report receives a final documentation-only commit. Resume with the Part 1 question, then implement its concurrency-safe protocol and remaining acceptance gaps before claiming completion.
+Static relative-import closure identifies these ten function bundles for deployment: `apollo-phone-webhook`, `enrich-leads-bulk`, `find-decision-makers`, `org-api-settings`, `reveal-decision-maker`, `run-deep-find`, `run-lookup-jobs`, `run-selected-autopilot`, `scrape-companies-house`, `send-email`. The conservative list includes shared/type-only dependency edges; all are in the existing typecheck manifest. No other function entrypoint changed. Review-before-send remains unchanged. The builder stops here after the report/documentation commit.
