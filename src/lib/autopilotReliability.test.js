@@ -6,18 +6,18 @@ import { processLeadPipeline } from '../../supabase/functions/_shared/selectedLe
 
 const run = { id: 'run', org_id: 'org', created_by: 'user', mode: 'selected', status: 'active', started_at: '2026-10-26T10:00:00Z',
   window_start: '00:00', window_end: '23:59', timezone: 'UTC', window_date: '2026-10-26' };
-let writes, reads, mailboxError, verified, parked, draftError;
+let writes, reads, mailboxError, verified, parked, draftError, freshRun, queuedCount, rpcs;
 function database() {
-  return { rpc: async () => ({ data: 'dummy-password', error: null }), from(table) {
+  return { rpc: async (name,args) => { rpcs.push({name,args}); return { data: 'dummy-password', error: null }; }, from(table) {
     let patch; const filters = [];
     const result = () => {
       reads.push({ table, filters });
       if (patch) writes.push({ table, patch });
-      const rows = table === 'org_members' ? [{ user_id: 'user' }]
+      const rows = table === 'autopilot_runs' ? (freshRun ? [freshRun] : []) : table === 'org_members' ? [{ user_id: 'user' }]
         : table === 'user_email_settings' ? [{ is_verified: verified }]
         : table === 'leads' ? [{ id: 'lead', org_id: 'org', stage: 'new_lead', opted_out: false }]
         : table === 'email_logs' ? parked : [];
-      return { data: rows, error: table === 'user_email_settings' && mailboxError ? { message: 'blip' }
+      return { data: rows, count: table === 'autopilot_run_leads' ? (filters.some(([k,v]) => k === 'status' && v === 'queued') ? queuedCount : 0) : null, error: table === 'user_email_settings' && mailboxError ? { message: 'blip' }
         : table === 'email_logs' && draftError ? { message: 'blip' } : null };
     };
     const q = { select: () => q, eq: (k, v) => { filters.push([k, v]); return q; }, in: (k, v) => { filters.push([k, v]); return q; },
@@ -29,7 +29,7 @@ function database() {
 beforeEach(() => {
   vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-26T12:00:00Z'));
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  vi.clearAllMocks(); writes = []; reads = []; mailboxError = false; verified = true; parked = []; draftError = false;
+  vi.clearAllMocks(); writes = []; reads = []; mailboxError = false; verified = true; parked = []; draftError = false; freshRun = null; queuedCount = 0; rpcs = [];
 });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 it('a persistent mailbox database blip leaves the run active and every lead untouched', async () => {
@@ -60,4 +60,17 @@ it('a draft lookup error fails closed without doing pipeline work', async () => 
 it('a sent or discarded parked draft no longer blocks a later run', async () => {
   expect(await precheckLead(database(), run, { id: 'row', lead_id: 'lead' }, {})).toMatchObject({ outcome: 'sent' });
   expect(processLeadPipeline).toHaveBeenCalledOnce();
+});
+
+it.each([
+  [2, {daily_send_cap:1,outreach_sent_total:1},'Daily send cap reached'],
+  [0, {daily_send_cap:1,outreach_sent_total:1},'Daily send cap reached'],
+  [2, {max_total_spend_cents:1,actual_ai_cost_cents:1},'Spend cap reached'],
+  [0, {max_total_spend_cents:1,actual_ai_cost_cents:1},'Spend cap reached'],
+])('resumed cap retains normal finish note with %s queued rows', async (queued, cap, reason) => {
+ queuedCount=queued;
+ freshRun={...run,resumed_at:'2026-10-26T11:00:00Z',window_start:'09:00',window_end:'11:00',...cap};
+ await processRun(database(),freshRun,Date.now());
+ expect(rpcs).toContainEqual({name:'autopilot_finish_selected',args:expect.objectContaining({target_run:'run',finish_reason:reason,cancel_note:reason})});
+ expect(rpcs.some(r=>r.name==='autopilot_claim_lead')).toBe(false);
 });

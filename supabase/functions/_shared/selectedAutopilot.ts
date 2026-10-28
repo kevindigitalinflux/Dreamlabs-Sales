@@ -198,7 +198,7 @@ async function decide(service: SupabaseClient, runId: string, bounds: Bounds): P
     now: new Date(), bounds, runStartedAt: new Date(fresh.started_at), sentTotal: fresh.outreach_sent_total, sendCap: fresh.daily_send_cap,
     spentCents: fresh.actual_ai_cost_cents, spendCap: fresh.max_total_spend_cents, queuedCount, workingCount,
   }, !!fresh.resumed_at);
-  if (fresh.resumed_at && queuedCount === 0 && workingCount === 0) return { decision: 'complete_no_leads', run: fresh };
+  if (fresh.resumed_at && queuedCount === 0 && workingCount === 0 && decision === 'wait') return { decision: 'complete_no_leads', run: fresh };
   return { decision: workingCount > 0 ? 'wait' : decision, run: fresh };
 }
 
