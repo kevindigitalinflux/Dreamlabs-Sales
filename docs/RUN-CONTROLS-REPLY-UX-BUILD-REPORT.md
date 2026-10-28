@@ -1,6 +1,18 @@
-# Run controls and reply UX — round 2 build report
+# Run controls and reply UX — round 3 build report
 
-Date: 2026-10-28. Worktree: `C:/Users/kevin/Projects/dreamlabs-sales-ux`; branch `codex/run-controls-reply-ux`. Round 1 began at `5414122`, based on `c678d73`; round 2 began from `f3a13c9` plus the supplied round 2 brief. Tested application revision: `81abb5d`. Documentation-only commits follow. Codex remains builder; Claude remains architect/reviewer. Independent review is pending. No release is authorized.
+Date: 2026-10-28. Worktree: `C:/Users/kevin/Projects/dreamlabs-sales-ux`; branch `codex/run-controls-reply-ux`. Round 1 began at `5414122`, based on `c678d73`; round 2 began from `f3a13c9` plus the supplied round 2 brief. Tested application revision: `95072f8`. Documentation-only commits follow. Codex remains builder; Claude remains architect/reviewer. Independent review is pending. No release is authorized.
+
+## Round 3 — completed locally (2026-10-28)
+
+This section supersedes the round 2 cap/window and greeting statements below; those sections remain historical evidence. Application commits: 3e6d6ae (caps/timezone), 4ced30d (surnames), 95072f8 (empty-queue cap finish notes). Existing checkpoint blocks were updated in place.
+
+- Resumed send/spend caps now finish through the unchanged completion RPC, with the existing cap notes and not-reached queue reasons. Cap decisions take priority even outside the window; empty queues retain the cap finish note too. Only a closed window may keep waiting. The UI announces that capped runs will finish shortly, and that window-waiting runs continue at the next window with Stop available. Non-resumed decision ordering remains unchanged.
+- Engine and UI share window calculation using today's date in the run's own timezone, with Europe/London only as the null fallback. Tests cover London, Pacific/Auckland across a local-date boundary, fallback and matching UI behaviour.
+- Greeting rejection is anchored to the start, including optional honorifics. Whole greeting candidates still fail; Mary Dear, John Hey, Jane Thanks, Alice Cheers, Hilary Hill and Hiroshi Tanaka pass both saved-name and website extraction tests.
+
+Failing regressions preceded fixes, including engine finish-note failures for empty resumed queues. Baseline: **186 files / 2,635 tests**. Final: **187 files / 2,660 tests**, all passing (+1 file / +25 tests). TypeScript, production build, 24-entrypoint edge typecheck and whitespace/range checks pass. Build retains the existing >500 kB warning. Changes are limited to runPauseRules.ts, selectedAutopilot.ts, RunControls.tsx, deepFindRules.ts, related tests and local handoff/design/automation documentation.
+
+Migration and audit 070 are unchanged. The round 3 brief reports Claude's successful rolled-back production SQL dry run on empty input; Codex did not execute or independently verify it. Actual PostgreSQL contention/fixtures, Deno, browser/phone width/themes and live runs remain unverified. No external service, new dependency, SQL execution, push, merge, deployment or other-checkout edit occurred. Existing cumulative deployment manifest and migration/functions/frontend order below remain applicable only after separate authorization. Claude review remains pending. Builder stops after this report update.
 
 ## Part 1 / Round 2 A — Pause, Resume, serialization
 
