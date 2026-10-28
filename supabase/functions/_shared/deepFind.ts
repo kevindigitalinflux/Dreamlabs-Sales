@@ -22,7 +22,7 @@ import { hunterAccountEmpty, hunterAccountLine, type HunterAccount } from './hun
 import { cleanEmail, cleanLinkedinProfile, emailDomain, extractWebsiteFindings, isFreeMailDomain, pickWebsiteFindings } from './knownPersonWide.ts';
 import { domainEmailsOnPages } from './domainSiteCheck.ts';
 import { extractPhone } from './websiteContact.ts';
-import { personPhoneSuggestion, phoneMetadata, type BusinessPhone, type PhonePage } from './phoneNumbers.ts';
+import { dedupeCompanyPhones, personPhoneSuggestion, phoneMetadata, type BusinessPhone, type PhonePage } from './phoneNumbers.ts';
 import { domainFromWebsite, isDirectoryDomain } from './knownPerson.ts';
 import { rankPeople } from './peopleRanking.ts';
 import { DOMAIN_SOURCE_LABELS, safeFailure, websiteSuspicion, type KnownPersonName, type WebPerson } from './domainDiscovery.ts';
@@ -1150,6 +1150,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     const proposal = personPhoneSuggestion(name, phonePages, companyPhone, lead.country, nowIso(), fallbackEvidence);
     if (proposal) suggestions.push(proposal);
   }
+  suggestions.splice(0, suggestions.length, ...dedupeCompanyPhones(suggestions));
   stats.namedByWeb = namedByWeb.length;
   stats.hunterCapHit = spend.hunterHit;
   stats.aiCapHit = spend.aiHit;

@@ -121,3 +121,15 @@ export function readPhoneEvidence(raw: unknown, value: unknown): BusinessPhone |
     typeof p.source_url === 'string' ? p.source_url : null, typeof p.found_at === 'string' ? p.found_at : null);
   return phone && phone.value === value ? { ...phone, original: typeof p.original === 'string' ? p.original.slice(0, 80) : phone.original } : null;
 }
+/** Collapse company-line proposals across people; retain independently published direct lines. */
+export function dedupeCompanyPhones<T extends { name: string; field: string; value: string; label: string; phone?: { kind: string } }>(suggestions: T[]): T[] {
+  const keyFor = (value: string) => parsePhone(value, 'OTHER')?.value ?? value;
+  const seen = new Set(suggestions.filter(p => p.field === 'phone').map(p => keyFor(p.value)));
+  return suggestions.flatMap(proposal => {
+    if (proposal.field !== 'person_phone' || proposal.phone?.kind !== 'company_line') return [proposal];
+    const key = parsePhone(proposal.value, 'OTHER')?.value ?? proposal.value;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ ...proposal, name: 'Company line', field: 'phone', label: 'Company line (switchboard). Review before adding.' }];
+  });
+}

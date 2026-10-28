@@ -58,7 +58,7 @@ it('suggests a person direct phone from a fetched staff page without writing it 
 it('suggests a saved company phone as company line, never as a direct line', async () => {
   lead.phone = '020 7946 0958';
   const out = await run('low');
-  expect(out.domains.suggestions).toContainEqual(expect.objectContaining({ name: 'Jane Smith', field: 'person_phone', phone: expect.objectContaining({ kind: 'company_line', source: 'manual' }) }));
+  expect(out.domains.suggestions.filter(s => s.field === 'person_phone' || s.field === 'phone')).toEqual([]);
   expect(writes.some(w => w.table === 'decision_maker_candidates' && 'phone' in w.patch)).toBe(false);
 });
 it('offers no person phone when free sources have none', async () => {

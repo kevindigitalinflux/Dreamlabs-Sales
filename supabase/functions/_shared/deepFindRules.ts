@@ -153,10 +153,12 @@ const NOT_NAME_WORDS = new Set([
   'and', 'of', 'for', 'with', 'all', 'rights', 'reserved', 'cookie', 'cookies', 'login', 'sign', 'register', 'welcome',
 ]);
 
+const GREETING = /^(?:kia\s+ora|hello|hi|hey|welcome|dear|good\s+(?:morning|afternoon|evening|day))\b/i;
+
 function personName(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const t = value.replace(/\s+/g, ' ').trim();
-  if (t.length < 4 || t.length > 50) return null;
+  if (GREETING.test(t) || t.length < 4 || t.length > 50) return null;
   const parts = t.split(' ');
   if (parts.length < 2 || parts.length > 4) return null;
   if (parts.some((p) => NOT_NAME_WORDS.has(p.toLowerCase()))) return null;
@@ -282,6 +284,7 @@ function titleWord(word: string): string {
 export function parseLeadPersonName(value: unknown): { first: string; last: string; title: string | null } | null {
   if (typeof value !== 'string') return null;
   let t = value.replace(/\s+/g, ' ').trim().slice(0, 120);
+  if (GREETING.test(t)) return null;
   let title: string | null = null;
   const role = /\(([^()]{1,60})\)\s*$/.exec(t);
   if (role) { title = cleanTitle(role[1]); t = t.slice(0, role.index).trim(); }
