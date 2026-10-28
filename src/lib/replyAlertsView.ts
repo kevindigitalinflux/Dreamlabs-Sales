@@ -16,3 +16,12 @@ export function replyPopups(input: { previous: ReplyAlertView[] | null; next: Re
     href: `/emails?tab=replies&reply=${encodeURIComponent(a.reply_id)}`,
   }));
 }
+/** Relative receipt label; exact timestamp belongs in the time element's title. */
+export function relativeReplyTime(receivedAt: string, now = Date.now()): string {
+  const minutes = Math.max(0, Math.floor((now - Date.parse(receivedAt)) / 60_000));
+  if (!Number.isFinite(minutes)) return 'Time unavailable';
+  if (minutes < 1) return 'Just now';
+  const count = minutes < 60 ? minutes : minutes < 1440 ? Math.floor(minutes / 60) : Math.floor(minutes / 1440);
+  const unit = minutes < 60 ? 'minute' : minutes < 1440 ? 'hour' : 'day';
+  return `${count} ${unit}${count === 1 ? '' : 's'} ago`;
+}

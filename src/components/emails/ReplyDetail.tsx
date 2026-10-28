@@ -1,3 +1,4 @@
+import { stageInfo } from '../../lib/utils';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { supabase } from '../../lib/supabase';
@@ -45,12 +46,14 @@ export function ReplyDetail({ reply, onChanged }: { reply: EmailReply; onChanged
   }
   return <article className="flex min-w-0 flex-col gap-3 rounded-xl border border-line bg-card p-4">
     <h2 className="break-words text-lg font-bold">{reply.lead?.business_name ?? 'Lead'} — {reply.subject || 'Reply'}</h2>
-    <p className="break-all text-sm text-muted">{reply.from_email} · {new Date(reply.received_at).toLocaleString('en-GB')}</p>
-    {reply.opt_out_suspected && <p className="text-sm font-semibold text-offwhite">Possible opt-out request. Review it before changing the lead.</p>}
+    {reply.lead?.stage && <span className="w-fit rounded border border-line px-2 py-1 text-xs font-semibold">{stageInfo(reply.lead.stage).label}</span>}
+    <p className="break-all text-sm text-muted">From {reply.from_email} · {new Date(reply.received_at).toLocaleString('en-GB')}</p>
+    {reply.opt_out_suspected && <p role="note" className="rounded-lg border border-warning bg-surface p-3 text-sm font-semibold">Possible opt-out request. Review it before changing the lead.</p>}
     {reply.handled_at && <p className="text-sm font-semibold">Handled</p>}
-    <p className="whitespace-pre-wrap break-words text-sm">{reply.body}</p>
+    <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{reply.body}</p>
     {reply.attachment_count > 0 && <p className="text-sm text-muted">{reply.attachment_count} attachments — open your inbox to view them.</p>}
-    {reply.original && <details className="rounded-lg border border-line p-3"><summary className="min-h-11 cursor-pointer break-words font-semibold">Email this answers: {reply.original.subject}</summary>
+    {reply.original && <details className="rounded-lg border border-line p-3"><summary className="min-h-11 cursor-pointer break-words font-semibold">Show original email</summary>
+      <p className="font-semibold break-words">{reply.original.subject}</p>
       <p className="text-xs text-muted">Sent {new Date(reply.original.sent_at).toLocaleString('en-GB')}</p><p className="whitespace-pre-wrap break-words text-sm">{reply.original.body}</p></details>}
     <Link className="underline" to={`/pipeline/leads/${reply.lead_id}`}>Open lead</Link>
     {error && <p role="alert" className="text-sm text-danger">{error}</p>}
@@ -58,7 +61,7 @@ export function ReplyDetail({ reply, onChanged }: { reply: EmailReply; onChanged
       <Button onClick={() => void draft()} disabled={busy || !reply.message_id}>{reply.draft?.status === 'draft' ? 'Review AI draft' : 'Draft an answer with AI'}</Button>
       <Button variant="secondary" disabled={busy || !reply.message_id} onClick={() => setAnswer({ subject: /^re:/i.test(reply.subject ?? '') ? reply.subject! : `Re: ${reply.subject ?? ''}`, body: '' })}>Write my own</Button>
       {reply.opt_out_suspected && !reply.lead?.opted_out && <Button variant="secondary" disabled={busy} onClick={() => void act('opt_out')}>Mark as opted out</Button>}
-      <Button variant="secondary" disabled={busy || !!reply.handled_at} onClick={() => void act('handled')}>Mark handled</Button>
+      <Button variant="ghost" disabled={busy || !!reply.handled_at} onClick={() => void act('handled')}>Mark handled</Button>
     </div>
     {!reply.message_id && <p className="text-sm text-muted">This older reply has no threading details. Answer it in your inbox.</p>}
     {answer && reply.lead && reply.original && <EmailComposer key={reply.id} open lead={reply.lead} onClose={() => { setAnswer(null); onChanged(); }}
