@@ -13,6 +13,12 @@ CREATE UNIQUE INDEX autopilot_runs_one_active_per_org_mode ON public.autopilot_r
 CREATE OR REPLACE FUNCTION public.autopilot_runs_guard_status()
 RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
 BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF auth.uid() IS NOT NULL AND (NEW.paused_at IS NOT NULL OR NEW.resumed_at IS NOT NULL) THEN
+      RAISE EXCEPTION 'Pause metadata is managed by run controls';
+    END IF;
+    RETURN NEW;
+  END IF;
   -- Preserve the existing engine privilege boundary.
   IF auth.uid() IS NULL THEN RETURN NEW; END IF;
   IF NOT public.is_org_member(OLD.org_id) OR
@@ -40,6 +46,9 @@ BEGIN
   END IF;
   RAISE EXCEPTION 'This run cannot make that status change';
 END $$;
+
+CREATE TRIGGER autopilot_runs_guard_pause_insert BEFORE INSERT ON public.autopilot_runs
+  FOR EACH ROW EXECUTE FUNCTION public.autopilot_runs_guard_status();
 
 -- The RPC owns sensitive stopped-run resume. Existing column UPDATE grants stay unchanged.
 CREATE OR REPLACE FUNCTION public.autopilot_control_run(target_run uuid, action text)

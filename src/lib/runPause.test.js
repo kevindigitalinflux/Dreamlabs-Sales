@@ -17,3 +17,5 @@ it('migration serializes claim with status and forbids concurrent workers', () =
  expect(sql).toContain("WHERE status IN ('active','paused')");
  expect(sql).toContain('REVOKE ALL ON FUNCTION public.autopilot_claim_lead');
 });
+
+it('protects server-owned pause metadata at browser insertion',()=>{ const sql=readFileSync('supabase/migrations/070_autopilot_run_pause.sql','utf8');expect(sql).toContain('autopilot_runs_guard_pause_insert');expect(sql).toContain("TG_OP = 'INSERT'"); });
