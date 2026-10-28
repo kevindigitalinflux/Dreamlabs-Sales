@@ -1,3 +1,7 @@
+## Run controls and reply UX — partial local checkpoint (2026-10-28)
+
+This checkout is C:/Users/kevin/Projects/dreamlabs-sales-ux, branch codex/run-controls-reply-ux. Codex remains builder; Claude remains architect/reviewer. Read docs/RUN-CONTROLS-REPLY-UX-BUILD-REPORT.md. Application revision 91d72f8 passes TypeScript, 180 files / 2,592 tests, production build, 24-entrypoint edge shim and whitespace. Run disclosures, readiness colours/icons, reply presentation, greeting rejection and company-phone deduplication are implemented locally. Pause/Resume and migration 070 are NOT implemented: an explicit question about in-flight SMTP handling remains unanswered. Sender display names are unavailable in the saved reply model. The report identifies remaining acceptance gaps; this is not a completed brief or release candidate. No remote calls, publication, migration execution, other-checkout edit or vault synchronization occurred. Local MIME dependencies were restored offline from package cache. Subscription usage is unavailable. Claude review is pending. Resume only after resolving the pause question and reading the report.
+
 # Handoff — Dreamlabs Sales (checkpoint 2026-10-15, written by Claude at Kevin's request near the weekly usage limit)
 
 Authoritative task record. The vault copy (`Dreamlabs Sales/Handoff.md`) is a snapshot of this file, labelled with the revision below. Workflow rules: vault `_Team/Shared agent workflow.md`.
