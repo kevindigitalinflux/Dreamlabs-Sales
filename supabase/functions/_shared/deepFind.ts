@@ -1150,7 +1150,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     const proposal = personPhoneSuggestion(name, phonePages, companyPhone, lead.country, nowIso(), fallbackEvidence);
     if (proposal) suggestions.push(proposal);
   }
-  suggestions.splice(0, suggestions.length, ...dedupeCompanyPhones(suggestions));
+  suggestions.splice(0, suggestions.length, ...dedupeCompanyPhones(suggestions, lead.country));
   stats.namedByWeb = namedByWeb.length;
   stats.hunterCapHit = spend.hunterHit;
   stats.aiCapHit = spend.aiHit;

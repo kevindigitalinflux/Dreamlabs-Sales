@@ -26,7 +26,7 @@ export function RunLeadGroups({ rows, loading, error, renderNeedsInputAction }: 
   return (
     <div className="flex flex-col gap-5">
       {groupRunLeads(rows).filter((g) => g.rows.length > 0).map((g) => (
-        <RunGroup key={g.key} title={g.title} count={g.rows.length}>
+        <RunGroup key={g.key} title={g.title} count={g.rows.length} alwaysOpen={g.key === 'needs_input'}>
             {g.rows.map((row) => (
               <RunLeadRow key={row.id} row={row} action={g.key === 'needs_input' ? renderNeedsInputAction?.(row) : undefined} />
             ))}
@@ -37,8 +37,8 @@ export function RunLeadGroups({ rows, loading, error, renderNeedsInputAction }: 
 }
 
 /** Local disclosure state; large groups start closed. */
-function RunGroup({title, count, children}: {title: string; count: number; children: ReactNode}) {
- const [open, setOpen] = useState(count <= 8);
+function RunGroup({title, count, children, alwaysOpen}: {title: string; count: number; children: ReactNode; alwaysOpen: boolean}) {
+ const [open, setOpen] = useState(alwaysOpen || count <= 8);
  const id = useId();
  return <section aria-label={title} className="flex flex-col gap-2">
  <h3><button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)} className="flex min-h-11 w-full items-center justify-between rounded-lg p-2 text-left text-sm font-bold hover:bg-surface focus-visible:outline-2 focus-visible:outline-violet-line">

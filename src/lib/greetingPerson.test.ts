@@ -9,3 +9,5 @@ it('retains real names with explicit roles', () => {
   expect(extractTeamMembers('<p>Jane Smith | Owner</p>')).toEqual([{name:'Jane Smith',role:'Owner'}]);
   expect(parseLeadPersonName('Jane Smith')).toMatchObject({first:'Jane',last:'Smith'});
 });
+
+it('rejects a greeting disguised with an honorific', () => { expect(parseLeadPersonName('Dr Kia Ora')).toBeNull(); });

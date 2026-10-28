@@ -19,7 +19,6 @@ export function RepliesPanel() {
     <MailboxStatus warningOnly />
     {(error || problem || alerts.error) && <p role="alert" className="text-sm text-danger">{error || problem || alerts.error}</p>}
     <div className="flex flex-wrap gap-2">
-      {selected && <Button variant="secondary" onClick={() => setParams({ tab: 'replies' })}>Back to replies</Button>}
       <Button variant="secondary" onClick={refresh}>Refresh replies</Button>
       <Button variant="secondary" disabled={!alerts.count} onClick={() => void alerts.markRead().then(setProblem)}>Mark all read</Button>
     </div>
