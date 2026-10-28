@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { Skeleton } from '../ui/Skeleton';
 import { groupRunLeads } from '../../lib/runLeadGroups';
 import type { NeedsInputResolution } from '../../lib/runLeadGroups';
@@ -25,15 +26,22 @@ export function RunLeadGroups({ rows, loading, error, renderNeedsInputAction }: 
   return (
     <div className="flex flex-col gap-5">
       {groupRunLeads(rows).filter((g) => g.rows.length > 0).map((g) => (
-        <section key={g.key} aria-label={g.title} className="flex flex-col gap-2">
-          <h3 className="text-sm font-bold">{g.title} ({g.rows.length})</h3>
-          <ul className="flex flex-col gap-2">
+        <RunGroup key={g.key} title={g.title} count={g.rows.length}>
             {g.rows.map((row) => (
               <RunLeadRow key={row.id} row={row} action={g.key === 'needs_input' ? renderNeedsInputAction?.(row) : undefined} />
             ))}
-          </ul>
-        </section>
+        </RunGroup>
       ))}
     </div>
   );
+}
+
+/** Local disclosure state; large groups start closed. */
+function RunGroup({title, count, children}: {title: string; count: number; children: ReactNode}) {
+ const [open, setOpen] = useState(count <= 8);
+ const id = useId();
+ return <section aria-label={title} className="flex flex-col gap-2">
+ <h3><button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)} className="flex min-h-11 w-full items-center justify-between rounded-lg p-2 text-left text-sm font-bold hover:bg-surface focus-visible:outline-2 focus-visible:outline-violet-line">
+ {title} ({count})<ChevronDown aria-hidden className={open ? 'h-4 w-4 rotate-180' : 'h-4 w-4'} />
+ </button></h3><ul id={id} hidden={!open} className={open ? 'flex flex-col gap-2' : 'hidden'}>{children}</ul></section>;
 }
