@@ -43,7 +43,7 @@ export function AutopilotStatus() {
       )}
 
       {selected.error && <p role="alert" className="text-sm text-danger">Could not load the selected leads run: {selected.error}</p>}
-      {selected.run && <SelectedRunSection run={selected.run} refresh={selected.refresh} stopRun={selected.stopRun} />}
+      {selected.run && <SelectedRunSection run={selected.run} refresh={selected.refresh} stopRun={selected.stopRun} controlRun={selected.controlRun} />}
 
       {run && (
         <Card>

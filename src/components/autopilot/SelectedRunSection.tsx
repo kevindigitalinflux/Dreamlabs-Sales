@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { useAutopilotRunLeads } from '../../hooks/useAutopilotRunLeads';
 import { useDraftStatuses } from '../../hooks/useDraftStatuses';
 import { NEEDS_INPUT_CHANGED_EVENT } from '../../hooks/useNeedsInputCount';
+import { useOrg } from '../../hooks/useOrg';
 import { useAuth } from '../../hooks/useAuth';
 import { applyDraftResolution } from '../../lib/runLeadGroups';
 import type { AutopilotRun } from '../../types';
@@ -14,14 +15,16 @@ interface SelectedRunSectionProps {
   run: AutopilotRun;
   refresh: () => Promise<void>;
   stopRun: () => Promise<string | null>;
+  controlRun: (action: 'pause' | 'resume' | 'stop') => Promise<string | null>;
 }
 
 /**
  * Status of a selected-leads run: header card plus its leads in groups, live via realtime.
  * Needs-input rows are resolved from their draft's current status (nothing is written back to the run).
  */
-export function SelectedRunSection({ run, refresh, stopRun }: SelectedRunSectionProps) {
+export function SelectedRunSection({ run, refresh, stopRun, controlRun }: SelectedRunSectionProps) {
   const { session } = useAuth();
+  const { currentOrg } = useOrg();
   const leads = useAutopilotRunLeads(run.id, () => void refresh());
   const draftIds = leads.rows.filter((r) => r.status === 'needs_input' && r.email_log_id).map((r) => r.email_log_id as string);
   const drafts = useDraftStatuses(draftIds);
@@ -31,8 +34,8 @@ export function SelectedRunSection({ run, refresh, stopRun }: SelectedRunSection
 
   return (
     <div className="flex flex-col gap-4">
-      <RunHeader run={run} rows={rows} onStop={stopRun} />
-      {run.status !== 'active' && (
+      <RunHeader run={run} rows={rows} onStop={stopRun} onControl={controlRun} canControl={session?.user.id === run.created_by || currentOrg?.role === 'admin'} />
+      {run.status !== 'active' && run.status !== 'paused' && (
         <Link to="/outreach/autopilot/new" className="text-sm font-semibold text-cyan hover:underline">Start a new run</Link>
       )}
       {drafts.error && <p role="alert" className="text-sm text-danger">Could not check which parked drafts were sent: {drafts.error}</p>}

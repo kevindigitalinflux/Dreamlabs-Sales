@@ -58,6 +58,7 @@ export function countRunLeads(rows: { status: string }[]): Record<RunLeadGroupKe
 
 /** Plain-English label for a run's status. */
 export function runStatusLabel(status: string): string {
+  if (status === 'paused') return 'Paused';
   if (status === 'active') return 'Running';
   if (status === 'completed') return 'Finished';
   if (status === 'cancelled') return 'Stopped';

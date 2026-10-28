@@ -528,7 +528,7 @@ export interface LinkedinDraft {
   created_at: string;
 }
 
-export type AutopilotRunStatus = 'active' | 'completed' | 'cancelled';
+export type AutopilotRunStatus = 'paused' | 'active' | 'completed' | 'cancelled';
 
 /** 'discover' scrapes new leads daily; 'selected' works through a hand-picked lead list (migration 048). */
 export type AutopilotMode = 'discover' | 'selected';
@@ -554,6 +554,8 @@ export interface AutopilotRun {
   /** Null for selected runs (they finish when the queue is empty). */
   ends_at: string | null;
   status: AutopilotRunStatus;
+  paused_at?: string | null;
+  resumed_at?: string | null;
   cancel_reason: string | null;
   estimated_cost_low_cents: number;
   estimated_cost_high_cents: number;

@@ -1,7 +1,5 @@
-import { useState } from 'react';
-import { XCircle } from 'lucide-react';
+import { RunControls } from './RunControls';
 import { Badge } from '../ui/Badge';
-import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { formatWindowDate, runFinishNote, runStatusLabel } from '../../lib/runLeadGroups';
 import type { AutopilotRun } from '../../types';
@@ -13,19 +11,14 @@ interface RunHeaderProps {
   /** The run's lead rows (status and reason), used to work out why the run ended. */
   rows: { status: string; reason: string | null }[];
   onStop: () => Promise<string | null>;
+  onControl: (action: 'pause' | 'resume' | 'stop') => Promise<string | null>;
+  canControl: boolean;
 }
 
 /** Summary card for a selected run: window, status, sent vs cap, AI spend vs cap, and Stop. */
-export function RunHeader({ run, rows, onStop }: RunHeaderProps) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export function RunHeader({ run, rows, onControl, canControl }: RunHeaderProps) {
   const note = runFinishNote(run, rows);
   const active = run.status === 'active';
-
-  const stop = async () => {
-    setBusy(true);
-    try { setError(await onStop()); } catch (e) { setError(e instanceof Error ? e.message : 'Could not stop the run'); } finally { setBusy(false); }
-  };
 
   return (
     <Card>
@@ -48,12 +41,7 @@ export function RunHeader({ run, rows, onStop }: RunHeaderProps) {
         </p>
         {note && <p role="status" className="text-sm font-semibold text-warning">{note}</p>}
         {run.status === 'cancelled' && run.cancel_reason && <p className="text-sm text-muted">Stopped: {run.cancel_reason}</p>}
-        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-        {active && (
-          <Button variant="danger" onClick={() => void stop()} disabled={busy} loading={busy}>
-            <XCircle className="h-4 w-4" aria-hidden /> Stop this run
-          </Button>
-        )}
+        <RunControls run={run} rows={rows} onControl={onControl} canControl={canControl} />
       </div>
     </Card>
   );

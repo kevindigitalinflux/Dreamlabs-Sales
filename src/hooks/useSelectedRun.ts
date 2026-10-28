@@ -29,7 +29,7 @@ export function useSelectedRun() {
       setError(message);
       setLoading(false);
     };
-    const active = await base().eq('status', 'active').order('started_at', { ascending: false }).limit(1);
+    const active = await base().in('status', ['active','paused']).order('started_at', { ascending: false }).limit(1);
     if (token !== tokenRef.current) return;
     if (active.error) return fail(active.error.message);
     let found = ((active.data as AutopilotRun[] | null) ?? [])[0] ?? null;
@@ -53,25 +53,29 @@ export function useSelectedRun() {
     return () => { tokenRef.current += 1; };
   }, [orgId, refresh]);
 
-  const active = run?.status === 'active';
+  const active = run?.status === 'active' || run?.status === 'paused';
   useEffect(() => {
     if (!active) return;
     const timer = window.setInterval(() => void refresh(), POLL_MS);
     return () => window.clearInterval(timer);
   }, [active, refresh]);
 
-  /** Stops the run. A run that already finished is simply already stopped (no error). */
-  const stopRun = useCallback(async (): Promise<string | null> => {
+  /** The database checks membership, creator/admin, transition and competing live runs. */
+  const controlRun = useCallback(async (action: 'pause' | 'resume' | 'stop'): Promise<string | null> => {
     const current = runRef.current;
-    if (!current || current.org_id !== orgId) return 'No run to stop';
+    if (!current || current.org_id !== orgId) return 'No run to control';
     const token = tokenRef.current;
-    const { error: err } = await supabase.from('autopilot_runs')
-      .update({ status: 'cancelled', cancel_reason: 'stopped by user' }).eq('id', current.id).eq('status', 'active');
-    if (token !== tokenRef.current) return null;
-    if (err) return err.message;
-    await refresh();
-    return null;
+    try {
+      const { error: err } = await supabase.rpc('autopilot_control_run', {target_run: current.id, action});
+      if (token !== tokenRef.current) return null;
+      if (err) return err.message;
+      await refresh();
+      return null;
+    } catch {
+      console.error('autopilot: run control failed');
+      return 'Could not change this run. Please try again.';
+    }
   }, [orgId, refresh]);
-
-  return { run, loading, error, refresh, stopRun };
+  const stopRun = useCallback(() => controlRun('stop'), [controlRun]);
+  return { run, loading, error, refresh, stopRun, controlRun };
 }
