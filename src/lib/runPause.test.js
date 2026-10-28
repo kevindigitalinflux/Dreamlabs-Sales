@@ -7,7 +7,9 @@ it('preserves only user-stopped cancelled queues', () => {
  expect(preservedQueue({status:'cancelled',cancel_reason:'failure'})).toBe(false);
  expect(preservedQueue({status:'completed',cancel_reason:null})).toBe(false);
 });
-it.each(['complete_window_closed','complete_send_cap','complete_spend_cap'])('resumed run waits instead of consuming queue: %s', decision => expect(resumedDecision(decision,true)).toBe('wait'));
+it('resumed closed window waits', () => expect(resumedDecision('complete_window_closed',true)).toBe('wait'));
+it.each(['complete_send_cap','complete_spend_cap'])('resumed cap finishes: %s', decision => expect(resumedDecision(decision,true)).toBe(decision));
+it.each(['complete_window_closed','complete_send_cap','complete_spend_cap','process'])('non-resumed decision stays unchanged: %s', decision => expect(resumedDecision(decision,false)).toBe(decision));
 it('still completes empty resumed runs', () => expect(resumedDecision('complete_no_leads',true)).toBe('complete_no_leads'));
 it('migration serializes claim with status and forbids concurrent workers', () => {
  const sql=readFileSync('supabase/migrations/070_autopilot_run_pause.sql','utf8');

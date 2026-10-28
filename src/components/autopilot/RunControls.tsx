@@ -1,6 +1,7 @@
+import { selectedRunBounds } from '../../../supabase/functions/_shared/runPauseRules';
 import { useEffect, useRef, useState } from 'react';
 import { runControlState } from '../../lib/runControlState';
-import { localDateString, windowBounds, inWindow } from '../../../supabase/functions/_shared/autopilotEligibility';
+import { inWindow } from '../../../supabase/functions/_shared/autopilotEligibility';
 import type { AutopilotRun } from '../../types';
 import { Button } from '../ui/Button';
 
@@ -21,12 +22,11 @@ export function RunControls({run, rows, canControl, onControl}: {
     const minutes = Math.max(0, Math.floor((now - Date.parse(run.paused_at ?? new Date(now).toISOString())) / 60_000));
     status = working ? 'Pausing, finishing the current email' : `Paused for ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}. Resume when you are ready.`;
   } else if (run.status === 'active') {
-    if (run.daily_send_cap != null && run.outreach_sent_total >= run.daily_send_cap) status = 'Waiting: this run has used its send allowance. No more emails will send under this cap.';
-    else if (run.max_total_spend_cents != null && run.actual_ai_cost_cents >= run.max_total_spend_cents) status = 'Waiting: this run has reached its spend cap.';
+    if (run.daily_send_cap != null && run.outreach_sent_total >= run.daily_send_cap) status = 'This run has reached its send allowance and will finish shortly';
+    else if (run.max_total_spend_cents != null && run.actual_ai_cost_cents >= run.max_total_spend_cents) status = 'This run has reached its spend cap and will finish shortly';
     else if (run.window_start && run.window_end && run.window_date) {
-      const date = run.resumed_at ? localDateString(new Date(now), 'Europe/London') : run.window_date;
-      const bounds = windowBounds(date, run.window_start, run.window_end, run.resumed_at ? 'Europe/London' : run.timezone ?? 'Europe/London');
-      if (!bounds || !inWindow(new Date(now), bounds)) status = 'Waiting for the send window to open. Nothing will send before then.';
+      const bounds = selectedRunBounds(run, new Date(now));
+      if (!bounds || !inWindow(new Date(now), bounds)) status = run.resumed_at ? 'This run will continue at the next send window. Stop is available.' : 'Waiting for the send window to open. Nothing will send before then.';
     }
   }
   async function act(action: 'pause' | 'resume' | 'stop') {

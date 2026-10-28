@@ -1,16 +1,16 @@
-import { preservedQueue, resumedDecision } from './runPauseRules.ts';
+import { preservedQueue, selectedRunDecision, selectedRunBounds as computeBounds } from './runPauseRules.ts';
 import { createPlacesContext, type PlacesContext } from './placesClient.ts';
 // Orchestration for selected-leads autopilot: window, claim, caps, outcomes, completion.
 // The heavy per-lead work lives in selectedLeadPipeline.ts (Task 12b).
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { classifyLead, endOfLocalDay, localDateString, windowBounds, type EligibilityEnrollment, type EligibilityLead } from './autopilotEligibility.ts';
+import { classifyLead, endOfLocalDay, type EligibilityEnrollment, type EligibilityLead } from './autopilotEligibility.ts';
 import { markLogInterrupted } from './interruptedSend.ts';
 import { loadSenderMailbox } from './sendLeadEmail.ts';
 import { unsentAutopilotDraft } from './autopilotDrafts.ts';
 import { plainReason } from './selectedLeadPipelineRules.ts';
 import { processLeadPipeline, type PipelineContext, type PipelineOutcome } from './selectedLeadPipeline.ts';
 import {
-  STUCK_SEND_REASON, canStartLead, decideRunState, shouldWaitBetweenLeads, skipReasonFor, stuckRowAction, truncateError, type RunDecision,
+  STUCK_SEND_REASON, canStartLead, shouldWaitBetweenLeads, skipReasonFor, stuckRowAction, truncateError, type RunDecision,
 } from './selectedAutopilotRules.ts';
 
 export const SEND_GAP_MS = 20000;
@@ -31,11 +31,6 @@ type Bounds = { startUtc: Date; endUtc: Date };
 const OUTCOMES = new Set(['sent', 'skipped', 'needs_input', 'failed']);
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const nowIso = () => new Date().toISOString();
-
-function computeBounds(run: SelectedRun): Bounds | null {
-  if (!run.window_date || !run.window_start || !run.window_end || !run.timezone) return null;
-  try { return windowBounds(run.resumed_at ? localDateString(new Date(), 'Europe/London') : run.window_date, run.window_start, run.window_end, run.resumed_at ? 'Europe/London' : run.timezone); } catch { return null; }
-}
 
 /** Row update that checks the returned error (supabase-js does not throw). Logs one short line on failure. */
 async function updateRow(service: SupabaseClient, id: string, patch: Record<string, unknown>): Promise<boolean> {
@@ -199,12 +194,12 @@ async function decide(service: SupabaseClient, runId: string, bounds: Bounds): P
   const fresh = data as SelectedRun | null;
   if (!fresh || fresh.status !== 'active' || fresh.mode !== 'selected') return { decision: 'wait', run: null };
   const [queuedCount, workingCount] = await Promise.all([countRows(service, runId, 'queued'), countRows(service, runId, 'working')]);
-  const decision = decideRunState({
+  const decision = selectedRunDecision({
     now: new Date(), bounds, runStartedAt: new Date(fresh.started_at), sentTotal: fresh.outreach_sent_total, sendCap: fresh.daily_send_cap,
     spentCents: fresh.actual_ai_cost_cents, spendCap: fresh.max_total_spend_cents, queuedCount, workingCount,
-  });
+  }, !!fresh.resumed_at);
   if (fresh.resumed_at && queuedCount === 0 && workingCount === 0) return { decision: 'complete_no_leads', run: fresh };
-  return { decision: workingCount > 0 ? 'wait' : resumedDecision(decision, !!fresh.resumed_at), run: fresh };
+  return { decision: workingCount > 0 ? 'wait' : decision, run: fresh };
 }
 
 /** Processes one active selected run for one tick. `startedAt` is the invocation start (ms epoch), shared across runs. */
