@@ -192,7 +192,7 @@ export function LinkedinOutreach() {
                   </a>
                 )}
               </div>
-              <p className="whitespace-pre-wrap text-sm">{d.message}</p>
+              <p className="whitespace-pre-wrap break-words text-sm">{d.message}</p>
               <div className="flex flex-wrap items-center gap-2">
                 {d.status === 'draft' && (
                   <>

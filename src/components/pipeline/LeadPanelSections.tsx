@@ -216,7 +216,7 @@ export function NotesPreview({ notes, loading, onEditNote, onDeleteNote }: {
           <li key={n.id} className="rounded-lg bg-surface/60 p-2 text-sm">
             {onEditNote
               ? <EditableNote note={n} onSave={onEditNote} onDelete={onDeleteNote} clamp />
-              : <p className="line-clamp-3 whitespace-pre-wrap">{n.content}</p>}
+              : <p className="line-clamp-3 whitespace-pre-wrap break-words">{n.content}</p>}
             <p className="mt-1 text-xs text-muted">{formatShortDate(n.created_at)}{n.edited_at ? ' · edited' : ''}</p>
           </li>
         ))}

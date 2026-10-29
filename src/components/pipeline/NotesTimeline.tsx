@@ -4,6 +4,7 @@ import type { LeadNote, NoteType } from '../../types';
 import { formatShortDate } from '../../lib/utils';
 import { Skeleton } from '../ui/Skeleton';
 import { EditableNote } from './EditableNote';
+import { NoteText } from './NoteText';
 
 /** Icon per note type — notes are icon + label, never colour-coded alone. */
 export const NOTE_TYPE_ICONS: Record<NoteType, LucideIcon> = {
@@ -45,7 +46,7 @@ export function NotesTimeline({ notes, loading, authorName, onEditNote, onDelete
             <div className="min-w-0 flex-1">
               {onEditNote
                 ? <EditableNote note={note} onSave={onEditNote} onDelete={onDeleteNote} />
-                : <p className="whitespace-pre-wrap text-sm">{note.content}</p>}
+                : <NoteText content={note.content} />}
               <p className="mt-1 text-xs text-muted">
                 {authorName(note.created_by)} · {formatShortDate(note.created_at)} · {note.note_type.replace('_', ' ')}{note.edited_at ? ' · edited' : ''}
               </p>

@@ -84,7 +84,7 @@ export function TemplateList() {
                 )}
               </div>
               <p className="mt-1 truncate text-sm text-muted">{t.subject}</p>
-              <p className="mt-2 line-clamp-2 whitespace-pre-wrap text-xs text-muted">{renderEmailText(t.body)}</p>
+              <p className="mt-2 line-clamp-2 whitespace-pre-wrap break-words text-xs text-muted">{renderEmailText(t.body)}</p>
             </button>
             <Button variant="ghost" disabled={copyBusy || !session || !currentOrg} aria-label={`Duplicate ${t.name}`} onClick={() => void duplicate(t)}>Duplicate</Button>
           </li>

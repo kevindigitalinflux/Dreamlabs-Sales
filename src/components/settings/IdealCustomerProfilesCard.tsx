@@ -47,7 +47,7 @@ export function IdealCustomerProfilesCard({ isOrgAdmin }: { isOrgAdmin: boolean 
             <li key={p.id}>
               <button type="button" onClick={() => setEditing(p)} className="w-full cursor-pointer rounded-lg border border-line bg-surface/40 p-3 text-left hover:bg-surface/70">
                 <span className="block text-sm font-bold">{p.name}</span>
-                <span className="mt-1 line-clamp-2 block whitespace-pre-wrap text-xs text-muted">{p.summary ?? p.pain_points ?? 'No details yet'}</span>
+                <span className="mt-1 line-clamp-2 block whitespace-pre-wrap break-words text-xs text-muted">{p.summary ?? p.pain_points ?? 'No details yet'}</span>
               </button>
             </li>
           ))}

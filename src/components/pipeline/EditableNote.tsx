@@ -4,6 +4,7 @@ import type { LeadNote } from '../../types';
 import { Button } from '../ui/Button';
 import { Textarea } from '../ui/Input';
 import { ConfirmDeleteButton } from '../ui/ConfirmDeleteButton';
+import { NoteText } from './NoteText';
 
 /**
  * "Stage changed: X → Y" notes are the activity history the pipeline analytics
@@ -48,7 +49,7 @@ export function EditableNote({ note, onSave, onDelete, clamp = false }: Editable
   if (!editing) {
     return (
       <div className="min-w-0">
-        <p className={`whitespace-pre-wrap text-sm ${clamp ? 'line-clamp-3' : ''}`}>{note.content}</p>
+        <NoteText content={note.content} compact={clamp} />
         {isEditableNote(note) && (
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
             <button
