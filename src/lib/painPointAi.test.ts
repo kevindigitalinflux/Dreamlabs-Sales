@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { generateLeadNotes, draftEmailClaude, draftEmail } from '../../supabase/functions/_shared/ai';
-const choice = { pain_point: 'Cleaner cover', source: 'icp_list', reason: 'The saved lead notes mention cover.' };
+const choice = { pain_point: 'Cleaner cover', source: 'icp_list' as const, reason: 'The saved lead notes mention cover.' };
 const requests: Record<string, unknown>[] = [];
 function respond(text: string) {
   vi.stubGlobal('fetch', vi.fn(async (_url, init) => {

@@ -54,6 +54,11 @@ it('manual formatting marks the change and preserves punctuation typed by the re
   const content = formatPainPointNote({ pain_point: 'Admin — cover', source: 'manual', reason: 'Chosen by you.' });
   expect(resolvePainPoint([{ content, note_type: 'general' }], points)).toEqual({ pain_point: 'Admin — cover', source: 'manual', reason: 'Chosen by you.' });
 });
+it('does not relabel a truncated ICP item as a list match or truncate an existing manual choice', () => {
+  expect(painPointList('- ' + 'x'.repeat(301) + '\n- Cover')).toEqual(['Cover']);
+  const manual = 'm'.repeat(500);
+  expect(resolvePainPoint([{ content: `Main pain point:\n${manual}`, note_type: 'general' }], points)?.pain_point).toBe(manual);
+});
 it('passes explicit factual fallback and manual precedence instructions to the model', () => {
   const prompt = painPointPrompt(points, { pain_point: 'Paperwork', source: 'manual', reason: 'Chosen by you.' });
   expect(prompt).toContain('Paperwork');

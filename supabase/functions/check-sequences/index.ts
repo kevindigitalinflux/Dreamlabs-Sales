@@ -1,6 +1,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { json } from '../_shared/cors.ts';
 import { draftEmail, draftEmailClaude, generateLeadNotes } from '../_shared/ai.ts';
+import { painPointList, resolvePainPoint } from '../_shared/painPointPick.ts';
+import { loadPainPointNotes, saveAiPainPoint, saveGeneratedPainPointNotes } from '../_shared/painPointStorage.ts';
 import type { ClaudeModel } from '../_shared/ai.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { buildTemplateVars, substituteVariables } from '../_shared/templateVars.ts';
@@ -260,6 +262,13 @@ Deno.serve(async (req) => {
     // Placeholders are filled per recipient below; the pain point is read from the notes as they were before any AI notes pass.
     const customVars = await loadCustomVariables(service, orgId, enrollment.enrolled_by);
     const varNotes = [...noteTexts];
+    const painPoints = painPointList(icp?.pain_points);
+    let painPoint;
+    try { painPoint = resolvePainPoint(await loadPainPointNotes(service, String(lead.id))); }
+    catch (error) {
+      console.error('check-sequences: pain point history could not be loaded');
+      skipped.push({ id: enrollment.id, reason: 'pain point history unavailable' }); continue;
+    }
 
     // Who this step is written to (the full list; caps are applied below). A lead with no contact that has an
     // email is the old single draft to lead.email.
@@ -333,13 +342,12 @@ Deno.serve(async (req) => {
 
       if (!hasAiSummary && compatible) {
         try {
-          const notesText = await generateLeadNotes({ lead, icpParams, icpContext, apiKey });
-          await service.from('lead_notes').insert({
-            lead_id: lead.id, created_by: null, note_type: 'ai_summary', content: notesText,
-          });
+          const generated = await generateLeadNotes({ lead, icpParams, icpContext, apiKey, painPoints, painPoint });
+          const notesText = await saveGeneratedPainPointNotes(service, String(lead.id), generated);
           noteTexts.unshift(notesText);
+          painPoint = resolvePainPoint(await loadPainPointNotes(service, String(lead.id)));
         } catch (e) {
-          console.error(`generateLeadNotes failed for lead ${lead.id}, continuing without it:`, e);
+          console.error('check-sequences: structured research failed; continuing with saved context');
         }
       }
     }
@@ -395,14 +403,15 @@ Deno.serve(async (req) => {
               ? { generalInbox: true, untrustedData: true }
               : { recipient: { name: naming.ownerName, title: naming.title }, untrustedData: true })
             : {};
-          const ai = await draftEmailClaude({ subject: subject.text, body: bodyText.text, lead: leadForDraft, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, icpContext, apiKey: outreachKey, model, ...recipientInput });
-          finalSubject = ai.subject; finalBody = ai.body;
+          const ai = await draftEmailClaude({ subject: subject.text, body: bodyText.text, lead: leadForDraft, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, icpContext, apiKey: outreachKey, model, painPoints, painPoint, ...recipientInput });
           const ap = autopilotByOrg.get(orgId);
           if (ap) {
             const costCents = 1; // rough per-draft accounting, see run-autopilot's estimate math
             ap.actualSpendCents += costCents;
             await service.from('autopilot_runs').update({ actual_ai_cost_cents: ap.actualSpendCents }).eq('id', ap.runId);
           }
+          painPoint = await saveAiPainPoint(service, String(lead.id), ai.painPoint ?? null);
+          finalSubject = ai.subject; finalBody = ai.body;
         } catch (e) {
           console.error(`Claude draft failed for enrollment ${enrollment.id}, using plain template:`, e);
         }
@@ -415,10 +424,11 @@ Deno.serve(async (req) => {
             // Only the first 3 (of up to 5 fetched) — preserves the exact original
             // note-count this path saw before the outreach gates needed a wider window.
             const recipientInput = naming ? { recipientTitle: naming.title, recipientName: naming.ownerName, generalInbox: naming.generalInbox } : {};
-            const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: leadForDraft, notes: noteTexts.slice(0, 3), contractorName, orgName, companyContext: org?.company_context, icpContext, apiKey, ...recipientInput });
+            const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: leadForDraft, notes: noteTexts.slice(0, 3), contractorName, orgName, companyContext: org?.company_context, icpContext, apiKey, painPoints, painPoint, ...recipientInput });
+            painPoint = await saveAiPainPoint(service, String(lead.id), ai.painPoint ?? null);
             finalSubject = ai.subject; finalBody = ai.body;
           } catch (e) {
-            console.error(`AI draft failed for enrollment ${enrollment.id}, using plain template:`, e);
+            console.error('check-sequences: tailored draft or pain point save failed; using the plain template');
           }
         }
       }

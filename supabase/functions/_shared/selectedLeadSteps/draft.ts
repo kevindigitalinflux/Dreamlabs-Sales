@@ -6,6 +6,8 @@ import { applyCustomVariables, loadCustomVariables } from '../customVariables.ts
 import { formatIcpContext, loadIcp, resolveIcpId, topPainPoint } from '../icp.ts';
 import { buildTemplateVars, substituteVariables } from '../templateVars.ts';
 import { stripAiPunctuation } from '../textGuardrails.ts';
+import { painPointList, resolvePainPoint } from '../painPointPick.ts';
+import { loadPainPointNotes, saveAiPainPoint } from '../painPointStorage.ts';
 import {
   DRAFT_COST_CENTS, chooseTemplate, isUsableUnsubscribeUrl, recipientLabel, recipientVarOverrides, unexpectedLinksOrAddresses, withUnsubscribeLine,
 } from '../selectedLeadPipelineRules.ts';
@@ -59,17 +61,22 @@ export async function buildDraft(ctx: PipelineContext, i: DraftInput, progress: 
   if (missing.length > 0) return { ...finish(subject.text, body.text), attachments, templateId: template.id, missing, aiFailed: false, unexpected: [], unsubscribeOk };
 
   try {
+    const painPoint = resolvePainPoint(await loadPainPointNotes(ctx.service, lead.id));
     progress.costCents += DRAFT_COST_CENTS;
     const ai = await raceDeadline(draftEmailClaude({
       subject: subject.text, body: body.text, lead, notes: i.noteTexts, contractorName: i.senderName,
       orgName: i.orgName, companyContext: i.companyContext, icpContext, apiKey: i.anthropicKey, model: 'claude-haiku-4-5',
       recipient: recipientLabel(i.candidate, lead.owner_name as string | null), untrustedData: true,
+      painPoints: painPointList(icp?.pain_points), painPoint,
     }), ctx.deadlineMs);
+    const savedPainPoint = await saveAiPainPoint(ctx.service, lead.id, ai.painPoint ?? null);
+    // A concurrent manual change must be reviewed, not sent using a now-stale angle.
+    const changed = savedPainPoint?.pain_point !== ai.painPoint?.pain_point;
     const aiSubject = stripAiPunctuation(ai.subject);
     const aiBody = stripAiPunctuation(ai.body);
     const unexpected = unexpectedLinksOrAddresses(`${subject.text} ${body.text}`, `${aiSubject} ${aiBody}`, [unsubscribeUrl, ...links.map((l) => l.url), ...attachments.map((a) => a.name)], (i.lead.website as string | null) ?? null);
-    return { ...finish(aiSubject, aiBody), attachments, templateId: template.id, missing, aiFailed: false, unexpected, unsubscribeOk };
-  } catch {
+    return { ...finish(aiSubject, aiBody), attachments, templateId: template.id, missing, aiFailed: changed, unexpected, unsubscribeOk };
+  } catch (error) {
     console.error('autopilot: AI draft failed, keeping the plain template for review');
     return { ...finish(subject.text, body.text), attachments, templateId: template.id, missing, aiFailed: true, unexpected: [], unsubscribeOk };
   }

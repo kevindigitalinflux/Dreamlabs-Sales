@@ -7,6 +7,8 @@ import { buildTemplateVars, substituteVariables } from '../_shared/templateVars.
 import { appendLinks, onlyOrgAttachments, parseAttachments, parseLinks } from '../_shared/emailAttachments.ts';
 import { formatIcpContext, loadIcp, resolveIcpId, topPainPoint } from '../_shared/icp.ts';
 import { applyCustomVariables, loadCustomVariables } from '../_shared/customVariables.ts';
+import { painPointList, resolvePainPoint } from '../_shared/painPointPick.ts';
+import { loadPainPointNotes, saveAiPainPoint } from '../_shared/painPointStorage.ts';
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -81,10 +83,13 @@ Deno.serve(async (req) => {
   const { data: org } = await service.from('organizations').select('name, company_context').eq('id', orgId).maybeSingle();
   const orgName = org?.name ?? 'our team';
   try {
-    const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: leadForDraft, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, icpContext: formatIcpContext(icp), recipientTitle: body.recipient_title?.slice(0, 120) ?? null, generalInbox, apiKey });
+    const painPoint = resolvePainPoint(await loadPainPointNotes(client, body.lead_id));
+    const ai = await draftEmail({ subject: subject.text, body: bodyText.text, lead: leadForDraft, notes: noteTexts, contractorName, orgName, companyContext: org?.company_context, icpContext: formatIcpContext(icp), recipientTitle: body.recipient_title?.slice(0, 120) ?? null, generalInbox, apiKey,
+      painPoints: painPointList(icp?.pain_points), painPoint });
+    await saveAiPainPoint(client, body.lead_id, ai.painPoint ?? null);
     return respond(ai.subject, ai.body, true);
   } catch (e) {
-    console.error('draftEmail failed, falling back to plain template:', e);
+    console.error('generate-email: tailored draft or pain point save failed; using the plain template');
     return respond(subject.text, bodyText.text, false);
   }
 });

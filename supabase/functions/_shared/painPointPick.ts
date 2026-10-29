@@ -11,8 +11,8 @@ const MARKER = 'Pain point pick v1';
 /** Clean, bounded, deduplicated options for AI use; template fallback still uses the original line unchanged. */
 export function painPointList(text: string | null | undefined): string[] {
   const seen = new Set<string>();
-  return icpPainPointLines(text).map(value => aiLine(value).slice(0, 300)).filter(value => {
-    if (!value || seen.has(key(value))) return false;
+  return icpPainPointLines(text).map(aiLine).filter(value => {
+    if (!value || value.length > 300 || seen.has(key(value))) return false;
     seen.add(key(value)); return true;
   });
 }
@@ -58,7 +58,7 @@ export function formatPainPointNote(choice: ChosenPainPoint): string {
 export function resolvePainPoint(notes: PainPointNote[], points: string[] = []): ChosenPainPoint | null {
   for (const note of notes) {
     const text = /Main pain point:\r?\n([^\r\n]+)/.exec(note.content)?.[1]?.trim();
-    if (text && (note.note_type !== 'ai_summary' || !!note.edited_at)) return { pain_point: text.slice(0, 300), source: 'manual', reason: 'Chosen by you.' };
+    if (text && (note.note_type !== 'ai_summary' || !!note.edited_at)) return { pain_point: text, source: 'manual', reason: 'Chosen by you.' };
   }
   for (const note of notes) {
     if (!note.content.startsWith(MARKER + '\n')) continue;
