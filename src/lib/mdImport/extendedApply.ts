@@ -36,12 +36,12 @@ export async function applySequences(client: SupabaseClient, files: ImportFile[]
     const resolved = resolveSequence(value, files, snapshot);
     if (resolved.errors.length || resolved.steps.some(step => !step.id)) throw new Error(resolved.errors.join('; ') || `Templates could not be resolved: ${value.name}`);
     const steps = resolved.steps.map(step => ({ template_id: step.id!, template_type: 'custom', delay_days: step.wait_days, subject_override: null }));
-    const row = { steps, icp_id: resolved.icpId, is_active: false };
-    if (existing && existing.is_active === false && existing.icp_id === row.icp_id && JSON.stringify(canonicalSteps(existing.steps)) === JSON.stringify(canonicalSteps(steps))) { done(label, label, true); continue; }
+    const row = { steps, icp_id: resolved.icpId };
+    if (existing && existing.icp_id === row.icp_id && JSON.stringify(canonicalSteps(existing.steps)) === JSON.stringify(canonicalSteps(steps))) { done(label, label, true); continue; }
     const query = existing ? client.from('email_sequences').update(row).eq('org_id', options.orgId).eq('id', existing.id)
-      : client.from('email_sequences').insert({ ...row, name: value.name, description: null, category: null, is_default: false, auto_draft_on_reply: false, org_id: options.orgId, created_by: options.userId });
+      : client.from('email_sequences').insert({ ...row, is_active: false, name: value.name, description: null, category: null, is_default: false, auto_draft_on_reply: false, org_id: options.orgId, created_by: options.userId });
     const saved = checkedRows(await query.select('id'), 1)[0];
-    if (!existing) snapshot.sequences!.push({ id: String(saved.id), name: value.name, ...row });
+    if (!existing) snapshot.sequences!.push({ id: String(saved.id), name: value.name, ...row, is_active: false });
     else Object.assign(existing, row);
     done(label, `${existing ? 'Updated' : 'Created'} ${label}`);
   }

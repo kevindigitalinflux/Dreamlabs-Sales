@@ -102,7 +102,7 @@ icp: Property managers
 
 Template names match exactly, ignoring case. Selected same-batch templates win over organisation templates; missing or ambiguous names block that selected sequence. The preview lists every template resolution and wait. An ICP must also resolve in the organisation or selected batch. Untick an unresolved sequence or fix its references before applying.
 
-Add new skips existing sequence names. Replace changes only the matching sequence's steps and ICP; unrelated sequences are untouched. Every imported/replaced sequence is an **inactive draft**. Nothing is enrolled or sent. After reviewing it, explicitly enable it in the sequence editor before using it. Steps are saved together in one existing JSON row. Migration 071 is required before this importer/frontend and its updated edge bundles are deployed; the builder does not apply it.
+Add new skips existing sequence names. Replace changes only the matching sequence's steps and ICP, preserving its existing active or inactive state; unrelated sequences are untouched. Only newly created sequences are **inactive drafts** and need explicit enabling in the sequence editor after review. Replace does not pause a live sequence. An identical replace compares only steps and ICP and performs no write, regardless of activation state. The import itself does not enrol or send. Steps are saved together in one existing JSON row. Migration 071 is required before this importer/frontend and its updated edge bundles are deployed; the builder does not apply it.
 
 ## 5. Company packages (`type: company-packages`)
 

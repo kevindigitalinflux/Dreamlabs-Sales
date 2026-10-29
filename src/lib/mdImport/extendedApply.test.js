@@ -39,14 +39,17 @@ it('creates a complete inactive sequence with resolved template IDs; add-only re
     { template_id: 't', template_type: 'custom', delay_days: 0 }, { template_id: 'r', template_type: 'custom', delay_days: 4 } ] });
   db.writes.length = 0; await applyImport(db.client, files, options); expect(db.writes).toEqual([]);
 });
-it('replace changes only the named sequence and leaves it inactive', async () => {
-  const db = database(); db.tables.email_sequences.push({ id: 's', org_id: 'org', name: 'FOLLOW-UP', steps: [], is_active: true }, { id: 'other', org_id: 'org', name: 'Other', steps: ['keep'] });
+it.each([true, false])('replace preserves is_active=%s and a second identical replace is a no-op', async is_active => {
+  const db = database(); db.tables.email_sequences.push({ id: 's', org_id: 'org', name: 'FOLLOW-UP', steps: [], is_active }, { id: 'other', org_id: 'org', name: 'Other', steps: ['keep'] });
   const files = prepareFiles([seq], db.tables.ideal_customer_profiles, []); files[0].replace = true;
-  await applyImport(db.client, files, options);
-  expect(db.tables.email_sequences[0].steps).toHaveLength(2); expect(db.tables.email_sequences[0].is_active).toBe(false);
+  expect((await applyImport(db.client, files, options)).error).toBeNull();
+  expect(db.tables.email_sequences[0].steps).toHaveLength(2); expect(db.tables.email_sequences[0].is_active).toBe(is_active);
+  expect(db.writes).toHaveLength(1);
+  expect(Object.keys(db.writes[0].payload).sort()).toEqual(['icp_id', 'steps']);
   expect(db.tables.email_sequences[1].steps).toEqual(['keep']);
   db.tables.email_sequences[0].steps = db.tables.email_sequences[0].steps.map(step => ({ subject_override: step.subject_override, delay_days: step.delay_days, template_type: step.template_type, template_id: step.template_id }));
-  db.writes.length = 0; await applyImport(db.client, files, options); expect(db.writes).toEqual([]);
+  db.writes.length = 0; expect((await applyImport(db.client, files, options)).error).toBeNull(); expect(db.writes).toEqual([]);
+  expect(db.tables.email_sequences[0].is_active).toBe(is_active);
 });
 it('reports partial sequence failure without a half-built row', async () => {
   const db = database(); const log = vi.spyOn(console, 'error').mockImplementation(() => {});
