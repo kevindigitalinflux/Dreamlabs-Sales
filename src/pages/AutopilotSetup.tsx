@@ -26,6 +26,7 @@ export function AutopilotSetup() {
   const { settings } = useOrgApiSettings();
   const { createRun } = useAutopilot();
   const [mode, setMode] = useState<AutopilotModeChoice>('discover');
+  const [selectedVisited, setSelectedVisited] = useState(false);
   const [step, setStep] = useState(1);
   const [rawInput, setRawInput] = useState('');
   const [icp, setIcp] = useState<IcpParams | null>(null);
@@ -81,8 +82,10 @@ export function AutopilotSetup() {
         <Rocket className="h-6 w-6 text-cyan" aria-hidden />
         <h1 className="text-[28px] font-extrabold">Start autopilot</h1>
       </header>
-      <ModeSwitch mode={mode} onChange={setMode} />
-      {mode === 'selected' && <SelectedSetup />}
+      <ModeSwitch mode={mode} onChange={next => { setMode(next); if (next === 'selected') setSelectedVisited(true); }} />
+      {(mode === 'selected' || selectedVisited) && <div hidden={mode !== 'selected'}>
+        <SelectedSetup key={currentOrg?.id ?? 'no-org'} />
+      </div>}
       {mode === 'discover' && <StepProgress step={step} total={3} />}
       {mode === 'discover' && error && <p role="alert" className="text-sm text-danger">{error}</p>}
 

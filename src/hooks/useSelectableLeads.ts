@@ -15,7 +15,12 @@ interface EnrollmentRow { lead_id: string; status: EligibilityEnrollment['status
 export function useSelectableLeads(timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone) {
   const { currentOrg } = useOrg();
   const { pipelines, loading: pipelinesLoading } = usePipeline();
-  const { leads, loading: leadsLoading, error: leadsError } = useOrgLeads();
+  const { leads, loading: leadsLoading, error: leadsError } = useOrgLeads(true);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
   const [loaded, setLoaded] = useState<{ orgId: string; enrollments: Map<string, EligibilityEnrollment>; blocked: Set<string>; pendingReview: Set<string> } | null>(null);
   const [extraError, setExtraError] = useState<string | null>(null);
 
@@ -50,15 +55,14 @@ export function useSelectableLeads(timeZone: string = Intl.DateTimeFormat().reso
     return () => { cancelled = true; };
   }, [currentOrg]);
 
+  const orgPipelines = useMemo(() => pipelines.filter(p => p.org_id === currentOrg?.id), [pipelines, currentOrg?.id]);
   const byPipeline: PipelineGroup[] = useMemo(() => {
     if (!currentOrg || !loaded || loaded.orgId !== currentOrg.id) return [];
-    const now = new Date();
-    const orgPipelines = pipelines.filter((p) => p.org_id === currentOrg.id);
     return groupSelectableLeads(orgPipelines, leads, loaded.enrollments, loaded.blocked, endOfLocalDay(now, timeZone), now, loaded.pendingReview);
-  }, [currentOrg, pipelines, leads, loaded, timeZone]);
+  }, [currentOrg, orgPipelines, leads, loaded, timeZone, now]);
 
   const error = leadsError ?? extraError;
   // With no org there is nothing to load: report not loading so the picker shows its no-org state.
   const loading = !!currentOrg && !error && (pipelinesLoading || leadsLoading || loaded?.orgId !== currentOrg.id);
-  return { loading, error, byPipeline, hasOrg: !!currentOrg };
+  return { loading, error, byPipeline, pipelines: orgPipelines, now, hasOrg: !!currentOrg };
 }

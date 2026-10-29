@@ -10,7 +10,7 @@ import type { Lead } from '../types';
  * can see in it), not scoped to one active pipeline — for org-wide surfaces like the
  * Dashboard and Power Dialer, where "today's focus" or "who can I call" must not be
  * silently narrowed to whichever pipeline happens to be selected in the switcher. */
-export function useOrgLeads() {
+export function useOrgLeads(withEmailContacts = false) {
   const { session } = useAuth();
   const { currentOrg } = useOrg();
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -20,11 +20,12 @@ export function useOrgLeads() {
   const refresh = useCallback(async () => {
     if (!currentOrg) { setLeads([]); setLoading(false); return; }
     const { data, error: err } = await supabase
-      .from('leads').select('*').eq('org_id', currentOrg.id).order('kanban_position').order('created_at');
+      .from('leads').select(withEmailContacts ? '*, email_contacts:decision_maker_candidates(email, dismissed_at)' : '*')
+      .eq('org_id', currentOrg.id).order('kanban_position').order('created_at').returns<Lead[]>();
     if (err) setError(err.message);
-    else { setLeads(data as Lead[]); setError(null); }
+    else { setLeads(data ?? []); setError(null); }
     setLoading(false);
-  }, [currentOrg]);
+  }, [currentOrg, withEmailContacts]);
 
   useEffect(() => {
     // A different org must never show the previous org's leads while it loads.

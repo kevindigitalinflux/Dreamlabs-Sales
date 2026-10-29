@@ -6,6 +6,7 @@ import { useSelectableLeads } from '../../hooks/useSelectableLeads';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { emailGateMessage, pruneSelection, spendCapToCents, validateCaps, validateWindow } from '../../lib/selectableLeads';
+import { emptyPickerFilters } from '../../lib/autopilotPicker';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { SelectedLeadsPicker } from './SelectedLeadsPicker';
@@ -17,6 +18,7 @@ export function SelectedSetup() {
   const { currentOrg } = useOrg();
   const { createSelectedRun } = useAutopilot();
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [filters, setFilters] = useState(emptyPickerFilters);
   const [win, setWin] = useState<WindowValues>({
     start: '09:00', end: '17:00', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, dailySendCap: 20, spendCap: '',
   });
@@ -38,7 +40,7 @@ export function SelectedSetup() {
 
   const data = useSelectableLeads(win.timeZone);
   // A different org's selection must never survive an org switch.
-  useEffect(() => { setSelected(new Set()); setError(null); }, [currentOrg?.id]);
+  useEffect(() => { setSelected(new Set()); setFilters(emptyPickerFilters()); setError(null); }, [currentOrg?.id]);
 
   const visibleSelected = useMemo(() => pruneSelection(selected, data.byPipeline), [selected, data.byPipeline]);
   const windowError = useMemo(() => validateWindow(win.start, win.end, win.timeZone, new Date()), [win.start, win.end, win.timeZone]);
@@ -64,7 +66,8 @@ export function SelectedSetup() {
     <div className="flex flex-col gap-6">
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       {mailboxError && <p role="alert" className="text-sm text-danger">{mailboxError}</p>}
-      <SelectedLeadsPicker value={selected} onChange={setSelected} data={data} count={visibleSelected.length} />
+      <SelectedLeadsPicker value={selected} onChange={setSelected} data={data} filters={filters} onFiltersChange={setFilters}
+        now={data.now} timeZone={win.timeZone} />
       <Card>
         <WindowFields value={win} onChange={setWin} windowError={windowError ?? capsError} />
       </Card>
