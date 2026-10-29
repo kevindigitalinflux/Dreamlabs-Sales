@@ -9,6 +9,17 @@ const ld = (id: string, pipeline_id: string, o: Partial<Lead> = {}) =>
   ({ id, pipeline_id, business_name: id, email: 'a@x.com', stage: 'new_lead', opted_out: false, last_contacted_at: null, ...o }) as Lead;
 
 describe('groupSelectableLeads', () => {
+  it('retains disabled rows with authoritative reasons and stable eligible-first name order', () => {
+    const groups = groupSelectableLeads([pl('1')], [ld('z', '1'), ld('a', '1', { opted_out: true }), ld('b', '1')], new Map(), new Set(), end, now);
+    expect(groups[0]!.leads.map(l => [l.id, l.eligible, l.reason])).toEqual([
+      ['b', true, 'new'], ['z', true, 'new'], ['a', false, 'opted_out'],
+    ]);
+  });
+  it('retains pending-review rows without making them selectable', () => {
+    const groups = groupSelectableLeads([pl('1')], [ld('draft', '1')], new Map(), new Set(), end, now, new Set(['draft']));
+    expect(groups[0]!.leads[0]).toMatchObject({ eligible: false, reason: 'pending_review' });
+    expect(pruneSelection(new Set(['draft']), groups)).toEqual([]);
+  });
   it('hides pending Autopilot review from later selection and prunes stale picks', () => {
     const groups = groupSelectableLeads([pl('1')], [ld('parked', '1'), ld('clear', '1')], new Map(), new Set(), end, now, new Set(['parked']));
     expect(groups[0]!.eligible.map(l => l.id)).toEqual(['clear']);

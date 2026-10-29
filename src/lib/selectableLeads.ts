@@ -1,18 +1,24 @@
-import { classifyLead, localDateString, windowBounds, type EligibilityEnrollment } from '../../supabase/functions/_shared/autopilotEligibility';
+import { classifyLead, localDateString, windowBounds, type EligibilityEnrollment, type EligibilityResult } from '../../supabase/functions/_shared/autopilotEligibility';
 import type { Lead, Pipeline } from '../types';
 
 export type SelectableLead = Lead & { reason: 'new' | 'due' };
+export type PickerLead = Lead & {
+  eligible: boolean;
+  reason: EligibilityResult['reason'] | 'pending_review';
+  enrollment: EligibilityEnrollment | null;
+};
 
 export interface PipelineGroup {
   pipelineId: string;
   pipelineName: string;
   eligible: SelectableLead[];
+  leads: PickerLead[];
   hiddenCount: number;
 }
 
 /**
- * Groups leads by pipeline, keeping only those autopilot may act on now. Ineligible leads are
- * counted in `hiddenCount`. Pipelines with no leads at all are omitted. `endOfToday` must come
+ * Groups all leads by pipeline, retaining disabled reasons alongside the eligible submit list.
+ * Ineligible leads are counted in `hiddenCount`. Empty pipelines are omitted. `endOfToday` must come
  * from `endOfLocalDay(now, timeZone)`.
  */
 export function groupSelectableLeads(
@@ -27,17 +33,21 @@ export function groupSelectableLeads(
   const groups: PipelineGroup[] = [];
   for (const p of pipelines) {
     const eligible: SelectableLead[] = [];
+    const rows: PickerLead[] = [];
     let hiddenCount = 0;
     let total = 0;
     for (const lead of leads) {
       if (lead.pipeline_id !== p.id) continue;
       total += 1;
-      if (pendingReview.has(lead.id)) { hiddenCount += 1; continue; }
-      const res = classifyLead({ ...lead, opted_out: lead.opted_out === true }, enrollmentByLead.get(lead.id) ?? null, blocked, endOfToday, now);
+      const enrollment = enrollmentByLead.get(lead.id) ?? null;
+      const res = pendingReview.has(lead.id) ? { eligible: false as const, reason: 'pending_review' as const }
+        : classifyLead({ ...lead, opted_out: lead.opted_out === true }, enrollment, blocked, endOfToday, now);
+      rows.push({ ...lead, ...res, enrollment });
       if (res.eligible) eligible.push({ ...lead, reason: res.reason });
       else hiddenCount += 1;
     }
-    if (total > 0) groups.push({ pipelineId: p.id, pipelineName: p.name, eligible, hiddenCount });
+    rows.sort((a, b) => Number(b.eligible) - Number(a.eligible) || a.business_name.localeCompare(b.business_name) || a.id.localeCompare(b.id));
+    if (total > 0) groups.push({ pipelineId: p.id, pipelineName: p.name, eligible, leads: rows, hiddenCount });
   }
   return groups;
 }
