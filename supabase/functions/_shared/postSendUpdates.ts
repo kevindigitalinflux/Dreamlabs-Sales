@@ -60,7 +60,7 @@ async function run(service: Service, ctx: PostSendContext, warnings: string[]): 
   const [enrRes, seqRes, tplRes] = await Promise.all([
     service.from('sequence_enrollments').select('id, sequence_id, current_step, status, next_send_at')
       .eq('lead_id', ctx.leadId).in('status', ['active', 'paused']).order('created_at', { ascending: false }).limit(1),
-    service.from('email_sequences').select('id, name, steps').or(`org_id.eq.${ctx.orgId},org_id.is.null`),
+    service.from('email_sequences').select('id, name, steps').or(`org_id.eq.${ctx.orgId},org_id.is.null`).eq('is_active', true),
     service.from('email_templates').select('id, org_id, template_type, is_default').or(`org_id.eq.${ctx.orgId},org_id.is.null`),
   ]);
   if (enrRes.error || seqRes.error || tplRes.error) {

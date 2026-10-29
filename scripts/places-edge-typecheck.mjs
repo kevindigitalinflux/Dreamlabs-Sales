@@ -12,7 +12,7 @@ mkdirSync(scratch, { recursive: true });
 writeFileSync(new URL('edge.d.ts', scratch), `declare namespace Deno { function serve(handler: (req: Request) => Response | Promise<Response>): void; namespace env { function get(name: string): string | undefined; } }
 declare module 'https://deno.land/x/denomailer@1.6.0/mod.ts' { export class SMTPClient { constructor(config: unknown); send(message: unknown): Promise<void>; close(): Promise<void>; } }
 `);
-const functions = ['org-api-settings', 'scrape-google-places', 'run-deep-find', 'enrich-leads-bulk', 'run-autopilot', 'run-lookup-jobs', 'run-selected-autopilot', 'scrape-companies-house', 'scrape-cro', 'reveal-decision-maker', 'apollo-phone-webhook', 'find-decision-makers', 'check-sequences', 'send-email', 'check-replies', 'email-settings', 'draft-reply', 'draft-linkedin-message', 'generate-email', 'parse-csv-leads', 'parse-notes', 'parse-session-notes', 'pipeline-shares', 'suggest-sequence'];
+const functions = ['auto-enroll-cold-outreach', 'org-api-settings', 'scrape-google-places', 'run-deep-find', 'enrich-leads-bulk', 'run-autopilot', 'run-lookup-jobs', 'run-selected-autopilot', 'scrape-companies-house', 'scrape-cro', 'reveal-decision-maker', 'apollo-phone-webhook', 'find-decision-makers', 'check-sequences', 'send-email', 'check-replies', 'email-settings', 'draft-reply', 'draft-linkedin-message', 'generate-email', 'parse-csv-leads', 'parse-notes', 'parse-session-notes', 'pipeline-shares', 'suggest-sequence'];
 writeFileSync(new URL('tsconfig.json', scratch), JSON.stringify({ compilerOptions: {
   target: 'ES2022', lib: ['ES2022', 'DOM', 'DOM.Iterable'], module: 'ESNext', moduleResolution: 'bundler',
   strict: true, skipLibCheck: true, noEmit: true, allowImportingTsExtensions: true,

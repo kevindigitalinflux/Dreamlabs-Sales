@@ -95,6 +95,7 @@ export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }
       .map((t): StepOption => ({ value: `id:${t.id}`, name: t.name, category: t.category, kind: 'custom' })),
   ];
   const [form, setForm] = useState<SequenceInput>({
+    is_active: sequence?.is_active ?? true,
     name: sequence?.name ?? '', description: sequence?.description ?? null,
     steps: sequence?.steps ?? [], is_default: sequence?.is_default ?? false,
     category: sequence?.category ?? '', icp_id: sequence?.icp_id ?? null,
@@ -130,6 +131,8 @@ export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }
     <Modal open onClose={onClose} title={sequence ? `Edit — ${sequence.name}` : 'New sequence'}>
       <div className="flex flex-col gap-4">
         <Input label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+        <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={form.is_active !== false}
+          onChange={event => setForm(previous => ({ ...previous, is_active: event.target.checked }))} />Active sequence (allow enrolment and drafting)</label>
         <CategoryField value={form.category ?? ''} onChange={(category) => setForm((f) => ({ ...f, category }))} suggestions={categorySuggestions} />
         <IcpSelect
           icps={icps}

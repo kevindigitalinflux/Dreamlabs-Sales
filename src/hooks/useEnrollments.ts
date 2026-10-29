@@ -29,7 +29,7 @@ export function useEnrollments(leadId: string) {
   useEffect(() => { setLoading(true); void refresh(); }, [refresh]);
 
   const enroll = useCallback(async (sequenceId: string, startStep = 1): Promise<string | null> => {
-    const { data: seq } = await supabase.from('email_sequences').select('*').eq('id', sequenceId).single();
+    const { data: seq } = await supabase.from('email_sequences').select('*').eq('id', sequenceId).eq('is_active', true).single();
     if (!seq) return 'Sequence not found';
     const steps = (seq as EmailSequence).steps;
     // Starting part-way in: the chosen step is the next one drafted, after its own usual wait.

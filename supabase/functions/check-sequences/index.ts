@@ -96,12 +96,13 @@ Deno.serve(async (req) => {
     const row = dueRows[rowIdx]!;
     const enrollment = row as Record<string, unknown> & {
       id: string; current_step: number; enrolled_by: string | null; next_send_at: string;
-      sequence: { steps: Step[]; auto_draft_on_reply: boolean; icp_id?: string | null } | null;
+      sequence: { steps: Step[]; auto_draft_on_reply: boolean; icp_id?: string | null; is_active?: boolean } | null;
       lead: Record<string, unknown> | null;
     };
     const steps = enrollment.sequence?.steps ?? [];
     const step = steps[enrollment.current_step - 1];
     const lead = enrollment.lead;
+    if (enrollment.sequence?.is_active === false) { skipped.push({ id: enrollment.id, reason: 'inactive sequence' }); continue; }
     if (!step || !lead) { skipped.push({ id: enrollment.id, reason: 'missing step or lead' }); continue; }
     // Parked Autopilot drafts have NOT advanced their step. Human review owns that advance.
     const draftState = await unsentAutopilotDraft(service, String(lead.org_id), String(lead.id));

@@ -14,7 +14,8 @@ import { Skeleton } from '../ui/Skeleton';
 /** Enroll a lead in a sequence, or manage the active enrollment (SPEC §7). */
 export function EnrollmentControl({ lead }: { lead: Lead }) {
   const { enrollment, loading, enroll, setStatus, goToStep } = useEnrollments(lead.id);
-  const { sequences } = useSequences();
+  const { sequences: allSequences } = useSequences();
+  const sequences = allSequences.filter(sequence => sequence.is_active !== false);
   const [picked, setPicked] = useState('');
   const [startStep, setStartStep] = useState('1');
   const pickedSteps = sequences.find((s) => s.id === picked)?.steps ?? [];

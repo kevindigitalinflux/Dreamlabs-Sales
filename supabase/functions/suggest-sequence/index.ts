@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
 
     const { data: seqData } = await service.from('email_sequences')
       .select('id, name, description, category, icp_id, steps')
-      .or(`org_id.is.null,org_id.eq.${orgId}`);
+      .or(`org_id.is.null,org_id.eq.${orgId}`).eq('is_active', true);
     const sequences = ((seqData ?? []) as SequenceRow[]).filter((s) => Array.isArray(s.steps) && s.steps.length > 0);
     if (sequences.length === 0) return json(result(null, null, 'There are no sequences to choose from yet'), 200, headers);
 

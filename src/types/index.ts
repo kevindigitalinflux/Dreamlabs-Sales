@@ -254,6 +254,8 @@ export interface SequenceStep {
 }
 
 export interface EmailSequence {
+  /** False for imported drafts until explicitly enabled in the sequence editor. */
+  is_active?: boolean;
   id: string;
   name: string;
   description: string | null;

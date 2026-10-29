@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
   );
 
   const { data: sequences } = await service
-    .from('email_sequences').select('id, org_id, steps').eq('name', 'Cold outreach default');
+    .from('email_sequences').select('id, org_id, steps').eq('name', 'Cold outreach default').eq('is_active', true);
 
   let enrolled = 0;
   for (const seq of sequences ?? []) {

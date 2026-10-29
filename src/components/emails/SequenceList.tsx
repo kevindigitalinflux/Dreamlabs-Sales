@@ -14,7 +14,7 @@ import { distinctCategories, matchesCategory, normalizeCategory } from '../../li
 
 /** Sequence library: defaults first, then own; click to edit (own or admin), New to create. */
 export function SequenceList() {
-  const { sequences, loading, error, save, remove } = useSequences();
+  const { sequences, loading, error, save, remove } = useSequences(true);
   const { session } = useAuth();
   const { currentOrg } = useOrg();
   const [editing, setEditing] = useState<EmailSequence | null | 'new'>(null);
@@ -44,6 +44,7 @@ export function SequenceList() {
               className={`w-full rounded-xl border border-line bg-card p-4 text-left ${canEdit(s) ? 'cursor-pointer hover:bg-surface/50' : 'cursor-default'}`}>
               <div className="flex items-center gap-2">
                 <span className="font-heading text-sm font-bold">{s.name}</span>
+                {s.is_active === false && <span className="text-xs text-muted">Inactive draft</span>}
                 {s.is_default && <Star className="h-3.5 w-3.5 text-warning" aria-label="Default sequence" />}
                 <CategoryBadge category={s.category} />
               </div>

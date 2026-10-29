@@ -5,6 +5,7 @@ import { useOrg } from './useOrg';
 import type { EmailSequence, SequenceStep } from '../types';
 
 export interface SequenceInput {
+  is_active?: boolean;
   name: string;
   description: string | null;
   steps: SequenceStep[];
@@ -14,7 +15,7 @@ export interface SequenceInput {
 }
 
 /** Email sequences (defaults + own), RLS-scoped like templates. */
-export function useSequences() {
+export function useSequences(includeInactive = false) {
   const { session } = useAuth();
   const { currentOrg } = useOrg();
   const [sequences, setSequences] = useState<EmailSequence[]>([]);
@@ -23,14 +24,15 @@ export function useSequences() {
 
   const refresh = useCallback(async () => {
     if (!currentOrg) { setSequences([]); setLoading(false); return; }
-    const { data, error: err } = await supabase
+    let query = supabase
       .from('email_sequences').select('*')
-      .or(`org_id.is.null,org_id.eq.${currentOrg.id}`)
-      .order('is_default', { ascending: false }).order('name');
+      .or(`org_id.is.null,org_id.eq.${currentOrg.id}`);
+    if (!includeInactive) query = query.eq('is_active', true);
+    const { data, error: err } = await query.order('is_default', { ascending: false }).order('name');
     if (err) setError(err.message);
     else { setSequences(data as EmailSequence[]); setError(null); }
     setLoading(false);
-  }, [currentOrg]);
+  }, [currentOrg, includeInactive]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 

@@ -38,7 +38,7 @@ export async function loadCandidates(service: SupabaseClient, leadId: string): P
 export async function loadSequencesAndTemplates(service: SupabaseClient, orgId: string): Promise<{ sequences: SequenceRow[]; templates: TemplateRow[] }> {
   const scope = `org_id.eq.${orgId},org_id.is.null`;
   const [{ data: seqs, error: sErr }, { data: tpls, error: tErr }] = await Promise.all([
-    service.from('email_sequences').select('*').or(scope),
+    service.from('email_sequences').select('*').or(scope).eq('is_active', true),
     service.from('email_templates').select('*').or(scope),
   ]);
   if (sErr || tErr) throw new Error('Could not load the sequences and templates');
