@@ -1,8 +1,8 @@
 # Setup file format (for the Claude skill and the app importer)
 
-Three Markdown files fill in a new organisation: company context, ideal customer profiles (ICPs) and email templates. The app reads them with a strict, deterministic parser. No AI is used on upload. A file that does not match this format is rejected with the line number and the reason.
+Five Markdown file types fill in an organisation: company context, ideal customer profiles (ICPs), company packages, email templates and sequences. The app reads them with a strict, deterministic parser. No AI is used on upload. A file that does not match this format is rejected with the line number and the reason.
 
-Rules that apply to all three files:
+Rules that apply to all five types:
 
 - Plain UTF-8 Markdown, file extension `.md`, maximum 200 KB.
 - The file starts with a front-matter block between two `---` lines. `type:` is required and tells the app which file it is.
@@ -84,6 +84,46 @@ Kind regards,
 - Allowed placeholders: `{{first_name}}`, `{{business_name}}`, `{{owner_name}}`, `{{package_name}}`, `{{deal_value}}`, `{{contractor_name}}`, `{{pain_point}}`, `{{unsubscribe_url}}`, plus any custom placeholder the organisation has already created. An unknown placeholder is flagged in the preview as a warning. `{{cal_link}}` and `{{audit_date}}` exist in the app but can be empty when an email is sent, so files should describe the call to action in words instead and avoid both.
 - Every cold email must include `{{unsubscribe_url}}` somewhere in the body.
 
+## 4. Sequences (`type: sequences`)
+
+Each sequence starts with a unique case-insensitive `# Name` (1–80 characters). An optional `icp:` name follows, then exactly one `## Steps` section. Maximum 100 sequences per file and 10 steps per sequence. Steps must be numbered consecutively from 1. Each `wait_days` is an integer from 0 to 60, measured after the preceding step; the first step normally uses 0.
+
+```
+---
+type: sequences
+---
+# Property managers follow-up
+icp: Property managers
+
+## Steps
+1. template: Intro email | wait_days: 0
+2. template: Intro email | wait_days: 4
+```
+
+Template names match exactly, ignoring case. Selected same-batch templates win over organisation templates; missing or ambiguous names block that selected sequence. The preview lists every template resolution and wait. An ICP must also resolve in the organisation or selected batch. Untick an unresolved sequence or fix its references before applying.
+
+Add new skips existing sequence names. Replace changes only the matching sequence's steps and ICP; unrelated sequences are untouched. Every imported/replaced sequence is an **inactive draft**. Nothing is enrolled or sent. After reviewing it, explicitly enable it in the sequence editor before using it. Steps are saved together in one existing JSON row. Migration 071 is required before this importer/frontend and its updated edge bundles are deployed; the builder does not apply it.
+
+## 5. Company packages (`type: company-packages`)
+
+One `# Package label` per package, maximum 20 packages per file. Labels must be unique ignoring case and have 1–80 characters after trimming/collapsing whitespace. Labels are saved exactly with that whitespace normalisation: prices, currency symbols and wording are not rewritten. Each organisation decides its own pricing policy. Optional body text is shown in the preview but **is not stored**, because the current model only stores labels.
+
+```
+---
+type: company-packages
+---
+# Growth £250 / month
+Timeline: two weeks.
+- Includes an onboarding session.
+
+# Support
+Optional ongoing help.
+```
+
+Add new appends labels not already present, ignoring case. If the organisation currently uses the built-in defaults (`custom_packages` is NULL), importing creates a custom list from the file only. Replace sets the list to exactly the selected labels. The preview warns about removed labels; existing leads keep their stored package text. Choose only one package file when replacing. Details storage is a separate future feature. `docs/setup-pack/company-packages-import.md` is one organisation's seven-label example, not a pricing policy for other organisations.
+
+Apply order is company context, ICP profiles, company packages, templates, then sequences. Import remains admin-only, local and review-before-save. A second add-new import skips saved matches. Sequence and package replacement also skip identical stored values. Failed work stops and reports saved, skipped and unsaved items; nothing retries silently.
+
 ## Guidance for the Claude skill (interview)
 
 The skill should ask the person for everything it needs before writing any file, one topic at a time:
@@ -92,4 +132,4 @@ The skill should ask the person for everything it needs before writing any file,
 2. Each customer type: who they are, their top three pain points in order of importance, goals, the objections they raise and the honest answers, and words to use or avoid.
 3. For each customer type, a short sequence of emails (introduction, follow-up, final nudge), each with a subject and a body in the owner's voice.
 
-Then it writes three files named `company-context.md`, `icp-profiles.md` and `email-templates.md` (or one `email-templates-<icp>.md` per customer type), and shows the person each one for approval before they upload. The skill must check each file against the rules above before it hands them over.
+Then it writes the requested files: `company-context.md`, `icp-profiles.md`, `company-packages.md`, `email-templates.md` (or one per customer type) and `sequences.md`. It shows each file for approval before upload and checks it against the rules above. Package details remain in the file for the person's review; only its labels are imported. The organisation decides whether labels may contain prices and whether email copy may quote them.

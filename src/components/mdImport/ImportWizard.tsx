@@ -9,9 +9,11 @@ import type { ApplyResult } from '../../lib/mdImport/apply';
 import { Modal } from '../ui/Modal';
 import { Skeleton } from '../ui/Skeleton';
 import { ImportWizardView } from './ImportWizardView';
+import { useOrg } from '../../hooks/useOrg';
 
 /** Loads the org snapshot and applies only reviewed selections; all file reading stays local. */
 export function ImportWizard({ orgId, userId, isAdmin, onClose, onApplied }: { orgId: string; userId: string; isAdmin: boolean; onClose: () => void; onApplied: () => void | Promise<void> }) {
+  const { setOrgPackages } = useOrg();
   const [snapshot, setSnapshot] = useState<ImportSnapshot | null>(null);
   const [files, setFiles] = useState<ImportFile[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -20,10 +22,11 @@ export function ImportWizard({ orgId, userId, isAdmin, onClose, onApplied }: { o
   const [result, setResult] = useState<ApplyResult | null>(null);
   const lock = useRef(false);
   useEffect(() => {
+    if (!isAdmin) return;
     let cancelled = false;
     void (async () => {
       try {
-        const [data, custom] = await Promise.all([loadImportSnapshot(supabase, orgId), supabase.from('custom_variables').select('key').eq('org_id', orgId)]);
+        const [data, custom] = await Promise.all([loadImportSnapshot(supabase, orgId, true), supabase.from('custom_variables').select('key').eq('org_id', orgId)]);
         if (custom.error) throw new Error(custom.error.message);
         if (!cancelled) setSnapshot({ ...data, customKeys: (custom.data ?? []).map((v: { key: string }) => v.key) });
       } catch (error) {
@@ -32,7 +35,7 @@ export function ImportWizard({ orgId, userId, isAdmin, onClose, onApplied }: { o
       }
     })();
     return () => { cancelled = true; };
-  }, [orgId]);
+  }, [orgId, isAdmin]);
   async function chooseFiles(incoming: File[]) {
     if (!snapshot || lock.current || result) return;
     lock.current = true; setReading(true);
@@ -47,7 +50,7 @@ export function ImportWizard({ orgId, userId, isAdmin, onClose, onApplied }: { o
     if (!snapshot || lock.current || result || !isAdmin) return;
     lock.current = true; setBusy(true);
     try {
-      const outcome = await applyImport(supabase, effectiveSelection(files, snapshot.profiles), { orgId, userId, isAdmin });
+      const outcome = await applyImport(supabase, effectiveSelection(files, snapshot.profiles), { orgId, userId, isAdmin, onPackagesChanged: labels => setOrgPackages(orgId, labels) });
       setResult(outcome);
       if (outcome.saved.length) await onApplied();
     } catch (error) {
@@ -55,6 +58,7 @@ export function ImportWizard({ orgId, userId, isAdmin, onClose, onApplied }: { o
       setError('Changes were saved, but the lists could not refresh. Close and reload the page.');
     } finally { setBusy(false); lock.current = false; }
   }
+  if (!isAdmin) return <p role="alert">Only an org admin can import setup files.</p>;
   return <Modal open title="Import setup files" onClose={() => { if (!lock.current) onClose(); }}>
     {error && <p role="alert" className="text-danger">{error}</p>}
     {!error && !snapshot && <Skeleton className="h-32 w-full" />}

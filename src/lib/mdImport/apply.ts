@@ -3,8 +3,9 @@ import type { ImportFile, ImportedTemplate } from './types';
 import type { IcpInput } from '../../hooks/useIcps';
 import { matchProfile, matchTemplate, resolveProfile } from './matching';
 import { checkedRows, loadImportSnapshot } from './store';
+import { applyPackages, applySequences } from './extendedApply';
 export interface ApplyResult { saved: string[]; skipped: string[]; notSaved: string[]; error: string | null }
-export interface ApplyOptions { orgId: string; userId: string; isAdmin: boolean }
+export interface ApplyOptions { orgId: string; userId: string; isAdmin: boolean; onPackagesChanged?: (labels: string[]) => void }
 /** Applies selected items, stopping on the first refused write. */
 export async function applyImport(client: SupabaseClient, files: ImportFile[], options: ApplyOptions): Promise<ApplyResult> {
   const result: ApplyResult = { saved: [], skipped: [], notSaved: [], error: null };
@@ -19,7 +20,10 @@ export async function applyImport(client: SupabaseClient, files: ImportFile[], o
     if (f.parsed.type === 'icp-profiles') f.parsed.data.forEach((value, i) => { if (f.selected[i]) profiles.push({ value, replace: f.replace, label: `Profile: ${value.name}` }); });
     if (f.parsed.type === 'email-templates') f.parsed.data.forEach((value, i) => { if (f.selected[i]) templates.push({ value, replace: f.replace, label: `Template: ${value.name}`, withoutIcp: !!f.withoutIcp?.[i] }); });
   }
-  result.notSaved = [...contexts.map(() => 'Company context'), ...profiles.map((p) => p.label), ...templates.map((t) => t.label)];
+  const packageFiles = files.filter(file => file.parsed.type === 'company-packages' && file.selected.some(Boolean));
+  if (packageFiles.length > 1 && packageFiles.some(file => file.replace)) return { ...result, error: 'Choose only one package file when replacing the list.' };
+  const sequenceLabels = files.flatMap(file => file.parsed.type === 'sequences' ? file.parsed.data.filter((_, i) => file.selected[i]).map(value => `Sequence: ${value.name}`) : []);
+  result.notSaved = [...contexts.map(() => 'Company context'), ...profiles.map((p) => p.label), ...packageFiles.map(file => `Packages: ${file.filename}`), ...templates.map((t) => t.label), ...sequenceLabels];
   function done(label: string, message: string, skip = false) {
     result.notSaved.splice(result.notSaved.indexOf(label), 1);
     (skip ? result.skipped : result.saved).push(message);
@@ -60,6 +64,7 @@ export async function applyImport(client: SupabaseClient, files: ImportFile[], o
       checkedRows(await client.from('ideal_customer_profiles').update(p.row).eq('org_id', orgId).eq('id', p.id).select('id'), 1);
       done(p.label, `Updated ${p.label}`);
     }
+    await applyPackages(client, files, snapshot, orgId, done, options.onPackagesChanged);
     const newTemplates: { row: Record<string, unknown>; label: string }[] = [];
     const templateUpdates: { id: string; row: Record<string, unknown>; label: string }[] = [];
     for (const t of templates) {
@@ -82,6 +87,7 @@ export async function applyImport(client: SupabaseClient, files: ImportFile[], o
       checkedRows(await client.from('email_templates').update(t.row).eq('org_id', orgId).eq('id', t.id).select('id'), 1);
       done(t.label, `Updated ${t.label}`);
     }
+    await applySequences(client, files, options, done);
   } catch (error) {
     console.error('Setup import stopped', { orgId, error });
     result.error = error instanceof Error ? error.message : 'Import stopped. Reopen the import to try again.';

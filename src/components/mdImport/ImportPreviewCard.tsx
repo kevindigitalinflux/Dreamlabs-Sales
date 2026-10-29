@@ -4,10 +4,13 @@ import { CompanyPreview } from './CompanyPreview';
 import { ProfilePreview } from './ProfilePreview';
 import { TemplatePreview } from './TemplatePreview';
 import { Button } from '../ui/Button';
+import { SelectField } from '../ui/Input';
+import { SequencePreview } from './SequencePreview';
+import { PackagePreview } from './PackagePreview';
 
-const typeLabels = { 'company-context': 'Company context', 'icp-profiles': 'Customer profiles', 'email-templates': 'Email templates' };
+const typeLabels = { 'company-context': 'Company context', 'icp-profiles': 'Customer profiles', 'email-templates': 'Email templates', sequences: 'Sequences', 'company-packages': 'Company packages' };
 /** One file card; invalid files remain removable without discarding other previews. */
-export function ImportPreviewCard({ file, snapshot, pending, onChange, onRemove }: { file: ImportFile; snapshot: ImportSnapshot; pending: string[]; onChange: (file: ImportFile) => void; onRemove: (id: string) => void }) {
+export function ImportPreviewCard({ file, files = [file], snapshot, pending, onChange, onRemove }: { file: ImportFile; files?: ImportFile[]; snapshot: ImportSnapshot; pending: string[]; onChange: (file: ImportFile) => void; onRemove: (id: string) => void }) {
   const p = file.parsed;
   const count = p.type === 'company-context' ? 1 : p.data?.length ?? 0;
   return <section className="min-w-0 rounded-xl border border-line p-3 text-sm">
@@ -17,12 +20,14 @@ export function ImportPreviewCard({ file, snapshot, pending, onChange, onRemove 
     {p.errors.map((e, i) => <p key={i} role="alert" className="break-words text-danger">line {e.line}: {e.message}</p>)}
     {p.warnings.map((w, i) => <p key={i} className="break-words text-warning">line {w.line}: {w.message}</p>)}
     {!p.errors.length && <>
-      {p.type !== 'company-context' && <label className="my-2 flex flex-col gap-1">Save choice<select className="min-h-11 w-full rounded border border-line bg-card px-2" value={file.replace ? 'replace' : 'new'} onChange={(e) => onChange({ ...file, replace: e.target.value === 'replace' })}>
+      {p.type !== 'company-context' && <SelectField label="Save choice" value={file.replace ? 'replace' : 'new'} onChange={(e) => onChange({ ...file, replace: e.target.value === 'replace' })}>
         <option value="new">Add new only, skip matches</option><option value="replace">Add new and replace matches</option>
-      </select></label>}
+      </SelectField>}
       <CompanyPreview file={file} context={snapshot.context} onChange={onChange} />
       <ProfilePreview file={file} profiles={snapshot.profiles} onChange={onChange} />
       <TemplatePreview file={file} profiles={snapshot.profiles} templates={snapshot.templates} pending={pending} onChange={onChange} />
+      <SequencePreview file={file} files={files} snapshot={snapshot} onChange={onChange} />
+      <PackagePreview file={file} current={snapshot.packages ?? null} onChange={onChange} />
     </>}
   </section>;
 }

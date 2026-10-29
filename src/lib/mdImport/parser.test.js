@@ -7,15 +7,17 @@ const icp = '# Property managers\n## Summary\nWho they are.\n## Pain points\n- L
 const email = '# Intro\nsubject: Hello {{first_name}}\n\n## Body\nHi,\n\nKeep this spacing.\n{{unsubscribe_url}}';
 
 describe('setup parser', () => {
-  it('parses all three actual format-document examples', () => {
+  it('parses all five actual format-document examples', () => {
     const doc = readFileSync('docs/MD-IMPORT-FORMAT.md', 'utf8');
     const blocks = [...doc.matchAll(/```\r?\n([\s\S]*?)```/g)].map((m) => m[1]);
-    expect(blocks).toHaveLength(3);
+    expect(blocks).toHaveLength(5);
     const parsed = blocks.map((text) => parseSetupFile(text, 'example.md'));
-    expect(parsed.map((p) => p.errors)).toEqual([[], [], []]);
+    expect(parsed.map((p) => p.errors)).toEqual([[], [], [], [], []]);
     expect(parsed[0].data).toBe('Mr Brush & Co is a commercial cleaning company in the UK. We clean offices, schools and ...');
     expect(parsed[1].data).toEqual([{ name: 'Property managers', summary: 'Who they are in one or two sentences.', pain_points: 'First item is the one used for the {{pain_point}} placeholder\nSecond item', goals: 'What they want', objections: 'What they push back on, and how to answer it', messaging_notes: 'Tone, words to use or avoid, angles that land.', extra_context: 'Anything else worth knowing.' }]);
     expect(parsed[2].data).toEqual([{ name: 'Intro email', subject: 'Quick question about {{business_name}}', body: 'Hi {{first_name}},\n\nBody text here. Blank lines separate paragraphs.\n\nKind regards,\n{{contractor_name}}', icp: 'Property managers', category: 'Cold outreach', links: [] }]);
+    expect(parsed[3].data[0].steps).toHaveLength(2);
+    expect(parsed[4].data.map(item => item.name)).toEqual(['Growth £250 / month', 'Support']);
   });
   it('normalizes BOM and CRLF without losing body paragraphs', () => {
     const p = parseSetupFile('\ufeff' + file('email-templates', email).replaceAll('\n', '\r\n'), 'A.MD');

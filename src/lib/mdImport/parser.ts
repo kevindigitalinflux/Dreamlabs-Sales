@@ -1,5 +1,6 @@
 import type { Issue, ParsedFile } from './types';
 import { profile, records, template } from './sections';
+import { companyPackage, sequence } from './extendedSections';
 
 /** Parses the setup format without I/O. */
 export function parseSetupFile(text: string, filename: string, customKeys: string[] = []): ParsedFile {
@@ -27,7 +28,7 @@ export function parseSetupFile(text: string, filename: string, customKeys: strin
     meta[m[1]] = m[2].trim();
   }
   const type = meta.type;
-  if (!['company-context', 'icp-profiles', 'email-templates'].includes(type)) { errors.push({ line: 2, message: 'Unknown or missing type.' }); return invalid; }
+  if (!['company-context', 'icp-profiles', 'email-templates', 'sequences', 'company-packages'].includes(type)) { errors.push({ line: 2, message: 'Unknown or missing type.' }); return invalid; }
   if (type !== 'email-templates' && (meta.icp !== undefined || meta.category !== undefined)) errors.push({ line: 2, message: 'icp and category defaults are only for email templates.' });
   const bodyLines = lines.slice(end + 1);
   if (type === 'company-context') {
@@ -37,15 +38,17 @@ export function parseSetupFile(text: string, filename: string, customKeys: strin
     return { type, data, errors, warnings };
   }
   const blocks = records(bodyLines, errors);
-  const limit = type === 'icp-profiles' ? 50 : 100;
+  const limit = type === 'icp-profiles' ? 50 : type === 'company-packages' ? 20 : 100;
   if (blocks.length > limit) errors.push({ line: blocks[limit][0].line, message: `Maximum ${limit} items per file.` });
   const seen = new Set<string>();
   for (const b of blocks) {
-    const name = b[0].text.slice(2).trim();
+    const name = b[0].text.slice(2).trim().replace(/\s+/g, ' ');
     if (!name || name.length > 80) errors.push({ line: b[0].line, message: 'Name must have 1 to 80 characters.' });
-    if (type === 'icp-profiles' && seen.has(name.toLowerCase())) errors.push({ line: b[0].line, message: 'Duplicate profile name.' });
+    if (type !== 'email-templates' && seen.has(name.toLowerCase())) errors.push({ line: b[0].line, message: 'Duplicate item name.' });
     seen.add(name.toLowerCase());
   }
+  if (type === 'sequences') return { type, data: blocks.map(block => sequence(block, errors)), errors, warnings };
+  if (type === 'company-packages') return { type, data: blocks.map(block => companyPackage(block, errors)), errors, warnings };
   return type === 'icp-profiles'
     ? { type, data: blocks.map((b) => profile(b, errors)), errors, warnings }
     : { type: 'email-templates', data: blocks.map((b) => template(b, meta, errors, warnings, customKeys)), errors, warnings };
