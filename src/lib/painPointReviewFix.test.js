@@ -17,4 +17,3 @@ it('keeps marker copies aligned', () => expect(AI_PAIN_POINT_MARKER).toBe(server
 it.each([['Cover', 'proposed', 'icp_list'], ['New angle', 'icp_list', 'proposed']])('keeps chosen text despite a wrong source label', (pain_point, source, expected) => {
   expect(validatePainPoint({ pain_point, source, reason: 'Saved facts.' }, ['Cover'])).toEqual({ pain_point, source: expected, reason: 'Saved facts.' });
 });
-
