@@ -2,6 +2,33 @@
 
 Updated 2026-10-16 (stacked review fixes). [x] means built AND independently reviewed; local review fixes remain [ ] until rereview. Exact resume point: `docs/HANDOFF.md`. Order matters. Roles are the defaults of the shared workflow (vault `_Team/Shared agent workflow.md`): either agent may plan or build when Kevin confirms and records the assignment. Kevin merges unless he authorizes otherwise.
 
+## Status (2026-10-29, Claude) - START HERE
+
+This section supersedes the older checkpoint blocks below it. Roles unchanged: Kevin directs, Claude architect/reviewer, Codex builder. Every merge, push, deploy, migration and role change still needs Kevin's explicit yes for that action.
+
+**Live on `main` (`c3fb1ce`, docs only on top of `c7f45c3`):**
+- Reply alerts (migration 069, `check-replies-tick` every 5 minutes). Kevin verified "Test reply detection" works and a real reply appears in Emails, Replies.
+- Run controls and Replies UX (pushed `3e76ee6`): Pause, Resume, Stop on selected-leads Autopilot runs, collapsible run sections, readiness colour badges, Replies list and opened-reply layout, "Kia Ora" greeting guard. Migration 070 applied (paused status, `paused_at`/`resumed_at`/`queued_at`, `autopilot_control_run`, `autopilot_claim_lead`, `autopilot_finish_selected`). Ten functions deployed. Checkpoint tag `checkpoint-2026-10-28-before-run-controls` (`c678d73`).
+- Notes overflow fix (`ac3f979`): `NoteText.tsx` wraps long notes and offers "Show full note".
+- Autopilot picker (`c7f45c3`, built by Codex on `codex/autopilot-picker`, reviewed by Claude, Kevin tested it live on 2026-10-29: "working perfectly"). Search (business, email, owner, not city), pipeline, contact status, stage, readiness and verified-email filters, one selection across pipelines, greyed-out ineligible leads with a written reason, "Hide leads I can't pick", sticky "N selected in M pipelines" bar. Frontend only, no migration or function. Gates: 190 files / 2,705 tests, 2,925 modules. Caveat: "Has a verified email" uses the last saved Deep find readiness result, so a manual email edit afterwards can make it stale.
+
+**In progress:** AI picks the best pain point per lead (tailored AI drafts only). Brief `docs/PAIN-POINT-PICK-BUILD-BRIEF.md` is pushed. Kevin is starting Codex on it in a new worktree `dreamlabs-sales-painpoint`, branch `codex/pain-point-pick`. Decisions by Kevin (2026-10-29): the AI chooses from the ICP pain-point list or proposes a new angle; the pick and a one-line reason show on the lead and review screen and can be changed; a manual pain point always wins; template sequences keep the current `{{pain_point}}` default (lead's own noted pain point, else the first ICP line). Phase 2 (not built): the AI picks which angle-specific template to use per lead. Today the notes pass only returns free text, so nothing stores a structured pick. Prefer the existing notes mechanism for storage; a migration only with Claude's review. Claude reviews the build report before any merge. TODO item 31.
+
+**Next, in order:**
+1. Claude reviews the pain-point build when Codex stops (report `docs/PAIN-POINT-PICK-BUILD-REPORT.md`).
+2. Kevin runs a small real selected-leads run to test Pause and Resume early (send window must be open; Kevin approves the run first).
+3. Remaining readiness checks (badge in all four places, readiness filter and sort, Emails, Waiting to release excludes parked Autopilot drafts) and reply-alert checks 3 to 9 (stage Replied, auto-reply filtering, opt-out warning, AI draft flow, desktop popups, non-admin visibility, Analytics reply rate, Kanban Replied stage).
+4. 3e smart depth and parallel leads (later brief), Gulf markets (deferred, TODO 29).
+
+**Open housekeeping:** Kevin's 24/7 Fitness lead has a probably wrong saved website (use "Not their domain") and a false person "Kia Ora" to dismiss; delete test lead "ZZ IRELAND TEST (delete me)"; Valentina to confirm the UX Tree Google key and that Admin, Invite hides the "Admin" role; refresh the Hostinger snapshot before any VPS change; VPS firewall reboot test; consider closing or reassigning `kieran@didreamlabs.com`. n8n-mcp fails with HTTP 401. There is no `gh` CLI.
+
+**Rollback references:** run controls = push tag `checkpoint-2026-10-28-before-run-controls` to main (ask first; migration 070 can stay because old code stays compatible). Reply alerts = `checkpoint-2026-10-27-before-reply-alerts`. Picker = `git push origin ac3f979:refs/heads/main --force-with-lease` (frontend only, nothing to undo in the database).
+
+**Worktrees:** `dreamlabs-sales-picker` (branch `codex/autopilot-picker`, merged), `dreamlabs-sales-ux` (`claude/notes-overflow`, merged), `dreamlabs-sales-replies` (`codex/reply-alerts`, merged, docs redundant), `dreamlabs-sales-painpoint` (to be created by Codex). Main checkout `dreamlabs-sales` has a stale local `main`: always `git fetch` and compare against `origin/main`.
+
+**Working notes:** gate env `VITE_SUPABASE_URL=http://127.0.0.1:54321 VITE_SUPABASE_ANON_KEY=local-test-placeholder`; gates are `npx tsc --noEmit`, `npx vitest run`, `npm run build`, `git diff --check`, `node scripts/places-edge-typecheck.mjs`. Verify a frontend deploy by taking `assets/index-*.js` from `https://sales.didreamlabs.com/` and grepping for a new string. Claude must not create accounts on the production system; RLS audits split into read-only blocks (prod) and fixture blocks (disposable local database only).
+
+
 ## Status (2026-10-27, Claude review)
 
 **Live on main (`546d7be`):** readiness badge and Autopilot fixes C8–11. Migration 065 applied to production (read-only audit passed); edge functions `run-deep-find`, `run-selected-autopilot`, `check-sequences`, `send-email` deployed (v27/v9/v35/v26); frontend bundle `index-crdPw0zt.js` confirmed live. Checkpoint tag `checkpoint-2026-10-27-before-readiness` (`ece88ed`). Not yet verified live: a real Deep find run showing the badge, and the Waiting-to-release filter.
