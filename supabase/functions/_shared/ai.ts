@@ -1,5 +1,11 @@
 import { stripAiPunctuation } from './textGuardrails.ts';
 import { EMAIL_FORMAT_PROMPT_LINE } from './emailFormatPrompt.ts';
+import { formatPainPointNote, painPointPrompt, parseLeadNotesOutput, type ChosenPainPoint } from './painPointPick.ts';
+
+interface PainPointInput { painPoints?: string[]; painPoint?: ChosenPainPoint | null }
+const choicePrompt = (input: PainPointInput) => input.painPoints ? painPointPrompt(input.painPoints, input.painPoint ?? null) : '';
+const draftChoice = (input: PainPointInput, output: unknown) => input.painPoints
+  ? { painPoint: input.painPoint ?? parseLeadNotesOutput(output, input.painPoints).choice } : {};
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 // gemini-2.5-flash was retired by Google ("no longer available to new users")
@@ -170,14 +176,15 @@ async function claudeJson(prompt: string, model: ClaudeModel, apiKey: string, ma
 }
 
 /** Personalises an already-variable-substituted draft using lead context + notes. Throws on failure. */
-export async function draftEmail(input: {
+export async function draftEmail(input: PainPointInput & {
   subject: string; body: string; lead: Record<string, unknown>; notes: string[]; contractorName: string; orgName: string; companyContext?: string | null; icpContext?: string | null; recipientTitle?: string | null; recipientName?: string | null; generalInbox?: boolean; apiKey: string;
-}): Promise<{ subject: string; body: string }> {
+}): Promise<{ subject: string; body: string; painPoint?: ChosenPainPoint | null }> {
   const result = await geminiJson(
 `${orgDescriptionLine(input.orgName, input.companyContext)}
 Personalise this follow-up email using the lead data and call notes. Keep it warm, brief, UK English.
 ${EMAIL_FORMAT_PROMPT_LINE}
 Do not invent facts not present in the data. Keep any URLs intact. ${DASH_GUARDRAIL_LINE} Return JSON: {"subject": string, "body": string}.
+${choicePrompt(input)}
 ${input.icpContext ? `
 IDEAL CUSTOMER PROFILE for this lead (who they are most like). Use it to choose which pain points, goals and objections to speak to, and the wording and tone that will resonate with them. Use it as background, not as text to quote, and never state a fact about this lead that is not in the lead data:
 ${input.icpContext}
@@ -192,7 +199,7 @@ ${input.body}`,
     input.apiKey,
   ) as { subject?: string; body?: string };
   if (!result.subject || !result.body) throw new Error('Gemini draft missing fields');
-  return { subject: stripAiPunctuation(result.subject), body: stripAiPunctuation(result.body) };
+  return { subject: stripAiPunctuation(result.subject), body: stripAiPunctuation(result.body), ...draftChoice(input, result) };
 }
 
 const DEFAULT_PACKAGE_VALUES = [
@@ -398,14 +405,15 @@ SAMPLE ROWS: ${JSON.stringify(input.sampleRows)}`,
  * is responsible for only invoking this when no `ai_summary` note exists
  * yet — see check-sequences). Throws on failure, same contract as draftEmail.
  */
-export async function generateLeadNotes(input: {
+export async function generateLeadNotes(input: PainPointInput & {
   lead: Record<string, unknown>; icpParams: Record<string, unknown> | null; icpContext?: string | null; apiKey: string;
 }): Promise<string> {
   const text = await claudeText(
 `You are a sales researcher. Given this business's data (and the ICP it was found against, if any),
 write 2-4 short bullet-style personalization talking points a salesperson could use in a cold email —
 a likely pain point implied by its rating/review count, a plausible angle from its industry/location.
-Do not invent facts not present in the data. Plain text bullets, one per line, no preamble.
+Do not invent facts not present in the data. Return JSON with talking_points (2-4 strings) and choice.
+${painPointPrompt(input.painPoints ?? [], input.painPoint ?? null)}
 
 ${input.icpContext ? `
 CUSTOMER PROFILE this lead is most like (use it to choose the angle and the pain point most likely to land):
@@ -413,9 +421,13 @@ ${input.icpContext}
 ` : ''}
 LEAD: ${JSON.stringify(input.lead)}
 ICP: ${JSON.stringify(input.icpParams)}`,
-    'claude-sonnet-5', input.apiKey, 300,
+    'claude-sonnet-5', input.apiKey, 600,
   );
-  return stripAiPunctuation(text.trim());
+  const parsed = parseLeadNotesOutput(text, input.painPoints ?? []);
+  const chosen = input.painPoint ?? parsed.choice;
+  // A manual choice stays in its own human note, never reclassified as a fresh AI pick.
+  return [chosen && chosen.source !== 'manual' ? formatPainPointNote(chosen) : '',
+    `Talking points:\n${parsed.talking_points.map(point => `- ${point}`).join('\n')}`].filter(Boolean).join('\n\n');
 }
 
 /**
@@ -424,7 +436,7 @@ ICP: ${JSON.stringify(input.icpParams)}`,
  * by the caller (Haiku for routine drafting, Sonnet for LinkedIn DMs and
  * complex-reply responses). Throws on failure.
  */
-export async function draftEmailClaude(input: {
+export async function draftEmailClaude(input: PainPointInput & {
   subject: string; body: string; lead: Record<string, unknown>; notes: string[];
   contractorName: string; orgName: string; companyContext?: string | null; icpContext?: string | null; apiKey: string; model: ClaudeModel;
   /** Optional (autopilot only): who the email is addressed to. Existing callers do not pass it. */
@@ -435,7 +447,7 @@ export async function draftEmailClaude(input: {
   generalInbox?: boolean;
   /** 'linkedin' for a LinkedIn DM: stays plain text. Defaults to 'email', which keeps and uses the email formatting syntax. */
   channel?: 'email' | 'linkedin';
-}): Promise<{ subject: string; body: string }> {
+}): Promise<{ subject: string; body: string; painPoint?: ChosenPainPoint | null }> {
   const formatLine = input.channel === 'linkedin'
     ? 'Keep it plain text, warm, brief, UK English.'
     : `Keep it warm, brief, UK English. ${EMAIL_FORMAT_PROMPT_LINE}`;
@@ -453,6 +465,7 @@ Personalise this outreach email using the lead data and any notes (which may inc
 personalization talking points from an earlier research pass — use them as real context, not as
 text to quote verbatim). ${formatLine} Do not invent facts not
 present in the data. Keep any URLs intact. ${DASH_GUARDRAIL_LINE} Return JSON: {"subject": string, "body": string}.
+${choicePrompt(input)}
 ${input.icpContext ? `
 IDEAL CUSTOMER PROFILE for this lead (who they are most like). Use it to choose which pain points, goals and objections to speak to, and the wording and tone that will resonate with them. Use it as background, not as text to quote, and never state a fact about this lead that is not in the lead data:
 ${input.icpContext}
@@ -467,7 +480,7 @@ ${input.body}`,
     input.model, input.apiKey, 1500,
   ) as { subject?: string; body?: string };
   if (!result.subject || !result.body) throw new Error('Claude draft missing fields');
-  return { subject: stripAiPunctuation(result.subject), body: stripAiPunctuation(result.body) };
+  return { subject: stripAiPunctuation(result.subject), body: stripAiPunctuation(result.body), ...draftChoice(input, result) };
 }
 
 /**

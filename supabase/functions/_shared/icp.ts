@@ -1,5 +1,6 @@
 // supabase/functions/_shared/icp.ts
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
+import { icpPainPointLines } from './icpPainPoints.ts';
 
 /** An org's ideal customer profile (see migration 044). */
 export interface IdealCustomerProfile {
@@ -36,11 +37,7 @@ export async function loadIcp(service: SupabaseClient, orgId: string, icpId: str
 
 /** The first pain point (one per line, bullets/numbering stripped): what {{pain_point}} falls back to. */
 export function topPainPoint(icp: Pick<IdealCustomerProfile, 'pain_points'> | null): string | null {
-  const line = (icp?.pain_points ?? '')
-    .split('\n')
-    .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
-    .find((l) => l.length > 0);
-  return line ?? null;
+  return icpPainPointLines(icp?.pain_points)[0] ?? null;
 }
 
 /** The profile as a labelled text block for an AI prompt. Empty fields are left out. */
