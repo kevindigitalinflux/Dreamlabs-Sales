@@ -10,8 +10,8 @@ it('cleans the existing line/bullet formats, spaces, punctuation and duplicate a
 });
 it('canonicalises case/spacing and requires the source to agree with list membership', () => {
   expect(validatePainPoint({ ...pick, pain_point: ' cleaner  COVER ' }, points)).toEqual(pick);
-  expect(validatePainPoint({ ...pick, source: 'proposed' }, points)).toBeNull();
-  expect(validatePainPoint({ ...pick, pain_point: 'New angle' }, points)).toBeNull();
+  expect(validatePainPoint({ ...pick, source: 'proposed' }, points)).toEqual(pick);
+  expect(validatePainPoint({ ...pick, pain_point: 'New angle' }, points)?.source).toBe('proposed');
   expect(validatePainPoint({ ...pick, pain_point: 'New angle', source: 'proposed' }, points)?.source).toBe('proposed');
 });
 it.each([null, [], {}, { ...pick, pain_point: '' }, { ...pick, reason: '' }, { ...pick, source: 'manual' },

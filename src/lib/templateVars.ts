@@ -1,5 +1,6 @@
 import { formatCurrency, packageLabel } from './utils';
 import type { Lead } from '../types';
+export const AI_PAIN_POINT_MARKER = 'Pain point pick v1';
 
 /** The {{variables}} templates may use (SPEC.md §7). */
 export const TEMPLATE_VARIABLES: { key: string; label: string }[] = [
@@ -45,6 +46,7 @@ export function buildTemplateVars(
   options: { generalInbox?: boolean } = {},
 ): Record<string, string | null> {
   const painPoint = notes
+    .filter(note => !note.startsWith(AI_PAIN_POINT_MARKER))
     .map((n) => /Main pain point:\n([^\n]+)/.exec(n)?.[1]?.trim() ?? null)
     .find((p) => p) ?? null;
   return {

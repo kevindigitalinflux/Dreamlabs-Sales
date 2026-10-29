@@ -1,12 +1,13 @@
 import { stripAiPunctuation } from './textGuardrails.ts';
 import { icpPainPointLines } from './icpPainPoints.ts';
+import { AI_PAIN_POINT_MARKER } from './painPointMarker.ts';
 export interface PainPointPick { pain_point: string; source: 'icp_list' | 'proposed'; reason: string }
 export type ChosenPainPoint = Omit<PainPointPick, 'source'> & { source: PainPointPick['source'] | 'manual' };
 export interface PainPointNote { content: string; note_type?: string; edited_at?: string | null }
 const line = (value: string) => value.replace(/\s+/g, ' ').trim();
 const aiLine = (value: string) => stripAiPunctuation(line(value));
 const key = (value: string) => aiLine(value).toLowerCase();
-const MARKER = 'Pain point pick v1';
+const MARKER = AI_PAIN_POINT_MARKER;
 
 /** Clean, bounded, deduplicated options for AI use; template fallback still uses the original line unchanged. */
 export function painPointList(text: string | null | undefined): string[] {
@@ -25,7 +26,7 @@ export function validatePainPoint(value: unknown, points: string[]): PainPointPi
   const text = aiLine(raw.pain_point), reason = aiLine(raw.reason);
   if (!text || text.length > 300 || !reason || reason.length > 300) return null;
   const match = points.find(point => key(point) === key(text));
-  if (raw.source !== (match ? 'icp_list' : 'proposed')) return null;
+  if (raw.source !== 'icp_list' && raw.source !== 'proposed') return null;
   return { pain_point: match ?? text, source: match ? 'icp_list' : 'proposed', reason };
 }
 
@@ -51,7 +52,7 @@ export function parseLeadNotesOutput(raw: unknown, points: string[]): { talking_
 
 /** Notes remain compatible with the existing Main pain point reader, with separate provenance/reason lines. */
 export function formatPainPointNote(choice: ChosenPainPoint): string {
-  return `${MARKER}\nMain pain point:\n${line(choice.pain_point)}\nPain point source:\n${choice.source}\nPain point reason:\n${line(choice.reason)}`;
+  return `${choice.source === 'manual' ? 'Manual pain point v1' : MARKER}\nMain pain point:\n${line(choice.pain_point)}\nPain point source:\n${choice.source}\nPain point reason:\n${line(choice.reason)}`;
 }
 
 /** Read newest-first notes, but choose the newest manual choice before considering any AI choice. */

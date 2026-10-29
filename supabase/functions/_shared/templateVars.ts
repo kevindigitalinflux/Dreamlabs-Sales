@@ -1,5 +1,7 @@
 // Deno copy of src/lib/templateVars.ts — keep the two in sync.
 import { publicAppUrl } from './appUrl.ts';
+import { AI_PAIN_POINT_MARKER } from './painPointMarker.ts';
+export { AI_PAIN_POINT_MARKER };
 
 /** Whole-pound GBP: 1200 → "£1,200". */
 function formatCurrency(n: number): string {
@@ -66,6 +68,7 @@ export function buildTemplateVars(
   const packageTier = lead.package_tier as PackageTier | null;
   const dealValue = lead.deal_value as number | null;
   const painPoint = notes
+    .filter(note => !note.startsWith(AI_PAIN_POINT_MARKER))
     .map((n) => /Main pain point:\n([^\n]+)/.exec(n)?.[1]?.trim() ?? null)
     .find((p) => p) ?? null;
   return {
