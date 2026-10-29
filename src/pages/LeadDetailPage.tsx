@@ -22,6 +22,7 @@ import { ActivityHistory, CallHistorySection, EmailLogSection } from '../compone
 import { EmailComposer } from '../components/emails/EmailComposer';
 import { EnrollmentControl } from '../components/emails/EnrollmentControl';
 import { LeadReplies } from '../components/emails/LeadReplies';
+import { PainPointCard } from '../components/pipeline/PainPointCard';
 
 /** Full lead record (SPEC.md §6 "Lead Detail Page") — 8 sections, vertical scroll. */
 export function LeadDetailPage() {
@@ -71,6 +72,7 @@ export function LeadDetailPage() {
         <ContactInfo lead={lead} onSave={(patch) => updateLead(patch)} />
       </Card>
       <LeadReplies leadId={lead.id} />
+      <PainPointCard leadId={lead.id} icpId={lead.icp_id} refreshKey={notes} />
 
       <Card>
         <h2 className="mb-2 text-[18px] font-bold">Decision Makers</h2>

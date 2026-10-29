@@ -28,6 +28,7 @@ import { PostSendPreview } from './PostSendPreview';
 import { TemplatePicker } from './TemplatePicker';
 import { SuggestedSequence } from './SuggestedSequence';
 import { MailboxStatus } from '../settings/MailboxStatus';
+import { PainPointCard } from '../pipeline/PainPointCard';
 
 interface DiffLine { kind: 'same' | 'removed' | 'added'; text: string }
 
@@ -62,7 +63,7 @@ interface EmailComposerProps {
    * recipient instead of defaulting to the lead's own email (see the
    * effect below, which seeds `selectedRecipients` from these fields once
    * `decisionMakers` has loaded). */
-  draft?: { log_id?: string; reply_id?: string; subject: string; body: string; to_email: string; decision_maker_candidate_id: string | null; attachments?: EmailAttachment[] } | null;
+  draft?: { log_id?: string; reply_id?: string; template_id?: string | null; subject: string; body: string; to_email: string; decision_maker_candidate_id: string | null; attachments?: EmailAttachment[] } | null;
   answer?: { replyId: string; to_email: string; subject: string; body: string; logId?: string };
 }
 
@@ -85,7 +86,7 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
   const { sequences, loading: seqLoading, error: seqError } = useSequences();
   const { enrollment, loading: enrLoading, enroll } = useEnrollments(lead.id);
   const { currentOrg } = useOrg();
-  const [templateId, setTemplateId] = useState('');
+  const [templateId, setTemplateId] = useState(savedDraft?.template_id ?? '');
   // Source of truth for every email being written, keyed by recipient. A draft opened from
   // the review queue starts under SEED_KEY until its recipient is worked out (effect below).
   const [drafts, setDrafts] = useState<Record<string, RecipientDraft>>(() => {
@@ -96,6 +97,7 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
   const [busy, setBusy] = useState<'load' | 'ai' | 'send' | 'save' | null>(null);
   const [msg, setMsg] = useState<StatusMsg | null>(null);
   const [report, setReport] = useState<PostSendReport | null>(null);
+  const [painPointVersion, setPainPointVersion] = useState(0);
   const { contacts, loading: contactsLoading } = useLeadContacts(lead.id);
   const [selectedRecipients, setSelectedRecipients] = useState<Set<string>>(new Set(!draft && lead.email ? ['lead'] : []));
   const recipients = useMemo(() => answer ? [{ key: 'reply', email: answer.to_email, label: answer.to_email, candidateId: null, name: null, title: null, kind: 'lead' as const }] : buildRecipients(lead, contacts), [lead, contacts, answer]);
@@ -157,6 +159,8 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
       return r.error ? { key, error: r.error } : { key, result: r };
     }));
     setBusy(null);
+
+    setPainPointVersion(version => version + 1);
 
     const firstError = results.find((x) => 'error' in x && x.error);
     let aiMissed = false;
@@ -242,6 +246,8 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
       <div className="flex flex-col gap-4">
         {recipients.length === 0 && <p role="alert" className="text-sm text-danger">No email addresses available for this lead or its contacts.</p>}
         {answer ? <p className="break-all text-sm">Answer to: {answer.to_email}</p> : recipients.length > 0 && <RecipientPicker recipients={recipients} selected={selectedRecipients} onToggle={toggleRecipient} multi={multi} />}
+        {!answer && open && <PainPointCard leadId={lead.id} icpId={lead.icp_id ?? templates.find(template => template.id === templateId)?.icp_id
+          ?? sequences.find(sequence => sequence.id === enrollment?.sequence_id)?.icp_id} refreshKey={painPointVersion} review />}
         {!draft && !enrLoading && !enrollment && <SuggestedSequence leadId={lead.id} onEnroll={(sequenceId) => enroll(sequenceId, 1)} />}
         {!answer && <><TemplatePicker
           templates={templates} sequences={sequences} enrollment={enrollment} orgId={currentOrg?.id}

@@ -17,6 +17,7 @@ import { NoteComposer } from './NoteComposer';
 import { DecisionMakersCard } from './DecisionMakersCard';
 import { EmailComposer } from '../emails/EmailComposer';
 import { EnrollmentControl } from '../emails/EnrollmentControl';
+import { PainPointCard } from './PainPointCard';
 
 interface LeadPanelProps {
   lead: Lead | null;
@@ -89,6 +90,7 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
         </Section>
 
         <Section title="Sequence"><EnrollmentControl lead={lead} /></Section>
+        <PainPointCard leadId={lead.id} icpId={lead.icp_id} refreshKey={notes} />
 
         {currentOrg?.role === 'admin' && (
           <Section title="Assignment">

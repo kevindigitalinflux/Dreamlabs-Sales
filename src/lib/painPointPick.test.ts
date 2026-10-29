@@ -1,5 +1,8 @@
 import { expect, it, vi } from 'vitest';
 import { painPointList, validatePainPoint, parseLeadNotesOutput, formatPainPointNote, resolvePainPoint, painPointPrompt } from '../../supabase/functions/_shared/painPointPick';
+import { topPainPoint } from '../../supabase/functions/_shared/icp';
+import { buildTemplateVars } from './templateVars';
+import type { Lead } from '../types';
 const points = ['Lost contracts', 'Cleaner cover'];
 const pick = { pain_point: 'Cleaner cover', source: 'icp_list' as const, reason: 'The saved notes mention staff cover.' };
 it('cleans the existing line/bullet formats, spaces, punctuation and duplicate angles', () => {
@@ -65,4 +68,11 @@ it('passes explicit factual fallback and manual precedence instructions to the m
   expect(prompt).toContain('manual choice must win');
   expect(prompt).toContain('first list item');
   expect(prompt).toContain('never invent facts');
+});
+it('leaves template substitution on the noted pain point or the original first ICP line', () => {
+  const first = topPainPoint({ pain_points: '- Admin — cover\n- Lost contracts' });
+  const lead = { id: 'fixture', business_name: 'Fixture', owner_name: null, package_tier: null, deal_value: null } as Lead;
+  expect(first).toBe('Admin — cover');
+  expect(buildTemplateVars(lead, 'Rep', [], first).pain_point).toBe('Admin — cover');
+  expect(buildTemplateVars(lead, 'Rep', ['Main pain point:\nManual'], first).pain_point).toBe('Manual');
 });

@@ -88,7 +88,7 @@ export function Dashboard() {
           lead={reviewLead}
           open
           onClose={() => { setReviewing(null); void refreshDrafts(); }}
-          draft={{ log_id: reviewing.id, subject: reviewing.subject, body: reviewing.body, to_email: reviewing.to_email, decision_maker_candidate_id: reviewing.decision_maker_candidate_id, attachments: reviewing.attachments }}
+          draft={{ log_id: reviewing.id, template_id: reviewing.template_id, subject: reviewing.subject, body: reviewing.body, to_email: reviewing.to_email, decision_maker_candidate_id: reviewing.decision_maker_candidate_id, attachments: reviewing.attachments }}
         />
       )}
     </div>

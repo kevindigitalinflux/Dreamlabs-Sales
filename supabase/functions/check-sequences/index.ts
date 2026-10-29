@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { json } from '../_shared/cors.ts';
 import { draftEmail, draftEmailClaude, generateLeadNotes } from '../_shared/ai.ts';
-import { painPointList, resolvePainPoint } from '../_shared/painPointPick.ts';
+import { painPointList, resolvePainPoint, type ChosenPainPoint } from '../_shared/painPointPick.ts';
 import { loadPainPointNotes, saveAiPainPoint, saveGeneratedPainPointNotes } from '../_shared/painPointStorage.ts';
 import type { ClaudeModel } from '../_shared/ai.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
@@ -263,7 +263,7 @@ Deno.serve(async (req) => {
     const customVars = await loadCustomVariables(service, orgId, enrollment.enrolled_by);
     const varNotes = [...noteTexts];
     const painPoints = painPointList(icp?.pain_points);
-    let painPoint;
+    let painPoint: ChosenPainPoint | null;
     try { painPoint = resolvePainPoint(await loadPainPointNotes(service, String(lead.id))); }
     catch (error) {
       console.error('check-sequences: pain point history could not be loaded');
@@ -413,7 +413,7 @@ Deno.serve(async (req) => {
           painPoint = await saveAiPainPoint(service, String(lead.id), ai.painPoint ?? null);
           finalSubject = ai.subject; finalBody = ai.body;
         } catch (e) {
-          console.error(`Claude draft failed for enrollment ${enrollment.id}, using plain template:`, e);
+          console.error('check-sequences: Claude draft or pain point save failed; using the plain template');
         }
       } else {
         const apiKey = await resolveOrgApiKey(service, orgId, 'gemini');

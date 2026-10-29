@@ -75,7 +75,7 @@ export function NeedsInputReview({ lead, log, sequenceId, onDone }: NeedsInputRe
       lead={lead}
       open={open}
       onClose={() => void handleClose()}
-      draft={{ log_id: log.id, subject: log.subject, body: log.body, to_email: log.to_email, decision_maker_candidate_id: log.decision_maker_candidate_id, attachments: log.attachments }}
+      draft={{ log_id: log.id, template_id: log.template_id, subject: log.subject, body: log.body, to_email: log.to_email, decision_maker_candidate_id: log.decision_maker_candidate_id, attachments: log.attachments }}
     />
   );
 }
