@@ -50,6 +50,8 @@ export interface Lead {
   readiness_missing?: string[] | null;
   /** RLS-scoped nested contacts for pipeline phone filters; never persisted on leads. */
   phone_contacts?: { phone: string | null; phone_kind: PhoneKind; dismissed_at: string | null }[];
+  /** Optional RLS-scoped saved contacts for the Autopilot verified-email filter. */
+  email_contacts?: { email: string | null; dismissed_at: string | null }[];
   email: string | null;
   /** True once the lead has unsubscribed (migration 010). */
   opted_out?: boolean;
