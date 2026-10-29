@@ -2,8 +2,8 @@ import { expect, it, vi } from 'vitest';
 import { buildTemplateVars, AI_PAIN_POINT_MARKER } from './templateVars';
 import { buildTemplateVars as serverVars, AI_PAIN_POINT_MARKER as serverMarker } from '../../supabase/functions/_shared/templateVars';
 import { validatePainPoint } from '../../supabase/functions/_shared/painPointPick';
-import type { Lead } from '../types';
-const lead = { id: 'fixture', business_name: 'Fixture', owner_name: null, package_tier: null, deal_value: null } as Lead;
+
+const lead = { id: 'fixture', business_name: 'Fixture', owner_name: null, package_tier: null, deal_value: null };
 it.each([buildTemplateVars, serverVars])('ignores AI picks, keeps manual and unmarked legacy notes', build => {
   vi.stubGlobal('Deno', { env: { get: () => undefined } });
   try {
@@ -14,6 +14,7 @@ it.each([buildTemplateVars, serverVars])('ignores AI picks, keeps manual and unm
   } finally { vi.unstubAllGlobals(); }
 });
 it('keeps marker copies aligned', () => expect(AI_PAIN_POINT_MARKER).toBe(serverMarker));
-it.each([['Cover', 'proposed', 'icp_list'], ['New angle', 'icp_list', 'proposed']] as const)('keeps chosen text despite a wrong source label', (pain_point, source, expected) => {
+it.each([['Cover', 'proposed', 'icp_list'], ['New angle', 'icp_list', 'proposed']])('keeps chosen text despite a wrong source label', (pain_point, source, expected) => {
   expect(validatePainPoint({ pain_point, source, reason: 'Saved facts.' }, ['Cover'])).toEqual({ pain_point, source: expected, reason: 'Saved facts.' });
 });
+

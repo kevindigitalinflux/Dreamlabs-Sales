@@ -8,7 +8,7 @@ const pick = { pain_point: 'Cleaner cover', source: 'icp_list' as const, reason:
 it('cleans the existing line/bullet formats, spaces, punctuation and duplicate angles', () => {
   expect(painPointList('\n- Lost contracts\n2. Cleaner   cover\n• lost CONTRACTS\n* Admin — delays')).toEqual(['Lost contracts', 'Cleaner cover', 'Admin, delays']);
 });
-it('canonicalises case/spacing and requires the source to agree with list membership', () => {
+it('canonicalises case/spacing and normalises the source from list membership', () => {
   expect(validatePainPoint({ ...pick, pain_point: ' cleaner  COVER ' }, points)).toEqual(pick);
   expect(validatePainPoint({ ...pick, source: 'proposed' }, points)).toEqual(pick);
   expect(validatePainPoint({ ...pick, pain_point: 'New angle' }, points)?.source).toBe('proposed');

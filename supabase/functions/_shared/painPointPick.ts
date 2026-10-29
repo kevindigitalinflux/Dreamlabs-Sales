@@ -18,7 +18,7 @@ export function painPointList(text: string | null | undefined): string[] {
   });
 }
 
-/** Reject malformed picks, including a source that contradicts list membership. */
+/** Reject malformed picks; derive a valid source label from list membership. */
 export function validatePainPoint(value: unknown, points: string[]): PainPointPick | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const raw = value as Record<string, unknown>;
