@@ -1,3 +1,7 @@
+## Setup skill download checkpoint (2026-10-30, local)
+
+Current worktree: `C:/Users/kevin/Projects/dreamlabs-sales-skilldl`; branch: `codex/setup-skill-download`; starting revision: `8a1a580` (brief on top of `0937140`). Kevin directs, Codex builds, Claude reviews. The approved download card, committed zip, deterministic local builder and regression tests are complete. Read `docs/SETUP-SKILL-DOWNLOAD-BUILD-REPORT.md` for verification, limitations, source-text discrepancies and refresh/rollout instructions. Independent review is pending. No production, database, edge, other-checkout or vault changes occurred. Builder stops after committing the report. Next action is Claude's review; publication needs Kevin's separate authorization. This checkpoint supersedes older task pointers for this checkout only.
+
 ## Status (2026-10-29, Claude) - START HERE
 
 This section supersedes the older checkpoint blocks below it. Roles unchanged: Kevin directs, Claude architect/reviewer, Codex builder. Every merge, push, deploy, migration and role change still needs Kevin's explicit yes for that action.

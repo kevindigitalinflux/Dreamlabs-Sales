@@ -15,7 +15,7 @@ import { IdealCustomerProfilesCard } from '../components/settings/IdealCustomerP
 import { CustomPlaceholdersCard } from '../components/settings/CustomPlaceholdersCard';
 import { UsageLimitsCard } from '../components/settings/UsageLimitsCard';
 import { DesktopNotificationsCard } from '../components/settings/DesktopNotificationsCard';
-import { ImportSetupButton } from '../components/mdImport/ImportSetupButton';
+import { SetupSkillCard } from '../components/settings/SetupSkillCard';
 import { MailboxStatus } from '../components/settings/MailboxStatus';
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
@@ -184,11 +184,7 @@ export function Settings() {
           </form>
         </div>
       </Card>
-      {currentOrg?.role === 'admin' && <Card><div className="flex flex-col items-start gap-3">
-        <h2 className="text-[18px] font-bold">Import setup files</h2>
-        <p className="text-sm text-muted">Add company context, customer profiles and email templates from .md files. This content feeds AI email drafting. Review before saving.</p>
-        <ImportSetupButton onApplied={() => setImportRevision((v) => v + 1)} />
-      </div></Card>}
+      {currentOrg && <SetupSkillCard isAdmin={currentOrg.role === 'admin'} onApplied={() => setImportRevision((v) => v + 1)} />}
       {currentOrg && <CompanyContextCard key={`context-${importRevision}`} orgId={currentOrg.id} orgName={currentOrg.name} isOrgAdmin={currentOrg.role === 'admin'} />}
       {currentOrg && <IdealCustomerProfilesCard key={`icps-${importRevision}`} isOrgAdmin={currentOrg.role === 'admin'} />}
       <CompanyProfileCard />

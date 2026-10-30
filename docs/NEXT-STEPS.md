@@ -1,5 +1,7 @@
 # Next steps (the to-do list for Codex and Claude)
 
+- [ ] TODO 32: Setup skill download built locally on `codex/setup-skill-download` (2026-10-30). Claude review pending; do not mark reviewed or deployed. Read `docs/SETUP-SKILL-DOWNLOAD-BUILD-REPORT.md`. Kevin must authorize publication separately.
+
 Updated 2026-10-16 (stacked review fixes). [x] means built AND independently reviewed; local review fixes remain [ ] until rereview. Exact resume point: `docs/HANDOFF.md`. Order matters. Roles are the defaults of the shared workflow (vault `_Team/Shared agent workflow.md`): either agent may plan or build when Kevin confirms and records the assignment. Kevin merges unless he authorizes otherwise.
 
 ## Status (2026-10-29, Claude) - START HERE

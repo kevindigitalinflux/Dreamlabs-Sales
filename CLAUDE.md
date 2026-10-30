@@ -1,3 +1,7 @@
+## Setup skill download checkpoint (2026-10-30, local)
+
+Codex built `docs/SETUP-SKILL-DOWNLOAD-BUILD-BRIEF.md` in `dreamlabs-sales-skilldl`, branch `codex/setup-skill-download`. Settings now offers every organisation member a setup-skill zip and shared numbered instructions; importing remains admin-only. The six supplied skill files are unchanged. Five gates pass; see `docs/SETUP-SKILL-DOWNLOAD-BUILD-REPORT.md` for counts, source-text discrepancies, confirmed upload documentation and refresh steps. Claude's independent review and authenticated browser/tool-upload checks remain pending. Frontend only: no database or edge changes, push, merge, deployment or vault sync. Stop after the report; older next-task pointers below are historical.
+
 ## Status (2026-10-29, Claude) - START HERE
 
 This section supersedes the older checkpoint blocks below it. Roles unchanged: Kevin directs, Claude architect/reviewer, Codex builder. Every merge, push, deploy, migration and role change still needs Kevin's explicit yes for that action.
