@@ -128,3 +128,31 @@ Frontend only. There is no new migration, edge function, environment variable, d
 After deployment, fetch `https://sales.didreamlabs.com/downloads/dreamlabs-sales-setup-skill.zip` and verify HTTP 200, a ZIP response rather than HTML, and the archive's contents/hash. Verify the download and numbered help for an admin and a member, confirm only the admin sees Import setup files, and check keyboard focus, both themes and 400 px width. Test the inner Claude ZIP upload in an authorized account. Review the recorded skill-text issues before deciding whether a separately approved skill revision is needed.
 
 Builder stopped after this report. Next action: Claude reviews these commits and this report. No automatic follow-on work is authorized.
+
+## Round 2 — hierarchy and scannability (2026-10-30)
+
+Built `docs/SETUP-SKILL-DOWNLOAD-ROUND2-BRIEF.md` on the same branch, starting at `9f2498e` (Round 2 brief on top of `c1ee2d1`). Implementation commits: `856e762` (shared instructions and generated archive) and `ecd0b669ff1112899b5d110fcc7a18207be3ef29` (card hierarchy and Settings tests). This section is committed last. Claude's independent review remains pending.
+
+The download is now first and uses the existing primary Button colour classes. The admin-only import remains secondary beside it, with wrapping on narrow screens. A short summary precedes seven numbered steps with bold titles and greater spacing. Four separately labelled native details/summary blocks show folder numbers and numbered installation sub-steps: recommended Claude starts open; the other three start closed. Native disclosure needs no JavaScript state. Menu labels are bold; file names use inline code. The import step carries an Admins only badge and the member handoff sentence. Troubleshooting is a separate bordered callout. Instructions use the normal text token, not muted text; summaries and actions have 44 px minimum targets and visible focus styles. Existing reduced-motion handling remains.
+
+`setup-skill/instructions.json` is now the single instruction source. The card renders it directly; the existing zip builder generates both `setup-skill/START HERE.txt` and its archive entry. The text uses CRLF, capitals for option names and blank lines between blocks, with no HTML or Markdown formatting. It is **2,118 bytes**, below 4 KB. A focused `.gitattributes` rule recognizes its deliberate CRLF for whitespace checks. This supersedes the earlier refresh guidance: **edit instructions.json, then run `node scripts/build-setup-skill-zip.mjs`; do not edit the generated text directly.** No dependency was added.
+
+Changed files: `.gitattributes`, `setup-skill/instructions.json`, `setup-skill/START HERE.txt`, `scripts/build-setup-skill-zip.mjs`, `public/downloads/dreamlabs-sales-setup-skill.zip`, `src/components/settings/SetupSkillCard.tsx`, `src/pages/Settings.test.ts`, `src/lib/setupSkillDownload.test.js`, and this report.
+
+Tests were adjusted first; the initial run produced five expected failures for the absent primary styling, structured steps, option blocks and generated text. Final tests cover seven bold titles, four labelled choices and initial disclosure states, numbered option steps, focus/target classes, the admin badge/member sentence, primary versus secondary styling, unchanged admin gating, and portable-text parity for every generated instruction line. Archive freshness, layout, safety and size tests remain green. The built-output check now explicitly uses `CHECK_BUILT_ASSETS=1`, avoiding accidental comparison against an older dist during the pre-build suite.
+
+Five gates ran one at a time with the same local placeholder environment documented above:
+
+| Gate | Round 2 result |
+|---|---|
+| `npx tsc --noEmit` | PASS, zero diagnostics |
+| `npx vitest run` | PASS, 201 files, 2,789 passed, zero failed, one post-build check explicitly skipped |
+| `npm run build` | PASS, 2,940 modules; existing large-chunk warning |
+| `git diff --check` | PASS after recognizing generated CRLF; staged checks also passed |
+| `node scripts/places-edge-typecheck.mjs` | PASS, 25 entrypoints; TypeScript shim, not Deno |
+
+After building, Settings, archive and existing importer entry-point tests passed **12 tests, zero failures, zero skips**, with `CHECK_BUILT_ASSETS=1`. The committed archive equals an in-memory rebuild byte-for-byte and equals the built dist archive. All **10 other archive entries**, including the nested Claude upload zip, remain byte-identical to Round 1; only START HERE changed. The supplied skill files, Claude menu path, download URL and folder layout are unchanged.
+
+New ZIP: **52,601 bytes**. SHA-256: `f6f86487bffbcbbafd8ebd6577d6a58dd4354b97ba01ce712f2500f95c4794a3`.
+
+Browser interaction, 400 px overflow, keyboard operation, light/dark appearance and real-account uploads were not exercised. Markup and class assertions do not replace those checks. No claim of a real upload test is made; the earlier documentation-confirmed menu path remains the basis for the instructions. The original skill-text discrepancies still require Claude and Kevin's review. No push, merge, deployment, database access, migration, external call, vault edit or other-checkout edit occurred in Round 2. Builder stops after this report update.
