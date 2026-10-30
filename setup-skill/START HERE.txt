@@ -1,0 +1,19 @@
+1. Click "Download setup skill". Save the zip, then open it. On Windows, right-click it and choose "Extract all".
+
+2. Open the folder that matches your chat tool. Not sure? Use Claude in folder 1. You need an account with that tool.
+
+3. Add the skill using the choice that fits you:
+Claude Desktop or Claude.ai (folder 1): In Claude Settings, Capabilities, turn on Code execution and file creation (also called Create and edit files). Open Customize, Skills, click +, then Create skill, then Upload a skill. Upload dreamlabs-sales-setup.zip from folder 1 without extracting that inner zip. Turn the skill on. If these controls are missing, ask your Claude account admin or use folder 4.
+Claude Code (folder 2, developers): Copy the dreamlabs-sales-setup folder into ~/.claude/skills/.
+ChatGPT (folder 3): If you can create or edit a GPT, open its configuration. Paste chatgpt-instructions.md into Instructions and upload file-format.md, interview-guide.md and sequences.md under Knowledge. Save it. If that option is missing, use folder 4 instead.
+Any other chat, or the simplest ChatGPT option (folder 4): Open SKILL-single-file.md in a plain text editor, copy all its text and paste it into a new chat.
+
+4. Start a new chat with your skill or GPT (or keep the chat where you pasted the text). Say: "Help me set up Dreamlabs Sales for my business." Answer its questions in your own words.
+
+5. When it is finished, it gives you several files ending in .md. Save each one. If it gives you text instead, follow its steps to save each file with a plain text editor, not Word.
+
+6. In Dreamlabs Sales Settings, click "Import setup files", choose all the finished .md files at once, check the preview, then save. Only an admin can upload the finished files. If you are not an admin, send the files to your admin.
+
+7. Reload the page after importing to see everything. New sequences start switched off: review each one in the sequence editor and turn it on when you are happy. Replacing an existing sequence keeps its current on or off setting.
+
+Something went wrong? A wrong file type error means hard refresh (Ctrl+F5) and try again. Ask your admin if the import button is missing.

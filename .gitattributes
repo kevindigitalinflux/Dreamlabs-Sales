@@ -1,0 +1,3 @@
+# Preserve shipped skill sources byte-for-byte, including the supplied line endings.
+setup-skill/** -text
+public/downloads/dreamlabs-sales-setup-skill.zip -text
