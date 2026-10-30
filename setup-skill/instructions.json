@@ -1,0 +1,74 @@
+{
+  "summary": "A chat assistant asks about your business and writes your setup files.",
+  "menuWords": ["Download setup skill", "Extract all", "Settings", "Capabilities", "Code execution and file creation", "Create and edit files", "Customize", "Skills", "Create skill", "Upload a skill", "Instructions", "Knowledge", "Import setup files", "Ctrl+F5"],
+  "fileNames": ["dreamlabs-sales-setup.zip", "dreamlabs-sales-setup", "~/.claude/skills/", "chatgpt-instructions.md", "file-format.md", "interview-guide.md", "sequences.md", "SKILL-single-file.md", ".md"],
+  "steps": [
+    {
+      "title": "Download",
+      "paragraphs": ["Click Download setup skill and save the zip.", "On Windows, right-click the zip and choose Extract all."]
+    },
+    {
+      "title": "Open the folder",
+      "paragraphs": ["Open the folder for your chat tool.", "Not sure? Use Claude in folder 1; you need an account with that tool."]
+    },
+    {
+      "title": "Add the skill",
+      "paragraphs": ["Choose your chat tool below."],
+      "options": [
+        {
+          "name": "Claude Desktop or Claude.ai",
+          "folder": "folder 1",
+          "recommended": true,
+          "steps": [
+            "In Settings, open Capabilities. Enable Code execution and file creation (also called Create and edit files).",
+            "Open Customize, then Skills. Click +, then Create skill, then Upload a skill.",
+            "Upload dreamlabs-sales-setup.zip from folder 1 without extracting it. Turn the skill on. Start a new chat.",
+            "Controls missing? Ask your Claude account admin or use folder 4."
+          ]
+        },
+        {
+          "name": "Claude Code (developers)",
+          "folder": "folder 2",
+          "steps": ["Copy the dreamlabs-sales-setup folder into ~/.claude/skills/.", "Start a new chat."]
+        },
+        {
+          "name": "ChatGPT",
+          "folder": "folder 3",
+          "steps": [
+            "If you can create or edit a GPT, open its configuration.",
+            "Paste chatgpt-instructions.md into Instructions.",
+            "Under Knowledge, upload file-format.md, interview-guide.md and sequences.md. Save it and start a new chat with it.",
+            "Option missing? Use folder 4 instead."
+          ]
+        },
+        {
+          "name": "Any other chat (paste)",
+          "folder": "folder 4",
+          "steps": ["Open SKILL-single-file.md in a plain text editor.", "Copy all its text.", "Paste it into a new chat."]
+        }
+      ]
+    },
+    {
+      "title": "Answer the questions",
+      "paragraphs": ["Tell your chat: Help me set up Dreamlabs Sales for my business.", "Answer its questions in your own words."]
+    },
+    {
+      "title": "Save your files",
+      "paragraphs": ["Save each finished .md file.", "If you receive text, use a plain text editor to save it, not Word."]
+    },
+    {
+      "title": "Import them",
+      "badge": "Admins only",
+      "paragraphs": ["In Dreamlabs Sales Settings, click Import setup files and choose all finished .md files.", "Check the preview, then save."],
+      "note": "Only an admin can upload the finished files. Not an admin? Send the files to your admin."
+    },
+    {
+      "title": "Switch sequences on",
+      "paragraphs": ["Reload the page, then review and turn on each new sequence in the sequence editor.", "New sequences start off; replacements keep their current on or off setting."]
+    }
+  ],
+  "troubleshooting": {
+    "title": "Something went wrong?",
+    "tips": ["A wrong file type error means hard refresh (Ctrl+F5) and try again.", "Ask your admin if the import button is missing."]
+  }
+}

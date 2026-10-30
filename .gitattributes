@@ -1,3 +1,5 @@
 # Preserve shipped skill sources byte-for-byte, including the supplied line endings.
 setup-skill/** -text
+# The generated Notepad instructions deliberately use CRLF.
+setup-skill/*.txt whitespace=cr-at-eol
 public/downloads/dreamlabs-sales-setup-skill.zip -text

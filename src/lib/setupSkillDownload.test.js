@@ -61,7 +61,21 @@ it('keeps every shipped file byte-identical to sources and detects a stale commi
   for (const name of Object.keys(files)) expect(rebuilt[name]).toEqual(files[name]);
 });
 
-it.skipIf(!existsSync(new URL('dist/index.html', root)))('copies the real download into built static assets', () => {
+it('ships short plain Windows text generated from the shared instruction structure', async () => {
+  const text = strFromU8(entries()['START HERE.txt']);
+  const titles = ['Download', 'Open the folder', 'Add the skill', 'Answer the questions', 'Save your files', 'Import them', 'Switch sequences on'];
+  titles.forEach((title, index) => expect(text).toContain(`${index + 1}. ${title}\r\n`));
+  expect(new TextEncoder().encode(text).length).toBeLessThan(4096);
+  expect(text).not.toMatch(/\*\*|`|^\s*#{1,6}\s|<\/?[a-z][^>]*>|\[[^\]]+\]\(/im);
+  expect(text).toContain('\r\n\r\nCLAUDE DESKTOP OR CLAUDE.AI');
+  const source = JSON.parse(readFileSync(new URL('setup-skill/instructions.json', root), 'utf8'));
+  const { renderStartHere } = await import('../../scripts/build-setup-skill-zip.mjs');
+  expect(text).toBe(renderStartHere(source));
+  expect(readFileSync(new URL('setup-skill/START HERE.txt', root), 'utf8')).toBe(text);
+});
+
+// Explicit post-build check avoids treating a previous build as the current one.
+it.skipIf(process.env.CHECK_BUILT_ASSETS !== '1')('copies the real download into built static assets', () => {
   const built = new URL('dist/downloads/dreamlabs-sales-setup-skill.zip', root);
   expect(existsSync(built)).toBe(true);
   expect(readFileSync(built)).toEqual(readFileSync(archive));

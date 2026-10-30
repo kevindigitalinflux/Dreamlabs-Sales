@@ -1,19 +1,53 @@
-1. Click "Download setup skill". Save the zip, then open it. On Windows, right-click it and choose "Extract all".
+1. Download
+Click Download setup skill and save the zip.
+On Windows, right-click the zip and choose Extract all.
 
-2. Open the folder that matches your chat tool. Not sure? Use Claude in folder 1. You need an account with that tool.
+2. Open the folder
+Open the folder for your chat tool.
+Not sure? Use Claude in folder 1; you need an account with that tool.
 
-3. Add the skill using the choice that fits you:
-Claude Desktop or Claude.ai (folder 1): In Claude Settings, Capabilities, turn on Code execution and file creation (also called Create and edit files). Open Customize, Skills, click +, then Create skill, then Upload a skill. Upload dreamlabs-sales-setup.zip from folder 1 without extracting that inner zip. Turn the skill on. If these controls are missing, ask your Claude account admin or use folder 4.
-Claude Code (folder 2, developers): Copy the dreamlabs-sales-setup folder into ~/.claude/skills/.
-ChatGPT (folder 3): If you can create or edit a GPT, open its configuration. Paste chatgpt-instructions.md into Instructions and upload file-format.md, interview-guide.md and sequences.md under Knowledge. Save it. If that option is missing, use folder 4 instead.
-Any other chat, or the simplest ChatGPT option (folder 4): Open SKILL-single-file.md in a plain text editor, copy all its text and paste it into a new chat.
+3. Add the skill
+Choose your chat tool below.
 
-4. Start a new chat with your skill or GPT (or keep the chat where you pasted the text). Say: "Help me set up Dreamlabs Sales for my business." Answer its questions in your own words.
+CLAUDE DESKTOP OR CLAUDE.AI (folder 1) Recommended
+1. In Settings, open Capabilities. Enable Code execution and file creation (also called Create and edit files).
+2. Open Customize, then Skills. Click +, then Create skill, then Upload a skill.
+3. Upload dreamlabs-sales-setup.zip from folder 1 without extracting it. Turn the skill on. Start a new chat.
+4. Controls missing? Ask your Claude account admin or use folder 4.
 
-5. When it is finished, it gives you several files ending in .md. Save each one. If it gives you text instead, follow its steps to save each file with a plain text editor, not Word.
+CLAUDE CODE (DEVELOPERS) (folder 2)
+1. Copy the dreamlabs-sales-setup folder into ~/.claude/skills/.
+2. Start a new chat.
 
-6. In Dreamlabs Sales Settings, click "Import setup files", choose all the finished .md files at once, check the preview, then save. Only an admin can upload the finished files. If you are not an admin, send the files to your admin.
+CHATGPT (folder 3)
+1. If you can create or edit a GPT, open its configuration.
+2. Paste chatgpt-instructions.md into Instructions.
+3. Under Knowledge, upload file-format.md, interview-guide.md and sequences.md. Save it and start a new chat with it.
+4. Option missing? Use folder 4 instead.
 
-7. Reload the page after importing to see everything. New sequences start switched off: review each one in the sequence editor and turn it on when you are happy. Replacing an existing sequence keeps its current on or off setting.
+ANY OTHER CHAT (PASTE) (folder 4)
+1. Open SKILL-single-file.md in a plain text editor.
+2. Copy all its text.
+3. Paste it into a new chat.
 
-Something went wrong? A wrong file type error means hard refresh (Ctrl+F5) and try again. Ask your admin if the import button is missing.
+4. Answer the questions
+Tell your chat: Help me set up Dreamlabs Sales for my business.
+Answer its questions in your own words.
+
+5. Save your files
+Save each finished .md file.
+If you receive text, use a plain text editor to save it, not Word.
+
+6. Import them
+Admins only
+In Dreamlabs Sales Settings, click Import setup files and choose all finished .md files.
+Check the preview, then save.
+Only an admin can upload the finished files. Not an admin? Send the files to your admin.
+
+7. Switch sequences on
+Reload the page, then review and turn on each new sequence in the sequence editor.
+New sequences start off; replacements keep their current on or off setting.
+
+Something went wrong?
+A wrong file type error means hard refresh (Ctrl+F5) and try again.
+Ask your admin if the import button is missing.
