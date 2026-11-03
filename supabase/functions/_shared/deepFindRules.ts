@@ -5,7 +5,7 @@
 
 import { displayPersonKey } from './personIdentity.ts';
 import { effortTotals, isEffort, type Effort } from './deepFindEffort.ts';
-export const MAX_DEEP_FIND_LEADS = 25;
+export const MAX_DEEP_FIND_LEADS = 50;
 /** Caps per run: `hunter` is Hunter CREDITS (one unit per Hunter request, each request limited to about one credit), `ai` is AI calls. */
 export const DEFAULT_CAPS = { hunter: 60, ai: 25 } as const;
 export { CAP_LIMITS } from './deepFindLimits.ts';
@@ -28,7 +28,7 @@ function cap(value: unknown, fallback: number, max: number): number | null {
   return value;
 }
 
-/** Validates `lead_ids` (1 to 25 distinct UUIDs) and the optional `caps` ({hunter, ai} whole numbers inside the limits). */
+/** Validates `lead_ids` (1 to 50 distinct UUIDs) and the optional `caps` ({hunter, ai} whole numbers inside the limits). */
 export function parseCreateRequest(body: unknown): CreateRequest {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return { ok: false, error: 'Invalid request' };
   const b = body as Record<string, unknown>;

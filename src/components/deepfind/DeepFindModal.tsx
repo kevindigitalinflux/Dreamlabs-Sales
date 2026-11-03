@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { startDeepFind } from '../../lib/deepFind';
-import { DEEP_FIND_CAP_LIMITS, DEEP_FIND_DEFAULT_CAPS, DEEP_FIND_MAX_LEADS, parseCap } from '../../lib/deepFindView';
+import { scaledDeepFindCaps, DEEP_FIND_CAP_LIMITS, DEEP_FIND_DEFAULT_CAPS, DEEP_FIND_MAX_LEADS, parseCap } from '../../lib/deepFindView';
 import { DeepFindConfirm } from './DeepFindConfirm';
 import { DeepFindProgress } from './DeepFindProgress';
 import { effortTotals, type Effort } from '../../../supabase/functions/_shared/deepFindEffort';
@@ -31,8 +31,8 @@ export function DeepFindModal({ open, leadIds, onClose, onStarted }: DeepFindMod
     if (!open) return;
     setRunId(null); setError(null); setNotice(null); setStarting(false);
     setEffort('medium'); setStartFresh(false);
-    setHunterCap(String(DEEP_FIND_DEFAULT_CAPS.hunter)); setAiCap(String(DEEP_FIND_DEFAULT_CAPS.ai));
-  }, [open]);
+    setHunterCap(String(DEEP_FIND_DEFAULT_CAPS.hunter)); setAiCap(String(scaledDeepFindCaps(leadIds.length).ai));
+  }, [open, leadIds.length]);
 
   const totals = effort === 'custom' ? null : effortTotals(effort, leadIds.length);
   const hunter = totals?.hunter ?? parseCap(hunterCap, DEEP_FIND_CAP_LIMITS.hunter);

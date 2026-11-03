@@ -10,7 +10,7 @@ const ID = '3f2b8c1e-4d5a-4b6c-8d7e-9f0a1b2c3d4e';
 const ID2 = '9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d';
 
 describe('parseCreateRequest', () => {
-  it('accepts up to 25 distinct ids and defaults the caps', () => {
+  it('accepts up to 50 distinct ids and defaults the caps', () => {
     expect(parseCreateRequest({ lead_ids: [ID, ID.toUpperCase(), ID2] })).toEqual({ ok: true, leadIds: [ID, ID2], caps: { hunter: 60, ai: 25 }, effort: 'custom', startFresh: false });
     expect(parseCreateRequest({ lead_ids: [ID], caps: { hunter: 0, ai: 3 } })).toEqual({ ok: true, leadIds: [ID], caps: { hunter: 0, ai: 3 }, effort: 'custom', startFresh: false });
   });
@@ -21,7 +21,7 @@ describe('parseCreateRequest', () => {
   });
   it('refuses bad input', () => {
     expect(parseCreateRequest({ lead_ids: [] })).toMatchObject({ ok: false });
-    expect(parseCreateRequest({ lead_ids: Array.from({ length: 26 }, () => ID) })).toMatchObject({ ok: false });
+    expect(parseCreateRequest({ lead_ids: Array.from({ length: 51 }, () => ID) })).toMatchObject({ ok: false });
     expect(parseCreateRequest({ lead_ids: ['1 OR 1=1'] })).toEqual({ ok: false, error: 'Invalid lead id' });
     expect(parseCreateRequest({ lead_ids: [ID], caps: { hunter: 501 } })).toMatchObject({ ok: false });
     expect(parseCreateRequest({ lead_ids: [ID], caps: { ai: 2.5 } })).toMatchObject({ ok: false });

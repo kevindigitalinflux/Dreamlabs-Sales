@@ -201,7 +201,7 @@ export function PipelineList() {
             </Button>
           )}
           <Button variant="secondary" onClick={() => setDeepFindOpen(true)} disabled={selected.size > DEEP_FIND_MAX_LEADS}
-            title={selected.size > DEEP_FIND_MAX_LEADS ? `Deep find works on ${DEEP_FIND_MAX_LEADS} leads or fewer at a time` : undefined}>
+            title={selected.size > DEEP_FIND_MAX_LEADS ? `Choose ${DEEP_FIND_MAX_LEADS} leads or fewer` : undefined}>
             <Telescope className="h-4 w-4" aria-hidden />
             Deep find
           </Button>

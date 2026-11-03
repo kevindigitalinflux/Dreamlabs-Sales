@@ -7,7 +7,7 @@ import { readAutoApplied, type AutoApplied } from '../../supabase/functions/_sha
 /** Defaults and limits shown in the Deep find confirm step (the server enforces the same). */
 export const DEEP_FIND_DEFAULT_CAPS = { hunter: 60, ai: 25 } as const;
 export const DEEP_FIND_CAP_LIMITS = { hunter: 500, ai: 200 } as const;
-export const DEEP_FIND_MAX_LEADS = 25;
+export const DEEP_FIND_MAX_LEADS = 50;
 
 /** Plain label for a lead's status. */
 export const DEEP_FIND_STATUS_LABELS: Record<DeepFindLeadRow['status'], string> = {
@@ -192,4 +192,9 @@ export function runTotals(rows: DeepFindActivityRow[]): Record<string, RunTotals
 /** Lead ids Deep find is queued for or working on right now. */
 export function activeLeadIds(rows: Pick<DeepFindActivityRow, 'lead_id' | 'status'>[]): Set<string> {
   return new Set(rows.filter((r) => r.status === 'queued' || r.status === 'running').map((r) => r.lead_id));
+}
+
+/** Custom run defaults: keep Hunter fixed and provide one AI call per lead above 25. */
+export function scaledDeepFindCaps(count: number) {
+  return { hunter: DEEP_FIND_DEFAULT_CAPS.hunter, ai: Math.min(DEEP_FIND_CAP_LIMITS.ai, Math.max(25, Math.ceil(Number.isFinite(count) ? count : 25))) };
 }

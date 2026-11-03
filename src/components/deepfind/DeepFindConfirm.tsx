@@ -42,6 +42,7 @@ export function DeepFindConfirm({ leadCount, hunterCap, aiCap, onHunterCap, onAi
   return (
     <div className="flex flex-col gap-4 text-sm text-offwhite">
       <p className="text-[15px]">Deep find searches {leadCount === 1 ? 'this lead' : `${leadCount} leads`} in the background. Choose how hard it should try.</p>
+      <p>Larger runs take longer because leads are searched one at a time.</p>
       <fieldset className="min-w-0">
         <legend className="mb-2 font-heading text-base font-bold">How much effort?</legend>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

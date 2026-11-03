@@ -8,7 +8,7 @@ import type { Effort } from '../../supabase/functions/_shared/deepFindEffort';
 export type StartDeepFindResult = { runId: string; queued: number; alreadyRunning: number } | { error: string };
 
 /**
- * Starts a Deep find for up to 25 leads with the given credit caps. The server checks every lead belongs to the
+ * Starts a Deep find for up to 50 leads with the given credit caps. The server checks every lead belongs to the
  * caller's organisation and that the caller can edit it, then works through them in the background.
  */
 export async function startDeepFind(leadIds: string[], caps: { hunter: number; ai: number }, effort: Effort = 'custom', options: { startFresh?: boolean } = {}): Promise<StartDeepFindResult> {
