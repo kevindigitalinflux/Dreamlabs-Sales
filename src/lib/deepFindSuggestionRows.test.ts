@@ -5,7 +5,7 @@ import { SuggestionRows } from '../components/deepfind/SuggestionRows';
 import { unverifiedEmailSuggestions } from '../../supabase/functions/_shared/personEmailFinding';
 
 it('renders both actions, role mailbox label, and wrapping email text', () => {
-  const html = renderToStaticMarkup(createElement(SuggestionRows, { suggestions: [{ name: 'Company contact', value: 'privacy@example.com' }], busy: false, onAction: () => {} }));
+  const html = renderToStaticMarkup(createElement(SuggestionRows, { suggestions: [{ name: 'Company contact', value: 'privacy@example.com' }], busy: false, onAction: async () => null }));
   expect(html).toContain('Add to lead');
   expect(html).toContain('Dismiss');
   expect(html).toContain('Role mailbox, not useful for outreach');
@@ -17,7 +17,7 @@ it('renders both actions, role mailbox label, and wrapping email text', () => {
 
 it('keeps one most likely address visible and alternatives collapsed with the same review actions', () => {
   const suggestions = unverifiedEmailSuggestions('Jane Smith', ['jane.smith@example.com', 'jane@example.com'], 'microsoft');
-  const html = renderToStaticMarkup(createElement(SuggestionRows, { suggestions, busy: false, onAction: () => {} }));
+  const html = renderToStaticMarkup(createElement(SuggestionRows, { suggestions, busy: false, onAction: async () => null }));
   expect(html).toContain('Most likely address');
   expect(html).toContain('<details');
   expect(html).toContain('Other possible formats');
@@ -33,14 +33,14 @@ it('keeps one most likely address visible and alternatives collapsed with the sa
   expect(html.indexOf('aria-label="Add to lead: Jane Smith, jane@example.com"')).toBeGreaterThan(detailsStart);
 });
 it('disables actions while saving and describes named people without an email', () => {
-  const html = renderToStaticMarkup(createElement(SuggestionRows, { suggestions: [{ name: 'Jane Smith', role: 'Director' }], busy: true, onAction: () => {} }));
+  const html = renderToStaticMarkup(createElement(SuggestionRows, { suggestions: [{ name: 'Jane Smith', role: 'Director' }], busy: true, onAction: async () => null }));
   expect(html).toContain('Jane Smith');
   expect(html).toContain('Director');
-  expect(html.match(/disabled=""/g)).toHaveLength(2);
+  expect(html.match(/disabled=""/g)).toHaveLength(4);
 });
 
 it('links https LinkedIn suggestions safely and rejects unsafe schemes', () => {
-  const render = (value: string) => renderToStaticMarkup(createElement(SuggestionRows, { suggestions: [{ name: 'Jane', field: 'linkedin_url', value }], busy: false, onAction: () => {} }));
+  const render = (value: string) => renderToStaticMarkup(createElement(SuggestionRows, { suggestions: [{ name: 'Jane', field: 'linkedin_url', value }], busy: false, onAction: async () => null }));
   const html = render('https://www.linkedin.com/in/jane');
   expect(html).toContain('href="https://www.linkedin.com/in/jane"');
   expect(html).toContain('rel="noreferrer noopener"');

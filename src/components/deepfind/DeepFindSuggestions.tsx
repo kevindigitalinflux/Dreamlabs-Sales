@@ -33,7 +33,7 @@ export function DeepFindSuggestions({ leadId, suggestions, refreshKey, roles = [
   }, [leadId, refreshKey]);
 
   async function act(s: ReviewSuggestion, action: 'add' | 'dismiss' | 'replace') {
-    if (saving.current) return;
+    if (saving.current) return 'Another review is saving. Try again.';
     saving.current = true;
     const key = suggestionKey(s);
     setBusy(true); setError(null); setHidden((keys) => [...keys, key]); setNotice('Saving…');
@@ -48,7 +48,9 @@ export function DeepFindSuggestions({ leadId, suggestions, refreshKey, roles = [
       logDeepFindError('deep find: suggestion review could not be saved', error);
       setHidden((keys) => keys.filter((k) => k !== key));
       setNotice(''); setError('Could not save this change. Refresh and try again.');
+      return 'Could not save this change. Refresh and try again.';
     } finally { saving.current = false; setBusy(false); }
+    return null;
   }
   const shown = state ? visibleSuggestions(suggestions, state.lead, state.contacts).filter((s) => !hidden.includes(suggestionKey(s))) : [];
   const { groups, rest } = groupReplacements(shown);
@@ -61,7 +63,7 @@ export function DeepFindSuggestions({ leadId, suggestions, refreshKey, roles = [
       <p className="text-[13px]">We checked these saved addresses and the mail server says they do not exist. Replace them with a better guess, or leave them.</p>
       <ReplacementRows suggestions={replacements} busy={busy} onAction={(s, action) => void act(s, action)} />
     </div>}
-    <SuggestionRows suggestions={rest} busy={busy} onAction={(s, action) => void act(s, action)} />
+    <SuggestionRows suggestions={rest} busy={busy} onAction={(s, action) => act(s, action)} />
     {error && <p role="alert" className="text-sm font-semibold text-danger-strong">{error}</p>}
   </section>;
 }

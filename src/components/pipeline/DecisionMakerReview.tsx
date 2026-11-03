@@ -1,3 +1,6 @@
+import { useRowSelection } from '../../hooks/useRowSelection';
+import { runRowBatch } from '../../lib/rowSelection';
+import { BulkActionBar } from '../ui/BulkActionBar';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { DecisionMakerCandidate, Lead } from '../../types';
@@ -87,6 +90,39 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
 
   const leadIds = Object.keys(candidatesByLead);
 
+  const allCandidates = Object.values(candidatesByLead).flat();
+  const selection = useRowSelection(allCandidates.map(candidate => candidate.id));
+  async function batchSelected(action: 'add' | 'remove') {
+    if (action === 'remove' && !window.confirm('Remove selected people? You can restore dismissed people from the lead.')) return;
+    setAddingAll(true); setAddSummary(null);
+    const chosen = allCandidates.filter(candidate => selection.selected.has(candidate.id));
+    // One patch per lead avoids overwriting earlier selected additions with stale lead data.
+    const groups = [...new Set(chosen.map(candidate => candidate.lead_id))];
+    try {
+      const results = await runRowBatch(groups, async leadId => {
+        const people = chosen.filter(candidate => candidate.lead_id === leadId);
+        if (action === 'add') {
+          const lead = leadsById[leadId];
+          const patch = lead ? additionsPatchFor(lead, people) : null;
+          if (!patch) return 'No new known details to add for these people.';
+          const error = await onAddToLead(leadId, patch);
+          if (!error) people.forEach(candidate => selection.remove(candidate.id));
+          return error;
+        }
+        const removed = await runRowBatch(people, async candidate => {
+          const error = await dismissDecisionMaker(candidate.id);
+          if (!error) {
+            selection.remove(candidate.id);
+            setCandidatesByLead(previous => ({...previous, [leadId]: (previous[leadId] ?? []).filter(row => row.id !== candidate.id)}));
+          }
+          return error;
+        });
+        return removed.flatMap(result => result.error ? [`${candidateName(result.row)}: ${result.error}`] : []).join('; ') || null;
+      });
+      setAddSummary(results.some(result => result.error) ? results.flatMap(result => result.error ? [`${leadsById[result.row]?.business_name ?? result.row}: ${result.error}`] : []).join('; ') : 'Selected changes saved.');
+    } finally { setAddingAll(false); }
+  }
+
   /** Adds one person's known name/email/phone to their lead's additional fields, right from the results. */
   async function handleAddOne(candidate: DecisionMakerCandidate) {
     const lead = leadsById[candidate.lead_id];
@@ -129,6 +165,8 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
       <div className="flex flex-col gap-4">
         <p className="text-xs text-muted">Full contact list for each lead is on its own Decision Makers section.</p>
         {leadIds.length === 0 && <p className="text-sm text-muted">No decision-maker candidates found for the selected leads.</p>}
+        {allCandidates.length > 0 && <label className="flex items-center gap-2"><input type="checkbox" aria-label="Select all decision-maker candidates" disabled={addingAll || busyId !== null} checked={selection.selected.size === allCandidates.length} onChange={selection.all} />Select all</label>}
+        <BulkActionBar count={selection.selected.size} busy={addingAll || busyId !== null} approveLabel="Add selected" rejectLabel="Remove selected" onApprove={() => void batchSelected('add')} onReject={() => void batchSelected('remove')} onClear={selection.clear} />
         {leadIds.map((leadId) => {
           const lead = leadsById[leadId];
           const candidates = candidatesByLead[leadId] ?? [];
@@ -138,6 +176,7 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
               <ul className="flex flex-col gap-2">
                 {candidates.map((candidate) => (
                   <li key={candidate.id} className="rounded bg-surface/60 p-2 text-sm">
+                    <label className="flex items-center gap-2"><input type="checkbox" aria-label={`Select ${candidateName(candidate)}`} disabled={addingAll || busyId !== null} checked={selection.selected.has(candidate.id)} onChange={() => selection.toggle(candidate.id)} />Select</label>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] uppercase text-muted">{candidateSourceLabel(candidate.source)}</span>
                       <span className="font-semibold">{candidateName(candidate)}</span>
@@ -157,6 +196,7 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
                         label="Remove"
                         question="Remove this person?"
                         onConfirm={async () => {
+                          if (addingAll || busyId !== null) return 'Another review action is saving.';
                           const err = await dismissDecisionMaker(candidate.id);
                           if (!err) setCandidatesByLead((prev) => ({ ...prev, [candidate.lead_id]: (prev[candidate.lead_id] ?? []).filter((c) => c.id !== candidate.id) }));
                           return err;

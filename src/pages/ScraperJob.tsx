@@ -1,3 +1,5 @@
+import { BulkActionBar } from '../components/ui/BulkActionBar';
+import { runRowBatch } from '../lib/rowSelection';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { CheckCircle2, XCircle, SkipForward } from 'lucide-react';
@@ -97,7 +99,7 @@ export function ScraperJob() {
   }
 
   function toggleSelectAll(ids: string[]) {
-    setSelected((prev) => (prev.size === ids.length ? new Set() : new Set(ids)));
+    setSelected((prev) => (ids.length > 0 && ids.every(id => prev.has(id)) ? new Set() : new Set(ids)));
   }
 
   async function approveSelected(leads: RawLead[]) {
@@ -107,13 +109,25 @@ export function ScraperJob() {
         if (!selected.has(lead.id)) continue;
         const err = await approve(lead);
         if (err) { setRowError({ id: lead.id, text: err }); break; }
+        setSelected(previous => new Set([...previous].filter(id => id !== lead.id)));
       }
     } catch (err) {
       console.error('Scrape review failed', err instanceof Error ? err.name : 'unknown');
       setRowError({ id: '', text: 'Could not finish approval. Refresh and try again.' });
     } finally {
-      setBulkBusy(false); setSelected(new Set()); void refresh();
+      setBulkBusy(false); void refresh();
     }
+  }
+
+  async function removeSelected(leads: RawLead[]) {
+    if (!window.confirm('Remove selected scraped leads? This rejection cannot be undone here.')) return;
+    setBulkBusy(true); setRowError(null);
+    const results = await runRowBatch(leads.filter(lead => selected.has(lead.id)), reject);
+    const failed = results.filter(result => result.error);
+    setSelected(new Set(failed.map(result => result.row.id)));
+    if (failed.length) setRowError({id: '', text: failed.map(result => `${result.row.business_name}: ${result.error}`).join('; ')});
+    try { await refresh(); } catch (error) { console.error('Scrape refresh failed', error); setRowError({id:'', text:'Refresh failed. Reload to see saved results.'}); }
+    finally { setBulkBusy(false); }
   }
 
   function exportCsv() {
@@ -173,6 +187,8 @@ export function ScraperJob() {
       {timedOut && <p role="status" className="text-sm text-warning">One source did not finish. You can review what arrived.</p>}
       <p className="text-sm text-muted">Approve a result into a pipeline before using Deep find.</p>
 
+      <label className="flex items-center gap-2 sm:hidden"><input type="checkbox" aria-label="Select all actionable scraped leads" disabled={reviewDisabled || !pending.length} checked={pending.length > 0 && pending.every(l => selected.has(l.id))} onChange={() => toggleSelectAll(pending.map(l => l.id))} />Select all</label>
+      <BulkActionBar count={pending.filter(l => selected.has(l.id)).length} busy={reviewDisabled} approveLabel="Approve selected" rejectLabel="Remove selected" onApprove={() => { if (pipelineId) void approveSelected(pending); else setRowError({id:'', text:'Choose a pipeline before approving.'}); }} onReject={() => void removeSelected(pending)} onClear={() => setSelected(new Set())} />
       <div className="overflow-x-auto rounded-xl border border-line">
         <table className="block w-full text-left text-sm sm:table">
           <thead className="hidden sm:table-header-group">
@@ -193,7 +209,7 @@ export function ScraperJob() {
             {visible.map((lead) => (
               <tr key={lead.id} className={`grid grid-cols-2 border-b border-line sm:table-row ${lead.status === 'duplicate' ? 'bg-amber-500/10' : ''}`}>
                 <td className="p-3">
-                  <input type="checkbox" checked={selected.has(lead.id)} disabled={reviewDisabled || lead.status === 'approved'} onChange={() => toggleSelected(lead.id)} className="h-4 w-4 accent-violet-500" aria-label={`Select ${lead.business_name}`} />
+                  <input type="checkbox" checked={selected.has(lead.id)} disabled={reviewDisabled || !pending.includes(lead)} onChange={() => toggleSelected(lead.id)} className="h-4 w-4 accent-violet-500" aria-label={`Select ${lead.business_name}`} />
                 </td>
                 <td className="min-w-0 break-words p-3 font-semibold">
                   {lead.business_name}
