@@ -1,5 +1,5 @@
 import { companyNameTokens, hasLocation, strongLocationAgrees, pickCompany, type CompanyCandidate, type LeadLocation } from './registrySearch.ts';
-import { sameCompanyName } from './nameVariants.ts';
+import { brandNameCandidates, sameCompanyName } from './nameVariants.ts';
 
 export interface RegistryEvidence { E1: boolean; E2: boolean; E3: boolean; E4: boolean; E5: boolean; E6: boolean; reasons: string[] }
 export interface RegistryProof {
@@ -25,8 +25,8 @@ function endsAtBoundary(suffix: string) {
 const personKey = (v: string) => v.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z]+/g, ' ').trim().replace(/^(?:(?:mr|mrs|ms|miss|dr|prof|sir|dame|lord|lady) )+/, '');
 /** Evidence is scored independently of provider ordering. Weak domain evidence can never authorize a pick. */
 export function matchRegistryEvidence(scored: CompanyCandidate[], name: string, loc: LeadLocation, proof: RegistryProof) {
-  const words = companyNameTokens(name);
-  const allWords = (c: CompanyCandidate) => words.length > 0 && (words.every(w => companyNameTokens(c.name).includes(w)) || sameCompanyName(c.name, name));
+  const brands = brandNameCandidates(name);
+  const allWords = (c: CompanyCandidate) => brands.some(brand => { const words = companyNameTokens(brand); return words.length > 0 && (words.every(w => companyNameTokens(c.name).includes(w)) || sameCompanyName(c.name, brand)); });
   const evidence: Record<string, RegistryEvidence> = {};
   const text = proof.pages.join(' ').replace(/<[^>]*>/g, ' | ').replace(/\s+/g, ' ').toLowerCase();
   const known = proof.people.map(personKey).filter(p => p.split(' ').length >= 2 && p.split(' ').every(part => part.length >= 2));
@@ -34,7 +34,7 @@ export function matchRegistryEvidence(scored: CompanyCandidate[], name: string, 
   try { host = new URL(proof.website?.includes('://') ? proof.website : `https://${proof.website ?? ''}`).hostname.replace(/^www\./, '').split('.')[0]; } catch { /* An invalid website contributes no evidence. */ }
   for (const c of scored) {
     const tokens = companyNameTokens(c.name);
-    const E1 = sameCompanyName(c.name, name) || (tokens.length === words.length && allWords(c));
+    const E1 = brands.some(brand => sameCompanyName(c.name, brand) || (tokens.length === companyNameTokens(brand).length && companyNameTokens(brand).every(w => tokens.includes(w))));
     const E2 = strongLocationAgrees(c, loc);
     const escapedNumber = c.company_number.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const legalName = c.name.toLowerCase().replace(/\s+/g, ' ').trim();

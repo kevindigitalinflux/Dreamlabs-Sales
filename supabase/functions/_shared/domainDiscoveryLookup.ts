@@ -6,7 +6,7 @@ import { domainFromWebsite } from './knownPerson.ts';
 import {
   apolloOrgSearch, hunterCompanySearch, hunterDomainList, hunterFindByCompany, readCompanyPages, webSearchCompanyDomains,
 } from './knownPersonLookup.ts';
-import { companyNameVariants } from './nameVariants.ts';
+import { brandNameCandidates, companyNameVariants } from './nameVariants.ts';
 import { lookupMx } from './dnsLookup.ts';
 import { runDomainDiscovery, type DiscoveryOutcome, type DomainCandidate, type KnownPersonName } from './domainDiscovery.ts';
 import { DOMAIN_CHECKS, savedDomains } from './domainChecks.ts';
@@ -69,7 +69,7 @@ export async function discoverLeadDomains(
   const { hunterKey, geminiKey } = opts.keys;
   const apolloKey = opts.keys.apolloKey ?? null;
   // Spellings to SEARCH with; every domain found is still judged against the real names.
-  const variants = companyNameVariants(names).map((v) => v.text);
+  const variants = companyNameVariants(names.flatMap(brandNameCandidates)).map((v) => v.text);
   const blocked = savedDomains(lead.blocked_domains);
   const spendHunter = async () => !opts.guard || await opts.guard.hunter();
   const phonePages = new Map<string, PhonePage[]>();

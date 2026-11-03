@@ -1,3 +1,4 @@
+import { INDUSTRY_WORDS, GENERIC_COMPANY_WORDS } from './companyNameWords.ts';
 // supabase/functions/_shared/nameVariants.ts
 // Company name variants for searching providers ("Love Living" -> "loveliving", "love-living", "loveliving london",
 // "love living management" ...). No imports on purpose: tested from src/lib. Variants only widen SEARCHES; every
@@ -83,11 +84,38 @@ export function registrySearchNames(name: string): string[] {
     const v = (t ?? '').replace(/[^a-z0-9& -]/gi, ' ').replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 80);
     if (v.length >= 3 && !out.includes(v) && out.length < MAX_REGISTRY_SEARCHES) out.push(v);
   };
+  const brands = brandNameCandidates(name);
+  if (brands.length > 1) for (const brand of brands.filter(v => v !== name)) add(brand);
   const variants = companyNameVariants([name]);
   const plain = coreWords(name).filter((w) => w !== 'and');
   add(variants.find((v) => v.kind === 'original')?.text);
   add(variants.find((v) => v.kind === 'compact')?.text);
   if (plain.length > 0) { add(`${plain.join(' ')} london`); add(`${plain.join(' ')} management`); }
   for (const v of variants.filter((x) => x.kind === 'and_swap')) add(v.text);
+  return out;
+}
+
+/** Up to four brand candidates, specific brand first and original descriptor name last. */
+export function brandNameCandidates(name: string): string[] {
+  const original = name.replace(/\s+/g, ' ').trim().slice(0, 200);
+  const out: string[] = [];
+  const generic = (part: string) => {
+    const tokens = words(part);
+    return tokens.length === 1 && (GENERIC_COMPANY_WORDS.has(tokens[0]) || INDUSTRY_WORDS.has(tokens[0]));
+  };
+  const add = (part: string) => {
+    const value = part.trim();
+    if (value.length >= 3 && !generic(value) && !out.some(v => v.toLowerCase() === value.toLowerCase()) && out.length < 4) out.push(value);
+  };
+  const segments = original.split(/\s[-–—|]\s|:\s*/).map(v => v.trim()).filter(Boolean);
+  let brand = segments[0] ?? '';
+  if (generic(brand)) brand = [...segments].sort((a,b) => b.length-a.length).find(v => !generic(v)) ?? '';
+  // A long marketing tail, or an explicit site/HQ suffix, is not part of the brand.
+  const tail = brand.match(/\s+(?:(?:global|creative|advertising|digital|marketing)\s+){2,}.*(?:agency|office|hq)\b.*$|\s+(?:london hq|head office|official site|official website)$/i);
+  if (tail?.index !== undefined) brand = brand.slice(0, tail.index);
+  add(brand);
+  add(brand.replace(/([a-z])([0-9])/gi, '$1 $2').replace(/([0-9])([a-z])/gi, '$1 $2'));
+  add(brand.replace(/([a-z])\s+([0-9])/gi, '$1$2').replace(/([0-9])\s+([a-z])/gi, '$1$2'));
+  add(original);
   return out;
 }

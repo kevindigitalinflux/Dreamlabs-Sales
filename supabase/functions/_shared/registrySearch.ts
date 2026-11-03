@@ -4,7 +4,7 @@
 // Rule (Review Focus 1 and 2): a common name, a dissolved company or a name match in a different town never produces
 // an automatic pick. Then the top candidates are offered to the user ("Use this company").
 
-import { sameCompanyName } from './nameVariants.ts';
+import { brandNameCandidates, sameCompanyName } from './nameVariants.ts';
 
 /** One Companies House search result, cleaned, with its score. */
 export interface CompanyCandidate {
@@ -118,15 +118,19 @@ export function hasLocation(loc: LeadLocation): boolean {
  * location agrees 30. Inactive companies stay in the list (shown with their status) but are never picked automatically.
  */
 export function scoreCompanyCandidates(items: unknown, leadName: string, loc: LeadLocation): CompanyCandidate[] {
-  const lead = companyNameTokens(leadName);
+  const brands = brandNameCandidates(leadName);
   return parseCompanySearchItems(items).map((c) => {
+    const nameScores = brands.map(brand => {
+    const lead = companyNameTokens(brand);
     const tokens = companyNameTokens(c.name);
     const shared = lead.filter((t) => tokens.includes(t)).length;
     const union = new Set([...lead, ...tokens]).size || 1;
     // Spacing and legal forms do not make a different name: LOVELIVING LIMITED is a full match for Love Living.
-    const all = (lead.length > 0 && shared === lead.length) || sameCompanyName(c.name, leadName);
+    const all = (lead.length > 0 && shared === lead.length) || sameCompanyName(c.name, brand);
     const score = Math.round((shared / union) * 50) + (all ? 20 : 0) + (c.status === 'active' ? 20 : 0) + (locationAgrees(c, loc) ? 30 : 0);
-    return { ...c, score };
+    return score;
+    });
+    return { ...c, score: Math.max(0, ...nameScores) };
   }).sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
 }
 
@@ -140,15 +144,16 @@ export function scoreCompanyCandidates(items: unknown, leadName: string, loc: Le
  *   means a choice, never a guess. A name match whose address disagrees with a known location is never picked.
  */
 export function pickCompany(scored: CompanyCandidate[], leadName: string, loc: LeadLocation): CompanyPick {
+  const brands = brandNameCandidates(leadName);
   const lead = companyNameTokens(leadName);
   const candidates = scored.slice(0, 5);
   if (lead.length === 0 || scored.length === 0) return { chosen: null, candidates, reason: 'none' };
   const tokensOf = (c: CompanyCandidate) => companyNameTokens(c.name);
   const isExact = (c: CompanyCandidate) => {
     const t = tokensOf(c);
-    return (t.length === lead.length && lead.every((w) => t.includes(w))) || sameCompanyName(c.name, leadName);
+    return brands.some(brand => { const words = companyNameTokens(brand); return (t.length === words.length && words.every(w => t.includes(w))) || sameCompanyName(c.name, brand); });
   };
-  const matches = scored.filter((c) => c.status === 'active' && (lead.every((w) => tokensOf(c).includes(w)) || sameCompanyName(c.name, leadName)));
+  const matches = scored.filter((c) => c.status === 'active' && brands.some(brand => { const words = companyNameTokens(brand); return words.length > 0 && (words.every(w => tokensOf(c).includes(w)) || sameCompanyName(c.name, brand)); }));
   if (matches.length === 0) return { chosen: null, candidates, reason: candidates.length ? 'ambiguous' : 'none' };
   if (hasLocation(loc)) {
     const located = matches.filter((c) => locationAgrees(c, loc));
