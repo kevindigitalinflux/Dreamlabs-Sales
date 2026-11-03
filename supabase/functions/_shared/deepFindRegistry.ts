@@ -8,8 +8,8 @@ import { fetchActiveOfficers, fetchCompanyProfile, fetchOfficerAppointments, sea
 import { matchRegistryEvidence, type RegistryEvidence } from './registryEvidence.ts';
 import { fetchActivePscNames } from './registryProofPeople.ts';
 import { appointmentCompanies, officerAppointmentPaths, type OfficerQuery } from './registryOfficerSearch.ts';
-import { cleanCompanyNumber, locationAgrees, scoreCompanyCandidates, type CompanyCandidate } from './registrySearch.ts';
-import { registrySearchNames } from './nameVariants.ts';
+import { cleanCompanyNumber, hasLocation, locationAgrees, pickCompany, scoreCompanyCandidates, type CompanyCandidate } from './registrySearch.ts';
+import { brandNameCandidates, registrySearchNames } from './nameVariants.ts';
 import { registrySkipReason } from './deepFindSuggestions.ts';
 import type { ReviewLead } from './deepFindSuggestions.ts';
 
@@ -90,8 +90,22 @@ export async function resolveRegistry(
     }
   }
   const loc = { postcode: str(lead.postcode), city: str(lead.city), address: str(lead.address) };
-  const scored = proof.cached ?? scoreCompanyCandidates(items, name, loc);
+  const scored = proof.cached ? [...proof.cached] : scoreCompanyCandidates(items, name, loc);
   anyOk ||= !!proof.cached;
+  // Grounded web text is only a hint: retrieve the registry profile before accepting any new candidate.
+  for (const number of [...new Set(proof.webNumbers ?? [])].slice(0, 3)) {
+    if (!cleanCompanyNumber(number) || scored.some(c => c.company_number === number)) continue;
+    if (proof.left && proof.left() < 12_000) break;
+    await proof.checkpoint?.();
+    const profile = await fetchCompanyProfile(number, chKey);
+    if (!profile || profile.status !== 'active') continue;
+    const candidate = { company_number: number, name: profile.name, status: profile.status, address: profile.address,
+      postcode: profile.postcode, locality: profile.locality, created: null, score: 0 };
+    if (hasLocation(loc) && !locationAgrees(candidate, loc)) continue;
+    if (!brandNameCandidates(name).some(brand => pickCompany([candidate], brand, loc).chosen)) continue;
+    scored.push(candidate);
+  }
+
   const officers: Record<string, string[]> = { ...proof.cachedPeople };
   for (const c of scored.filter(c => c.status === 'active').slice(0, 3)) {
     if (Object.hasOwn(officers, c.company_number)) continue;
