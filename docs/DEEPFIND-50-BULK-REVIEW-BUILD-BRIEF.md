@@ -1,0 +1,30 @@
+# Build brief: Deep find lead cap to 50, and multi-select Add/Dismiss/Remove for suggestions and scraped leads
+
+You are Codex, the builder. Claude is architect and reviewer. Kevin directs. Roles unchanged. Kevin approved this build on 2026-11-03. Codex weekly allowance is nearly used (about 8% left, renews 2026-11-04): keep reads targeted, do not explore beyond the files named here, run each gate once, and write the report early (stop and report if allowance runs short; commit work in small steps so nothing is lost).
+
+Worktree: `C:/Users/kevin/Projects/dreamlabs-sales-bulkreview`, branch `codex/deepfind-50-bulk-review` (already created from `origin/main`). Run `npm ci` if `node_modules` is missing. Work only there.
+
+## Part 1: raise the Deep find lead cap to 50
+Facts verified by Claude: the cap is `DEEP_FIND_MAX_LEADS = 25` in `src/lib/deepFindView.ts` and `MAX_DEEP_FIND_LEADS = 25` in `supabase/functions/_shared/deepFindRules.ts` (server check line ~37). Kevin reports seeing "20", so first find where 20 appears in the UI or server (search `20` near Deep find, Pipeline selection, picker) and report what it is. Do not guess.
+Why quality is not hurt by more leads: the engine claims ONE lead per tick (`deep_find_claim max_leads: 1`, cron every 2 minutes) and each lead has its own time budget. More leads only means a longer queue. The real risk is the per-RUN caps (defaults Hunter 60 credits, AI 25 calls, shared across all leads): with 50 leads the later leads would hit the cap and be searched with less. So:
+1. Raise both constants to 50 (client and server in step). Keep the client message and the tooltip text in sync (`Choose 50 leads or fewer`).
+2. Scale the DEFAULT caps shown in the confirm step with the lead count so per-lead budget stays what it is for 25 leads (for example hunter = 60 * leads / 25 rounded up, ai = 25 * leads / 25), still clamped to `DEEP_FIND_CAP_LIMITS` (500 / 200). User can still edit. Do not change the limits or server-side clamping. Pure function with tests.
+3. Tell the user in the confirm step that a bigger run takes longer (roughly 2 minutes per lead, from the tick) in one plain sentence, only if the estimate is true from the code; verify the tick and per-lead timing before stating a number, otherwise omit the number.
+4. Do not touch other caps (`enrich-leads-bulk` 40, `find-decision-makers` 40, lookup jobs 50).
+
+## Part 2: multi-select review actions
+Kevin: after a scrape and after a Deep find, adding or removing suggestions and scraped leads one by one takes too long.
+A. **Deep find suggestions** (`src/components/deepfind/DeepFindSuggestions.tsx`, `SuggestionRows.tsx`, `DeepFindLeadResult.tsx`, and the Deep find run page `src/pages/DeepFindRun.tsx` if suggestions are listed there): add a checkbox per suggestion row, a "Select all" for the visible group, and a sticky action bar "N selected: Add selected / Dismiss selected / Clear". Reuse the existing single-row add and dismiss handlers (same code path, same server calls, same optimistic state) so behaviour and security are identical; run them in sequence or small bounded batches, report partial failure per row with plain text, never abort silently, keep failed rows selected. Role-mailbox and non-addable rows must be unselectable or clearly skipped with a reason. Suggestions for different people on one lead may be batched; across leads only if the page already lists several leads.
+B. **Scraped leads** (`src/pages/ScraperJob.tsx`): it already has checkboxes, Select all and "Approve selected". Add the missing counterpart: "Remove selected" (use the existing skip/reject path for single rows, `skipForSession` and the reject action; check which one the single-row "remove" button uses and mirror it). Show a count and a confirm step if the action is not undoable. Keep duplicate rows selectable. "Select all" must cover only rows that can be acted on. Keep Approve selected working, and make a failure on one row not stop the rest where safe (today `approveSelected` breaks on the first error: keep that behaviour unless you can show it is safe to continue; report your choice).
+C. Plain UK English, real buttons, labelled checkboxes (`aria-label`), keyboard use, visible focus, phone width, both themes, loading and error states, no horizontal overflow. Components stay small (extract a shared `useRowSelection` hook or small component if both places need it).
+
+## Constraints
+- TDD: failing tests first for pure logic (cap constant, scaled defaults, selection reducer/hook logic, batch runner with partial failure).
+- No change to RLS, grants, migrations, edge function behaviour beyond the one server constant, sequences, send behaviour, or review-before-send. Deep find never emails anyone. No new dependency. No external calls in tests. No push, merge, deploy, Supabase writes, migrations or secrets.
+- Stage explicit paths only. Small commits with `git -c core.hooksPath=NUL commit`, each ending with `Co-Authored-By: Codex <noreply@openai.com>`. Do not edit the top checkpoint of `AGENTS.md`, `CLAUDE.md` or `docs/HANDOFF.md`; add one short dated section at the END of `docs/HANDOFF.md` only.
+
+## Gates
+`npx tsc --noEmit`, `npx vitest run`, `npm run build`, `git diff --check`, `node scripts/places-edge-typecheck.mjs`, with `VITE_SUPABASE_URL=http://127.0.0.1:54321 VITE_SUPABASE_ANON_KEY=local-test-placeholder`. Record baseline first (expected about 190 files / 2,705 tests) and exact final counts.
+
+## Deliver
+`docs/DEEPFIND-50-BULK-REVIEW-BUILD-REPORT.md`: where "20" came from, what was built, files changed, the scaled-defaults formula, error and partial-failure behaviour, the Approve-selected choice, gate counts, what was not verified (Deno, browser, phone width, themes, a real 50-lead run), and the functions to deploy (`run-deep-find` for the constant) and safe order (functions first, then frontend). Then stop. Claude reviews before any merge.
