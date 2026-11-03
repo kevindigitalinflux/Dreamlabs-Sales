@@ -21,7 +21,7 @@ interface DeepFindConfirmProps {
 
 const EFFORT_COPY: Record<Exclude<Effort, 'custom'>, { line: string; best: string }> = {
   low: { line: 'Free steps only. No paid credits.', best: 'a first pass or large lists' },
-  medium: { line: 'Free steps first, then goes deeper only when an email or decision maker is missing.', best: 'most lists' },
+  medium: { line: 'Free steps first, with company web proof for unresolved matches; deeper work when email or decision maker is missing.', best: 'most lists' },
   high: { line: 'Goes deeper when email, decision maker or website is missing. Adds web proof, Apollo and LinkedIn searches.', best: 'leads worth a closer look' },
   extra_high: { line: 'Tries every step, even when details are complete.', best: 'a few high-value leads' },
 };

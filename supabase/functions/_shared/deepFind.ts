@@ -1,3 +1,4 @@
+import { reserveRegistryProof } from './registryProofGate.ts';
 import { createPlacesContext, type PlacesContext } from './placesClient.ts';
 // supabase/functions/_shared/deepFind.ts
 // Deep find engine: claims queued leads, discovers the company's domains and people, stores people as contacts that are
@@ -812,6 +813,18 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   };
   await runFreeDomainChecks([...verified].slice(0, 4));
 
+  if (await reserveRegistryProof(effort, registry.how, !!configured.geminiKey, left(), async () => {
+    const enabled = spend.enabled; spend.enabled = true;
+    try { return await spend.ai('company registry proof'); } finally { spend.enabled = enabled; }
+  }, line => steps.push(line))) {
+        await checkpoint();
+    const webNumbers = await registryWebNumbers(str(lead.business_name) ?? '', configured.geminiKey!, Math.min(10_000, left() - 5_000));
+    registry = await resolveRegistry(service, lead, chKey, registryPeople, { pages: registryPages, website: usableSite ? str(lead.website) : null, cached: registry.allCandidates ?? registry.candidates, cachedPeople: registry.proofPeople, priorEvidence: registry.evidence, webNumbers, left, checkpoint, applyNumber: number => applyLead('company_number', number) });
+    registryEvidence = registry.evidence ?? {};
+    steps.push(registryStep(registry));
+    if (registry.number) await addRegistryOfficers();
+  }
+
   if (effort !== 'custom') {
     const decision = deepPhaseDecision(effort, {
       verifiedEmail: emails.some(email => { const c = checkedEmails.get(email.toLowerCase()); return c?.ok && c.value.status === 'valid'; }),
@@ -862,14 +875,6 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       }
       discovery.sitePages.push(...deeper.sitePages);
       steps.push(...deeper.notes.slice(0, 6)); problems.push(...deeper.problems);
-      if ((effort === 'high' || effort === 'extra_high') && registry.how === 'ambiguous' && geminiKey && left() > 18_000 && await spend.ai('company registry proof')) {
-        await checkpoint();
-        const webNumbers = await registryWebNumbers(str(lead.business_name) ?? '', geminiKey, Math.min(10_000, left() - 5_000));
-        registry = await resolveRegistry(service, lead, chKey, registryPeople, { pages: registryPages, website: usableSite ? str(lead.website) : null, cached: registry.allCandidates ?? registry.candidates, cachedPeople: registry.proofPeople, priorEvidence: registry.evidence, webNumbers, left, checkpoint, applyNumber: number => applyLead('company_number', number) });
-        registryEvidence = registry.evidence ?? {};
-        steps.push(registryStep(registry));
-        if (registry.number) await addRegistryOfficers();
-      }
       // Newly confirmed domains share the original time reserves, checker budget and Hunter caps.
       const newDomains = [...verified].filter(d => !freeCheckedDomains.has(d)).slice(0, Math.max(0, 4 - freeCheckedDomains.size));
       for (const domain of newDomains) {

@@ -2,7 +2,7 @@ import { CAP_LIMITS } from './deepFindLimits.ts';
 /** Pure effort policy shared by confirmation, request validation and the queued engine. */
 export const EFFORT_LEVELS = {
   low: { label: 'Low', hunter: 0, ai: 0, firecrawl: 0, explanation: 'Free steps only. Best for a first pass or large lists.' },
-  medium: { label: 'Medium', hunter: 1, ai: 2, firecrawl: 1, explanation: 'Free steps first. Look deeper only if a verified email or named decision maker is missing.' },
+  medium: { label: 'Medium', hunter: 1, ai: 2, firecrawl: 1, explanation: 'Free steps first, with company web proof for unresolved registry matches. Look deeper if email or decision maker is missing.' },
   high: { label: 'High', hunter: 3, ai: 4, firecrawl: 1, explanation: 'Look deeper if email, decision maker or confirmed website is missing. Adds company web proof, Apollo and owner LinkedIn searches.' },
   extra_high: { label: 'Extra high', hunter: 6, ai: 8, firecrawl: 2, explanation: 'Try every step, even when details are complete. Best for a few high-value leads.' },
 } as const;
