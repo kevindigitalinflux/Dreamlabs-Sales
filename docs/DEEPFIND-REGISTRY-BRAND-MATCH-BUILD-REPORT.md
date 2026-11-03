@@ -52,4 +52,3 @@ Not verified: Deno, live Companies House/Gemini, real run, actual historical Fol
 ## Deployment manifest and next step
 
 Static transitive relative-import graph identifies: run-deep-find, run-lookup-jobs, enrich-leads-bulk, find-decision-makers, org-api-settings, run-selected-autopilot and scrape-companies-house. Some bundles only inherit unchanged vocabulary through shared helpers; all importing bundles are listed so rollout cannot leave mixed shared versions. No frontend or migration required. Claude reviews this exact branch and the Part B/C limitations before any separately authorised function deployment. Stop after this report.
-

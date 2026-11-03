@@ -1,4 +1,4 @@
-import { companyNameTokens, hasLocation, strongLocationAgrees, pickCompany, type CompanyCandidate, type LeadLocation } from './registrySearch.ts';
+import { companyMatchesLead, companyNameTokens, hasLocation, strongLocationAgrees, pickCompany, type CompanyCandidate, type LeadLocation } from './registrySearch.ts';
 import { brandNameCandidates, sameCompanyName } from './nameVariants.ts';
 
 export interface RegistryEvidence { E1: boolean; E2: boolean; E3: boolean; E4: boolean; E5: boolean; E6: boolean; reasons: string[] }
@@ -26,7 +26,7 @@ const personKey = (v: string) => v.normalize('NFD').replace(/\p{M}/gu, '').toLow
 /** Evidence is scored independently of provider ordering. Weak domain evidence can never authorize a pick. */
 export function matchRegistryEvidence(scored: CompanyCandidate[], name: string, loc: LeadLocation, proof: RegistryProof) {
   const brands = brandNameCandidates(name);
-  const allWords = (c: CompanyCandidate) => brands.some(brand => { const words = companyNameTokens(brand); return words.length > 0 && (words.every(w => companyNameTokens(c.name).includes(w)) || sameCompanyName(c.name, brand)); });
+  const allWords = (c: CompanyCandidate) => companyMatchesLead(c.name, name);
   const evidence: Record<string, RegistryEvidence> = {};
   const text = proof.pages.join(' ').replace(/<[^>]*>/g, ' | ').replace(/\s+/g, ' ').toLowerCase();
   const known = proof.people.map(personKey).filter(p => p.split(' ').length >= 2 && p.split(' ').every(part => part.length >= 2));

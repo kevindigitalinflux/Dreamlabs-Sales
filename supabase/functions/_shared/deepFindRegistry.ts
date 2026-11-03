@@ -8,8 +8,8 @@ import { fetchActiveOfficers, fetchCompanyProfile, fetchOfficerAppointments, sea
 import { matchRegistryEvidence, type RegistryEvidence } from './registryEvidence.ts';
 import { fetchActivePscNames } from './registryProofPeople.ts';
 import { appointmentCompanies, officerAppointmentPaths, type OfficerQuery } from './registryOfficerSearch.ts';
-import { cleanCompanyNumber, hasLocation, locationAgrees, pickCompany, scoreCompanyCandidates, type CompanyCandidate } from './registrySearch.ts';
-import { brandNameCandidates, registrySearchNames } from './nameVariants.ts';
+import { cleanCompanyNumber, companyMatchesLead, hasLocation, locationAgrees, scoreCompanyCandidates, type CompanyCandidate } from './registrySearch.ts';
+import { registrySearchNames } from './nameVariants.ts';
 import { registrySkipReason } from './deepFindSuggestions.ts';
 import type { ReviewLead } from './deepFindSuggestions.ts';
 
@@ -102,7 +102,7 @@ export async function resolveRegistry(
     const candidate = { company_number: number, name: profile.name, status: profile.status, address: profile.address,
       postcode: profile.postcode, locality: profile.locality, created: null, score: 0 };
     if (hasLocation(loc) && !locationAgrees(candidate, loc)) continue;
-    if (!brandNameCandidates(name).some(brand => pickCompany([candidate], brand, loc).chosen)) continue;
+    if (!companyMatchesLead(candidate.name, name)) continue;
     scored.push(candidate);
   }
 

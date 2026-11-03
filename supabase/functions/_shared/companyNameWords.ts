@@ -25,4 +25,3 @@ export const GENERIC_COMPANY_WORDS = new Set([
   'enterprises', 'enterprise', 'trading', 'partners', 'partnership', 'associates', 'london', 'uk', 'gb', 'england',
   'britain', 'british', 'scotland', 'wales', 'ireland', 'ie', 'europe', 'cic',
 ]);
-

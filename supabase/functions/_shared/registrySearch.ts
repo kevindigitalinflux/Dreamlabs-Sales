@@ -126,7 +126,7 @@ export function scoreCompanyCandidates(items: unknown, leadName: string, loc: Le
     const shared = lead.filter((t) => tokens.includes(t)).length;
     const union = new Set([...lead, ...tokens]).size || 1;
     // Spacing and legal forms do not make a different name: LOVELIVING LIMITED is a full match for Love Living.
-    const all = (lead.length > 0 && shared === lead.length) || sameCompanyName(c.name, brand);
+    const all = (lead.length > 0 && shared === lead.length && (brand === leadName.replace(/\s+/g, ' ').trim().slice(0, 200) || tokens.length === lead.length)) || sameCompanyName(c.name, brand);
     const score = Math.round((shared / union) * 50) + (all ? 20 : 0) + (c.status === 'active' ? 20 : 0) + (locationAgrees(c, loc) ? 30 : 0);
     return score;
     });
@@ -144,16 +144,13 @@ export function scoreCompanyCandidates(items: unknown, leadName: string, loc: Le
  *   means a choice, never a guess. A name match whose address disagrees with a known location is never picked.
  */
 export function pickCompany(scored: CompanyCandidate[], leadName: string, loc: LeadLocation): CompanyPick {
-  const brands = brandNameCandidates(leadName);
   const lead = companyNameTokens(leadName);
   const candidates = scored.slice(0, 5);
   if (lead.length === 0 || scored.length === 0) return { chosen: null, candidates, reason: 'none' };
-  const tokensOf = (c: CompanyCandidate) => companyNameTokens(c.name);
   const isExact = (c: CompanyCandidate) => {
-    const t = tokensOf(c);
-    return brands.some(brand => { const words = companyNameTokens(brand); return (t.length === words.length && words.every(w => t.includes(w))) || sameCompanyName(c.name, brand); });
+    return companyMatchesLead(c.name, leadName, true);
   };
-  const matches = scored.filter((c) => c.status === 'active' && brands.some(brand => { const words = companyNameTokens(brand); return words.length > 0 && (words.every(w => tokensOf(c).includes(w)) || sameCompanyName(c.name, brand)); }));
+  const matches = scored.filter((c) => c.status === 'active' && companyMatchesLead(c.name, leadName));
   if (matches.length === 0) return { chosen: null, candidates, reason: candidates.length ? 'ambiguous' : 'none' };
   if (hasLocation(loc)) {
     const located = matches.filter((c) => locationAgrees(c, loc));
@@ -162,6 +159,18 @@ export function pickCompany(scored: CompanyCandidate[], leadName: string, loc: L
     if (located.length > 1 && exactLocated.length === 1) return { chosen: exactLocated[0]!, candidates, reason: 'auto_location' };
     return { chosen: null, candidates, reason: 'ambiguous' };
   }
+  const relatedActive = scored.filter(c => c.status === 'active' && brandNameCandidates(leadName).some(brand => { const words = companyNameTokens(brand); return words.length > 0 && words.every(w => companyNameTokens(c.name).includes(w)); }));
+  if (relatedActive.length > matches.length) return { chosen: null, candidates, reason: 'ambiguous' };
   if (matches.length === 1 && isExact(matches[0]!)) return { chosen: matches[0]!, candidates, reason: 'auto_unique' };
   return { chosen: null, candidates, reason: 'ambiguous' };
+}
+
+/** Original names retain subset matching; extracted brands require exact tokens or compact equivalence. */
+export function companyMatchesLead(company: string, original: string, exactOnly = false): boolean {
+  const tokens = companyNameTokens(company);
+  return brandNameCandidates(original).some(brand => {
+    const words = companyNameTokens(brand);
+    const derived = brand !== original.replace(/\s+/g, ' ').trim().slice(0, 200);
+    return words.length > 0 && ((words.every(word => tokens.includes(word)) && (!derived && !exactOnly || tokens.length === words.length)) || sameCompanyName(company, brand));
+  });
 }
