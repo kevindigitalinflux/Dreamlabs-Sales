@@ -78,3 +78,7 @@ Tasks 1–6 built locally on codex/platform-owners. Read docs/HANDOFF.md section
 
 ## MD setup import build checkpoint (2026-10-26)
 The active task is the local build in `C:/Users/kevin/Projects/dreamlabs-sales-md-import`, branch `codex/md-import-build`. Read `docs/MD-IMPORT-BUILD-REPORT.md` and the latest `docs/HANDOFF.md` section. Markdown setup import, its admin wizard and both template-copy actions are built. Application revision `6ed94a5` passes TypeScript, 152 files / 2,390 tests, build and diff checks. Claude's independent review and browser/live Supabase checks remain pending. No migration, dependency, remote operation, vault sync, push, merge or deployment occurred or is authorized by this build. This checkpoint supersedes older task pointers for this worktree only.
+
+## Registry fix round 1 checkpoint (2026-11-04)
+
+In dreamlabs-sales-accuracy, Parts 1-2 remain complete. Part 3 reached the brief's >150-line stop/proposal boundary after a failing fake-provider callback-order probe. Read the final build-report addendum and docs/HANDOFF.md. Part 3 is not built; Part 4 is unstarted. Application gates pass unchanged; no publication or live operations occurred. Codex stops for review of the proposal.

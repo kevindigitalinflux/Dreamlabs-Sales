@@ -1,0 +1,21 @@
+import { expect, it } from 'vitest';
+import { runDomainDiscovery } from '../../supabase/functions/_shared/domainDiscovery';
+import { DOMAIN_CHECKS } from '../../supabase/functions/_shared/domainChecks';
+
+it('finishes own DNS, site and web callbacks before the first Hunter request', async () => {
+  const calls: string[] = [];
+  await runDomainDiscovery({
+    names: ['Bright Fox'], website: 'https://brightfox.com', websiteDomain: 'brightfox.com', known: [],
+    allow: { hunter: true, site: true, web: true }, budgetMs: 30_000,
+  }, {
+    now: () => 0,
+    hunterByName: async () => { calls.push('hunter'); return { ok: false, failure: 'cap_reached' }; },
+    readSite: async () => { calls.push('site'); return []; },
+    mx: async () => { calls.push('dns'); return 'none'; },
+    webSearch: async () => { await Promise.resolve(); calls.push('web'); return { ok: true, text: '{}' }; },
+  }, DOMAIN_CHECKS);
+  expect(calls).toContain('hunter');
+  for (const own of ['dns', 'site', 'web']) {
+    expect(calls.indexOf(own), `${own}: ${calls.join(', ')}`).toBeLessThan(calls.indexOf('hunter'));
+  }
+});
