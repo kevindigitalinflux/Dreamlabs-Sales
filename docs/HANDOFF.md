@@ -1015,3 +1015,6 @@ Kevin authorised docs/DEEPFIND-50-BULK-REVIEW-BUILD-BRIEF.md in this dreamlabs-s
 ## Rollout record 2026-11-03 (Claude)
 
 Merged `d779777` (Deep find 50-lead cap, bulk review actions) to main with Kevin's yes. Rollback tag `checkpoint-2026-11-03-before-50-leads-bulk-review` = `5452c97`. `run-deep-find` deployed to production. The first Cloudflare frontend build timed out at environment initialisation ("Build failed to initialize and was timed out"); this docs-only commit re-triggers it. Next: Codex brief `docs/DEEPFIND-REGISTRY-BRAND-MATCH-BUILD-BRIEF.md` on `codex/deepfind-registry-brand-match`.
+
+## Worker sender identity 2026-11-04 (Claude)
+Reacher now identifies as `verify.didreamlabs.com`: PTR for 2.24.131.162 set via Hostinger, A and SPF (`v=spf1 ip4:2.24.131.162 -all`) records for `verify.didreamlabs.com` in Cloudflare, `RCH__HELLO_NAME`/`RCH__FROM_EMAIL` updated on the VPS and in `worker/docker-compose.yml`. Only the reacher container was restarted. Hostinger snapshot 440446 taken first (expires 2026-11-05). Backup on VPS: `/opt/lookup-worker/docker-compose.yml.bak-20261104`. Probe of five addresses gave the same results as before; Microsoft 365 and hosted mail stay unverifiable by SMTP. Rollback: restore the backup file and `docker compose up -d reacher`.
