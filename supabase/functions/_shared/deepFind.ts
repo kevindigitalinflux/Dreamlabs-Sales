@@ -32,6 +32,7 @@ import {
   MAX_HUNTER_PEOPLE_PER_LEAD, deepFindSummary, emailOnLead, extractTeamMembers, findSamePerson, samePersonMatches,
   hunterPeople, namedPersonIsStored, parseLeadPersonName, peopleToLookUp, stuckAction, type ExistingContact, type LeadStats, type SitePerson,
 } from './deepFindRules.ts';
+import { makeRunVerifyGate, saveRunResult } from './runVerifyGateStore.ts';
 import { makeWorkerClient } from './workerClient.ts';
 import { MAX_VERIFY_PER_LEAD, WORKER_TIMEOUT_MS, scrapeTimeoutFor, unconfirmedLabel, verifyAction, type WorkerFailure } from './workerRules.ts';
 import { rankedEmailCandidates, unverifiedEmailSuggestions, providerGuessLine, GuessBudget, GuessChecks, optionalPeopleBudget, personEmailLine, COMMON_GUESS_LABEL } from './personEmailFinding.ts';
@@ -165,7 +166,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   });
   // Own worker key first; shared worker requires the global fallback flag or WORKER_SHARED_ORG_IDS.
   const workerConfig = await resolveOrgWorkerConfig(service, run.org_id, Deno.env.get('WORKER_SHARED_ORG_IDS'));
-  const worker = makeWorkerClient({ usage: service, orgId: run.org_id, config: workerConfig });
+  const worker = makeWorkerClient({ usage: service, orgId: run.org_id, config: workerConfig, verifyGate: makeRunVerifyGate(service, run.org_id, run.id), verifyTimeLeftMs: () => Math.max(0, left() - 2000) });
   const { data: contactData, error: contactErr } = await service.from('decision_maker_candidates').select('*').eq('lead_id', lead.id);
   if (contactErr) return { status: 'failed', reason: 'Could not read this lead\'s contacts.' };
   const rows = (contactData ?? []) as Contact[];
@@ -1235,8 +1236,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
 }
 
 async function updateRow(service: SupabaseClient, id: string, patch: Record<string, unknown>): Promise<void> {
-  const { error } = await service.from('deep_find_leads').update({ ...patch, updated_at: nowIso() }).eq('id', id).eq('status', 'running');
-  if (error) console.error('deep find: row update failed');
+  await saveRunResult(service, id, { ...patch, updated_at: nowIso() });
 }
 
 /** Completes an active run once none of its rows is queued or running. */

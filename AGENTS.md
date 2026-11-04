@@ -90,3 +90,7 @@ This accuracy checkout completes round 1b Steps 0 and 1; Step 0 commit 41a8924, 
 ## Registry round 1b Step 2 item 1 (2026-11-04)
 
 In this accuracy checkout, Part 4 item 1 is complete; items 2/2b/3/4/5 remain authorised and unfinished. Read the latest report addendum and handoff. All-effort lead-email, published scrape and built-guess coverage passes; full gates pass with 2,839 tests and one skipped. Context checkpoint before item 2. Caveman skill and existing hook verified. No publication or live action; independent review pending.
+
+## Registry round 1b Step 2 item 2 checkpoint (2026-11-04)
+
+Item 2 completes locally: 33-second checker budgets, durable run/domain breaker/pacing in existing summary JSON, conditional final writes. Read the final report addendum for recovery and cross-run limits. Gates pass: 2,851 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. Context stop before item 2b; later items remain authorised. Independent review pending; no schema, worker/VPS, live or publication changes.

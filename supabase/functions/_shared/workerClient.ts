@@ -1,6 +1,7 @@
 // supabase/functions/_shared/workerClient.ts
 // Calls the shared lookup worker for one lead. Reserve usage BEFORE the request, refund at most once and only when
 // the worker did no work, fail closed. Never logs or returns the secret, the address or raw worker text.
+import type { RunVerifyGate } from './runVerifyGate.ts';
 import { refundUsage, reserveUsage, type UsageClient } from './usage.ts';
 import { refusalLine } from './usageRules.ts';
 import {
@@ -18,7 +19,7 @@ export interface WorkerClient {
   lines(): string[];
 }
 
-export interface WorkerClientOptions { usage: UsageClient; orgId: string; config: WorkerConfig | null; fetchImpl?: typeof fetch }
+export interface WorkerClientOptions { usage: UsageClient; orgId: string; config: WorkerConfig | null; fetchImpl?: typeof fetch; verifyGate?: RunVerifyGate; verifyTimeLeftMs?: () => number }
 
 type Kind = 'verify' | 'scrape';
 type Stopped = { failure: WorkerFailure; line: string };
@@ -91,21 +92,29 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
 
   return {
     async verifyEmail(email, options) {
-      const already = stopped.verify;
-      if (already) return { ok: false, ...already };
-      if (verifyCalls >= MAX_VERIFY_PER_LEAD) {
-        return stop('verify', 'limit_reached', `Only ${MAX_VERIFY_PER_LEAD} email checks are used for one lead in one Deep find.`);
-      }
-      verifyCalls++;
-      const raw = await call('verify', 1, '/verify-email', { email }, options?.timeoutMs);
-      if (!raw.ok) return { ok: false, failure: raw.failure, line: raw.line };
-      const reply = parseVerifyReply(raw.json, email);
-      if (!reply) { const line = workerFailureLine('bad_response'); addLine(line); return { ok: false, failure: 'bad_response', line }; }
-      tally.checked++;
-      if (reply.status === 'valid') tally.valid++;
-      else if (reply.status === 'invalid') tally.invalid++;
-      else tally.undecided++;
-      return { ok: true, value: reply };
+      const perform = async (timeoutMs: number): Promise<WorkerResult<VerifyReply>> => {
+        const options = { timeoutMs };
+        const already = stopped.verify;
+        if (already) return { ok: false, ...already };
+        if (verifyCalls >= MAX_VERIFY_PER_LEAD) {
+          return stop('verify', 'limit_reached', `Only ${MAX_VERIFY_PER_LEAD} email checks are used for one lead in one Deep find.`);
+        }
+        verifyCalls++;
+        const raw = await call('verify', 1, '/verify-email', { email }, options?.timeoutMs);
+        if (!raw.ok) return { ok: false, failure: raw.failure, line: raw.line };
+        const reply = parseVerifyReply(raw.json, email);
+        if (!reply) { const line = workerFailureLine('bad_response'); addLine(line); return { ok: false, failure: 'bad_response', line }; }
+        tally.checked++;
+        if (reply.status === 'valid') tally.valid++;
+        else if (reply.status === 'invalid') tally.invalid++;
+        else tally.undecided++;
+        return { ok: true, value: reply };
+      };
+      const timeout = options?.timeoutMs ?? WORKER_TIMEOUT_MS.verify;
+      const gateBudget = Math.min(opts.verifyTimeLeftMs?.() ?? timeout + 2000, options ? timeout + 2000 : Infinity);
+      const result = opts.verifyGate && config && !stopped.verify && verifyCalls < MAX_VERIFY_PER_LEAD ? await opts.verifyGate.run(email, gateBudget, perform) : await perform(timeout);
+      if (!result.ok) addLine(result.line);
+      return result;
     },
     async scrapeSite(domain, mode = 'key_pages', options) {
       const raw = await call('scrape', SCRAPE_UNITS[mode], '/scrape-site', { url: `https://${domain}`, mode }, options?.timeoutMs);

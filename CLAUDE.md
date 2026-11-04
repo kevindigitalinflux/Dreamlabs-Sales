@@ -1839,3 +1839,7 @@ Step 0 (41a8924) guards active appointment profiles and unnamed registry-proof s
 ### Registry round 1b Step 2 item 1 checkpoint (2026-11-04)
 
 Completed checker coverage item 1 with 15 new fake-worker effort-matrix tests (six failed before the fix). Saved lead and published scrape addresses now enter checking for every effort; existing custom contact-recheck policy remains unchanged. Full gates pass: 2,839 tests / one skipped, TypeScript/build/25-entrypoint shim/whitespace. Context checkpoint before item 2 timeout/breaker work; later items remain authorised. Read the final report addendum. Caveman skill/hook verified; no configuration, live/remote, deployment or vault change. Independent review pending.
+
+### Registry round 1b Step 2 item 2 checkpoint (2026-11-04)
+
+Built item 2 locally with tests first. Verify timeout and guess slots are 33 seconds; a persistent run/domain gate uses the existing deep_find_leads JSON summary with compare-and-swap and preserves its state during final result writes. Timeout/provider-block breakers and pacing precede usage reservation. Full gates: 2,851 tests / one skipped, TypeScript/build/25-entrypoint shim/whitespace. Read final report addendum for recovery assumptions and remaining item 2b/3/4/5 scope. Context checkpoint; independent review pending. No schema, worker, remote or deployment changes.

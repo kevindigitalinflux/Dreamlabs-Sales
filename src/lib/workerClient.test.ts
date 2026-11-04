@@ -397,3 +397,33 @@ it('classifies an aborted response body as timeout and keeps later checks eligib
   expect(await c.verifyEmail('max@loveliving.uk')).toMatchObject({ ok: true });
   expect(refundCalls(u)).toHaveLength(0);
 });
+
+it('lets the default verifier finish at 33 seconds and never refunds dispatched timeout', async () => {
+ vi.useFakeTimers();
+ try {
+  const u=usage();
+  const f=vi.fn<typeof fetch>((_url, init) => new Promise((_resolve,reject) => {
+   init?.signal?.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError')));
+  }));
+  const pending=make(u,f).verifyEmail('a@example.com');
+  await vi.advanceTimersByTimeAsync(32999);
+  expect(f).toHaveBeenCalledTimes(1);
+  expect(f.mock.calls[0][1]?.signal?.aborted).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(await pending).toMatchObject({ok:false,failure:'timeout'});
+  expect(refundCalls(u)).toHaveLength(0);
+ } finally { vi.useRealTimers(); }
+});
+
+it('does not reserve or refund another check after the run/domain blocks checks', async () => {
+ const { RunVerifyGate } = await import('../../supabase/functions/_shared/runVerifyGate');
+ let state:Record<string,unknown>={}; let version=0;
+ const gate=new RunVerifyGate({read:async()=>({state,version:String(version)}),swap:async(v,s)=>{
+  if(v!==String(version))return false;state=s;version++;return true;
+ }},()=>0,async()=>{});
+ const u=usage();const f=worker(200,{email:'first@example.com',status:'unverifiable',reason:'provider_blocks_checks'});
+ const client=makeWorkerClient({usage:u,orgId:'org',config:CONFIG,fetchImpl:f,verifyGate:gate});
+ expect((await client.verifyEmail('first@example.com')).ok).toBe(true);
+ expect(await client.verifyEmail('second@example.com')).toMatchObject({ok:false,failure:'timeout'});
+ expect(f).toHaveBeenCalledTimes(1);expect(reserveCalls(u)).toHaveLength(1);expect(refundCalls(u)).toHaveLength(0);
+});

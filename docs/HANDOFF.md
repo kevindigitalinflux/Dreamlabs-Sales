@@ -1038,3 +1038,7 @@ Merged `d779777` (Deep find 50-lead cap, bulk review actions) to main with Kevin
 
 ## Worker sender identity 2026-11-04 (Claude)
 Reacher now identifies as `verify.didreamlabs.com`: PTR for 2.24.131.162 set via Hostinger, A and SPF (`v=spf1 ip4:2.24.131.162 -all`) records for `verify.didreamlabs.com` in Cloudflare, `RCH__HELLO_NAME`/`RCH__FROM_EMAIL` updated on the VPS and in `worker/docker-compose.yml`. Only the reacher container was restarted. Hostinger snapshot 440446 taken first (expires 2026-11-05). Backup on VPS: `/opt/lookup-worker/docker-compose.yml.bak-20261104`. Probe of five addresses gave the same results as before; Microsoft 365 and hosted mail stay unverifiable by SMTP. Rollback: restore the backup file and `docker compose up -d reacher`.
+
+## Registry round 1b Step 2 item 2 (2026-11-04)
+
+Item 2 is implemented locally in dreamlabs-sales-accuracy on codex/deepfind-registry-brand-match, resumed c300928. Read the final report addendum: 33-second client/guess admission, persistent per-run/domain JSON breaker and spacing, conditional final writes preserving concurrent state. No schema or worker change. Full gates pass: 2,851 tests / one skipped, TypeScript/build/25-entrypoint shim/whitespace. Context checkpoint before item 2b; subscription allowance unavailable. Items 2b/3/4/5 remain authorised. Independent review and live DB concurrency/recovery tests pending. No remote/SQL, deployment, other-checkout or vault action. Resume hosted canary using the durable gate. No jobs remain.

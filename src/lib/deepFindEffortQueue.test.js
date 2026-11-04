@@ -18,7 +18,7 @@ function database() {
       }
       const rows = tables[table].filter(r => filters.every(([key, op, v]) => {
         const actual = key === 'deep_find_runs.status' ? 'active' : r[key];
-        return op === 'eq' ? actual === v : op === 'neq' ? actual !== v : v.includes(actual);
+        return op === 'eq' ? (key === 'domains' ? JSON.stringify(actual) === v : actual === v) : op === 'neq' ? actual !== v : v.includes(actual);
       }));
       if (patch) rows.forEach(r => Object.assign(r, patch));
       if (remove) tables[table] = tables[table].filter(r => !rows.includes(r));

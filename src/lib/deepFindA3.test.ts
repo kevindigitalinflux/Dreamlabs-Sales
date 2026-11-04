@@ -19,7 +19,7 @@ it('reserves concurrent attempts before results and stops both guess paths on bl
   expect(checks.claim('one@other.com')).toBe(true);
   expect(checks.claim('two@other.com')).toBe(false);
 });
-it.each(['unknown', 'checker_error', 'other_reason', '', 'timeout'])('allows another address after one unverifiable %s', reason => {
+it.each(['unknown', 'checker_error', 'other_reason', ''])('allows another address after one unverifiable %s', reason => {
   const checks = new GuessChecks();
   checks.record('first@ukrm.com', 'unverifiable', reason);
   expect(checks.blocked.has('ukrm.com')).toBe(false);
@@ -59,7 +59,7 @@ it('keeps invalid results eligible for the next candidate', () => {
   checks.record('first@ukrm.com', 'invalid', 'mailbox_missing');
   expect(checks.canCheck('next@ukrm.com')).toBe(true);
 });
-it('shares a 36 second wall-clock budget across batches and preserves the people reserve plus floor', async () => {
+it('shares a 36 second wall-clock budget and skips a second shortened check', async () => {
   vi.useFakeTimers();
   const budget = new GuessBudget(() => 70_000, () => true);
   let active = 0, peak = 0;
@@ -80,22 +80,23 @@ it('shares a 36 second wall-clock budget across batches and preserves the people
   expect(called).toBe(false);
 });
 
-it('allows an 18 second check but preserves 40 seconds for people', () => {
-  expect(new GuessBudget(() => 80_000, () => true).timeout()).toBe(18_000);
-  expect(new GuessBudget(() => 45_000, () => true).timeout()).toBe(5_000);
+it('allows 33 seconds while retaining at least 25 seconds for people', () => {
+  expect(new GuessBudget(() => 80_000, () => true).timeout()).toBe(33_000);
+  expect(new GuessBudget(() => 45_000, () => true).timeout()).toBe(0);
 });
-it('blocks only after two distinct timeouts on the same domain', () => {
+it('blocks immediately after one timeout on each affected domain', () => {
   const checks = new GuessChecks();
   checks.record('first@one.com', null, 'timeout');
   checks.record('first@one.com', null, 'timeout');
   checks.record('first@two.com', null, 'timeout');
-  expect(checks.canCheck('next@one.com')).toBe(true);
+  expect(checks.canCheck('next@one.com')).toBe(false);
   checks.record('second@one.com', null, 'timeout');
   expect(checks.canCheck('next@one.com')).toBe(false);
-  expect(checks.canCheck('next@two.com')).toBe(true);
+  expect(checks.canCheck('next@two.com')).toBe(false);
+  expect(checks.canCheck('next@other.com')).toBe(true);
 });
 
-it('ends guesses with 40 seconds left when the run clock falls during checks', async () => {
+it('ends a 33 second batch with 27 seconds left for people', async () => {
   vi.useFakeTimers();
   const start = Date.now();
   const budget = new GuessBudget(() => 60_000 - (Date.now() - start), () => true);
@@ -104,9 +105,9 @@ it('ends guesses with 40 seconds left when the run clock falls during checks', a
     calls++;
     await new Promise(resolve => setTimeout(resolve, timeout));
   }));
-  await vi.advanceTimersByTimeAsync(20_000);
+  await vi.advanceTimersByTimeAsync(33_000);
   await pending;
-  expect(calls).toBe(6);
+  expect(calls).toBe(3);
   expect(budget.timeout()).toBe(0);
-  expect(Date.now() - start).toBe(20_000);
+  expect(Date.now() - start).toBe(33_000);
 });

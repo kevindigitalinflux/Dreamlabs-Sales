@@ -399,7 +399,7 @@ it.each([
   expect(out.domains.suggestions.filter(s => s.field === 'email').every(s => s.label.includes('unverified'))).toBe(true);
   expect(writes.filter(w => 'email' in w.patch)).toHaveLength(0);
 });
-it('caps concurrent guesses at the people reserve with an 18 second check cap', async () => {
+it('caps concurrent guesses with a 33 second check cap and preserves people time', async () => {
   vi.useFakeTimers();
   contacts[0].email = null;
   contacts.push({ id: 'two', lead_id: 'lead', first_name: 'Alex', last_name: 'Brown', email: null });
@@ -412,12 +412,12 @@ it('caps concurrent guesses at the people reserve with an 18 second check cap', 
     return { ok: true, value: { status: 'invalid', reason: 'mailbox_missing' } };
   });
   const pending = run('low');
-  await vi.advanceTimersByTimeAsync(30_000);
+  await vi.advanceTimersByTimeAsync(33_000);
   const out = await pending;
   expect(peak).toBe(3);
-  expect(worker.verifyEmail.mock.calls.every(([, opts]) => opts.timeoutMs <= 18_000)).toBe(true);
+  expect(worker.verifyEmail.mock.calls.every(([, opts]) => opts.timeoutMs <= 33_000)).toBe(true);
   expect(lookUpPeople.mock.calls[0][0].people).toHaveLength(2);
-  expect(lookUpPeople.mock.calls[0][0].left()).toBe(40_000);
+  expect(lookUpPeople.mock.calls[0][0].left()).toBe(37_000);
   expect(out.domains.steps.join(' ')).not.toContain('36 second limit');
   expect(out.domains.suggestions.filter(s => s.guess_rank === 'most_likely')).toHaveLength(2);
   vi.useRealTimers();
@@ -847,7 +847,7 @@ it.each([false, true])('late-domain inference stops Hunter after one unverifiabl
   readCompanyPages.mockImplementation(async url => url.includes('newco.com') ? ['<title>Acme</title><p>alex.brown@newco.com</p>'] : []);
   await run('medium');
   expect(worker.verifyEmail).toHaveBeenCalledWith('jane.smith@newco.com', { timeoutMs: expect.any(Number) });
-  expect(worker.verifyEmail.mock.calls[0][1].timeoutMs).toBeLessThanOrEqual(18_000);
+  expect(worker.verifyEmail.mock.calls[0][1].timeoutMs).toBeLessThanOrEqual(33_000);
   expect(hunterVerifyEmail).not.toHaveBeenCalled();
 });
 
@@ -899,7 +899,7 @@ it('can check and fill a unique contact just created by the wide lookup', async 
   expect(contacts.find(c => c.id === 'new-person').email).toBe('alex@acme.com');
 });
 
-it('late own-site reads preserve the downstream people and checker reserve', async () => {
+it('late own-site reads preserve people time and skip checks without 33 seconds', async () => {
   contacts[0].email = null;
   resolveOrgWorkerConfig.mockResolvedValue({});
   worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'test' } });
@@ -912,7 +912,7 @@ it('late own-site reads preserve the downstream people and checker reserve', asy
   });
   await run('medium');
   expect(readCompanyPages.mock.calls.some(([url]) => url.includes('newco.com'))).toBe(false);
-  expect(worker.verifyEmail.mock.calls.some(([email]) => email.endsWith('@newco.com'))).toBe(true);
+  expect(worker.verifyEmail.mock.calls.some(([email]) => email.endsWith('@newco.com'))).toBe(false);
 });
 
 it.each(['manual', 'dream_agent', 'companies_house', 'cro', 'hunter', 'apollo'])('gives dismissal recovery advice for %s contacts', async source => {

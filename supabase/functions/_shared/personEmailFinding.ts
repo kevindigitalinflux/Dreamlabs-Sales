@@ -4,7 +4,7 @@ import type { MailProvider } from './dnsLookup.ts';
 export const PEOPLE_RESERVE_MS = 25_000;
 export const PEOPLE_LOOKUP_FLOOR_MS = 15_000;
 export const GUESS_TOTAL_MS = 36_000;
-export const GUESS_CHECK_TIMEOUT_MS = 18_000;
+export const GUESS_CHECK_TIMEOUT_MS = 33_000;
 
 /** One wall-clock allowance shared by all guess paths and later domain batches for a lead. */
 export class GuessBudget {
@@ -14,8 +14,10 @@ export class GuessBudget {
   timeout(maxMs = GUESS_CHECK_TIMEOUT_MS): number {
     if (this.deadline === null) this.deadline = Date.now() + GUESS_TOTAL_MS;
     const remaining = this.deadline - Date.now();
-    const reserve = this.hasPeople() ? PEOPLE_RESERVE_MS + PEOPLE_LOOKUP_FLOOR_MS : 25_000;
-    return Math.max(0, Math.min(maxMs, remaining, this.left() - reserve));
+    // The 25-second people reserve already exceeds its 15-second floor; do not add the same reserve twice.
+    const reserve = this.hasPeople() ? Math.max(PEOPLE_RESERVE_MS, PEOPLE_LOOKUP_FLOOR_MS) : 25_000;
+    const available = Math.max(0, Math.min(maxMs, remaining, this.left() - reserve));
+    return maxMs === GUESS_CHECK_TIMEOUT_MS && available < GUESS_CHECK_TIMEOUT_MS ? 0 : available;
   }
   async run(jobs: ((timeoutMs: number) => Promise<void>)[]): Promise<void> {
     let index = 0;
@@ -87,7 +89,7 @@ export class GuessChecks {
       this.timeoutAddresses.add(key);
       const count = (this.timeoutCounts.get(d) ?? 0) + 1;
       this.timeoutCounts.set(d, count);
-      if (count >= 2) { this.blocked.add(d); this.timedOut.add(d); }
+      if (count >= 1) { this.blocked.add(d); this.timedOut.add(d); }
     }
     if (status !== null && reason === 'catch_all') this.catchAll.add(d);
     if (status === 'unverifiable') {

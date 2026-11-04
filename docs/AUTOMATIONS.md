@@ -74,3 +74,7 @@ Deep find suggestions/regions extension (2026-10-16): **built locally on `codex/
 | Overdue follow-up nudge | idea | Daily digest of overdue next-actions (email or in-app) — not yet designed |
 | CSV/Sheets lead import | idea | Bulk import from the old Google Sheets workflow — not yet designed |
 | Jobs tracker (view + delete) | B | In-app only: `/jobs`, bar, tab title. Reads deep_find_runs, autopilot_runs, scrape_jobs; deletes only finished jobs the user created or admins (migration 060). No emails, no cron. Owner: `src/lib/jobs/`. |
+
+## Deep find checker pacing checkpoint (local branch, 2026-11-04)
+
+Existing Deep find trigger/owner remains unchanged. Before SMTP requests, the engine's runVerifyGate now stores per-run/domain pending, spacing and breaker state under deep_find_leads.domains._verify_gate on the run's lowest-ID row. Compare-and-swap protects admissions and final results. No new schedule, table or migration. Worker reservations/refunds remain in workerClient.call. See the final registry-brand-match report addendum for run membership/recovery assumptions and pending review; not deployed.
