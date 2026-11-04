@@ -930,3 +930,31 @@ it('mentions Start fresh when an automatic dismissed contact is beyond the three
   expect(out.domains.steps.join(' ')).toContain('and 1 more people were dismissed earlier.');
   expect(out.domains.steps.join(' ')).toContain('Use Start fresh');
 });
+
+it.each(['low', 'medium', 'high', 'extra_high', 'custom'])('%s checks the lead saved email in the free phase', async effort => {
+  lead.email = 'owner@acme.com';
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
+  const out = await run(effort);
+  expect(out.status).toBe('done');
+  expect(worker.verifyEmail.mock.calls.map(([email]) => email)).toContain('owner@acme.com');
+});
+it.each(['low', 'medium', 'high', 'extra_high', 'custom'])('%s checks a scraped published address before guessing', async effort => {
+  contacts[0].email = null;
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.scrapeSite.mockResolvedValue({ ok: true, value: { emails: [{ value: 'office@acme.com', source: 'https://acme.com/contact' }], phones: [] } });
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
+  const out = await run(effort);
+  expect(out.status).toBe('done');
+  expect(worker.verifyEmail.mock.calls.map(([email]) => email)).toContain('office@acme.com');
+  expect(worker.verifyEmail.mock.calls[0][0]).toBe('office@acme.com');
+});
+it.each(['low', 'medium', 'high', 'extra_high', 'custom'])('%s checks built guesses with our worker', async effort => {
+  contacts[0].email = null;
+  resolveOrgWorkerConfig.mockResolvedValue({});
+  worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
+  const out = await run(effort);
+  expect(out.status).toBe('done');
+  expect(worker.verifyEmail.mock.calls.some(([email]) => email.endsWith('@acme.com'))).toBe(true);
+  if (effort === 'low') expect(hunterVerifyEmail).not.toHaveBeenCalled();
+});

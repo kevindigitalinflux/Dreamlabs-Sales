@@ -104,7 +104,7 @@ it('retains a literal website find when the domain is catch-all, without repeati
   expect(result.domains.suggestions.filter((s) => s.value === 'jane.smith@example.com')).toEqual([
     expect.objectContaining({ label: 'Found on example.com, check it' }),
   ]);
-  expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
+  expect(worker.verifyEmail).toHaveBeenCalledTimes(1);
 });
 it('does not repeat an inferred-format address among common guesses and never exceeds five per domain', async () => {
   vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });

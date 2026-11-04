@@ -616,13 +616,14 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }
 
   const emails = [...new Set([str(lead.email), ...all().filter(c => !c.dismissed_at).map(c => str(c.email))].filter((e): e is string => !!e))];
-  if (effort !== 'custom') {
-    // Re-check saved emails: an address alone, catch-all or unavailable verdict is never verified evidence.
-    for (const email of emails.slice(0, MAX_VERIFY_PER_LEAD)) {
-      if (left() < WORKER_TIMEOUT_MS.verify + 2_000) break;
-      const checked = await checkEmail(email);
-      if (checked.ok && checked.value.status === 'valid') break;
-    }
+  // Re-check saved emails: an address alone, catch-all or unavailable verdict is never verified evidence.
+  // Published site/scrape addresses use the same checker before built guesses, for every effort.
+  const savedCheckEmails = effort === 'custom' ? [str(lead.email)].filter((email): email is string => !!email) : emails;
+  const publishedEmails = [...new Set([...savedCheckEmails, ...siteEmails.values()].flat())];
+  for (const email of publishedEmails.slice(0, MAX_VERIFY_PER_LEAD)) {
+    if (left() < WORKER_TIMEOUT_MS.verify + 2_000) break;
+    const checked = await checkEmail(email);
+    if (checked.ok && checked.value.status === 'valid') break;
   }
 
   // (1c) the email format on each confirmed domain, from addresses we already know there (contacts, the lead's own

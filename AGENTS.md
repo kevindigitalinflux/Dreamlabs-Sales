@@ -86,3 +86,7 @@ In dreamlabs-sales-accuracy, Parts 1-2 remain complete. Part 3 reached the brief
 ## Registry fix round 1b checkpoint (2026-11-04)
 
 This accuracy checkout completes round 1b Steps 0 and 1; Step 0 commit 41a8924, Step 1 commit carries this note. Read the final report addendum and docs/HANDOFF.md. runDomainDiscovery now completes own sources before Hunter; custom engine-wide ordering remains unchanged by approved scope. All local gates pass, 2,824 tests plus one skipped. Context checkpoint before Step 2, which remains authorised and unstarted. Independent review pending; no publication or live actions. Resume Step 2, not the superseded full-engine proposal.
+
+## Registry round 1b Step 2 item 1 (2026-11-04)
+
+In this accuracy checkout, Part 4 item 1 is complete; items 2/2b/3/4/5 remain authorised and unfinished. Read the latest report addendum and handoff. All-effort lead-email, published scrape and built-guess coverage passes; full gates pass with 2,839 tests and one skipped. Context checkpoint before item 2. Caveman skill and existing hook verified. No publication or live action; independent review pending.
