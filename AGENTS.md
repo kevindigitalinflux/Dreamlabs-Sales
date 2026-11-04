@@ -82,3 +82,7 @@ The active task is the local build in `C:/Users/kevin/Projects/dreamlabs-sales-m
 ## Registry fix round 1 checkpoint (2026-11-04)
 
 In dreamlabs-sales-accuracy, Parts 1-2 remain complete. Part 3 reached the brief's >150-line stop/proposal boundary after a failing fake-provider callback-order probe. Read the final build-report addendum and docs/HANDOFF.md. Part 3 is not built; Part 4 is unstarted. Application gates pass unchanged; no publication or live operations occurred. Codex stops for review of the proposal.
+
+## Registry fix round 1b checkpoint (2026-11-04)
+
+This accuracy checkout completes round 1b Steps 0 and 1; Step 0 commit 41a8924, Step 1 commit carries this note. Read the final report addendum and docs/HANDOFF.md. runDomainDiscovery now completes own sources before Hunter; custom engine-wide ordering remains unchanged by approved scope. All local gates pass, 2,824 tests plus one skipped. Context checkpoint before Step 2, which remains authorised and unstarted. Independent review pending; no publication or live actions. Resume Step 2, not the superseded full-engine proposal.

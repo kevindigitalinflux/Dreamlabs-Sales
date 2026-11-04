@@ -600,17 +600,14 @@ const NO_MATCH_STATUSES = new Set([400, 404, 451]);
 /**
  * Discovers the company's other domains, never trusting one source. Searches use every name VARIANT; matches are
  * always judged against the company's real names.
- * 1. Hunter company-name search per variant, stopping once a domain is corroborated (a registered-name match is
- *    strong, anything else weak). A 400/404 is "no company of that name", not a failure.
- * 2. For up to 3 known people, Hunter email-finder by company name (registered name, then the variants), stopping at
- *    the first confident address (score >= 50): its domain is "confirmed by a person".
- * 3. Domains built from every name and variant (candidateDomainsFromNames) are checked for a mail server (DNS, in
- *    small parallel batches); for up to 4 with MX, Hunter's company list: a known person on it confirms the domain,
- *    an organisation name equal to the registered name makes it strong, anything else is weak.
- * 4. Apollo organisation search for the top 2 variants (weak signal only). A 401/402/403 means Apollo is not on the
+ * 1. Read hints from the supplied website, unless suspect.
+ * 2. Await the web search, started first in parallel with its own budget (WEB_BUDGET_MS).
+ * 3. Check name-built domains for MX in small batches and read their own sites for corroboration.
+ * 4. Hunter company-name search, finder for up to 3 known people (score >= 50), then lists on MX domains.
+ *    Stop once corroborated. Registered-name matches are strong; other name matches are weak.
+ *    A 400/404 is no match, not a failure. Lists confirm known people or registered names.
+ * 5. Apollo organisation search for the top 2 variants (weak signal only). A 401/402/403 means Apollo is not on the
  *    plan: one quiet note and no more Apollo calls, never a failure.
- * 5. Other domains the company's own website points at (skipped when the website is suspect).
- * 6. A web search, started first and run in parallel with its own budget (WEB_BUDGET_MS), awaited last.
  * Hunter requests stop at `hunterCap` or as soon as a provider gate refuses (credit cap). Blocked domains are dropped.
  */
 export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryDeps, checks: DomainChecks): Promise<DiscoveryOutcome> {
@@ -651,6 +648,52 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
   const confirmed = () => seen.some((s) => isCorroborated(seen.filter((x) => x.domain === s.domain).map((x) => x.source))
     && !blocked.has(s.domain));
 
+  if (input.allow.site && input.website && !input.websiteSuspect && left() >= 3_000) {
+    const pages = await deps.readSite(input.website, Math.min(10_000, left())).catch(() => [] as string[]);
+    for (const html of pages) seen.push(...domainHintsFromHtml(html, names, input.websiteDomain, checks));
+  }
+  if (webTask) {
+    const res = await webTask;
+    if (!res.ok) failed('web', 'company', res.failure);
+    else {
+      const parsed = parseDiscoveryAnswer(res.text, names, checks);
+      webPeople = parsed.people;
+      for (const d of parsed.domains) seen.push({ domain: d, source: 'web' });
+    }
+  }
+  const withMx: string[] = [];
+  if (deps.mx) {
+    const knownDomains = new Set(seen.map((s) => checks.clean(s.domain)));
+    const candidates = candidateDomainsFromNames([input.registeredName ?? '', ...searchNames].filter(Boolean), MAX_MX_CHECKS)
+      .map((c) => usable(c)).filter((d): d is string => !!d && !knownDomains.has(d));
+    for (let i = 0; i < candidates.length && left() >= 3_000; i += 6) {
+      const batch = candidates.slice(i, i + 6);
+      const results = await Promise.all(batch.map((d) => deps.mx!(d, Math.min(3_000, left())).catch(() => 'error' as const)));
+      batch.forEach((d, j) => {
+        if (results[j] === 'mx') withMx.push(d);
+        else if (results[j] === 'error') problems.push({ step: 'domain_check', target: d, failure: 'dns_error' });
+        else if (i + j < 3) problems.push({ step: 'domain_check', target: d, failure: 'no_mx' });
+      });
+    }
+    if (withMx.length > 0) notes.push(`Domains with a mail server: ${withMx.slice(0, 6).join(', ')}.`.slice(0, 300));
+    // Free check first: does the domain's own website name the company or a known person? (no credits)
+    if (deps.readDomainSite) {
+      const toRead = withMx.slice(0, MAX_PROBES).filter(() => left() >= 4_000);
+      const read = await Promise.all(toRead.map((d) => deps.readDomainSite!(d, Math.min(10_000, Math.max(1, left() - 2_000))).catch(() => [] as string[])));
+      toRead.forEach((d, i) => {
+        const pages = read[i] ?? [];
+        const c = siteConfirmsCompany(pages, searchNames, people);
+        const line = siteConfirmLine(d, c);
+        if (c.confirms && line) {
+          seen.push({ domain: d, source: 'site_confirms' });
+          sitePages.push({ domain: d, pages });
+          notes.push(line);
+        } else if (pages.length === 0) {
+          problems.push({ step: 'site_check', target: d, failure: 'unreadable' });
+        }
+      });
+    }
+  }
   if (input.allow.hunter) {
     for (const name of searchNames) {
       if (!canHunter(1_500) || confirmed()) break;
@@ -689,53 +732,20 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
       }
     }
   }
-  if (deps.mx) {
-    const knownDomains = new Set(seen.map((s) => checks.clean(s.domain)));
-    const candidates = candidateDomainsFromNames([input.registeredName ?? '', ...searchNames].filter(Boolean), MAX_MX_CHECKS)
-      .map((c) => usable(c)).filter((d): d is string => !!d && !knownDomains.has(d));
-    const withMx: string[] = [];
-    for (let i = 0; i < candidates.length && left() >= 3_000; i += 6) {
-      const batch = candidates.slice(i, i + 6);
-      const results = await Promise.all(batch.map((d) => deps.mx!(d, Math.min(3_000, left())).catch(() => 'error' as const)));
-      batch.forEach((d, j) => {
-        if (results[j] === 'mx') withMx.push(d);
-        else if (results[j] === 'error') problems.push({ step: 'domain_check', target: d, failure: 'dns_error' });
-        else if (i + j < 3) problems.push({ step: 'domain_check', target: d, failure: 'no_mx' });
-      });
-    }
-    if (withMx.length > 0) notes.push(`Domains with a mail server: ${withMx.slice(0, 6).join(', ')}.`.slice(0, 300));
-    // Free check first: does the domain's own website name the company or a known person? (no credits)
-    if (deps.readDomainSite) {
-      const toRead = withMx.slice(0, MAX_PROBES).filter(() => left() >= 4_000);
-      const read = await Promise.all(toRead.map((d) => deps.readDomainSite!(d, Math.min(10_000, Math.max(1, left() - 2_000))).catch(() => [] as string[])));
-      toRead.forEach((d, i) => {
-        const pages = read[i] ?? [];
-        const c = siteConfirmsCompany(pages, searchNames, people);
-        const line = siteConfirmLine(d, c);
-        if (c.confirms && line) {
-          seen.push({ domain: d, source: 'site_confirms' });
-          sitePages.push({ domain: d, pages });
-          notes.push(line);
-        } else if (pages.length === 0) {
-          problems.push({ step: 'site_check', target: d, failure: 'unreadable' });
-        }
-      });
-    }
-    if (input.allow.hunter && deps.hunterList) {
-      for (const d of withMx.slice(0, MAX_PROBES)) {
-        if (!canHunter(3_000) || confirmed()) break;
-        hunterCalls++;
-        const res = await deps.hunterList(d, Math.min(5_000, left())).catch((): Failed => ({ ok: false, failure: 'network' }));
-        if (!res.ok) { failed('hunter_list', d, res.failure); continue; }
-        if (listNamesKnownPerson(res.emails, people)) {
-          seen.push({ domain: d, source: 'person_confirmed' });
-          notes.push(`Domain ${d} has a mail server and Hunter lists a known person there.`);
-        } else {
-          const match = hunterNameMatches(names, res.organization, d, input.registeredName);
-          if (match === 'strong') seen.push({ domain: d, source: 'hunter_name' });
-          else if (match === 'weak') seen.push({ domain: d, source: 'hunter_name_weak' });
-          if (match !== 'none') notes.push(`Domain ${d} has a mail server and Hunter's name for it ${match === 'strong' ? 'matches the registered company' : 'is similar, but that alone is not enough'}.`);
-        }
+  if (input.allow.hunter && deps.hunterList) {
+    for (const d of withMx.slice(0, MAX_PROBES)) {
+      if (!canHunter(3_000) || confirmed()) break;
+      hunterCalls++;
+      const res = await deps.hunterList(d, Math.min(5_000, left())).catch((): Failed => ({ ok: false, failure: 'network' }));
+      if (!res.ok) { failed('hunter_list', d, res.failure); continue; }
+      if (listNamesKnownPerson(res.emails, people)) {
+        seen.push({ domain: d, source: 'person_confirmed' });
+        notes.push(`Domain ${d} has a mail server and Hunter lists a known person there.`);
+      } else {
+        const match = hunterNameMatches(names, res.organization, d, input.registeredName);
+        if (match === 'strong') seen.push({ domain: d, source: 'hunter_name' });
+        else if (match === 'weak') seen.push({ domain: d, source: 'hunter_name_weak' });
+        if (match !== 'none') notes.push(`Domain ${d} has a mail server and Hunter's name for it ${match === 'strong' ? 'matches the registered company' : 'is similar, but that alone is not enough'}.`);
       }
     }
   }
@@ -753,19 +763,6 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
         continue;
       }
       for (const d of apolloOrgDomains(res.json, names, checks)) if (usable(d)) seen.push({ domain: d, source: 'apollo_org' });
-    }
-  }
-  if (input.allow.site && input.website && !input.websiteSuspect && left() >= 3_000) {
-    const pages = await deps.readSite(input.website, Math.min(10_000, left())).catch(() => [] as string[]);
-    for (const html of pages) seen.push(...domainHintsFromHtml(html, names, input.websiteDomain, checks));
-  }
-  if (webTask) {
-    const res = await webTask;
-    if (!res.ok) failed('web', 'company', res.failure);
-    else {
-      const parsed = parseDiscoveryAnswer(res.text, names, checks);
-      webPeople = parsed.people;
-      for (const d of parsed.domains) seen.push({ domain: d, source: 'web' });
     }
   }
   const domains = rankDomains(seen.filter((s) => !blocked.has(checks.clean(s.domain) ?? '')), checks);

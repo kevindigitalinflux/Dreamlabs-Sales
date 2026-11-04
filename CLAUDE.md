@@ -1831,3 +1831,7 @@ Codex built the approved scope in `dreamlabs-sales-md-import` on `codex/md-impor
 ### Registry fix round 1 investigation (2026-11-04)
 
 Resumed Parts 1-2 at 42d6f09. The Part 3 fake-provider probe confirms Hunter precedes own callback completion even inside provider-enabled preset discovery. The fix exceeds the brief's approximately 150-line boundary; exact proposal and preserved failing diagnostic are linked from the final build-report addendum. No application change. Part 3 and Part 4 remain unbuilt. TypeScript, 2,815 passing tests / one skipped, production build and 25-entrypoint shim pass. No remote actions, deployment or vault sync. Independent review pending; stop after checkpoint.
+
+### Registry fix round 1b Steps 0/1 checkpoint (2026-11-04)
+
+Step 0 (41a8924) guards active appointment profiles and unnamed registry-proof spending. Step 1 reorders only runDomainDiscovery and promotes the failing probe into passing coverage. Read the final report addendum for exact scope and custom-path limitations. Full gates pass: 2,824 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. Context headroom prompted a stop before Step 2; subscription usage unavailable. Step 2 remains authorised and unstarted. Independent review pending; no remote action or vault sync.
