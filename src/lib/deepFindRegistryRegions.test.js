@@ -52,3 +52,15 @@ it('checks active non-name-matching candidates for competing person proof', asyn
   expect(result.how).toBe('ambiguous');
   expect(result.evidence['13550007'].E4).toBe(true);
 });
+
+it('excludes inactive officer appointment profiles', async () => {
+  vi.clearAllMocks();
+  searchCompaniesByName.mockResolvedValue([]);
+  const { searchOfficers, fetchOfficerAppointments } = await import('../../supabase/functions/_shared/companiesHouse');
+  searchOfficers.mockResolvedValue({ items: [{ title: 'Jane Smith', links: { self: '/officers/abc/appointments' } }] });
+  fetchOfficerAppointments.mockResolvedValue({ items: [{ appointed_to: { company_number: '12345678', company_name: 'Acme Limited', company_status: 'active' } }] });
+  fetchCompanyProfile.mockResolvedValue({ name: 'Acme Limited', status: 'dissolved' });
+  const result = await resolveRegistry({}, { id: 'lead', business_name: 'Acme' }, 'fake', [{ first: 'Jane', last: 'Smith' }]);
+  expect(fetchCompanyProfile).toHaveBeenCalled();
+  expect(result.candidates).toEqual([]);
+});

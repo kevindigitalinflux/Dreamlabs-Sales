@@ -816,8 +816,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   if (await reserveRegistryProof(effort, registry.how, !!configured.geminiKey, left(), async () => {
     const enabled = spend.enabled; spend.enabled = true;
     try { return await spend.ai('company registry proof'); } finally { spend.enabled = enabled; }
-  }, line => steps.push(line))) {
-        await checkpoint();
+  }, line => steps.push(line), !!str(lead.business_name))) {
+    await checkpoint();
     const webNumbers = await registryWebNumbers(str(lead.business_name) ?? '', configured.geminiKey!, Math.min(10_000, left() - 5_000));
     registry = await resolveRegistry(service, lead, chKey, registryPeople, { pages: registryPages, website: usableSite ? str(lead.website) : null, cached: registry.allCandidates ?? registry.candidates, cachedPeople: registry.proofPeople, priorEvidence: registry.evidence, webNumbers, left, checkpoint, applyNumber: number => applyLead('company_number', number) });
     registryEvidence = registry.evidence ?? {};

@@ -160,6 +160,7 @@ async function companiesViaOfficers(chKey: string, people: OfficerQuery[], names
         if (budget.left && budget.left() < 12_000) return out;
         await budget.checkpoint?.();
         const profile = await fetchCompanyProfile(c.company_number, chKey);
+        if (profile?.status !== 'active') continue;
         out.push({
           company_number: c.company_number, name: profile?.name ?? c.name, address: profile?.address ?? null,
           status: profile?.status ?? c.status, postcode: profile?.postcode ?? null, locality: profile?.locality ?? null,

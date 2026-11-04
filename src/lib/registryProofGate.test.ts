@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { registryProofEligible, reserveRegistryProof } from '../../supabase/functions/_shared/registryProofGate';
-it.each(['ambiguous','not_found','none'])('enables proof on Medium/High/Extra high for %s',how=>{
+it.each(['ambiguous','not_found'])('enables proof on Medium/High/Extra high for %s',how=>{
  for(const effort of ['medium','high','extra_high'] as const) expect(registryProofEligible(effort,how)).toBe(true);
  for(const effort of ['low','custom'] as const) expect(registryProofEligible(effort,how)).toBe(false);
 });
@@ -18,4 +18,10 @@ it('reserves once when admitted',async()=>{
  const reserve=vi.fn(async()=>true);
  expect(await reserveRegistryProof('medium','ambiguous',true,19000,reserve,()=>{})).toBe(true);
  expect(reserve).toHaveBeenCalledTimes(1);
+});
+
+it('does not reserve proof for an unnamed lead', async () => {
+ const reserve = vi.fn(async () => true);
+ expect(await reserveRegistryProof('medium', 'not_found', true, 19000, reserve, () => {}, false)).toBe(false);
+ expect(reserve).not.toHaveBeenCalled();
 });
