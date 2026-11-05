@@ -38,6 +38,7 @@ export async function backfillBounceOutcomes(service:SupabaseClient,userId:strin
     if(out.complete)out.next_before_uid=null;
     return out;
   } catch {
+    console.error('bounce backfill: message scan failed');
     throw new Error('Bounce backfill could not finish');
   } finally {
     lock?.release();

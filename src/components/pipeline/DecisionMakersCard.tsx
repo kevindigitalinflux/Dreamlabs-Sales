@@ -10,6 +10,7 @@ import { buildKnownPersonPayload } from '../../lib/knownPersonForm';
 import { savePhoneAfterLookup } from '../../lib/knownPersonPhone';
 import { mainContact, sequenceRecipients } from '../../../supabase/functions/_shared/contacts';
 import { useLeadContacts } from '../../hooks/useLeadContacts';
+import { useOrg } from '../../hooks/useOrg';
 import { useOrgApiSettings } from '../../hooks/useOrgApiSettings';
 import { useKnownPersonFlow } from '../../hooks/useKnownPersonFlow';
 import type { ContactResult } from '../../hooks/useLeadContacts';
@@ -20,6 +21,7 @@ import { ContactRow } from './ContactRow';
 import { KnownPersonArea } from './KnownPersonArea';
 import { DismissedPeople } from './DismissedPeople';
 import { DeepFindLeadControls } from '../deepfind/DeepFindLeadControls';
+import { DomainBounceWarnings } from './DomainBounceWarnings';
 
 type Adding = 'person' | 'general' | null;
 
@@ -32,6 +34,7 @@ type Adding = 'person' | 'general' | null;
  */
 export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; lead: Lead; onSave: (patch: LeadPatch) => Promise<string | null> }) {
   const hook = useLeadContacts(leadId);
+  const { currentOrg } = useOrg();
   const api = useOrgApiSettings();
   const apolloConfigured = !api.loading && !api.loadError && api.settings.some(s => s.provider === 'apollo' && s.is_configured);
   const { contacts } = hook;
@@ -97,6 +100,7 @@ export function DecisionMakersCard({ leadId, lead, onSave }: { leadId: string; l
 
   return (
     <div className="flex flex-col gap-2">
+      {currentOrg && <DomainBounceWarnings orgId={currentOrg.id} addresses={[lead.email,...contacts.map(c=>c.email)]} website={lead.website} />}
       {contacts.length === 0 && (
         <p className="text-sm text-muted">No contacts yet. Add one below, or use Deep find to search.</p>
       )}
