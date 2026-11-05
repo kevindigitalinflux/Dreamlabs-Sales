@@ -10,7 +10,7 @@ import {
   type ScrapeFound, type ScrapeMode, type VerifyReply, type WorkerConfig, type WorkerFailure,
 } from './workerRules.ts';
 
-export type WorkerResult<T> = { ok: true; value: T } | { ok: false; failure: WorkerFailure; line: string };
+export type WorkerResult<T> = ({ ok: true; value: T } | { ok: false; failure: WorkerFailure; line: string }) & { domainNoteSuppressed?: boolean };
 
 export interface WorkerClient {
   verifyEmail(email: string, opts?: { timeoutMs?: number }): Promise<WorkerResult<VerifyReply>>;
@@ -113,7 +113,7 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
       const timeout = options?.timeoutMs ?? WORKER_TIMEOUT_MS.verify;
       const gateBudget = Math.min(opts.verifyTimeLeftMs?.() ?? timeout + 2000, options ? timeout + 2000 : Infinity);
       const result = opts.verifyGate && config && !stopped.verify && verifyCalls < MAX_VERIFY_PER_LEAD ? await opts.verifyGate.run(email, gateBudget, perform) : await perform(timeout);
-      if (!result.ok) addLine(result.line);
+      if (!result.ok && !result.domainNoteSuppressed) addLine(result.line);
       return result;
     },
     async scrapeSite(domain, mode = 'key_pages', options) {

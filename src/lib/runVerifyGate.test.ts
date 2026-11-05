@@ -48,12 +48,12 @@ it('blocks GuessChecks after its first timeout without blocking another domain',
 it('keeps an abandoned pending call closed across a new gate instance', async () => {
  const f = fixture();
  await expect(f.gate().run('a@example.com',33000, async () => { throw new Error('worker interrupted'); })).rejects.toThrow('worker interrupted');
- expect((await f.gate().run('b@example.com',33000,f.check)).ok).toBe(false);
+ expect(await f.gate().run('b@example.com',33000,f.check)).toMatchObject({ok:true,value:{reason:'waiting_for_domain'}});
  expect(f.starts).toEqual([]);
 });
 it('does not dispatch a shorter check when spacing leaves less than 33 seconds', async () => {
  const f=fixture(); await f.gate().run('a@example.com',33000,f.check);
- expect((await f.gate().run('b@example.com',33000,f.check)).ok).toBe(false);
+ expect(await f.gate().run('b@example.com',33000,f.check)).toMatchObject({ok:true,value:{reason:'waiting_for_domain'}});
  expect(f.starts).toHaveLength(1);
 });
 
@@ -99,4 +99,12 @@ it('records hosted_unverifiable once in durable state and one note at the canary
  const later=new RunVerifyGate(f.store,()=>0,async()=>{},async()=>true);
  await later.run('later@example.com',35000,f.check);
  expect(later.lines()).toEqual([]);expect(f.starts).toEqual([]);
+});
+
+it('emits a waiting notice only once per domain across lead instances',async()=>{
+ const f=fixture();await f.gate().run('a@example.com',33000,f.check);
+ const waiting=f.gate();await waiting.run('b@example.com',33000,f.check);
+ const later=f.gate();await later.run('c@example.com',33000,f.check);
+ expect(waiting.lines().filter(l=>l.includes('waiting for its next check'))).toHaveLength(1);
+ expect(later.lines()).toEqual([]);expect(f.starts).toHaveLength(1);
 });

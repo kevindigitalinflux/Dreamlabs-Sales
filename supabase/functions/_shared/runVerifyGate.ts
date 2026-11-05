@@ -6,9 +6,9 @@ export interface VerifyGateStore {
   read(): Promise<{ state: Record<string, unknown>; version: string }>;
   swap(version: string, state: Record<string, unknown>): Promise<boolean>;
 }
-interface DomainState { nextAt: number; pendingUntil: number; blocked: boolean; hosted?: boolean; canaryDone?: boolean; hostedUnverifiable?: boolean }
+interface DomainState { nextAt: number; pendingUntil: number; blocked: boolean; hosted?: boolean; canaryDone?: boolean; hostedUnverifiable?: boolean; waitingNoted?: boolean; noted?: boolean }
 const skipped = (line: string): WorkerResult<VerifyReply> => ({ ok: false, failure: 'busy', line });
-const slow = (): WorkerResult<VerifyReply> => ({ ok: false, failure: 'timeout', line: 'This mail server answers too slowly to check, so these are best guesses.' });
+const slow = (): WorkerResult<VerifyReply> => ({ ok: false, failure: 'timeout', domainNoteSuppressed: true, line: 'This mail server answers too slowly to check, so these are best guesses.' });
 
 /** Durable per-run breaker and conservative spacing; no usage is reserved while waiting. */
 export class RunVerifyGate {
@@ -24,7 +24,7 @@ export class RunVerifyGate {
   async run(email: string, budget: number, perform: (timeout: number) => Promise<WorkerResult<VerifyReply>>): Promise<WorkerResult<VerifyReply>> {
     const domain = email.toLowerCase().split('@')[1];
     if (!domain) return skipped('The email checker could not read this domain.');
-    const hostedSkip = (): WorkerResult<VerifyReply> => ({ ok: true, value: { status: 'unverifiable', reason: 'hosted_unverifiable' } });
+    const hostedSkip = (): WorkerResult<VerifyReply> => ({ ok: true, value: { status: 'unverifiable', reason: 'hosted_unverifiable' }, domainNoteSuppressed: true });
     if (this.localHosted.has(domain)) return hostedSkip();
     if (this.localBlocked.has(domain)) return slow();
     let hosted = false;
@@ -55,13 +55,19 @@ export class RunVerifyGate {
         if (prior?.pendingUntil && prior.pendingUntil <= this.now()) return slow(); // An abandoned call is never assumed safe.
         const wait = Math.max(0, (prior?.pendingUntil || prior?.nextAt || 0) - this.now());
         if (wait > 0) {
-          if (wait + 33000 > deadline - this.now()) return skipped('The email check was skipped while this domain was waiting for its next check.');
+          if (wait + 33000 > deadline - this.now()) {
+            if (!prior?.waitingNoted) {
+              if (!await this.store.swap(snapshot.version, {...snapshot.state,[domain]:{...prior,waitingNoted:true}})) continue;
+              this.notices.add(domain + ': The email check was skipped while this domain was waiting for its next check.');
+            }
+            return {ok:true,value:{status:'unverifiable',reason:'waiting_for_domain'},domainNoteSuppressed:true};
+          }
           await this.sleep(Math.min(wait, 1000));
           continue;
         }
         started = this.now(); token = started + Math.min(33000, deadline - started) + 2000;
         if (deadline - started < 33000) return skipped('The email check was skipped because its time allowance was reached.');
-        if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { nextAt: started + 12001, pendingUntil: token, blocked: false, hosted, canaryDone } })) { acquired = true; break; }
+        if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, nextAt: started + 12001, pendingUntil: token, blocked: false, hosted, canaryDone } })) { acquired = true; break; }
         if (attempt === 99) throw new Error('Checker state contention');
       }
       if (!acquired) throw new Error('Checker state unavailable');
@@ -72,7 +78,8 @@ export class RunVerifyGate {
         const snapshot = await this.store.read();
         const prior = snapshot.state[domain] as DomainState | undefined;
         if (prior?.pendingUntil !== token) throw new Error('Checker lease changed');
-        if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { nextAt: started + 12001, pendingUntil: 0, blocked, hosted, canaryDone: true, hostedUnverifiable: this.localHosted.has(domain) } })) return result;
+        const relevant = result.ok ? ['unverifiable','risky'].includes(result.value.status) : result.failure === 'timeout';
+        if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, nextAt: started + 12001, pendingUntil: 0, blocked, hosted, canaryDone: true, hostedUnverifiable: this.localHosted.has(domain), noted: prior?.noted || relevant } })) return relevant && prior?.noted ? {...result,domainNoteSuppressed:true} : result;
       }
       throw new Error('Checker result could not be saved');
     } catch (error) {

@@ -381,7 +381,7 @@ it.each([
   ['unknown', 'The mail server gave no clear answer.'],
   ['checker_error', 'The email checker could not finish this check.'],
   ['timeout', 'The email checker could not finish this check.'],
-])('explains unverifiable %s on the person line within the domain cap', async (reason, sentence) => {
+])('explains unverifiable %s once on the domain line within the domain cap', async (reason, sentence) => {
   lead.website = null;
   contacts[0].email = 'jane.smith@acme.com';
   cachedMailProvider.mockReturnValue('microsoft');
@@ -394,7 +394,8 @@ it.each([
   expect(worker.verifyEmail.mock.calls.map(([email]) => email)).toContain('jane@acme.com');
   expect(worker.verifyEmail.mock.calls.length).toBeLessThanOrEqual(4);
   const line = out.domains.steps.find(s => s.startsWith('Jane Smith: no email found.'));
-  expect(line).toContain(sentence);
+  expect(line).not.toContain(sentence);
+  expect(out.domains.steps.filter(s=>s.startsWith('acme.com:') && s.includes(sentence))).toHaveLength(1);
   expect(line).not.toContain('PRIVATE');
   expect(out.domains.suggestions.filter(s => s.field === 'email').every(s => s.label.includes('unverified'))).toBe(true);
   expect(writes.filter(w => 'email' in w.patch)).toHaveLength(0);
@@ -987,4 +988,23 @@ it('checks a saved decision-maker address before a lower-priority saved contact'
  {id:'owner',lead_id:'lead',first_name:'Jane',last_name:'Smith',title:'Founder',email:'jane@acme.com'}];
  resolveOrgWorkerConfig.mockResolvedValue({});worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'valid',reason:'deliverable'}});
  await run('low');expect(worker.verifyEmail.mock.calls[0][0]).toBe('jane@acme.com');
+});
+
+it('offers a pattern-supported guess from two published people without filling or enabling sequences',async()=>{
+ contacts=[{id:'a',lead_id:'lead',first_name:'Alex',last_name:'Brown',email:'alex.brown@acme.com',source:'manual'},
+ {id:'b',lead_id:'lead',first_name:'Mary',last_name:'Jones',email:'mary.jones@acme.com',source:'manual'},
+ {id:'target',lead_id:'lead',first_name:'Jane',last_name:'Smith',email:null,title:'Founder'}];
+ resolveOrgWorkerConfig.mockResolvedValue({});worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'unverifiable',reason:'unknown'}});
+ const out=await run('low');
+ expect(out.domains.suggestions).toContainEqual(expect.objectContaining({name:'Jane Smith',value:'jane.smith@acme.com',label:expect.stringContaining('Pattern-supported')}));
+ expect(contacts[2].email).toBeNull();expect(writes.filter(w=>'email' in w.patch)).toEqual([]);
+});
+it('reports a domain reason once instead of repeating it on person lines and guess labels',async()=>{
+ contacts=[{id:'a',lead_id:'lead',first_name:'Jane',last_name:'Smith',email:null},{id:'b',lead_id:'lead',first_name:'Alex',last_name:'Brown',email:null}];
+ cachedMailProvider.mockReturnValue('microsoft');resolveOrgWorkerConfig.mockResolvedValue({});
+ worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'unverifiable',reason:'catch_all'}});
+ const out=await run('low');
+ expect(out.domains.steps.filter(s=>s.startsWith('acme.com:'))).toHaveLength(1);
+ expect(out.domains.steps.filter(s=>s.includes('no email found.')).join(' ')).not.toContain('accepts any address');
+ expect(out.domains.suggestions.map(s=>s.label).join(' ')).not.toContain('Microsoft 365');
 });

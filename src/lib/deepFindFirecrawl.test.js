@@ -469,14 +469,14 @@ it('does not reserve a Hunter verification credit when its guess timeout is zero
   expect(result.domains.credits.hunter['verify email format']).toBeUndefined();
 });
 
-it('continues guesses after one local timeout and explains two slow answers per domain', async () => {
+it('reports already-started timeout answers once for the domain', async () => {
   vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
   contacts = [{ id: 'contact', first_name: 'Valentina', last_name: 'Antunovic', title: 'Founder', email: null }];
   worker.verifyEmail.mockResolvedValue({ ok: false, failure: 'timeout', line: 'The email checker took too long to answer for this address.' });
   const result = await process();
   expect(worker.verifyEmail.mock.calls.length).toBeGreaterThanOrEqual(2);
   const text = JSON.stringify(result);
-  expect(text).toContain('This mail server answers too slowly to check, so these are best guesses.');
+  expect(result.domains.steps.filter(s=>s.startsWith('example.com:') && s.includes('The email checker could not finish this check.'))).toHaveLength(1);
   expect(text).toContain('The email checker could not finish this check.');
   expect(text).not.toContain('could not be reached');
 });
