@@ -21,6 +21,7 @@ export function replyDatabase(seed = {}) {
     };
     const q = { select: () => q, eq: (key, value) => { predicates.push(row => row[key] === value); return q; },
       in: (key, values) => { predicates.push(row => values.includes(row[key])); return q; },
+      gte: (key, value) => { predicates.push(row => row[key] >= value); return q; },
       is: (key, value) => { predicates.push(row => (row[key] ?? null) === value); return q; },
       order: () => q, limit: n => { count = n; return q; },
       update: value => { operation = 'update'; patch = value; return q; },

@@ -1,10 +1,12 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { replySenderMatches } from './replyMatch.ts';
 import { automaticMail, htmlReplyText, imapErrorCode, messageIds, optOutSuspected, replyLeadPatch, replyPreview, replyRecipients, uidWindow } from './replyRules.ts';
+import { learnBounceOutcomes, recordEmailOutcome } from './emailOutcomeLearning.ts';
 
 export interface ParsedReply {
   messageId?: string; inReplyTo?: string; references?: string; subject?: string; text?: string; html?: string; date?: string;
   from: { address?: string }; headers: { key: string; value: string }[]; attachments: unknown[];
+  deliveryStatus?: string[]; originalMessageIds?: string[]; sourceId?: string;
 }
 export interface ReplyContext {
   replyId: string; senderId: string; lead: Record<string, unknown>; body: string; subject: string;
@@ -35,7 +37,10 @@ export async function processReplyMessage(service: SupabaseClient, userId: strin
   const result = { matched: 0, automatic: 0, bounces: 0 };
   const kind = automaticMail(mail.headers.map(h => [h.key, h.value]), mail.subject ?? '', mail.from?.address ?? '');
   if (kind) {
-    if (kind === 'bounce') { result.bounces++; await effect('bounce accounting', () => recordBounce(service, userId)); }
+    if (kind === 'bounce') {
+      await learnBounceOutcomes(service,userId,mail,now);
+      result.bounces++; await effect('bounce accounting', () => recordBounce(service, userId));
+    }
     else result.automatic++;
     return result;
   }
@@ -55,6 +60,8 @@ export async function processReplyMessage(service: SupabaseClient, userId: strin
   if (leadError) throw new Error('Could not check reply lead');
   // Second forgery guard: a leaked Message-ID alone cannot authorize a different From address.
   if (!lead || !replySenderMatches(mail.from?.address, sent.to_email, lead.email)) return result;
+  // Save before deduplication: a transient outcome failure must leave this UID retryable.
+  await recordEmailOutcome(service,{orgId:sent.org_id,leadId:sent.lead_id,address:mail.from.address!,outcome:'replied',source:ownId,seenAt:now});
   const body = mail.text || htmlReplyText(mail.html ?? '');
   const preview = replyPreview(body);
   const { data: inserted, error: insertError } = await service.from('email_replies').upsert({

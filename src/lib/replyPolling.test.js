@@ -47,6 +47,12 @@ it('automatic mail never becomes a reply, note or alert', async () => {
   expect((await process({ ...mail, headers: [{ key: 'auto-submitted', value: 'auto-replied' }] })).automatic).toBe(1);
   expect(db.writes).toEqual([]);
 });
+it('learns only a sender-validated human reply before its normal effects',async()=>{
+ const rpc=vi.spyOn(db.service,'rpc');await process();
+ expect(rpc).toHaveBeenCalledWith('record_email_outcome',expect.objectContaining({p_org_id:'org',p_lead_id:'lead',p_address:'lead@fixture.invalid',p_outcome:'replied'}));
+ rpc.mockClear();await process({...mail,headers:[{key:'auto-submitted',value:'auto-replied'}]});
+ expect(rpc).not.toHaveBeenCalled();
+});
 it('save failure stops effects so the watermark can retry', async () => {
   db.failures.add('email_replies:upsert');
   await expect(process()).rejects.toThrow();

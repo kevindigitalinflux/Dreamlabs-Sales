@@ -1,6 +1,7 @@
 import { ImapFlow } from 'npm:imapflow@1';
 import PostalMime from 'npm:postal-mime@2.4.3';
 import type { ParsedReply, ReplyInbox } from './replyPolling.ts';
+import { messageIds } from './replyRules.ts';
 
 /** Bounded INBOX-only adapter. Disable protocol logging, including authentication and message payloads. */
 export function makeReplyInbox(host: string, port: number, user: string, pass: string): ReplyInbox {
@@ -18,5 +19,11 @@ export function makeReplyInbox(host: string, port: number, user: string, pass: s
 export async function parseReplyMime(source: Uint8Array): Promise<ParsedReply> {
   if (source.byteLength >= 1_000_000) throw new Error('Reply source too large');
   const email = await PostalMime.parse(source);
-  return { ...email, headers: email.headers.map(h => ({ key: h.key ?? '', value: h.value ?? '' })) };
+  const decode=(value:ArrayBuffer|Uint8Array|string)=>typeof value==='string'?value:new TextDecoder().decode(value);
+  const deliveryStatus=email.attachments.filter(a=>a.mimeType==='message/delivery-status').slice(0,10).map(a=>decode(a.content).slice(0,100_000));
+  const originalMessageIds=email.attachments.filter(a=>a.mimeType==='message/rfc822').slice(0,10).flatMap(a=>{
+    const headers=decode(a.content).slice(0,20_000).split(/\r?\n\r?\n/)[0]??'';
+    return messageIds(/^message-id:\s*(.+)$/im.exec(headers)?.[1]??'');
+  });
+  return { ...email, deliveryStatus, originalMessageIds, headers: email.headers.map(h => ({ key: h.key ?? '', value: h.value ?? '' })) };
 }
