@@ -24,7 +24,7 @@ function sendGate(orgId:string):RunVerifyGate {
 const verdict=(status:EmailPrecheckResult['status']):EmailPrecheckResult=>({status,label:status==='invalid'?'Our checker says this address does not exist':status==='valid'?'Confirmed':'Not confirmed'});
 
 /** One operation's small address cache plus the org-scoped fourteen-day durable cache proposed in Part A SQL. */
-export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{worker?:WorkerClient;now?:()=>number;lookupMx?:(domain:string)=>Promise<'mx'|'none'|'error'>}={}) {
+export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{worker?:WorkerClient;workerFactory?:()=>WorkerClient;now?:()=>number;lookupMx?:(domain:string)=>Promise<'mx'|'none'|'error'>}={}) {
   const now=deps.now??Date.now;
   const cache=new Map<string,{at:number;result:EmailPrecheckResult}>();
   const remember=async(input:Input,email:string,result:EmailPrecheckResult)=>{
@@ -54,7 +54,7 @@ export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{wo
     const deadline=Date.now()+110000;
     let checked:Awaited<ReturnType<WorkerClient['verifyEmail']>>;
     try {
-      const worker=deps.worker??makeWorkerClient({usage:service,orgId,
+      const worker=deps.worker??deps.workerFactory?.()??makeWorkerClient({usage:service,orgId,
         config:await resolveOrgWorkerConfig(service,orgId,Deno.env.get('WORKER_SHARED_ORG_IDS')),
         verifyGate:sendGate(orgId),verifyTimeLeftMs:()=>Math.max(0,Math.min(deadline-Date.now(),input.timeLeftMs?.()??Infinity))});
       checked=await worker.verifyEmail(email,{timeoutMs:33000});
