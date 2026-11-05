@@ -111,3 +111,11 @@ describe('Deep find activity helpers', () => {
     expect([...activeLeadIds(rows)].sort()).toEqual(['l2', 'l3']);
   });
 });
+
+it('preserves pattern-supported labels and grouped alternatives for review',()=>{
+ const label='Pattern-supported. Likely: matches the format of 2 published addresses at this domain, not confirmed';
+ const out=readDeepFindDetails({suggestions:[{name:'Jane Smith',field:'email',value:'jane.smith@example.com',label,guess_rank:'most_likely'},
+ {name:'Jane Smith',field:'email',value:'jane@example.com',label:'Guess, unverified',guess_rank:'other'}]});
+ expect(out.suggestions[0]).toMatchObject({label,guess_rank:'most_likely'});
+ expect(out.suggestions[1].guess_rank).toBe('other');
+});

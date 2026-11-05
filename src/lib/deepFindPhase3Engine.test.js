@@ -172,7 +172,7 @@ beforeEach(() => {
       if (table === 'leads' && patch?.website) beforeWebsiteWrite?.();
       const found = records().filter((r) => filters.every(([k,v]) => Array.isArray(r[k]) ? v === '{' + r[k].map(x => JSON.stringify(x)).join(',') + '}' : r[k] === v));
       if (patch) { writes.push({ table, patch, filters: [...filters] }); if (deny) return { data: [], error: null }; for (const row of found) { Object.assign(row, patch); if (table === 'leads') row.updated_at = 'trigger-version'; } }
-      return { data: found.map((r) => ({ ...r })), error: null };
+      return { data: found.map((r) => ({ ...r })), count: found.length, error: null };
     };
     const q = { select: () => q, eq: (k,v) => { filters.push([k,v]); return q; }, is: (k,v) => { filters.push([k,v]); return q; },
       update: (p) => { patch = p; return q; }, upsert: (p) => { additions = p; return q; }, insert: (p) => { additions = p; return q; },
@@ -1007,4 +1007,57 @@ it('reports a domain reason once instead of repeating it on person lines and gue
  expect(out.domains.steps.filter(s=>s.startsWith('acme.com:'))).toHaveLength(1);
  expect(out.domains.steps.filter(s=>s.includes('no email found.')).join(' ')).not.toContain('accepts any address');
  expect(out.domains.suggestions.map(s=>s.label).join(' ')).not.toContain('Microsoft 365');
+});
+
+it('never upgrades two saved guess-labelled addresses to published-pattern support',async()=>{
+ contacts=[{id:'a',lead_id:'lead',first_name:'Alex',last_name:'Brown',email:'alex.brown@acme.com',source:'manual',label:'Guess, unverified'},
+ {id:'b',lead_id:'lead',first_name:'Mary',last_name:'Jones',email:'mary.jones@acme.com',source:'guess'},
+ {id:'target',lead_id:'lead',first_name:'Jane',last_name:'Smith',email:null,title:'Founder'}];
+ resolveOrgWorkerConfig.mockResolvedValue({});worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'unverifiable',reason:'unknown'}});
+ const out=await run('low');
+ const guesses=out.domains.suggestions.filter(s=>s.name==='Jane Smith' && s.field==='email');
+ expect(guesses.length).toBeGreaterThan(0);expect(guesses.every(s=>!s.label.includes('Pattern-supported'))).toBe(true);
+ expect(guesses.filter(s=>s.guess_rank==='most_likely')).toHaveLength(1);
+ expect(guesses.slice(1).every(s=>s.guess_rank==='other')).toBe(true);
+});
+it('does not recycle a newly confirmed generated address as published evidence for another person',async()=>{
+ contacts=[{id:'a',lead_id:'lead',first_name:'Alex',last_name:'Brown',email:'alex.brown@acme.com',source:'manual'},
+ {id:'b',lead_id:'lead',first_name:'Mary',last_name:'Jones',email:null,source:'manual',title:'Founder'},
+ {id:'target',lead_id:'lead',first_name:'Jane',last_name:'Smith',email:null,title:'Director'}];
+ lead.owner_name='Mary Jones';resolveOrgWorkerConfig.mockResolvedValue({});
+ worker.verifyEmail.mockImplementation(async email=>({ok:true,value:email==='mary.jones@acme.com'?{status:'valid',reason:'deliverable'}:email.startsWith('mary')?{status:'invalid',reason:'mailbox_missing'}:{status:'unverifiable',reason:'unknown'}}));
+ const out=await run('low');
+ expect(worker.verifyEmail.mock.calls.map(c=>c[0])).toContain('mary.jones@acme.com');
+ expect(out.domains.steps.some(s=>s.startsWith('Mary Jones:') && s.includes('confirmed by our email checker'))).toBe(true);
+ const guesses=out.domains.suggestions.filter(s=>s.name==='Jane Smith' && s.field==='email');
+ expect(guesses.length).toBeGreaterThan(0);expect(guesses.every(s=>!s.label.includes('Pattern-supported'))).toBe(true);
+});
+
+it('excludes previously proposed guesses even when review saved them as unlabelled manual contacts',async()=>{
+ contacts=[{id:'a',lead_id:'lead',first_name:'Alex',last_name:'Brown',email:'alex.brown@acme.com',source:'manual'},
+ {id:'b',lead_id:'lead',first_name:'Mary',last_name:'Jones',email:'mary.jones@acme.com',source:'manual'},
+ {id:'target',lead_id:'lead',first_name:'Jane',last_name:'Smith',email:null}];
+ const original=service.from.bind(service);
+ service.from=table=>{
+  if(table!=='deep_find_leads')return original(table);
+  const q={select:()=>q,eq:()=>q,then:resolve=>resolve({data:[{domains:{suggestions:contacts.slice(0,2).map(c=>({field:'email',value:c.email,label:'Guess, unverified',guess_rank:'most_likely'}))}}],count:1,error:null})};return q;
+ };
+ resolveOrgWorkerConfig.mockResolvedValue({});worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'unverifiable',reason:'unknown'}});
+ const out=await run('low');
+ expect(out.domains.suggestions.filter(s=>s.name==='Jane Smith').every(s=>!s.label.includes('Pattern-supported'))).toBe(true);
+});
+
+it.each(['failed','truncated'])('keeps checking when provenance history is %s but declines saved confidence',async mode=>{
+ contacts=[{id:'a',lead_id:'lead',first_name:'Alex',last_name:'Brown',email:'alex.brown@acme.com'},
+ {id:'b',lead_id:'lead',first_name:'Mary',last_name:'Jones',email:'mary.jones@acme.com'},
+ {id:'target',lead_id:'lead',first_name:'Jane',last_name:'Smith',email:null}];
+ const original=service.from.bind(service);const filters=[];
+ service.from=table=>{
+  if(table!=='deep_find_leads')return original(table);
+  const q={select:()=>q,eq:(key,value)=>{filters.push([key,value]);return q;},then:resolve=>resolve(mode==='failed'?{data:null,count:null,error:{message:'fixture unavailable'}}:{data:[],count:1,error:null})};return q;
+ };
+ resolveOrgWorkerConfig.mockResolvedValue({});worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'unverifiable',reason:'unknown'}});
+ const out=await run('low');expect(out.status).toBe('done');expect(worker.verifyEmail).toHaveBeenCalled();
+ expect(filters).toContainEqual(['org_id','org']);expect(filters).toContainEqual(['lead_id','lead']);
+ expect(out.domains.suggestions.filter(s=>s.name==='Jane Smith').every(s=>!s.label.includes('Pattern-supported'))).toBe(true);
 });

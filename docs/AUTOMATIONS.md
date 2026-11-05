@@ -82,3 +82,7 @@ Existing Deep find trigger/owner remains unchanged. Before SMTP requests, the en
 ## Deep find canary and fallback checkpoint (local branch, 2026-11-05)
 
 The existing checker gate now fails open on pacing-state infrastructure errors with one plain fallback notice per lead, while usage reservations remain fail closed. Existing MX classification drives a per-run hosted canary; inconclusive canaries suppress later SMTP calls for that domain and persist under the existing _verify_gate JSON. Trigger/owner unchanged. Draft clean storage SQL in the registry build report is proposal text only; no schema change or deployment occurred. General domain-reason deduplication remains item 4.
+
+## Deep find confidence/diagnostics final local checkpoint (2026-11-05)
+
+Trigger and owner unchanged. Suggestions now distinguish two-distinct-published-person pattern support from mailbox verification; generation alone cannot cause an automatic fill. Existing grouped alternatives carry additional guesses. Checker metadata retains domain reason/waiting notice suppression across lead instances. Known reviewed historical guesses are excluded from confidence evidence through an org/lead-scoped history read; history failure declines saved-address confidence without disabling verification. See final registry report for limitations. Local build only, no deployment or schema change.

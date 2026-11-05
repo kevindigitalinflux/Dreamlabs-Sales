@@ -265,12 +265,26 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (suppressedDomains.has(domain)) return;
     const lines = domainDetails.get(domain) ?? new Set<string>(); lines.add(line); domainDetails.set(domain, lines);
   };
+  const previousGuesses = new Set<string>();
+  let savedEvidenceSafe = false;
+  try {
+    const history = await service.from('deep_find_leads').select('domains', {count:'exact'}).eq('org_id', run.org_id).eq('lead_id', lead.id);
+    if (!history.error) {
+      savedEvidenceSafe = typeof history.count === 'number' && history.count === history.data?.length;
+      for (const record of history.data ?? []) {
+        const items = record.domains?.suggestions;
+        if (!Array.isArray(items)) continue;
+        for (const item of items) if (item && typeof item === 'object' && typeof item.value === 'string'
+          && (item.guess_rank || /guess|pattern-supported|most likely address/i.test(String(item.label ?? '')))) previousGuesses.add(item.value.toLowerCase());
+      }
+    } else console.error('Deep find published-address history unavailable');
+  } catch (error) { console.error('Deep find published-address history unavailable'); }
   const publishedEvidence: PublishedPatternSample[] = rows.flatMap(c => {
     const email = str(c.email);
-    return email && !/\bguess(?:ed)?\b|most likely address/i.test([str(c.source),str(c.label)].join(' '))
+    return savedEvidenceSafe && email && !previousGuesses.has(email.toLowerCase()) && !/\bguess(?:ed)?\b|most likely address/i.test([str(c.source),str(c.label)].join(' '))
       ? [{email,first:str(c.first_name),last:str(c.last_name),published:true}] : [];
   });
-  if (str(lead.email)) {
+  if (savedEvidenceSafe && str(lead.email) && !previousGuesses.has(str(lead.email)!.toLowerCase())) {
     const owner = parseLeadPersonName(lead.owner_name);
     publishedEvidence.push({email:str(lead.email)!,first:owner?.first ?? null,last:owner?.last ?? null,published:true});
   }

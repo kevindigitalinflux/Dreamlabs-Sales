@@ -108,3 +108,10 @@ it('emits a waiting notice only once per domain across lead instances',async()=>
  expect(waiting.lines().filter(l=>l.includes('waiting for its next check'))).toHaveLength(1);
  expect(later.lines()).toEqual([]);expect(f.starts).toHaveLength(1);
 });
+
+it('persists domain-note suppression independently of the worker verdict',async()=>{
+ const f=fixture();
+ await f.gate().run('a@example.com',35000,async()=>({ok:true,value:{status:'unverifiable',reason:'unknown'}}));
+ const later=new RunVerifyGate(f.store,()=>12001,async()=>{});
+ expect(await later.run('b@example.com',35000,async()=>({ok:true,value:{status:'unverifiable',reason:'unknown'}}))).toMatchObject({ok:true,value:{reason:'unknown'},domainNoteSuppressed:true});
+});

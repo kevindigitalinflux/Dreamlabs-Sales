@@ -1847,3 +1847,7 @@ Built item 2 locally with tests first. Verify timeout and guess slots are 33 sec
 ### Registry round 1b gate follow-up / items 2b-3 (2026-11-05)
 
 Required fail-open gate fix 90bb9bc preserves worker results and usage refusal. Hosted canary 3450a2a persists an inconclusive verdict once per run/domain; priority 853f125 orders owners, decision makers and others before pattern rank. Final gates: 2,867 tests / one skipped, TypeScript/build/25-entrypoint shim/whitespace. Read the latest report for detailed limitations, timing maths, test DNS correction and draft storage SQL. Items 4/5 remain authorised and unbuilt; context checkpoint before item 4. No migration, worker/VPS change or deployment. Independent review pending.
+
+### Registry round 1b items 4/5 final local build (2026-11-05)
+
+Completed distinct-published-person Pattern-supported confidence, grouped format alternatives, domain-level diagnostics and final regression coverage. Item 4 is 4bcc063; item 5 includes a history-based provenance correction after its failing test. Full gates pass: 2,888 tests / one skipped, TypeScript/build/25-entrypoint shim/whitespace. Read final report for exact trust/legacy-data limitations and pending independent/runtime review. All builder items complete locally; no deployment, SQL, worker/VPS or vault change. Stop after report.

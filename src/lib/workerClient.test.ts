@@ -438,3 +438,16 @@ it('keeps usage refusal closed during pacing failure and emits one fallback note
  expect(f).not.toHaveBeenCalled();expect(reserveCalls(u)).toHaveLength(1);
  expect(client.lines().filter(l=>l==='Run-wide email check pacing was unavailable; checks ran without it.')).toHaveLength(1);
 });
+
+it('spends no second usage unit while waiting and emits the domain waiting note once',async()=>{
+ const { RunVerifyGate }=await import('../../supabase/functions/_shared/runVerifyGate');
+ let state:Record<string,unknown>={};let version=0;
+ const gate=new RunVerifyGate({read:async()=>({state,version:String(version)}),swap:async(v,s)=>{if(v!==String(version))return false;state=s;version++;return true;}},()=>0,async()=>{});
+ const u=usage(),f=worker(200,{email:'first@example.com',status:'valid',reason:'deliverable'});
+ const client=makeWorkerClient({usage:u,orgId:'org',config:CONFIG,fetchImpl:f,verifyGate:gate});
+ await client.verifyEmail('first@example.com');
+ expect(await client.verifyEmail('second@example.com')).toMatchObject({ok:true,value:{reason:'waiting_for_domain'}});
+ await client.verifyEmail('third@example.com');
+ expect(f).toHaveBeenCalledTimes(1);expect(reserveCalls(u)).toHaveLength(1);expect(refundCalls(u)).toHaveLength(0);
+ expect(client.lines().filter(l=>l.includes('waiting for its next check'))).toHaveLength(1);
+});

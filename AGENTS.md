@@ -98,3 +98,7 @@ Item 2 completes locally: 33-second checker budgets, durable run/domain breaker/
 ## Registry round 1b checkpoint (2026-11-05)
 
 Required pacing fail-open fix and items 2b/3 are complete locally (90bb9bc, 3450a2a, 853f125). Full gates pass with 2,867 tests and one skipped. Read final report/handoff. Context checkpoint before item 4 confidence/grouping/domain notes, then item 5; both remain authorised. No deployment or SQL. Independent review pending.
+
+## Registry round 1b final local checkpoint (2026-11-05)
+
+All requested builder items are complete locally. Item 4 is 4bcc063; item 5 commit includes this note. Read final report/handoff for confidence thresholds, provenance limitations and domain-note behavior. Full gates pass: 2,888 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. Independent Claude review and live/browser checks remain pending. No publication, SQL, schema or worker change. Stop after report.
