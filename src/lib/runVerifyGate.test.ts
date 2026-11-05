@@ -104,6 +104,13 @@ it('returns the worker result without dispatching twice when saving it fails',as
  expect(await gate.run('a@example.com',35000,async()=>{calls++;return result;})).toEqual(result);
  expect(calls).toBe(1);
 });
+it('does not report a tried check or completed canary if admission storage consumes the waiting budget',async()=>{
+ let now=0,state:Record<string,unknown>={};const perform=vi.fn();
+ const gate=new RunVerifyGate({read:async()=>({state,version:'v'}),swap:async(_v,s)=>{state=s;now=1001;return true;}},()=>now);
+ expect(await gate.run('a@example.com',1000,perform)).toMatchObject({ok:true,value:{reason:'lead_time_exhausted'}});
+ expect(perform).not.toHaveBeenCalled();
+ expect(state['example.com']).toMatchObject({starts:[],pendingUntil:0,canaryDone:false});
+});
 
 it.each(['catch_all','provider_blocks_checks','unknown','timeout'])('uses one hosted canary across instances after %s',async reason=>{
  const f=fixture();let calls=0;let detections=0;

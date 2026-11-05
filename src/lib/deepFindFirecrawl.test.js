@@ -124,7 +124,7 @@ it('stops at an existing inferred format when the checker confirms it', async ()
   worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
   await process();
   expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
-  expect(worker.verifyEmail).toHaveBeenCalledWith('jane.smith@example.com', { timeoutMs: expect.any(Number) });
+  expect(worker.verifyEmail).toHaveBeenCalledWith('jane.smith@example.com', expect.objectContaining({ timeoutMs: expect.any(Number), timeBudgetMs: expect.any(Number) }));
   expect(write).toHaveBeenCalledWith('update', expect.objectContaining({ email: 'jane.smith@example.com' }));
 });
 it('does not attempt common guesses on an unconfirmed domain', async () => {
@@ -147,14 +147,14 @@ it('worker off stops common guesses immediately and gives one plain worker line'
 it('reserves people time before admitting the browser scrape', async () => {
   contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null }];
   const start = Date.now();
-  vi.spyOn(Date, 'now').mockReturnValueOnce(start).mockReturnValue(start + 20_000);
+  vi.spyOn(Date, 'now').mockReturnValueOnce(start).mockReturnValue(start + 70_000);
   await process();
   expect(worker.scrapeSite).not.toHaveBeenCalled();
 });
 it('also preserves the people floor when Firecrawl would otherwise read a team page', async () => {
   leadOverrides = { owner_name: 'Jane Smith' };
   const start = Date.now();
-  vi.spyOn(Date, 'now').mockReturnValueOnce(start).mockReturnValue(start + 20_000);
+  vi.spyOn(Date, 'now').mockReturnValueOnce(start).mockReturnValue(start + 70_000);
   const result = await process();
   expect(request).not.toHaveBeenCalled();
   expect(lookUpPeople.mock.calls[0][0].people).toEqual([expect.objectContaining({ first: 'Jane', last: 'Smith' })]);
@@ -415,7 +415,7 @@ it.each([false, true])('preserves wide person lookup at 26 seconds with legacy p
   contacts = [{ id: 'one', first_name: 'Jane', last_name: 'Smith', title: 'Director', email: null }];
   if (legacy) contacts.push({ id: 'sample', first_name: 'Max', last_name: 'Jones', email: 'max.jones@example.com' });
   const start = Date.now();
-  let elapsed = 44_000;
+  let elapsed = 94_000;
   vi.spyOn(Date, 'now').mockReturnValueOnce(start).mockImplementation(() => start + elapsed);
   worker.verifyEmail.mockImplementation(async () => { elapsed += 20_000; return { ok: true, value: { status: 'invalid', reason: 'mailbox_missing' } }; });
   await process();

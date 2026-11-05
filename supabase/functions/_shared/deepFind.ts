@@ -50,10 +50,8 @@ import { lookupOpenCorporatesOfficer } from './openCorporates.ts';
 import { linkedinMatch, planWebsiteAutoUpdate, type AutoApplied } from './deepFindAutoApply.ts';
 import { evaluateReadiness, readinessText } from './leadReadiness.ts';
 
-export const WALL_BUDGET_MS = 130_000;
-/** A lead is only started when at least this much of the invocation is left. */
-const LEAD_RESERVE_MS = 80_000;
-const LEAD_BUDGET_MS = 70_000;
+import { WALL_BUDGET_MS, LEAD_RESERVE_MS, leadDeadline } from './deepFindTimeBudget.ts';
+export { WALL_BUDGET_MS } from './deepFindTimeBudget.ts';
 const nowIso = () => new Date().toISOString();
 
 /** The run columns the engine reads. */
@@ -114,10 +112,10 @@ async function insertContacts(service: SupabaseClient, rows: Record<string, unkn
 }
 
 /** One lead, start to finish. Returns the outcome to store; never throws for provider problems. */
-export async function processDeepFindLead(service: SupabaseClient, run: DeepFindRun, row: ClaimedRow, placesContext = createPlacesContext(service, run.org_id)): Promise<LeadOutcome> {
+export async function processDeepFindLead(service: SupabaseClient, run: DeepFindRun, row: ClaimedRow, placesContext = createPlacesContext(service, run.org_id), invocationDeadline = Infinity): Promise<LeadOutcome> {
   const effort = effortPolicy(row.domains);
   const metadata = { ...(row.domains?.start_fresh === true ? { start_fresh: true } : {}), effort, effort_caps: effort === 'custom' ? row.domains?.effort_caps : { hunter: EFFORT_LEVELS[effort].hunter, ai: EFFORT_LEVELS[effort].ai, firecrawl: EFFORT_LEVELS[effort].firecrawl } };
-  const deadline = Date.now() + LEAD_BUDGET_MS;
+  const deadline = leadDeadline(Date.now(), invocationDeadline);
   const left = () => deadline - Date.now();
   const { data: leadData, error: leadErr } = await service.from('leads').select('*').eq('id', row.lead_id).maybeSingle();
   if (leadErr) return { status: 'failed', reason: 'Could not load this lead.' };
@@ -314,16 +312,18 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     const checked = s.field === 'email' ? checkedEmails.get(s.value.toLowerCase()) : null;
     return !checked?.ok || checked.value.status !== 'invalid';
   }), lead, all());
-  const checkEmail = async (email: string, opts?: { timeoutMs?: number }) => {
+  const checkEmail = async (email: string, opts?: { timeoutMs?: number; timeBudgetMs?: number }) => {
     const key = email.toLowerCase();
     const cached = checkedEmails.get(key);
     if (cached) return cached;
-    const checkDeadline = opts?.timeoutMs === undefined ? null : Date.now() + opts.timeoutMs;
+    const checkStarted = Date.now();
+    const checkDeadline = opts?.timeoutMs === undefined ? null : checkStarted + opts.timeoutMs;
     await checkpoint();
     const remaining = checkDeadline === null ? null : checkDeadline - Date.now();
     const result = remaining !== null && remaining < 1
       ? { ok: true as const, value: { status: 'unverifiable' as const, reason: 'lead_time_exhausted' }, domainNoteSuppressed: true }
-      : remaining === null ? await worker.verifyEmail(email) : await worker.verifyEmail(email, { timeoutMs: remaining });
+      : remaining === null ? await worker.verifyEmail(email) : await worker.verifyEmail(email, { timeoutMs: remaining,
+        timeBudgetMs: opts?.timeBudgetMs === undefined ? undefined : Math.max(0,opts.timeBudgetMs-(Date.now()-checkStarted)) });
     checkedEmails.set(key, result);
     const domain = emailDomain(key);
     if (domain) {
@@ -501,7 +501,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     registeredName: registry.name, registeredAddress: registry.address, people: knownPeople, websiteSuspect: suspicion.suspect,
     extraKnown: contactDomains.map((domain) => ({ domain, source: 'contact_email' as const })),
     keys: { hunterKey, geminiKey, apolloKey }, allow: { hunter: deepEnabled, site: pages.length > 0, web: deepEnabled, apollo: deepEnabled },
-    budgetMs: Math.min(30_000, Math.max(0, left() - 30_000)), pages, hunterCap: discoveryCap,
+    budgetMs: Math.min(10_000, Math.max(0, left() - 30_000)), pages, hunterCap: discoveryCap,
     guard: { hunter: () => spend.hunter('company domains'), ai: () => spend.ai('web search') },
   });
   problems.push(...discovery.problems);
@@ -738,7 +738,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       jobs.push(async timeoutMs => {
         const name = person.first + ' ' + person.last;
         if (confirmedGuessPeople.has(name) || validCheckPeople.has(name) || checkerFailure || emailOnLead(all(), guess) || !checks.claim(guess)) return;
-        const checked = await checkEmail(guess, { timeoutMs });
+        const checked = await checkEmail(guess, { timeoutMs, timeBudgetMs: guessBudget.timeLeft() });
         checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : checked.failure);
         if (!checked.ok) {
           if (checked.failure !== 'timeout') { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
@@ -923,7 +923,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         registeredName: registry.name, registeredAddress: registry.address, people: knownPeople, websiteSuspect: suspicion.suspect,
         extraKnown: contactDomains.map(domain => ({ domain, source: 'contact_email' as const })),
         keys: { hunterKey, geminiKey, apolloKey }, allow: { hunter: true, site: pages.length > 0, web: true, apollo: !!apolloKey },
-        pages, budgetMs: Math.min(30_000, Math.max(0, left() - 30_000)), hunterCap: Math.max(0, discoveryCap - (spend.used.hunter['company domains'] ?? 0)),
+        pages, budgetMs: Math.min(10_000, Math.max(0, left() - 30_000)), hunterCap: Math.max(0, discoveryCap - (spend.used.hunter['company domains'] ?? 0)),
         guard: { hunter: () => spend.hunter('company domains'), ai: () => spend.ai('web search') },
       });
       for (const d of deeper.domains) {
@@ -1397,7 +1397,7 @@ export async function runDeepFindTick(service: SupabaseClient, startedAt: number
     let out: LeadOutcome;
     try {
       if (!placesRuns.has(run.id)) placesRuns.set(run.id, createPlacesContext(service, run.org_id));
-      out = await processDeepFindLead(service, run, row, placesRuns.get(run.id));
+      out = await processDeepFindLead(service, run, row, placesRuns.get(run.id), startedAt + WALL_BUDGET_MS);
     } catch { console.error('deep find: claimed lead processing failed'); out = { status: 'failed', reason: 'Something went wrong while searching this lead.' }; }
     const effort = effortPolicy(row.domains);
     const label = effort === 'custom' ? 'Custom' : EFFORT_LEVELS[effort].label;

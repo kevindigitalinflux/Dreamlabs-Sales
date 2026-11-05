@@ -13,7 +13,7 @@ import {
 export type WorkerResult<T> = ({ ok: true; value: T } | { ok: false; failure: WorkerFailure; line: string }) & { domainNoteSuppressed?: boolean };
 
 export interface WorkerClient {
-  verifyEmail(email: string, opts?: { timeoutMs?: number }): Promise<WorkerResult<VerifyReply>>;
+  verifyEmail(email: string, opts?: { timeoutMs?: number; timeBudgetMs?: number }): Promise<WorkerResult<VerifyReply>>;
   scrapeSite(domain: string, mode?: ScrapeMode, opts?: { timeoutMs?: number }): Promise<WorkerResult<ScrapeFound>>;
   /** Plain step lines for the Deep find result: the check tally, the scrape result, then each distinct skip reason. */
   lines(): string[];
@@ -111,9 +111,10 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
         return { ok: true, value: reply };
       };
       const timeout = options?.timeoutMs ?? WORKER_TIMEOUT_MS.verify;
-      const remaining = opts.verifyTimeLeftMs?.() ?? timeout + 2000;
-      if (opts.verifyGate && remaining < timeout + 2000) return { ok: true, value: { status: 'unverifiable', reason: 'lead_time_exhausted' }, domainNoteSuppressed: true };
-      const gateBudget = Math.max(0, remaining - timeout - 2000);
+      const callWindow = opts.verifyGate ? WORKER_TIMEOUT_MS.verify : timeout;
+      const remaining = Math.min(opts.verifyTimeLeftMs?.() ?? timeout + 2000, options?.timeBudgetMs ?? Infinity);
+      if (opts.verifyGate && remaining < callWindow + 2000) return { ok: true, value: { status: 'unverifiable', reason: 'lead_time_exhausted' }, domainNoteSuppressed: true };
+      const gateBudget = Math.max(0, remaining - callWindow - 2000);
       const result = opts.verifyGate && config && !stopped.verify && verifyCalls < MAX_VERIFY_PER_LEAD ? await opts.verifyGate.run(email, gateBudget, perform) : await perform(timeout);
       if (!result.ok && !result.domainNoteSuppressed) addLine(result.line);
       return result;

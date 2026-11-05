@@ -9,6 +9,7 @@ export interface VerifyGateStore {
 interface DomainState { starts?: number[]; nextAt?: number; pendingUntil: number; blocked: boolean; hosted?: boolean; canaryDone?: boolean; hostedUnverifiable?: boolean; waitingNoted?: boolean; noted?: boolean }
 const skipped = (line: string): WorkerResult<VerifyReply> => ({ ok: false, failure: 'busy', line });
 const slow = (): WorkerResult<VerifyReply> => ({ ok: false, failure: 'timeout', domainNoteSuppressed: true, line: 'This mail server answers too slowly to check, so these are best guesses.' });
+const outOfTime = (): WorkerResult<VerifyReply> => ({ ok: true, value: { status: 'unverifiable', reason: 'lead_time_exhausted' }, domainNoteSuppressed: true });
 
 /** Durable per-run breaker and domain sliding window; no usage is reserved while waiting. */
 export class RunVerifyGate {
@@ -72,20 +73,22 @@ export class RunVerifyGate {
           continue;
         }
         started = this.now(); token = started + 33000 + 2000;
-        if (started > deadline) return skipped('The email check was skipped because its time allowance was reached.');
+        if (started > deadline) return outOfTime();
         if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, starts: [...starts, started], pendingUntil: token, blocked: false, hosted, canaryDone } })) { acquired = true; break; }
         if (attempt === 99) throw new Error('Checker state contention');
       }
       if (!acquired) throw new Error('Checker state unavailable');
       const result = this.now() <= deadline ? await once()
-        : skipped('The email check was skipped because its time allowance was reached.');
+        : outOfTime();
       const blocked = !result.ok ? result.failure === 'timeout' : result.value.reason === 'timeout' || result.value.reason === 'provider_blocks_checks';
       for (let attempt = 0; attempt < 100; attempt++) {
         const snapshot = await this.store.read();
         const prior = snapshot.state[domain] as DomainState | undefined;
         if (prior?.pendingUntil !== token) throw new Error('Checker lease changed');
         const relevant = result.ok ? ['unverifiable','risky'].includes(result.value.status) : result.failure === 'timeout';
-        if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, pendingUntil: 0, blocked, hosted, canaryDone: true, hostedUnverifiable: this.localHosted.has(domain), noted: prior?.noted || relevant } })) return relevant && prior?.noted ? {...result,domainNoteSuppressed:true} : result;
+        const starts = prior?.starts ?? [];
+        const finishedStarts = dispatch ? starts : starts.filter((_t,index) => index !== starts.lastIndexOf(started));
+        if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, starts: finishedStarts, pendingUntil: 0, blocked, hosted, canaryDone: dispatch ? true : canaryDone, hostedUnverifiable: this.localHosted.has(domain), noted: prior?.noted || (!!dispatch && relevant) } })) return relevant && prior?.noted ? {...result,domainNoteSuppressed:true} : result;
       }
       throw new Error('Checker result could not be saved');
     } catch (error) {

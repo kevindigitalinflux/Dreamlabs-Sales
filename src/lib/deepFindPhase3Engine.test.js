@@ -181,17 +181,17 @@ beforeEach(() => {
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
-it('runs at least four real guess requests for a live-shaped hosted Medium lead with a valid canary',async()=>{
+it.each([[false,1000],[true,1000],[true,2000]])('runs four hosted Medium guesses with saved email=%s and %s ms replies',async(savedEmail,latency)=>{
  const {makeWorkerClient:realClient}=await vi.importActual('../../supabase/functions/_shared/workerClient');
  const {RunVerifyGate}=await import('../../supabase/functions/_shared/runVerifyGate');
  let state={},version=0;vi.useFakeTimers();vi.setSystemTime(0);
- lead.website='https://acme.com';lead.email=null;
+ lead.website='https://acme.com';lead.email=savedEmail?'hello@acme.com':null;
  contacts=['Jane Smith','Alex Brown','Mary Jones','Tom Green'].map((name,i)=>({id:`p${i}`,lead_id:'lead',first_name:name.split(' ')[0],last_name:name.split(' ')[1],email:null}));
  const requests=[];
  const gate=new RunVerifyGate({read:async()=>({state:structuredClone(state),version:String(version)}),swap:async(v,s)=>{if(v!==String(version))return false;state=structuredClone(s);version++;return true;}},()=>Date.now(),ms=>new Promise(resolve=>setTimeout(resolve,ms)),async()=>true);
  const fetcher=vi.fn(async(url,init)=>{
   if(!String(url).endsWith('/verify-email'))return new Response(JSON.stringify({emails:[],phones:[]}));
-  const {email}=JSON.parse(init.body);requests.push({email,at:Date.now()});await new Promise(resolve=>setTimeout(resolve,1000));
+  const {email}=JSON.parse(init.body);requests.push({email,at:Date.now()});await new Promise(resolve=>setTimeout(resolve,latency));
   return new Response(JSON.stringify({email,status:'valid',reason:'deliverable'}));
  });
  const usage={rpc:async()=>({data:{ok:true,day:'2026-11-05',used:1,limit:150,global_used:1,global_limit:400},error:null})};
@@ -199,10 +199,11 @@ it('runs at least four real guess requests for a live-shaped hosted Medium lead 
  cachedMailProvider.mockReturnValue('hosted');
  makeWorkerClient.mockImplementation(opts=>realClient({...opts,usage,verifyGate:gate,fetchImpl:fetcher}));
  const pending=run('medium');await vi.advanceTimersByTimeAsync(130000);const out=await pending;vi.useRealTimers();
- const guesses=requests;
+ const guesses=requests.filter(r=>r.email!=='hello@acme.com');
  expect(guesses.length).toBeGreaterThanOrEqual(4);
  expect(out.domains.steps.join(' ')).toContain(`Checked ${requests.length} email addresses with our own checker`);
  expect(state['acme.com']).toMatchObject({hosted:true,canaryDone:true});
+ if(savedEmail) expect(guesses.some(r=>r.at>=60000)).toBe(true);
 });
 it.each(['waiting_for_domain','lead_time_exhausted'])('reports unchecked guesses once per domain for %s, without claiming they were tried',async reason=>{
  contacts=[{id:'a',lead_id:'lead',first_name:'Jane',last_name:'Smith',email:null},{id:'b',lead_id:'lead',first_name:'Alex',last_name:'Brown',email:null}];
@@ -219,7 +220,7 @@ it.each(['waiting_for_domain','lead_time_exhausted'])('reports unchecked guesses
 it('counts still-prioritised candidates when time ends before their jobs start',async()=>{
  let now=0;vi.spyOn(Date,'now').mockImplementation(()=>now);
  contacts[0].email=null;resolveOrgWorkerConfig.mockResolvedValue({});cachedMailProvider.mockReturnValue('hosted');
- worker.verifyEmail.mockImplementation(async()=>{now+=40000;return {ok:true,value:{status:'invalid',reason:'mailbox_missing'}};});
+ worker.verifyEmail.mockImplementation(async()=>{now+=90000;return {ok:true,value:{status:'invalid',reason:'mailbox_missing'}};});
  const out=await run('medium');
  expect(worker.verifyEmail).toHaveBeenCalledTimes(1);
  expect(out.domains.steps.join(' ')).toContain('4 addresses were not checked because the lead ran out of time');
@@ -457,14 +458,14 @@ it('caps concurrent guesses with a 33 second check cap and preserves people time
     return { ok: true, value: { status: 'invalid', reason: 'mailbox_missing' } };
   });
   const pending = run('low');
-  await vi.advanceTimersByTimeAsync(33_000);
+  await vi.advanceTimersByTimeAsync(66_000);
   const out = await pending;
   expect(peak).toBe(3);
   expect(worker.verifyEmail.mock.calls.every(([, opts]) => opts.timeoutMs <= 33_000)).toBe(true);
   expect(lookUpPeople.mock.calls[0][0].people).toHaveLength(2);
-  expect(lookUpPeople.mock.calls[0][0].left()).toBe(37_000);
+  expect(lookUpPeople.mock.calls[0][0].left()).toBe(54_000);
   expect(out.domains.steps.join(' ')).not.toContain('36 second limit');
-  expect(out.domains.suggestions.filter(s => s.guess_rank === 'most_likely')).toHaveLength(2);
+  expect(out.domains.suggestions.filter(s => s.guess_rank === 'most_likely').map(s=>s.name)).toEqual(['Alex Brown']);
   vi.useRealTimers();
 });
 it('Low disables paid discovery, Hunter, AI, Apollo, Places and LinkedIn even with every key', async () => {
@@ -891,7 +892,7 @@ it.each([false, true])('late-domain inference stops Hunter after one unverifiabl
     .mockResolvedValueOnce({ domains: [{ domain: 'newco.com', sources: ['web'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] });
   readCompanyPages.mockImplementation(async url => url.includes('newco.com') ? ['<title>Acme</title><p>alex.brown@newco.com</p>'] : []);
   await run('medium');
-  expect(worker.verifyEmail).toHaveBeenCalledWith('alex.brown@newco.com', { timeoutMs: expect.any(Number) });
+  expect(worker.verifyEmail).toHaveBeenCalledWith('alex.brown@newco.com', expect.objectContaining({ timeoutMs: expect.any(Number), timeBudgetMs: expect.any(Number) }));
   expect(worker.verifyEmail.mock.calls[0][1].timeoutMs).toBeLessThanOrEqual(33_000);
   expect(hunterVerifyEmail).not.toHaveBeenCalled();
 });
@@ -952,7 +953,7 @@ it('late own-site reads preserve people time and skip checks without 33 seconds'
   vi.spyOn(Date, 'now').mockImplementation(() => elapsed);
   discoverLeadDomains.mockImplementation(async (_s,_l,options) => {
     if (!options.allow.web) return { domains: [], people: [], notes: [], problems: [], sitePages: [] };
-    elapsed = 20_000;
+    elapsed = 70_000;
     return { domains: [{ domain: 'newco.com', sources: ['web'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] };
   });
   await run('medium');

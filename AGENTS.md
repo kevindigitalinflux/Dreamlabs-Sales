@@ -102,3 +102,7 @@ Required pacing fail-open fix and items 2b/3 are complete locally (90bb9bc, 3450
 ## Registry round 1b final local checkpoint (2026-11-05)
 
 All requested builder items are complete locally. Item 4 is 4bcc063; item 5 commit includes this note. Read final report/handoff for confidence thresholds, provenance limitations and domain-note behavior. Full gates pass: 2,888 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. Independent Claude review and live/browser checks remain pending. No publication, SQL, schema or worker change. Stop after report.
+
+## Verifier round 1c final local checkpoint (2026-11-05)
+
+All six ordered items are built locally in dreamlabs-sales-accuracy, branch codex/deepfind-registry-brand-match, tests first and one commit per item. Read the final round 1c report addendum and docs/HANDOFF.md. Waiting is separate from the 33-second call, with four starts per 60-second window. Lead work now has up to 120 seconds, bounded by the invocation's ten-second final-save reserve. Allowances remain five checks per domain and six per lead; the six-check timing test proves budget feasibility only. Full gates pass: 2,903 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. Continuation is a report proposal only. Independent review and production validation remain pending. Stop after report; no publication, SQL, schema or worker/VPS changes are authorised.

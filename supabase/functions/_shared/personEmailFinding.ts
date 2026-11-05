@@ -13,12 +13,16 @@ export class GuessBudget {
   private deadline: number | null = null;
   get exhausted(): boolean { return this.deadline !== null && Date.now() >= this.deadline; }
   constructor(private left: () => number, private hasPeople: () => boolean) {}
-  timeout(maxMs = GUESS_CHECK_TIMEOUT_MS): number {
+  /** Shared waiting and call allowance, retaining the people reserve across gate waits. */
+  timeLeft(): number {
     if (this.deadline === null) this.deadline = Date.now() + GUESS_TOTAL_MS;
     const remaining = this.deadline - Date.now();
     // The 25-second people reserve already exceeds its 15-second floor; do not add the same reserve twice.
     const reserve = this.hasPeople() ? Math.max(PEOPLE_RESERVE_MS, PEOPLE_LOOKUP_FLOOR_MS) : 25_000;
-    const available = Math.max(0, Math.min(maxMs, remaining, this.left() - reserve));
+    return Math.max(0, Math.min(remaining, this.left() - reserve));
+  }
+  timeout(maxMs = GUESS_CHECK_TIMEOUT_MS): number {
+    const available = Math.min(maxMs, this.timeLeft());
     return maxMs === GUESS_CHECK_TIMEOUT_MS && available < GUESS_CHECK_TIMEOUT_MS ? 0 : available;
   }
   async run(jobs: ((timeoutMs: number) => Promise<void>)[]): Promise<void> {

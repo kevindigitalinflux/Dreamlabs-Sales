@@ -96,8 +96,8 @@ it('skips absent keys, exhausted AI budget, dismissed people, and saved profiles
   aiAllowed = true; contacts[0].dismissed_at = 'date'; await run(); expect(webSearchForPerson).not.toHaveBeenCalled();
   contacts[0].dismissed_at = null; contacts[0].linkedin_url = profile; await run(); expect(webSearchForPerson).not.toHaveBeenCalled();
 });
-it('keeps the existing time budget and skips new searches when time is short', async () => {
-  const start = Date.now(); vi.spyOn(Date, 'now').mockReturnValueOnce(start).mockReturnValue(start + 65_000);
+it('keeps the final reserve and skips new searches when time is short', async () => {
+  const start = Date.now(); vi.spyOn(Date, 'now').mockReturnValueOnce(start).mockReturnValue(start + 115_000);
   const out = await run(); expect(webSearchForPerson).not.toHaveBeenCalled();
   expect(out.domains.steps.join(' ')).toContain('LinkedIn search for Jane Smith skipped: not enough time left.');
   expect(out.domains.auto_applied.some((c) => c.table === 'leads')).toBe(false);
