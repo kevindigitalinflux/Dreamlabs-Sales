@@ -17,3 +17,10 @@ it.each(['valid','unverifiable'])('allows %s with explicit verification metadata
  expect(await sendLeadEmail(replyDatabase().service,input)).toMatchObject({ok:true,verification:{status}});
  expect(sendMail).toHaveBeenCalledTimes(1);
 });
+it('requires an explicit row override and never overrides a learned hard bounce',async()=>{
+ checkEmailBeforeSend.mockResolvedValueOnce({status:'invalid',label:'Our checker says this address does not exist'});
+ expect(await sendLeadEmail(replyDatabase().service,{...input,overrideInvalid:true})).toMatchObject({ok:true,verification:{overridden:true}});
+ checkEmailBeforeSend.mockResolvedValueOnce({status:'invalid',label:'This address bounced before.',hardBounce:true});
+ expect(await sendLeadEmail(replyDatabase().service,{...input,overrideInvalid:true})).toMatchObject({ok:false,status:409});
+ expect(sendMail).toHaveBeenCalledTimes(1);
+});

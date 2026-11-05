@@ -29,6 +29,9 @@ import { TemplatePicker } from './TemplatePicker';
 import { SuggestedSequence } from './SuggestedSequence';
 import { MailboxStatus } from '../settings/MailboxStatus';
 import { PainPointCard } from '../pipeline/PainPointCard';
+import {readEmailSendResponse,emailReleaseSummary,type EmailSendView} from '../../lib/emailVerification';
+import {useEmailVerification} from '../../hooks/useEmailVerification';
+import {EmailVerificationBadge} from './EmailVerificationBadge';
 
 interface DiffLine { kind: 'same' | 'removed' | 'added'; text: string }
 
@@ -115,6 +118,8 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
   }, [lead.id, draft?.log_id, draft?.to_email, draft?.decision_maker_candidate_id, contactsLoading]);
 
   const selectedTargets = useMemo(() => recipients.filter((r) => selectedRecipients.has(r.key)), [recipients, selectedRecipients]);
+  const verificationAddresses=useMemo(()=>selectedTargets.map(t=>t.email),[selectedTargets]);
+  const verification=useEmailVerification(verificationAddresses);
   const multi = selectedTargets.length > 1;
   // The email shown in the single editor: the one recipient's, or (nothing ticked yet) the seed/blank one.
   const shownKey = selectedTargets[0]?.key ?? SEED_KEY;
@@ -194,6 +199,7 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
     setBusy(asDraft ? 'save' : 'send'); setMsg(null); setReport(null);
     const reports: (PostSendReport | null)[] = [];
     let succeeded = 0;
+    const sendResults:EmailSendView[]=[];
     let firstFailReason: string | null = null;
     for (const target of targets) {
       // Each person's own subject, body and attachments, never a shared copy.
@@ -211,29 +217,35 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
         succeeded++;
         continue;
       }
-      const { data, error } = await supabase.functions.invoke('send-email', {
+      const invoke=(override=false)=>supabase.functions.invoke('send-email', {
         body: {
           to_email: target.email, subject: d.subject, body: d.body, lead_id: lead.id,
           decision_maker_candidate_id: target.candidateId, attachments: d.attachments,
           template_id: templateId || undefined,
           log_id: targets.length === 1 ? draft?.log_id : undefined,
           reply_id: draft?.reply_id,
+          override_email_check:override,
         },
       });
-      if (error) { if (!firstFailReason) firstFailReason = await readableInvokeError(error); continue; }
-      const r = data as { ok?: boolean; error?: string };
-      if (r.error) { if (!firstFailReason) firstFailReason = r.error; continue; }
-      reports.push(parsePostSend(data));
+      let response=await invoke();let result=await readEmailSendResponse(response.data,response.error);
+      if(result.blocked&&!result.verification?.hardBounce&&result.verification?.overridable!==false
+        &&window.confirm(`${result.verification?.label}. Send this reviewed email to ${target.email} anyway?`)) {
+        response=await invoke(true);result=await readEmailSendResponse(response.data,response.error);
+      }
+      sendResults.push(result);
+      if(!result.ok){if(!firstFailReason)firstFailReason=result.error??'Send failed';continue;}
+      reports.push(parsePostSend(response.data));
       succeeded++;
     }
     setBusy(null);
     const merged = mergePostSend(reports);
     setReport(merged);
     if (succeeded === targets.length) {
-      setMsg({ kind: 'ok', text: asDraft ? (targets.length > 1 ? `Saved ${succeeded} drafts to your review queue.` : 'Saved to your review queue.') : (targets.length > 1 ? `Sent ${succeeded} emails ✓` : 'Sent ✓') });
-      if (!asDraft) setTimeout(onClose, merged ? 3500 : 800);
+      const confirmed=sendResults.every(r=>r.verification?.status==='valid');
+      setMsg({ kind: asDraft||confirmed?'ok':'warn', text: asDraft ? (targets.length > 1 ? `Saved ${succeeded} drafts to your review queue.` : 'Saved to your review queue.') : emailReleaseSummary(sendResults) });
+      if (!asDraft&&confirmed) setTimeout(onClose, merged ? 3500 : 800);
     } else {
-      setMsg({ kind: 'err', text: `${succeeded} of ${targets.length} succeeded${firstFailReason ? ` — ${firstFailReason}` : ''}` });
+      setMsg({ kind: 'err', text: `${asDraft?`${succeeded} of ${targets.length} succeeded`:emailReleaseSummary(sendResults)}${firstFailReason ? ` — ${firstFailReason}` : ''}` });
     }
   }
 
@@ -244,6 +256,8 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
   return (
     <Modal open={open} onClose={onClose} title={`Email — ${lead.business_name}`}>
       <div className="flex flex-col gap-4">
+        {selectedTargets.map(target=><p key={target.key} className="break-words text-xs">{target.email}: <EmailVerificationBadge value={verification.get(target.email)}/></p>)}
+        {verification.error&&<p role="alert" className="text-xs text-warning">Could not load previous checks. The server will check before sending.</p>}
         {recipients.length === 0 && <p role="alert" className="text-sm text-danger">No email addresses available for this lead or its contacts.</p>}
         {answer ? <p className="break-all text-sm">Answer to: {answer.to_email}</p> : recipients.length > 0 && <RecipientPicker recipients={recipients} selected={selectedRecipients} onToggle={toggleRecipient} multi={multi} />}
         {!answer && open && <PainPointCard leadId={lead.id} icpId={lead.icp_id ?? templates.find(template => template.id === templateId)?.icp_id

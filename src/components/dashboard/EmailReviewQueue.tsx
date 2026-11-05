@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { MailCheck, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { DraftLog } from '../../hooks/useDrafts';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 import { Skeleton } from '../ui/Skeleton';
+import {useEmailVerification} from '../../hooks/useEmailVerification';
+import {EmailVerificationBadge} from '../emails/EmailVerificationBadge';
 
 interface EmailReviewQueueProps {
   drafts: DraftLog[];
@@ -29,6 +31,8 @@ interface EmailReviewQueueProps {
 /** Drafts awaiting review — sequence output + manual saves. Nothing sends without a click. */
 export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selected, onToggle, onToggleAll, selectionDisabled }: EmailReviewQueueProps) {
   const [discardingId, setDiscardingId] = useState<string | null>(null);
+  const addresses=useMemo(()=>drafts.map(d=>d.to_email),[drafts]);
+  const verification=useEmailVerification(addresses);
   if (loading) return <Skeleton className="h-20 w-full" />;
   if (drafts.length === 0) {
     return <EmptyState icon={MailCheck} title="No emails waiting for review" hint="Sequence drafts and saved drafts appear here for you to approve." />;
@@ -42,6 +46,7 @@ export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selecte
   const selectable = selected !== undefined && onToggle !== undefined && onToggleAll !== undefined;
   return (
     <ul className="flex flex-col gap-2">
+      {verification.error&&<li role="alert" className="text-xs text-warning">Could not load previous email checks. Every address will be checked on release.</li>}
       {selectable && (
         <li className="flex items-center gap-2 px-1">
           <input type="checkbox" checked={drafts.length > 0 && selected.size === drafts.length} onChange={onToggleAll} disabled={selectionDisabled} className="h-4 w-4 accent-violet-500 disabled:cursor-not-allowed disabled:opacity-50" aria-label="Select all" />
@@ -54,6 +59,7 @@ export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selecte
             <input type="checkbox" checked={selected.has(d.id)} onChange={() => onToggle(d.id)} disabled={selectionDisabled} className="h-4 w-4 accent-violet-500 disabled:cursor-not-allowed disabled:opacity-50" aria-label={`Select ${d.lead?.business_name ?? d.to_email}`} />
           )}
           <span className="font-heading text-sm font-bold">{d.lead?.business_name ?? d.to_email}</span>
+          <EmailVerificationBadge value={verification.get(d.to_email)} />
           <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${d.sequence_enrollment_id ? 'bg-violet/25 text-offwhite' : 'bg-surface text-muted'}`}>
             {d.sequence_enrollment_id ? 'Sequence' : 'Manual'}
           </span>

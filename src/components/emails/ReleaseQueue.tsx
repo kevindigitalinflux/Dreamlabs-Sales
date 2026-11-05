@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { readableInvokeError } from '../../lib/invokeError';
+import {readEmailSendResponse,emailReleaseSummary,type EmailSendView} from '../../lib/emailVerification';
 import { supabase } from '../../lib/supabase';
 import { useDrafts } from '../../hooks/useDrafts';
 import type { DraftLog } from '../../hooks/useDrafts';
@@ -61,8 +61,7 @@ export function ReleaseQueue() {
     setSummary(null);
     setReport(null);
     const reports: (PostSendReport | null)[] = [];
-    let sent = 0;
-    let failed = 0;
+    const results:EmailSendView[]=[];
     let firstFailReason: string | null = null;
     // Recheck immediately before release: a draft may have acquired an Autopilot link since selection.
     const fresh = await loadReleaseDrafts(supabase, currentOrg?.id ?? null);
@@ -75,12 +74,10 @@ export function ReleaseQueue() {
           decision_maker_candidate_id: draft.decision_maker_candidate_id,
         },
       });
-      const result = data as { ok?: boolean; error?: string } | null;
-      if (error || !result?.ok) {
-        failed++;
-        if (!firstFailReason) firstFailReason = error ? await readableInvokeError(error) : (result?.error ?? 'Send failed');
+      const result=await readEmailSendResponse(data,error);results.push(result);
+      if (!result.ok) {
+        if (!firstFailReason) firstFailReason = result.error ?? 'Send failed';
       } else {
-        sent++;
         // Keep which lead each line is about: prefix with the business name (lines then stay distinct per lead).
         const rep = parsePostSend(data);
         const who = draft.lead?.business_name ?? draft.to_email;
@@ -90,7 +87,7 @@ export function ReleaseQueue() {
     setReleasing(false);
     setReport(mergePostSend(reports));
     setSelected(new Set());
-    setSummary(failed === 0 ? `Sent ${sent}` : `Sent ${sent} — ${failed} failed${firstFailReason ? `: ${firstFailReason}` : ''}`);
+    setSummary(emailReleaseSummary(results)+(firstFailReason?`: ${firstFailReason}`:''));
     await refresh();
   }
 

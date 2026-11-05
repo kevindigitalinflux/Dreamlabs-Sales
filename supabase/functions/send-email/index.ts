@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
   const user = userData?.user;
   if (!user) return json({ error: 'Not signed in' }, 401, headers);
 
-  const body = (await req.json()) as { to_email?: string; subject?: string; body?: string; lead_id?: string; log_id?: string; decision_maker_candidate_id?: string; attachments?: unknown; template_id?: string; reply_id?: string };
+  const body = (await req.json()) as { to_email?: string; subject?: string; body?: string; lead_id?: string; log_id?: string; decision_maker_candidate_id?: string; attachments?: unknown; template_id?: string; reply_id?: string; override_email_check?:boolean };
   if (!body.to_email || !body.subject || !body.body) {
     return json({ error: 'to_email, subject and body are required' }, 400, headers);
   }
@@ -104,11 +104,12 @@ Deno.serve(async (req) => {
     orgId,
     leadStage,
     draft,
+    overrideInvalid:body.override_email_check===true,
     ...thread,
   });
   if (!result.ok) {
     const warning = result.warning;
-    return json({ error: result.error, ...(result.logId !== undefined ? { log_id: result.logId } : {}), ...(warning ? { warning } : {}) }, result.status ?? 400, headers);
+    return json({ error: result.error, ...(result.verification?{verification:result.verification}:{}), ...(result.logId !== undefined ? { log_id: result.logId } : {}), ...(warning ? { warning } : {}) }, result.status ?? 400, headers);
   }
   if (body.reply_id) {
     const { error: handledError } = await service.from('email_replies').update({ handled_at: new Date().toISOString() }).eq('id', body.reply_id).eq('org_id', orgId);
@@ -144,5 +145,5 @@ Deno.serve(async (req) => {
       if (timer !== undefined) clearTimeout(timer);
     }
   }
-  return json({ ok: true, log_id: result.logId, ...(result.warning ? { warning: result.warning } : {}), ...(postSend ? { post_send: postSend } : {}) }, 200, headers);
+  return json({ ok: true, log_id: result.logId, ...(result.verification?{verification:result.verification}:{}), ...(result.warning ? { warning: result.warning } : {}), ...(postSend ? { post_send: postSend } : {}) }, 200, headers);
 });

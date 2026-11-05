@@ -6,7 +6,7 @@ import {resolveOrgWorkerConfig} from './orgApiKeys.ts';
 import {RunVerifyGate} from './runVerifyGate.ts';
 import {cachedMailProvider} from './dnsLookup.ts';
 
-export interface EmailPrecheckResult {status:'valid'|'invalid'|'unverifiable';label:string;hardBounce?:boolean;warning?:string}
+export interface EmailPrecheckResult {status:'valid'|'invalid'|'unverifiable';label:string;hardBounce?:boolean;warning?:string;overridden?:boolean;overridable?:boolean}
 interface Input {leadId?:string;address:string;timeLeftMs?:()=>number}
 const gates=new Map<string,{gate:RunVerifyGate;usedAt:number}>();
 /** Warm-isolate coordination only; independent isolates remain bounded by the worker's own domain limiter. */

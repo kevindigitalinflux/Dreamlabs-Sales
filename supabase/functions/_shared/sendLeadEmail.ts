@@ -45,6 +45,8 @@ export async function loadSenderMailbox(
 export interface SendLeadEmailInput {
   /** Optional caller deadline; SMTP/final-save reserves remain outside this checker share. */
   checkTimeLeftMs?:()=>number;
+  /** Human-confirmed override for this recipient only; never applies to learned hard bounces. */
+  overrideInvalid?:boolean;
   /** The user whose mailbox (user_email_settings + Vault password) sends this email. Also written to email_logs.sent_by. */
   senderId: string;
   to: string;
@@ -154,7 +156,10 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
   let verification:EmailPrecheckResult;
   try{verification=await checkEmailBeforeSend(service,{orgId:attachOrgId,leadId:leadId??undefined,address:input.to,timeLeftMs:input.checkTimeLeftMs});}
   catch{console.error('email precheck: outcome history unavailable');return {ok:false,error:'Could not check previous email outcomes. Try again.',status:503};}
-  if(verification.status==='invalid')return {ok:false,error:verification.label,status:409,verification};
+  if(verification.status==='invalid') {
+    if(input.overrideInvalid!==true||verification.hardBounce||verification.overridable===false)return {ok:false,error:verification.label,status:409,verification};
+    verification={...verification,overridden:true};
+  }
   if (attachments.length > 0) {
     if (!attachOrgId || attachments.some((a) => !a.path.startsWith(`${attachOrgId}/`) || a.path.includes('..'))) {
       return { ok: false, error: 'Attachment not allowed', status: 400 };
