@@ -56,7 +56,7 @@ export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{wo
     try {
       const worker=deps.worker??deps.workerFactory?.()??makeWorkerClient({usage:service,orgId,
         config:await resolveOrgWorkerConfig(service,orgId,Deno.env.get('WORKER_SHARED_ORG_IDS')),
-        verifyGate:sendGate(orgId),verifyTimeLeftMs:()=>Math.max(0,Math.min(deadline-Date.now(),input.timeLeftMs?.()??Infinity))});
+        verifyGate:sendGate(orgId),verifyTimeLeftMs:()=>Math.max(0,Math.min(deadline-Date.now(),input.timeLeftMs?.()??Infinity)),retryTransient:domain=>cachedMailProvider(domain)==='unknown'});
       checked=await worker.verifyEmail(email,{timeoutMs:33000});
     }catch{console.error('email precheck: checker unavailable');return disclose(verdict('unverifiable'));}
     if(!checked.ok)return disclose(checked.failure==='limit_reached'?{status:'unverifiable',label:'Not checked: daily check allowance reached'}:verdict('unverifiable'));

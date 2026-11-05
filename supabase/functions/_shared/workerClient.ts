@@ -19,7 +19,7 @@ export interface WorkerClient {
   lines(): string[];
 }
 
-export interface WorkerClientOptions { usage: UsageClient; orgId: string; config: WorkerConfig | null; fetchImpl?: typeof fetch; verifyGate?: RunVerifyGate; verifyTimeLeftMs?: () => number }
+export interface WorkerClientOptions { usage: UsageClient; orgId: string; config: WorkerConfig | null; fetchImpl?: typeof fetch; verifyGate?: RunVerifyGate; verifyTimeLeftMs?: () => number; retryTransient?:(domain:string)=>boolean }
 
 type Kind = 'verify' | 'scrape';
 type Stopped = { failure: WorkerFailure; line: string };
@@ -92,30 +92,44 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
 
   return {
     async verifyEmail(email, options) {
+      const requestedAt=Date.now();let admitted=false;let firstStarted:number|null=null;let attempts=0;
       const perform = async (timeoutMs: number): Promise<WorkerResult<VerifyReply>> => {
         const options = { timeoutMs };
         const already = stopped.verify;
         if (already) return { ok: false, ...already };
-        if (verifyCalls >= MAX_VERIFY_PER_LEAD) {
+        if (!admitted&&verifyCalls >= MAX_VERIFY_PER_LEAD) {
           return stop('verify', 'limit_reached', `Only ${MAX_VERIFY_PER_LEAD} email checks are used for one lead in one Deep find.`);
         }
-        verifyCalls++;
+        if(!admitted){verifyCalls++;admitted=true;firstStarted=Date.now();}attempts++;
         const raw = await call('verify', 1, '/verify-email', { email }, options?.timeoutMs);
         if (!raw.ok) return { ok: false, failure: raw.failure, line: raw.line };
         const reply = parseVerifyReply(raw.json, email);
         if (!reply) { const line = workerFailureLine('bad_response'); addLine(line); return { ok: false, failure: 'bad_response', line }; }
-        tally.checked++;
-        if (reply.status === 'valid') tally.valid++;
-        else if (reply.status === 'invalid') tally.invalid++;
-        else tally.undecided++;
         return { ok: true, value: reply };
       };
       const timeout = options?.timeoutMs ?? WORKER_TIMEOUT_MS.verify;
       const callWindow = opts.verifyGate ? WORKER_TIMEOUT_MS.verify : timeout;
       const remaining = Math.min(opts.verifyTimeLeftMs?.() ?? timeout + 2000, options?.timeBudgetMs ?? Infinity);
+      const timeLeft=()=>Math.max(0,Math.min(opts.verifyTimeLeftMs?.()??Infinity,remaining-(Date.now()-requestedAt)));
       if (opts.verifyGate && remaining < callWindow + 2000) return { ok: true, value: { status: 'unverifiable', reason: 'lead_time_exhausted' }, domainNoteSuppressed: true };
       const gateBudget = Math.max(0, remaining - callWindow - 2000);
-      const result = opts.verifyGate && config && !stopped.verify && verifyCalls < MAX_VERIFY_PER_LEAD ? await opts.verifyGate.run(email, gateBudget, perform) : await perform(timeout);
+      const owner=opts.retryTransient&&opts.verifyGate?crypto.randomUUID():undefined;
+      let result = opts.verifyGate && config && !stopped.verify && verifyCalls < MAX_VERIFY_PER_LEAD ? await opts.verifyGate.run(email, gateBudget, perform,{retryOwner:owner}) : await perform(timeout);
+      const initial=result;
+      const retryable=!result.ok?result.failure==='timeout':result.value.status==='unverifiable'&&['unknown','timeout'].includes(result.value.reason);
+      if(retryable&&firstStarted!==null&&opts.verifyGate&&opts.retryTransient?.(email.split('@')[1]??'')) {
+        const wait=60000;
+        if(wait+WORKER_TIMEOUT_MS.verify+2000<=timeLeft()) {
+          if(wait)await new Promise(resolve=>setTimeout(resolve,wait));
+          if(timeLeft()>=WORKER_TIMEOUT_MS.verify+2000) {
+            const before=attempts;
+            const retried=await opts.verifyGate.run(email,timeLeft()-WORKER_TIMEOUT_MS.verify-2000,perform,{retry:true,retryOwner:owner});
+            if(attempts>before)result=retried;
+          }
+        }
+      }
+      const counted=result.ok?result:initial.ok?initial:null;
+      if(admitted&&counted){tally.checked++;if(counted.value.status==='valid')tally.valid++;else if(counted.value.status==='invalid')tally.invalid++;else tally.undecided++;}
       if (!result.ok && !result.domainNoteSuppressed) addLine(result.line);
       return result;
     },

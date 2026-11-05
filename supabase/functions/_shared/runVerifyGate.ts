@@ -6,7 +6,8 @@ export interface VerifyGateStore {
   read(): Promise<{ state: Record<string, unknown>; version: string }>;
   swap(version: string, state: Record<string, unknown>): Promise<boolean>;
 }
-interface DomainState { starts?: number[]; nextAt?: number; pendingUntil: number; blocked: boolean; hosted?: boolean; canaryDone?: boolean; hostedUnverifiable?: boolean; waitingNoted?: boolean; noted?: boolean }
+interface DomainState { starts?: number[]; nextAt?: number; pendingUntil: number; blocked: boolean; blockedReason?:string; timeoutRetryOwner?:string; hosted?: boolean; canaryDone?: boolean; hostedUnverifiable?: boolean; waitingNoted?: boolean; noted?: boolean }
+export interface VerifyGateAttempt {retry?:boolean;retryOwner?:string}
 const skipped = (line: string): WorkerResult<VerifyReply> => ({ ok: false, failure: 'busy', line });
 const slow = (): WorkerResult<VerifyReply> => ({ ok: false, failure: 'timeout', domainNoteSuppressed: true, line: 'This mail server answers too slowly to check, so these are best guesses.' });
 const outOfTime = (): WorkerResult<VerifyReply> => ({ ok: true, value: { status: 'unverifiable', reason: 'lead_time_exhausted' }, domainNoteSuppressed: true });
@@ -22,12 +23,12 @@ export class RunVerifyGate {
   constructor(private store: VerifyGateStore, private now = () => Date.now(),
     private sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)),
     private isHosted: (domain: string) => Promise<boolean> = async () => false) {}
-  async run(email: string, budget: number, perform: (timeout: number) => Promise<WorkerResult<VerifyReply>>): Promise<WorkerResult<VerifyReply>> {
+  async run(email: string, budget: number, perform: (timeout: number) => Promise<WorkerResult<VerifyReply>>, attemptOptions:VerifyGateAttempt={}): Promise<WorkerResult<VerifyReply>> {
     const domain = email.toLowerCase().split('@')[1];
     if (!domain) return skipped('The email checker could not read this domain.');
     const hostedSkip = (): WorkerResult<VerifyReply> => ({ ok: true, value: { status: 'unverifiable', reason: 'hosted_unverifiable' }, domainNoteSuppressed: true });
     if (this.localHosted.has(domain)) return hostedSkip();
-    if (this.localBlocked.has(domain)) return slow();
+    if (this.localBlocked.has(domain)&&!attemptOptions.retry) return slow();
     let hosted = false;
     let canaryDone = false;
     let dispatch: Promise<WorkerResult<VerifyReply>> | null = null;
@@ -51,7 +52,10 @@ export class RunVerifyGate {
         if (prior && (!Number.isFinite(prior.pendingUntil) || typeof prior.blocked !== 'boolean'
           || (prior.starts !== undefined ? !Array.isArray(prior.starts) || prior.starts.some(t => !Number.isFinite(t)) : !Number.isFinite(prior.nextAt)))) throw new Error('Invalid checker state');
         if (prior?.hostedUnverifiable) return hostedSkip();
-        if (prior?.blocked) return slow();
+        const ownedRetry=attemptOptions.retry&&prior?.blockedReason==='timeout'&&!!attemptOptions.retryOwner
+          &&prior.timeoutRetryOwner===attemptOptions.retryOwner&&!prior.hosted;
+        if (prior?.blocked&&!ownedRetry) return slow();
+        if(attemptOptions.retry&&(!prior?.blocked||ownedRetry))this.localBlocked.delete(domain);
         hosted = prior?.hosted ?? await this.isHosted(domain);
         canaryDone = prior?.canaryDone ?? false;
         if (prior?.pendingUntil && prior.pendingUntil <= this.now()) return slow(); // An abandoned call is never assumed safe.
@@ -74,13 +78,14 @@ export class RunVerifyGate {
         }
         started = this.now(); token = started + 33000 + 2000;
         if (started > deadline) return outOfTime();
-        if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, starts: [...starts, started], pendingUntil: token, blocked: false, hosted, canaryDone } })) { acquired = true; break; }
+        if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, starts: [...starts, started], pendingUntil: token, blocked: false, blockedReason:undefined,timeoutRetryOwner:undefined, hosted, canaryDone } })) { acquired = true; break; }
         if (attempt === 99) throw new Error('Checker state contention');
       }
       if (!acquired) throw new Error('Checker state unavailable');
       const result = this.now() <= deadline ? await once()
         : outOfTime();
       const blocked = !result.ok ? result.failure === 'timeout' : result.value.reason === 'timeout' || result.value.reason === 'provider_blocks_checks';
+      const blockedReason=blocked?(!result.ok?'timeout':result.value.reason):undefined;
       for (let attempt = 0; attempt < 100; attempt++) {
         const snapshot = await this.store.read();
         const prior = snapshot.state[domain] as DomainState | undefined;
@@ -88,7 +93,9 @@ export class RunVerifyGate {
         const relevant = result.ok ? ['unverifiable','risky'].includes(result.value.status) : result.failure === 'timeout';
         const starts = prior?.starts ?? [];
         const finishedStarts = dispatch ? starts : starts.filter((_t,index) => index !== starts.lastIndexOf(started));
-        if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, starts: finishedStarts, pendingUntil: 0, blocked, hosted, canaryDone: dispatch ? true : canaryDone, hostedUnverifiable: this.localHosted.has(domain), noted: prior?.noted || (!!dispatch && relevant) } })) return relevant && prior?.noted ? {...result,domainNoteSuppressed:true} : result;
+        if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, starts: finishedStarts, pendingUntil: 0, blocked, blockedReason,
+          timeoutRetryOwner:blockedReason==='timeout'&&!hosted&&!attemptOptions.retry?attemptOptions.retryOwner:undefined,
+          hosted, canaryDone: dispatch ? true : canaryDone, hostedUnverifiable: this.localHosted.has(domain), noted: prior?.noted || (!!dispatch && relevant) } })) return relevant && prior?.noted ? {...result,domainNoteSuppressed:true} : result;
       }
       throw new Error('Checker result could not be saved');
     } catch (error) {

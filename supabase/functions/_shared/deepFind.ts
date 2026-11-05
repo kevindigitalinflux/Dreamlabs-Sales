@@ -166,7 +166,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   });
   // Own worker key first; shared worker requires the global fallback flag or WORKER_SHARED_ORG_IDS.
   const workerConfig = await resolveOrgWorkerConfig(service, run.org_id, Deno.env.get('WORKER_SHARED_ORG_IDS'));
-  const worker = makeWorkerClient({ usage: service, orgId: run.org_id, config: workerConfig, verifyGate: makeRunVerifyGate(service, run.org_id, run.id), verifyTimeLeftMs: () => Math.max(0, left()) });
+  const worker = makeWorkerClient({ usage: service, orgId: run.org_id, config: workerConfig, verifyGate: makeRunVerifyGate(service, run.org_id, run.id), verifyTimeLeftMs: () => Math.max(0, left()),retryTransient:domain=>cachedMailProvider(domain)==='unknown' });
   const { data: contactData, error: contactErr } = await service.from('decision_maker_candidates').select('*').eq('lead_id', lead.id);
   if (contactErr) return { status: 'failed', reason: 'Could not read this lead\'s contacts.' };
   const rows = (contactData ?? []) as Contact[];
