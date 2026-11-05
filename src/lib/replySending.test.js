@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 vi.mock('../../supabase/functions/_shared/smtp', () => ({ sendMail: vi.fn(async () => ({ messageId: '<answer@fixture.invalid>' })) }));
+vi.mock('../../supabase/functions/_shared/dnsLookup',()=>({lookupMx:vi.fn(async()=>'mx'),cachedMailProvider:vi.fn(()=>null)}));
 import { sendLeadEmail } from '../../supabase/functions/_shared/sendLeadEmail';
 import { sendMail } from '../../supabase/functions/_shared/smtp';
 import { replyDatabase } from './replyTestDatabase';

@@ -1,14 +1,17 @@
 import {readableInvokeError} from './invokeError';
+import {emailDomainTypo,emailSyntaxValid} from '../../supabase/functions/_shared/emailPrecheckRules';
 export interface VerificationView {status:'valid'|'invalid'|'unverifiable';label:string;hardBounce?:boolean;overridden?:boolean;overridable?:boolean}
 export interface EmailSendView {ok:boolean;blocked:boolean;error?:string;verification?:VerificationView}
 /** Display only evidence belonging to this exact organisation and address. */
 export function emailEvidenceView(orgId:string,address:string,rows:{org_id:string;address:string;outcome:string;seen_at:string}[],now=Date.now()):VerificationView {
+  if(!emailSyntaxValid(address))return {status:'invalid',label:'This email address has invalid syntax',overridable:false};
   const own=rows.filter(r=>r.org_id===orgId&&r.address.toLowerCase()===address.trim().toLowerCase());
   if(own.some(r=>r.outcome==='bounced_hard'))return {status:'invalid',label:'This address bounced before.',hardBounce:true};
   if(own.some(r=>r.outcome==='replied'))return {status:'valid',label:'This address has replied before.'};
   const recent=own.filter(r=>Date.parse(r.seen_at)>=now-14*86400000&&Date.parse(r.seen_at)<=now).sort((a,b)=>Date.parse(b.seen_at)-Date.parse(a.seen_at))[0];
-  return recent?.outcome==='checked_invalid'?{status:'invalid',label:'Our checker says this address does not exist'}
+  const result:VerificationView=recent?.outcome==='checked_invalid'?{status:'invalid',label:'Our checker says this address does not exist'}
     :recent?.outcome==='checked_valid'?{status:'valid',label:'Confirmed'}:{status:'unverifiable',label:'Not confirmed'};
+  const typo=emailDomainTypo(address);return typo?{...result,label:`${result.label}. Possible domain typo: did you mean ${typo}? Address was not changed.`}:result;
 }
 /** Read non-2xx verification details without consuming the error Response used elsewhere. */
 export async function readEmailSendResponse(data:unknown,error:unknown):Promise<EmailSendView> {

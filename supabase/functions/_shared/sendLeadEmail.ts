@@ -254,7 +254,7 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
     await service.from('leads').update(leadUpdate).eq('id', leadId);
   }
 
-  const warning = logFailed ? 'Email sent but logging failed' : undefined;
+  const warning = [logFailed?'Email sent but logging failed':null,verification.warning].filter(Boolean).join(' ')||undefined;
   if (status === 'failed') return { ok: false, error: 'Send failed: ' + errorMessage, status: 400, logId, verification, ...(warning ? { warning } : {}) };
   return { ok: true, logId, verification, ...(warning ? { warning } : {}) };
 }

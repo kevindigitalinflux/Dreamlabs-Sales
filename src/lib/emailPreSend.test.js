@@ -6,7 +6,8 @@ const input={leadId:'lead',address:'person@example.com'};
 function fixture(outcomes=[]) {
  const db=replyDatabase({email_outcomes:outcomes});db.service.rpc=vi.fn(async()=>({error:null}));
  const worker={verifyEmail:vi.fn(async()=>({ok:true,value:{status:'valid',reason:'deliverable'}})),scrapeSite:vi.fn(),lines:()=>[]};
- return {db,worker,check:makeEmailPrechecker(db.service,'org',{worker,now})};
+ const mx=vi.fn(async()=>'mx');
+ return {db,worker,mx,check:makeEmailPrechecker(db.service,'org',{worker,now,lookupMx:mx})};
 }
 it.each(['valid','invalid','unverifiable'])('checks and caches %s per org/address without sending',async status=>{
  const f=fixture();f.worker.verifyEmail.mockResolvedValue({ok:true,value:{status,reason:status==='unverifiable'?'unknown':'clear'}});
@@ -29,4 +30,18 @@ it('labels unavailable checker results without pretending they are cached checks
  const f=fixture();f.worker.verifyEmail.mockResolvedValue({ok:false,failure:'unreachable',line:'private worker text'});
  expect(await f.check(input)).toMatchObject({status:'unverifiable',label:'Not confirmed'});
  expect(f.db.service.rpc).not.toHaveBeenCalled();
+});
+it('blocks invalid syntax without a worker or DNS request',async()=>{
+ const f=fixture();expect(await f.check({...input,address:'bad\r\nrecipient'})).toMatchObject({status:'invalid',overridable:false});
+ expect(f.worker.verifyEmail).not.toHaveBeenCalled();expect(f.mx).not.toHaveBeenCalled();
+});
+it('blocks a domain known to have no MX without a worker call',async()=>{
+ const f=fixture();f.mx.mockResolvedValue('none');
+ expect(await f.check(input)).toMatchObject({status:'invalid',label:'This email domain has no mail server'});
+ expect(f.worker.verifyEmail).not.toHaveBeenCalled();
+});
+it('flags common domain typos without changing or silently correcting the address',async()=>{
+ const f=fixture();const address='person@gmial.com';
+ expect(await f.check({...input,address})).toMatchObject({label:expect.stringContaining('gmail.com')});
+ expect(f.worker.verifyEmail).toHaveBeenCalledWith(address,{timeoutMs:33000});
 });

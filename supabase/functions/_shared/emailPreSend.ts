@@ -4,7 +4,8 @@ import {recordEmailOutcome} from './emailOutcomeLearning.ts';
 import {makeWorkerClient,type WorkerClient} from './workerClient.ts';
 import {resolveOrgWorkerConfig} from './orgApiKeys.ts';
 import {RunVerifyGate} from './runVerifyGate.ts';
-import {cachedMailProvider} from './dnsLookup.ts';
+import {cachedMailProvider,lookupMx} from './dnsLookup.ts';
+import {emailSyntaxValid,emailDomainTypo} from './emailPrecheckRules.ts';
 
 export interface EmailPrecheckResult {status:'valid'|'invalid'|'unverifiable';label:string;hardBounce?:boolean;warning?:string;overridden?:boolean;overridable?:boolean}
 interface Input {leadId?:string;address:string;timeLeftMs?:()=>number}
@@ -23,19 +24,33 @@ function sendGate(orgId:string):RunVerifyGate {
 const verdict=(status:EmailPrecheckResult['status']):EmailPrecheckResult=>({status,label:status==='invalid'?'Our checker says this address does not exist':status==='valid'?'Confirmed':'Not confirmed'});
 
 /** One operation's small address cache plus the org-scoped fourteen-day durable cache proposed in Part A SQL. */
-export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{worker?:WorkerClient;now?:()=>number}={}) {
+export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{worker?:WorkerClient;now?:()=>number;lookupMx?:(domain:string)=>Promise<'mx'|'none'|'error'>}={}) {
   const now=deps.now??Date.now;
   const cache=new Map<string,{at:number;result:EmailPrecheckResult}>();
+  const remember=async(input:Input,email:string,result:EmailPrecheckResult)=>{
+    if(input.leadId) {
+      try{await recordEmailOutcome(service,{orgId,leadId:input.leadId,address:email,outcome:`checked_${result.status}`,source:`check:${crypto.randomUUID()}`,seenAt:new Date(now())});}
+      catch{console.error('email precheck: result cache unavailable');result.warning='The email check result could not be saved.';}
+    }
+    if(cache.size>=256)cache.delete(cache.keys().next().value!);
+    cache.set(email,{at:now(),result});return result;
+  };
   return async(input:Input):Promise<EmailPrecheckResult>=>{
     const email=input.address.trim().toLowerCase();
+    if(!emailSyntaxValid(email))return {status:'invalid',label:'This email address has invalid syntax',overridable:false};
+    const typo=emailDomainTypo(email);
+    const disclose=(value:EmailPrecheckResult):EmailPrecheckResult=>typo?{...value,label:`${value.label}. Possible domain typo: did you mean ${typo}? Address was not changed.`}:value;
     // Always refresh hard-bounce evidence, including before a cached valid result is reused.
     const history=makeEmailOutcomeLookup(service,orgId);
     const known=await history.status(email);
-    if(known)return known.status==='invalid'?{status:'invalid',label:'This address bounced before.',hardBounce:true}:{status:'valid',label:'This address has replied before.'};
+    if(known)return disclose(known.status==='invalid'?{status:'invalid',label:'This address bounced before.',hardBounce:true}:{status:'valid',label:'This address has replied before.'});
     const recent=await history.recentCheck(email,now());
-    if(recent)return verdict(recent.outcome==='checked_valid'?'valid':recent.outcome==='checked_invalid'?'invalid':'unverifiable');
+    if(recent)return disclose(verdict(recent.outcome==='checked_valid'?'valid':recent.outcome==='checked_invalid'?'invalid':'unverifiable'));
     const remembered=cache.get(email);
-    if(remembered&&remembered.at>=now()-14*86400000)return remembered.result;
+    if(remembered&&remembered.at>=now()-14*86400000)return disclose(remembered.result);
+    const domain=email.split('@')[1]!;
+    const mx=await (deps.lookupMx??((d:string)=>lookupMx(d,3000,true)))(domain);
+    if(mx==='none')return disclose(await remember(input,email,{status:'invalid',label:'This email domain has no mail server'}));
     const deadline=Date.now()+110000;
     let checked:Awaited<ReturnType<WorkerClient['verifyEmail']>>;
     try {
@@ -43,16 +58,11 @@ export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{wo
         config:await resolveOrgWorkerConfig(service,orgId,Deno.env.get('WORKER_SHARED_ORG_IDS')),
         verifyGate:sendGate(orgId),verifyTimeLeftMs:()=>Math.max(0,Math.min(deadline-Date.now(),input.timeLeftMs?.()??Infinity))});
       checked=await worker.verifyEmail(email,{timeoutMs:33000});
-    }catch{console.error('email precheck: checker unavailable');return verdict('unverifiable');}
-    if(!checked.ok)return verdict('unverifiable');
+    }catch{console.error('email precheck: checker unavailable');return disclose(verdict('unverifiable'));}
+    if(!checked.ok)return disclose(verdict('unverifiable'));
     const result=verdict(checked.value.status==='valid'?'valid':checked.value.status==='invalid'?'invalid':'unverifiable');
-    if(['waiting_for_domain','lead_time_exhausted'].includes(checked.value.reason))return result;
-    if(input.leadId) {
-      try{await recordEmailOutcome(service,{orgId,leadId:input.leadId,address:email,outcome:`checked_${result.status}`,source:`check:${crypto.randomUUID()}`,seenAt:new Date(now())});}
-      catch{console.error('email precheck: result cache unavailable');result.warning='The email check result could not be saved.';}
-    }
-    if(cache.size>=256)cache.delete(cache.keys().next().value!);
-    cache.set(email,{at:now(),result});return result;
+    if(['waiting_for_domain','lead_time_exhausted'].includes(checked.value.reason))return disclose(result);
+    return disclose(await remember(input,email,result));
   };
 }
 /** Shared boundary used by every real send path; it never sends a message itself. */

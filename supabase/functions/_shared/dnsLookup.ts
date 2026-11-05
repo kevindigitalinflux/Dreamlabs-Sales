@@ -5,6 +5,8 @@
 import { cancelBody, readCapped } from './cappedBody.ts';
 import { DOMAIN_CHECKS } from './domainChecks.ts';
 import { parseDohMx } from './domainDiscovery.ts';
+import {isFreeMailDomain} from './knownPersonWide.ts';
+import {parseSafeWebsiteUrl} from './hostGuard.ts';
 
 const DOH_URL = 'https://cloudflare-dns.com/dns-query';
 
@@ -30,9 +32,9 @@ export function cachedMailProvider(domain: string): MailProvider | null {
 }
 
 /** 'mx' when the domain has a real mail server, 'none' when it has none or does not exist, 'error' otherwise. Never throws. */
-export async function lookupMx(domain: string, timeoutMs = 3000): Promise<'mx' | 'none' | 'error'> {
+export async function lookupMx(domain: string, timeoutMs = 3000, allowFreeMail = false): Promise<'mx' | 'none' | 'error'> {
   const d = DOMAIN_CHECKS.clean(domain);
-  if (!d || !DOMAIN_CHECKS.usable(d)) return 'error';
+  if (!d || (!DOMAIN_CHECKS.usable(d)&&!(allowFreeMail&&isFreeMailDomain(d)&&parseSafeWebsiteUrl(`https://${d}`)))) return 'error';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(1, timeoutMs));
   try {
