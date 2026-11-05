@@ -14,7 +14,7 @@ it('defaults to Medium radio cards with totals and daily allowance explanations'
   expect(html.match(/type="radio"/g)).toHaveLength(4);
   expect(html).toMatch(/checked=""[^>]*value="medium"|value="medium"[^>]*checked=""/);
   expect(html).toContain('For 25 leads: up to 25 Hunter credits, 50 AI calls, 25 Firecrawl pages, 25 browser scrapes');
-  expect(html).toContain('150 checks per organisation');
+  expect(html).toContain('600 checks per organisation');
   expect(html).not.toContain('inputMode="numeric"');
 });
 it('Custom retains numeric inputs and whole-run limits', () => {

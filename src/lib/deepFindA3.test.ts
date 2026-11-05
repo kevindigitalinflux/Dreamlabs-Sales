@@ -6,7 +6,7 @@ afterEach(() => vi.useRealTimers());
 it.each(['bounced_hard','previously_replied'])('does not spend worker guess allowance on %s evidence',reason=>{
  const checks=new GuessChecks();checks.claim('a@example.com');checks.record('a@example.com',reason==='bounced_hard'?'invalid':'valid',reason);
  expect(checks.attempted.size).toBe(0);expect(checks.canCheck('a@example.com')).toBe(false);
- expect(checks.remaining('example.com')).toBe(5);
+ expect(checks.remaining('example.com')).toBe(8);
 });
 it.each(['waiting_for_domain','lead_time_exhausted'])('does not count %s as tried or block another candidate',reason=>{
  const checks=new GuessChecks();
@@ -21,13 +21,14 @@ it('accepts only boolean start_fresh and defaults to false', () => {
 });
 it('reserves concurrent attempts before results and stops both guess paths on blocked domains', () => {
   const checks = new GuessChecks();
-  for (let i = 0; i < 5; i++) expect(checks.claim(`${i}@ukrm.com`)).toBe(true);
-  expect(checks.claim('six@ukrm.com')).toBe(false);
+  for (let i = 0; i < 8; i++) expect(checks.claim(`${i}@ukrm.com`)).toBe(true);
+  expect(checks.claim('ninth@ukrm.com')).toBe(false);
   expect(checks.claim('0@ukrm.com')).toBe(false);
   checks.record('0@ukrm.com', 'unverifiable', 'unknown');
   expect(checks.canCheck('another@ukrm.com', true)).toBe(false);
   expect(checks.claim('one@other.com')).toBe(true);
-  expect(checks.claim('two@other.com')).toBe(false);
+  expect(checks.claim('two@other.com')).toBe(true);
+  expect(checks.claim('three@other.com')).toBe(false);
 });
 it.each(['unknown', 'checker_error', 'other_reason', ''])('allows another address after one unverifiable %s', reason => {
   const checks = new GuessChecks();
@@ -55,14 +56,15 @@ it('blocks immediately when SMTP cannot connect', () => {
   expect(checks.claim('next@ukrm.com')).toBe(false);
   expect(checks.claim('next@other.com')).toBe(true);
 });
-it('keeps five-per-domain and six-per-lead caps after duplicate unverifiable results', () => {
+it('keeps eight-per-domain and ten-per-lead caps after duplicate unverifiable results', () => {
   const checks = new GuessChecks();
   checks.record('first@ukrm.com', 'unverifiable', 'unknown');
   checks.record('FIRST@UKRM.COM', 'unverifiable', 'unknown');
-  for (let i = 0; i < 4; i++) expect(checks.claim(`${i}@ukrm.com`)).toBe(true);
-  expect(checks.claim('six@ukrm.com')).toBe(false);
+  for (let i = 0; i < 7; i++) expect(checks.claim(`${i}@ukrm.com`)).toBe(true);
+  expect(checks.claim('ninth@ukrm.com')).toBe(false);
   expect(checks.claim('one@other.com')).toBe(true);
-  expect(checks.claim('two@other.com')).toBe(false);
+  expect(checks.claim('two@other.com')).toBe(true);
+  expect(checks.claim('three@other.com')).toBe(false);
 });
 it('keeps invalid results eligible for the next candidate', () => {
   const checks = new GuessChecks();

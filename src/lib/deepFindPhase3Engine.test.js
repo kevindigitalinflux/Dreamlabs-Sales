@@ -269,7 +269,7 @@ it('UKRM keeps one ranked suggestion per director after invalid and unverifiable
   let count = 0;
   worker.verifyEmail.mockImplementation(async () => ({ ok: true, value: ++count < 3 ? { status: 'invalid', reason: 'mailbox_missing' } : { status: 'unverifiable', reason: 'unknown' } }));
   const out = await run('low');
-  expect(worker.verifyEmail).toHaveBeenCalledTimes(5);
+  expect(worker.verifyEmail).toHaveBeenCalledTimes(6);
   expect(out.domains.suggestions.filter(s => s.guess_rank === 'most_likely').map(s => s.name).sort()).toEqual(['Karthik Rao', 'Ravi Kumar']);
   expect(contacts.every(c => !c.email)).toBe(true);
 });
@@ -289,7 +289,7 @@ it('UKRM retries invalid saved director guesses without circular format evidence
   const out = await run('medium');
   expect(out.domains.steps.join(' ')).not.toContain('Email format on');
   expect(out.domains.steps.join(' ')).not.toContain('PRIVATE PROVIDER TEXT');
-  expect(worker.verifyEmail).toHaveBeenCalledTimes(5);
+  expect(worker.verifyEmail).toHaveBeenCalledTimes(8);
   expect(lookUpPeople.mock.calls[0][0].people.map(p => p.contactId)).toEqual(['one', 'two']);
   for (const c of contacts) {
     const name = `${c.first_name} ${c.last_name}`;
@@ -297,7 +297,8 @@ it('UKRM retries invalid saved director guesses without circular format evidence
     expect(out.domains.people).toContainEqual(expect.objectContaining({ name, email_found: false, reason: 'Saved address does not exist.' }));
     const proposals = out.domains.suggestions.filter(s => s.name === name && s.field === 'email');
     const first = c.first_name.toLowerCase(), last = c.last_name.toLowerCase();
-    expect(proposals.map(s => s.value)).toEqual([`${first[0]}${last}@ukrmanagement.com`, `${first}${last}@ukrmanagement.com`, `${first}_${last}@ukrmanagement.com`]);
+    expect(proposals.map(s => s.value)).toEqual([`${first[0]}${last}@ukrmanagement.com`, `${first}${last}@ukrmanagement.com`, `${first}_${last}@ukrmanagement.com`]
+      .filter(email=>!worker.verifyEmail.mock.calls.some(([checked])=>checked===email)));
     expect(proposals[0]).toMatchObject({ guess_rank: 'most_likely', label: expect.stringContaining('unverified') });
     expect(proposals[0].label).toContain('Replaces the saved address that does not exist');
   }
@@ -447,9 +448,9 @@ it('fills one blank from a later valid Microsoft format and suppresses provider 
   expect(contacts[0].email).toBe('jsmith@acme.com');
   expect(writes.filter(w => 'email' in w.patch)).toHaveLength(1);
   expect(out.domains.suggestions.some(s => s.name === 'Jane Smith' && s.field === 'email')).toBe(false);
-  expect(out.domains.suggestions.some(s => s.name === 'Alex Brown' && s.field === 'email')).toBe(true);
+  expect(out.domains.suggestions.some(s => s.name === 'Alex Brown' && s.field === 'email')).toBe(false);
   expect(JSON.stringify(out.domains)).not.toContain('uses Microsoft 365');
-  expect(worker.verifyEmail.mock.calls.length).toBeLessThanOrEqual(5);
+  expect(worker.verifyEmail.mock.calls.length).toBeLessThanOrEqual(8);
 });
 
 it.each([

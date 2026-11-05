@@ -19,7 +19,7 @@ export const WORKER_RESOURCE: Record<'scrape' | 'verify' | 'fetch', UsageResourc
   scrape: 'worker_scrape', verify: 'worker_verify', fetch: 'worker_fetch',
 };
 /** Most email checks one lead may use in one Deep find. */
-export const MAX_VERIFY_PER_LEAD = 6;
+export const MAX_VERIFY_PER_LEAD = 10;
 
 /** Both values present and an https address; anything else means "not set up". */
 export function readWorkerConfig(url: string | undefined | null, secret: string | undefined | null): WorkerConfig | null {

@@ -13,13 +13,14 @@ it('orders five ASCII candidates, takes the first given name and joins surname p
   expect(commonEmailCandidates('Jane', '', 'example.com')).toEqual([]);
   expect(commonEmailCandidates('Jane', 'Smith', 'bad/domain')).toEqual([]);
 });
-it('counts existing-format checks, deduplicates and caps each domain at five and the lead at six', () => {
+it('counts existing-format checks, deduplicates and caps each domain at eight and the lead at ten', () => {
   const state = new GuessChecks();
-  for (let i = 0; i < 5; i++) { expect(state.canCheck(`${i}@example.com`)).toBe(true); state.record(`${i}@example.com`, 'invalid', 'mailbox_missing'); }
+  for (let i = 0; i < 8; i++) { expect(state.canCheck(`${i}@example.com`)).toBe(true); state.record(`${i}@example.com`, 'invalid', 'mailbox_missing'); }
   expect(state.canCheck('next@example.com')).toBe(false);
   expect(state.canCheck('0@EXAMPLE.com')).toBe(false);
   state.record('one@other.com', 'invalid', 'mailbox_missing');
-  expect(state.canCheck('two@other.com')).toBe(false);
+  state.record('two@other.com', 'invalid', 'mailbox_missing');
+  expect(state.canCheck('three@other.com')).toBe(false);
 });
 it('stops a catch-all domain for all people when any result says catch-all', () => {
   const state = new GuessChecks();

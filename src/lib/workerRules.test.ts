@@ -23,7 +23,7 @@ describe('costs and mapping', () => {
   it('charges 3 units for a deep scrape and 1 otherwise', () => {
     expect(SCRAPE_UNITS).toEqual({ homepage: 1, key_pages: 1, deep: 3 });
     expect(WORKER_RESOURCE).toEqual({ scrape: 'worker_scrape', verify: 'worker_verify', fetch: 'worker_fetch' });
-    expect(MAX_VERIFY_PER_LEAD).toBe(6);
+    expect(MAX_VERIFY_PER_LEAD).toBe(10);
   });
   it('maps http statuses to failures', () => {
     expect(failureForStatus(200)).toBeNull();

@@ -8,7 +8,7 @@ export const EFFORT_LEVELS = {
 } as const;
 export type Effort = keyof typeof EFFORT_LEVELS | 'custom';
 export const EFFORT_RUN_LIMITS = CAP_LIMITS;
-export const EFFORT_DAILY_LIMITS = { firecrawl: 100, scrapes: 100, checks: 150, places: 300, apollo: 100 } as const;
+export const EFFORT_DAILY_LIMITS = { firecrawl: 100, scrapes: 100, checks: 600, places: 300, apollo: 100 } as const;
 export function isEffort(value: unknown): value is Effort {
   return value === 'custom' || (typeof value === 'string' && Object.hasOwn(EFFORT_LEVELS, value));
 }

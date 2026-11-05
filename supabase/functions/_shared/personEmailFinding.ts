@@ -3,6 +3,8 @@ import { patternGuess, type DomainPattern, type PatternSample } from './domainPa
 import { isOwnerRole } from './deepFindSuggestions.ts';
 import { displayPersonKey } from './personIdentity.ts';
 import type { MailProvider } from './dnsLookup.ts';
+import {MAX_VERIFY_PER_LEAD} from './workerRules.ts';
+export const MAX_VERIFY_PER_DOMAIN=8;
 export const PEOPLE_RESERVE_MS = 25_000;
 export const PEOPLE_LOOKUP_FLOOR_MS = 15_000;
 export const GUESS_TOTAL_MS = 105_000;
@@ -60,7 +62,7 @@ export function optionalPeopleBudget(leftMs: number, hasPeople: boolean): number
   return Math.max(0, leftMs - (hasPeople ? PEOPLE_RESERVE_MS : 0));
 }
 
-/** Shared by inferred and common formats: no repeated address, six checks per lead, five per domain. */
+/** Shared by inferred and common formats: no repeated address, ten checks per lead, eight per domain. */
 export class GuessChecks {
   readonly catchAll = new Set<string>();
   readonly blocked = new Set<string>();
@@ -73,14 +75,14 @@ export class GuessChecks {
   private unverifiableCounts = new Map<string, number>();
   private counts = new Map<string, number>();
   private stopped = false;
-  constructor(private maxChecks = 6) {}
+  constructor(private maxChecks = MAX_VERIFY_PER_LEAD) {}
   /** Remaining admission slots, preserving the lead and domain allowances. */
-  remaining(domain: string): number { return Math.max(0, Math.min(this.maxChecks - this.attempted.size, 5 - (this.counts.get(domain) ?? 0))); }
+  remaining(domain: string): number { return Math.max(0, Math.min(this.maxChecks - this.attempted.size, MAX_VERIFY_PER_DOMAIN - (this.counts.get(domain) ?? 0))); }
   canCheck(email: string, _legacy = false): boolean {
     const key = email.toLowerCase();
     const d = key.split('@')[1] ?? '';
     return !this.stopped && !this.catchAll.has(d) && !this.blocked.has(d) && !this.attempted.has(key) && !this.known.has(key)
-      && this.attempted.size < this.maxChecks && (this.counts.get(d) ?? 0) < 5;
+      && this.attempted.size < this.maxChecks && (this.counts.get(d) ?? 0) < MAX_VERIFY_PER_DOMAIN;
   }
   claim(email: string): boolean {
     if (!this.canCheck(email)) return false;

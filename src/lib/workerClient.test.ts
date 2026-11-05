@@ -236,22 +236,22 @@ describe('makeWorkerClient', () => {
     expect(reserveCalls(u).length).toBe(2);
   });
 
-  it('caps email checks at 6 per client', async () => {
+  it('caps email checks at 10 per client', async () => {
     const u = usage();
     const f = worker(200, VERIFY_OK);
     const c = make(u, f);
     for (let i = 0; i < MAX_VERIFY_PER_LEAD; i++) {
       expect((await c.verifyEmail('max@loveliving.uk')).ok).toBe(true);
     }
-    expect(MAX_VERIFY_PER_LEAD).toBe(6);
+    expect(MAX_VERIFY_PER_LEAD).toBe(10);
     const seventh = await c.verifyEmail('max@loveliving.uk');
     expect(seventh).toMatchObject({ ok: false, failure: 'limit_reached' });
-    expect(reserveCalls(u).length).toBe(6);
-    expect(f).toHaveBeenCalledTimes(6);
-    expect(c.lines()).toContain('Only 6 email checks are used for one lead in one Deep find.');
+    expect(reserveCalls(u).length).toBe(10);
+    expect(f).toHaveBeenCalledTimes(10);
+    expect(c.lines()).toContain('Only 10 email checks are used for one lead in one Deep find.');
     // verify is stopped; later calls also do not reserve
     await c.verifyEmail('max@loveliving.uk');
-    expect(reserveCalls(u).length).toBe(6);
+    expect(reserveCalls(u).length).toBe(10);
   });
 
   it('charges 3 units for a deep scrape and 1 for key_pages', async () => {
