@@ -153,6 +153,7 @@ export async function sendDraft(
     senderId: ctx.run.created_by, to: recipient.email, subject: draft.subject, body: draft.body,
     leadId: lead.id, logId: emailLogId, decisionMakerCandidateId: recipient.candidateId, attachments: draft.attachments,
     orgId: ctx.run.org_id, leadStage: stage,
+    checkTimeLeftMs:()=>Math.max(0,ctx.deadlineMs-Date.now()-15000),
     draft: { org_id: ctx.run.org_id, attachments: draft.attachments },
   });
   if (!result.ok) {

@@ -7,7 +7,7 @@ import type { ParsedReply } from './replyPolling.ts';
 
 /** Durable outcome, suppression and note effects share one service-only transaction (SQL proposed in the report). */
 export async function recordEmailOutcome(service: SupabaseClient, input: {
-  orgId:string; leadId:string; address:string; outcome:'bounced_hard'|'replied'; source:string; seenAt:Date; pauseSequences?:boolean;
+  orgId:string; leadId:string; address:string; outcome:'bounced_hard'|'replied'|'checked_invalid'|'checked_valid'|'checked_unverifiable'; source:string; seenAt:Date; pauseSequences?:boolean;
 }): Promise<void> {
   const {error}=await service.rpc('record_email_outcome',{
     p_org_id:input.orgId,p_lead_id:input.leadId,p_address:input.address.trim().toLowerCase(),p_outcome:input.outcome,

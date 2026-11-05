@@ -1,6 +1,7 @@
 import { sendMail } from './smtp.ts';
 import { buildMailContent } from './emailFormat.ts';
 import { ATTACHMENT_BUCKET, MAX_TOTAL_ATTACHMENT_BYTES, parseAttachments, safeFilename } from './emailAttachments.ts';
+import {checkEmailBeforeSend,type EmailPrecheckResult} from './emailPreSend.ts';
 
 // deno-lint-ignore no-explicit-any
 type ServiceClient = any;
@@ -42,6 +43,8 @@ export async function loadSenderMailbox(
 }
 
 export interface SendLeadEmailInput {
+  /** Optional caller deadline; SMTP/final-save reserves remain outside this checker share. */
+  checkTimeLeftMs?:()=>number;
   /** The user whose mailbox (user_email_settings + Vault password) sends this email. Also written to email_logs.sent_by. */
   senderId: string;
   to: string;
@@ -75,8 +78,8 @@ export interface SendLeadEmailInput {
 }
 
 export type SendLeadEmailResult =
-  | { ok: true; logId: string | null; warning?: string }
-  | { ok: false; error: string; status?: number; logId?: string | null; warning?: string };
+  | { ok: true; logId: string | null; warning?: string; verification?:EmailPrecheckResult }
+  | { ok: false; error: string; status?: number; logId?: string | null; warning?: string; verification?:EmailPrecheckResult };
 
 /**
  * Sends one email as `input.senderId` and records it. Extracted unchanged from
@@ -147,6 +150,11 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
   // Files are namespaced <org_id>/...; only ever attach ones inside the lead's/draft's own org,
   // so a crafted request can't make this function mail another organisation's documents.
   const attachOrgId = orgId ?? draftOrgId;
+  if(!attachOrgId)return {ok:false,error:'Could not determine the email organisation',status:400};
+  let verification:EmailPrecheckResult;
+  try{verification=await checkEmailBeforeSend(service,{orgId:attachOrgId,leadId:leadId??undefined,address:input.to,timeLeftMs:input.checkTimeLeftMs});}
+  catch{console.error('email precheck: outcome history unavailable');return {ok:false,error:'Could not check previous email outcomes. Try again.',status:503};}
+  if(verification.status==='invalid')return {ok:false,error:verification.label,status:409,verification};
   if (attachments.length > 0) {
     if (!attachOrgId || attachments.some((a) => !a.path.startsWith(`${attachOrgId}/`) || a.path.includes('..'))) {
       return { ok: false, error: 'Attachment not allowed', status: 400 };
@@ -242,6 +250,6 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
   }
 
   const warning = logFailed ? 'Email sent but logging failed' : undefined;
-  if (status === 'failed') return { ok: false, error: 'Send failed: ' + errorMessage, status: 400, logId, ...(warning ? { warning } : {}) };
-  return { ok: true, logId, ...(warning ? { warning } : {}) };
+  if (status === 'failed') return { ok: false, error: 'Send failed: ' + errorMessage, status: 400, logId, verification, ...(warning ? { warning } : {}) };
+  return { ok: true, logId, verification, ...(warning ? { warning } : {}) };
 }
