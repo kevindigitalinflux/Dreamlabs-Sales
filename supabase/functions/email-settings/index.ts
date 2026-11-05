@@ -2,7 +2,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { sendMail } from '../_shared/smtp.ts';
 import { testMailboxConnection } from '../_shared/mailboxTest.ts';
-import { makeReplyInbox } from '../_shared/replyImap.ts';
+import { makeReplyInbox, parseReplyMime } from '../_shared/replyImap.ts';
+import { backfillBounceOutcomes } from '../_shared/emailOutcomeBackfill.ts';
 
 const IMAP_PRESETS: Record<string, { host: string; port: number }> = {
   gmail: { host: 'imap.gmail.com', port: 993 },
@@ -35,6 +36,19 @@ Deno.serve(async (req) => {
     const { data } = await service
       .from('user_email_settings').select('*').eq('user_id', user.id).maybeSingle();
     return json({ settings: data }, 200, headers);
+  }
+
+  if(body.action==='backfill_bounces') {
+    const cursor=body.before_uid;
+    if(cursor!==undefined&&(typeof cursor!=='number'||!Number.isSafeInteger(cursor)||cursor<1))return json({error:'Invalid backfill cursor'},400,headers);
+    const {data:settings,error}=await service.from('user_email_settings').select('imap_host,imap_port,smtp_user,is_verified').eq('user_id',user.id).maybeSingle();
+    if(error||!settings?.is_verified||!settings.imap_host||!settings.imap_port||!settings.smtp_user)return json({error:'Connect and verify your inbox first'},400,headers);
+    const {data:pass,error:passError}=await service.rpc('app_get_smtp_secret',{uid:user.id});
+    if(passError||!pass)return json({error:'Inbox password unavailable'},503,headers);
+    try {
+      const counts=await backfillBounceOutcomes(service,user.id,makeReplyInbox(settings.imap_host,settings.imap_port,settings.smtp_user,String(pass)),parseReplyMime,Date.now()+100000,new Date(),cursor as number|undefined);
+      return json(counts,200,headers);
+    } catch {console.error('bounce backfill: action failed');return json({error:'Bounce backfill could not finish. It is safe to retry.'},503,headers);}
   }
 
   if (body.action === 'save') {

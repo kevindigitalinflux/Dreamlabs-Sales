@@ -9,8 +9,10 @@ export function makeReplyInbox(host: string, port: number, user: string, pass: s
     disableAutoIdle: true, connectionTimeout: 15_000, greetingTimeout: 15_000, socketTimeout: 20_000 });
   return {
     get highestUid() { return client.mailbox ? Math.max(0, client.mailbox.uidNext - 1) : 0; },
+    get uidValidity() {return client.mailbox?client.mailbox.uidValidity.toString():undefined;},
     connect: () => client.connect().then(() => undefined), lock: () => client.getMailboxLock('INBOX'),
     fetch: range => client.fetch(range, { envelope: true, internalDate: true, source: { maxLength: 1_000_000 } }, { uid: true }),
+    searchSince: async(since,beforeUid)=>beforeUid===1?[]:(await client.search({since,...(beforeUid?{uid:`1:${beforeUid-1}`}:{})},{uid:true}))||[],
     logout: () => client.logout().then(() => undefined),
     abort: () => client.close(),
   };

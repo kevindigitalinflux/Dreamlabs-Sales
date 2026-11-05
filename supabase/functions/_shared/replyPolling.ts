@@ -16,6 +16,7 @@ export interface ReplyContext {
 export type AutoDraftReply = (context: ReplyContext) => Promise<string | null>;
 export interface ReplyInbox {
   highestUid: number; connect(): Promise<void>; lock(): Promise<{ release(): void }>;
+  uidValidity?: string; searchSince?(since:Date,beforeUid?:number):Promise<number[]>;
   fetch(range: string): AsyncIterable<{ uid: number; source?: Uint8Array; internalDate?: Date | string }>; logout(): Promise<void>; abort?(): void;
 }
 const checked = async (query: PromiseLike<{ error: unknown }>) => { const result = await query; if (result.error) throw new Error('Reply database operation failed'); };
@@ -123,7 +124,10 @@ export async function pollMailbox(service: SupabaseClient, user: { user_id: stri
           watermark = message.uid; continue;
         }
         if (Date.now() >= deadline - 5000 || !message.source) throw new Error('Reply check budget or source unavailable');
-        const counts = await processReplyMessage(service, user.user_id, await parse(message.source), autoDraft);
+        const parsed=await parse(message.source);
+        const counts = await processReplyMessage(service, user.user_id, {...parsed,
+          sourceId:inbox.uidValidity?`imap:${user.user_id}:${inbox.uidValidity}:${message.uid}`:undefined}, autoDraft,
+          message.internalDate?new Date(message.internalDate):new Date());
         totals.matched += counts.matched; totals.automatic += counts.automatic; totals.bounces += counts.bounces;
         watermark = message.uid;
       }
