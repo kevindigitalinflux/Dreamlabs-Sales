@@ -78,3 +78,7 @@ Deep find suggestions/regions extension (2026-10-16): **built locally on `codex/
 ## Deep find checker pacing checkpoint (local branch, 2026-11-04)
 
 Existing Deep find trigger/owner remains unchanged. Before SMTP requests, the engine's runVerifyGate now stores per-run/domain pending, spacing and breaker state under deep_find_leads.domains._verify_gate on the run's lowest-ID row. Compare-and-swap protects admissions and final results. No new schedule, table or migration. Worker reservations/refunds remain in workerClient.call. See the final registry-brand-match report addendum for run membership/recovery assumptions and pending review; not deployed.
+
+## Deep find canary and fallback checkpoint (local branch, 2026-11-05)
+
+The existing checker gate now fails open on pacing-state infrastructure errors with one plain fallback notice per lead, while usage reservations remain fail closed. Existing MX classification drives a per-run hosted canary; inconclusive canaries suppress later SMTP calls for that domain and persist under the existing _verify_gate JSON. Trigger/owner unchanged. Draft clean storage SQL in the registry build report is proposal text only; no schema change or deployment occurred. General domain-reason deduplication remains item 4.

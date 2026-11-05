@@ -1843,3 +1843,7 @@ Completed checker coverage item 1 with 15 new fake-worker effort-matrix tests (s
 ### Registry round 1b Step 2 item 2 checkpoint (2026-11-04)
 
 Built item 2 locally with tests first. Verify timeout and guess slots are 33 seconds; a persistent run/domain gate uses the existing deep_find_leads JSON summary with compare-and-swap and preserves its state during final result writes. Timeout/provider-block breakers and pacing precede usage reservation. Full gates: 2,851 tests / one skipped, TypeScript/build/25-entrypoint shim/whitespace. Read final report addendum for recovery assumptions and remaining item 2b/3/4/5 scope. Context checkpoint; independent review pending. No schema, worker, remote or deployment changes.
+
+### Registry round 1b gate follow-up / items 2b-3 (2026-11-05)
+
+Required fail-open gate fix 90bb9bc preserves worker results and usage refusal. Hosted canary 3450a2a persists an inconclusive verdict once per run/domain; priority 853f125 orders owners, decision makers and others before pattern rank. Final gates: 2,867 tests / one skipped, TypeScript/build/25-entrypoint shim/whitespace. Read the latest report for detailed limitations, timing maths, test DNS correction and draft storage SQL. Items 4/5 remain authorised and unbuilt; context checkpoint before item 4. No migration, worker/VPS change or deployment. Independent review pending.

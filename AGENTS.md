@@ -94,3 +94,7 @@ In this accuracy checkout, Part 4 item 1 is complete; items 2/2b/3/4/5 remain au
 ## Registry round 1b Step 2 item 2 checkpoint (2026-11-04)
 
 Item 2 completes locally: 33-second checker budgets, durable run/domain breaker/pacing in existing summary JSON, conditional final writes. Read the final report addendum for recovery and cross-run limits. Gates pass: 2,851 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. Context stop before item 2b; later items remain authorised. Independent review pending; no schema, worker/VPS, live or publication changes.
+
+## Registry round 1b checkpoint (2026-11-05)
+
+Required pacing fail-open fix and items 2b/3 are complete locally (90bb9bc, 3450a2a, 853f125). Full gates pass with 2,867 tests and one skipped. Read final report/handoff. Context checkpoint before item 4 confidence/grouping/domain notes, then item 5; both remain authorised. No deployment or SQL. Independent review pending.
