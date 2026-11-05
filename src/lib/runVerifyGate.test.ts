@@ -75,3 +75,28 @@ it('returns the worker result without dispatching twice when saving it fails',as
  expect(await gate.run('a@example.com',35000,async()=>{calls++;return result;})).toEqual(result);
  expect(calls).toBe(1);
 });
+
+it.each(['catch_all','provider_blocks_checks','unknown','timeout'])('uses one hosted canary across instances after %s',async reason=>{
+ const f=fixture();let calls=0;let detections=0;
+ const gate=()=>new RunVerifyGate(f.store,()=>0,async()=>{},async()=>{detections++;return true;});
+ await gate().run('a@example.com',35000,async()=>{calls++;return {ok:true,value:{status:reason==='catch_all'?'risky':'unverifiable',reason}};});
+ expect(await gate().run('b@example.com',35000,async()=>{calls++;return {ok:true,value:{status:'valid',reason:'deliverable'}};})).toMatchObject({ok:true,value:{reason:'hosted_unverifiable'}});
+ expect(calls).toBe(1);expect(detections).toBe(1);
+});
+it.each(['valid','invalid'] as const)('continues hosted checks after a clear %s canary',async status=>{
+ const f=fixture();const gate=new RunVerifyGate(f.store,()=>0,async()=>{},async()=>true);
+ expect(await gate.run('a@example.com',35000,async()=>({ok:true,value:{status,reason:'clear'}}))).toMatchObject({ok:true});
+ const next=new RunVerifyGate(f.store,()=>12001,async()=>{},async()=>{throw new Error('must reuse provider');});
+ expect(await next.run('b@example.com',35000,async()=>({ok:true,value:{status:'invalid',reason:'mailbox_missing'}}))).toMatchObject({ok:true,value:{status:'invalid'}});
+});
+
+it('records hosted_unverifiable once in durable state and one note at the canary lead',async()=>{
+ const f=fixture();const gate=new RunVerifyGate(f.store,()=>0,async()=>{},async()=>true);
+ await gate.run('first@example.com',35000,async()=>({ok:true,value:{status:'unverifiable',reason:'unknown'}}));
+ await gate.run('next@example.com',35000,f.check);
+ expect(gate.lines().filter(l=>l.includes('hosted mail'))).toHaveLength(1);
+ expect((await f.store.read()).state['example.com']).toMatchObject({hostedUnverifiable:true,canaryDone:true});
+ const later=new RunVerifyGate(f.store,()=>0,async()=>{},async()=>true);
+ await later.run('later@example.com',35000,f.check);
+ expect(later.lines()).toEqual([]);expect(f.starts).toEqual([]);
+});

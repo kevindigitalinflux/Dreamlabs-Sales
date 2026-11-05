@@ -1,4 +1,5 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+vi.mock('../../supabase/functions/_shared/dnsLookup',()=>({cachedMailProvider:vi.fn(()=>'unknown'),lookupMx:vi.fn(async()=>'mx')}));
 import { makeRunVerifyGate, saveRunResult } from '../../supabase/functions/_shared/runVerifyGateStore';
 import type { SupabaseClient } from '@supabase/supabase-js';
 

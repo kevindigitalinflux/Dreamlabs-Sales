@@ -1,4 +1,5 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
+import { cachedMailProvider, lookupMx } from './dnsLookup.ts';
 import { RunVerifyGate, type VerifyGateStore } from './runVerifyGate.ts';
 
 /** Reuses the first run row's JSON summary; every mutation uses a full JSON compare-and-swap. */
@@ -21,7 +22,14 @@ export function makeRunVerifyGate(service: SupabaseClient, orgId: string, runId:
       return !!data?.length;
     },
   };
-  return new RunVerifyGate(store);
+  const providers = new Map<string, Promise<boolean>>();
+  return new RunVerifyGate(store, undefined, undefined, domain => {
+    if (!providers.has(domain)) providers.set(domain, (async () => {
+      if (cachedMailProvider(domain) === null) await lookupMx(domain);
+      return ['microsoft', 'google', 'hosted'].includes(cachedMailProvider(domain) ?? 'unknown');
+    })());
+    return providers.get(domain)!;
+  });
 }
 
 /** Saves a result without losing a concurrently written run checker checkpoint. */

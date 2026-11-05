@@ -35,7 +35,7 @@ import {
 import { makeRunVerifyGate, saveRunResult } from './runVerifyGateStore.ts';
 import { makeWorkerClient } from './workerClient.ts';
 import { MAX_VERIFY_PER_LEAD, WORKER_TIMEOUT_MS, scrapeTimeoutFor, unconfirmedLabel, verifyAction, type WorkerFailure } from './workerRules.ts';
-import { rankedEmailCandidates, unverifiedEmailSuggestions, providerGuessLine, GuessBudget, GuessChecks, optionalPeopleBudget, personEmailLine, COMMON_GUESS_LABEL } from './personEmailFinding.ts';
+import { prioritiseCheckPeople, rankedEmailCandidates, unverifiedEmailSuggestions, providerGuessLine, GuessBudget, GuessChecks, optionalPeopleBudget, personEmailLine, COMMON_GUESS_LABEL } from './personEmailFinding.ts';
 import { makeFirecrawlClient } from './firecrawlClient.ts';
 import { FIRECRAWL_DAILY_PAGES, firecrawlDomainFor } from './firecrawlRules.ts';
 import { classifyDeepFindCheckpoint, DeepFindAuthorisationLost } from './deepFindCheckpoint.ts';
@@ -679,7 +679,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       if (pattern) steps.push(patternLine(d, pattern));
     }
     // Round-robin candidates across people. Both inferred and common formats share the same three slots.
-    const guessPeople = lookupPeople().slice(0, 5);
+    const availablePeople = lookupPeople();
+    const hostedDomain = checkDomains.some(d => ['microsoft', 'google', 'hosted'].includes(cachedMailProvider(d) ?? ''));
+    const guessPeople = (hostedDomain ? prioritiseCheckPeople(availablePeople, [lead.owner_name, ...(Array.isArray(lead.additional_owners) ? lead.additional_owners : [])]) : availablePeople).slice(0, 5);
     const jobs: ((timeoutMs: number) => Promise<void>)[] = [];
     for (let rank = 0; rank < 6; rank++) for (const d of checkDomains.slice(0, 4)) for (const person of guessPeople) {
       const guess = rankedEmailCandidates(person.first, person.last, d, patterns.get(d) ?? null)[rank];

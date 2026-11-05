@@ -1,5 +1,7 @@
 // Import-free rules for bounded common-format guesses. No provider or database access.
 import { patternGuess, type DomainPattern, type PatternSample } from './domainPattern.ts';
+import { isOwnerRole } from './deepFindSuggestions.ts';
+import { displayPersonKey } from './personIdentity.ts';
 import type { MailProvider } from './dnsLookup.ts';
 export const PEOPLE_RESERVE_MS = 25_000;
 export const PEOPLE_LOOKUP_FLOOR_MS = 15_000;
@@ -142,4 +144,11 @@ export function groundedFormatSamples(domain: string, _answer: string, sourceEvi
     }
   }
   return [...emails].slice(0, 40).map(email => ({ email, first: null, last: null }));
+}
+
+/** Stable owner/decision-maker ordering for the domain's first canary candidate. */
+export function prioritiseCheckPeople<T extends { first: string; last: string; title?: string | null }>(people: T[], owners: unknown[]): T[] {
+  const names = new Set(owners.filter((name): name is string => typeof name === 'string').map(displayPersonKey));
+  const score = (person: T) => names.has(displayPersonKey(person.first + ' ' + person.last)) ? 0 : isOwnerRole(person.title) ? 1 : 2;
+  return [...people].sort((a, b) => score(a) - score(b));
 }

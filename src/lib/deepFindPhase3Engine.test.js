@@ -958,3 +958,13 @@ it.each(['low', 'medium', 'high', 'extra_high', 'custom'])('%s checks built gues
   expect(worker.verifyEmail.mock.calls.some(([email]) => email.endsWith('@acme.com'))).toBe(true);
   if (effort === 'low') expect(hunterVerifyEmail).not.toHaveBeenCalled();
 });
+
+it('uses the owner best-ranked guess first for a hosted-domain canary',async()=>{
+ contacts=[{id:'junior',lead_id:'lead',first_name:'Alex',last_name:'Brown',title:'Assistant',email:null},
+ {id:'owner',lead_id:'lead',first_name:'Jane',last_name:'Smith',title:'Founder',email:null}];
+ lead.owner_name='Jane Smith';cachedMailProvider.mockReturnValue('microsoft');
+ resolveOrgWorkerConfig.mockResolvedValue({});
+ worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'unverifiable',reason:'unknown'}});
+ await run('low');
+ expect(worker.verifyEmail.mock.calls[0][0]).toBe('jane.smith@acme.com');
+});
