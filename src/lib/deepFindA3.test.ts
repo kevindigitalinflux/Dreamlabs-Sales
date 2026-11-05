@@ -3,6 +3,11 @@ import { GuessBudget, GuessChecks } from '../../supabase/functions/_shared/perso
 import { parseCreateRequest } from '../../supabase/functions/_shared/deepFindRules';
 
 afterEach(() => vi.useRealTimers());
+it.each(['waiting_for_domain','lead_time_exhausted'])('does not count %s as tried or block another candidate',reason=>{
+ const checks=new GuessChecks();
+ for(const email of ['a@example.com','b@example.com']) {expect(checks.claim(email)).toBe(true);checks.record(email,'unverifiable',reason);}
+ expect(checks.attempted.size).toBe(0);expect(checks.canCheck('c@example.com')).toBe(true);
+});
 it('accepts only boolean start_fresh and defaults to false', () => {
   const lead_ids = ['3f2b8c1e-4d5a-4b6c-8d7e-9f0a1b2c3d4e'];
   expect(parseCreateRequest({ lead_ids })).toMatchObject({ startFresh: false });

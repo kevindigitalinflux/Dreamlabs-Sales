@@ -260,6 +260,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     return prepared;
   };
   const domainDetails = new Map<string, Set<string>>();
+  const uncheckedEmails = new Map<string, Map<string, string>>();
   const suppressedDomains = new Set<string>();
   const domainDetail = (domain: string, line: string) => {
     if (suppressedDomains.has(domain)) return;
@@ -320,11 +321,16 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     const checkDeadline = opts?.timeoutMs === undefined ? null : Date.now() + opts.timeoutMs;
     await checkpoint();
     const remaining = checkDeadline === null ? null : checkDeadline - Date.now();
-    if (remaining !== null && remaining < 1) return { ok: false as const, failure: 'timeout' as const, line: 'The email checker took too long to answer for this address.' };
-    const result = remaining === null ? await worker.verifyEmail(email) : await worker.verifyEmail(email, { timeoutMs: remaining });
+    const result = remaining !== null && remaining < 1
+      ? { ok: true as const, value: { status: 'unverifiable' as const, reason: 'lead_time_exhausted' }, domainNoteSuppressed: true }
+      : remaining === null ? await worker.verifyEmail(email) : await worker.verifyEmail(email, { timeoutMs: remaining });
     checkedEmails.set(key, result);
     const domain = emailDomain(key);
     if (domain) {
+      if (result.ok && ['waiting_for_domain', 'lead_time_exhausted'].includes(result.value.reason)) {
+        const unchecked = uncheckedEmails.get(domain) ?? new Map<string,string>();
+        unchecked.set(key, result.value.reason); uncheckedEmails.set(domain, unchecked);
+      }
       if (result.domainNoteSuppressed || (result.ok && ['hosted_unverifiable', 'waiting_for_domain'].includes(result.value.reason)) || (!result.ok && result.line?.startsWith('This mail server answers too slowly'))) suppressedDomains.add(domain);
       else if (!result.ok && result.failure === 'timeout') domainDetail(domain, 'The email checker could not finish this check.');
       else if (result.ok && ['unverifiable', 'risky'].includes(result.value.status)) {
@@ -724,9 +730,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     const availablePeople = lookupPeople();
     const guessPeople = prioritiseCheckPeople(availablePeople, checkOwners).slice(0, 5);
     const jobs: ((timeoutMs: number) => Promise<void>)[] = [];
+    const prioritised: { email: string; domain: string; name: string }[] = [];
     for (const importance of [0, 1, 2]) for (let rank = 0; rank < 6; rank++) for (const d of checkDomains.slice(0, 4)) for (const person of guessPeople.filter(p => checkPersonPriority(p, checkOwners) === importance)) {
       const guess = rankedEmailCandidates(person.first, person.last, d, patterns.get(d) ?? null)[rank];
       if (!guess) continue;
+      prioritised.push({email:guess,domain:d,name:person.first + ' ' + person.last});
       jobs.push(async timeoutMs => {
         const name = person.first + ' ' + person.last;
         if (confirmedGuessPeople.has(name) || validCheckPeople.has(name) || checkerFailure || emailOnLead(all(), guess) || !checks.claim(guess)) return;
@@ -742,6 +750,19 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       });
     }
     await guessBudget.run(jobs);
+    if (!checkerFailure && guessBudget.timeout() === 0) {
+      let remaining = Math.max(0, MAX_VERIFY_PER_LEAD - checks.attempted.size);
+      const perDomain = new Map<string,number>();
+      for (const candidate of prioritised) {
+        if (!remaining || confirmedGuessPeople.has(candidate.name) || validCheckPeople.has(candidate.name)
+          || checkedEmails.has(candidate.email) || emailOnLead(all(),candidate.email) || !checks.canCheck(candidate.email)) continue;
+        const available = perDomain.get(candidate.domain) ?? checks.remaining(candidate.domain);
+        if (!available) continue;
+        const unchecked = uncheckedEmails.get(candidate.domain) ?? new Map<string,string>();
+        unchecked.set(candidate.email,'lead_time_exhausted'); uncheckedEmails.set(candidate.domain,unchecked);
+        perDomain.set(candidate.domain,available-1); remaining--;
+      }
+    }
     for (const d of checkDomains.slice(0, 4)) {
       const pattern = patterns.get(d);
       if (!pattern) continue;
@@ -1213,8 +1234,17 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // One plain line per search that gave no answer (replaces the old "N searches did not work" count), then the credits.
   for (const line of worker.lines()) {
     const match = /^([a-z0-9.-]+): (.*)$/.exec(line);
+    if (match && uncheckedEmails.has(match[1]!) && /waiting for its next check/.test(match[2]!)) continue;
     if (match) { const lines = domainDetails.get(match[1]!) ?? new Set<string>(); lines.add(match[2]!); domainDetails.set(match[1]!, lines); }
     else if (!domainDetails.size || !/took too long|too slowly|waiting for its next check/.test(line)) steps.push(line);
+  }
+  for (const [domain, unchecked] of uncheckedEmails) {
+    const lines = domainDetails.get(domain) ?? new Set<string>();
+    for (const reason of ['waiting_for_domain', 'lead_time_exhausted']) {
+      const count = [...unchecked.values()].filter(r => r === reason).length;
+      if (count) lines.add(`${count} address${count === 1 ? ' was' : 'es were'} not checked because ${reason === 'waiting_for_domain' ? "it was waiting for this domain's next check" : 'the lead ran out of time'}.`);
+    }
+    domainDetails.set(domain, lines);
   }
   for (const [domain, lines] of domainDetails) steps.push(domain + ': ' + [...lines].join(' '));
   steps.push(...firecrawl.lines());

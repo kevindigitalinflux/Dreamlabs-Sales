@@ -181,6 +181,27 @@ beforeEach(() => {
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it.each(['waiting_for_domain','lead_time_exhausted'])('reports unchecked guesses once per domain for %s, without claiming they were tried',async reason=>{
+ contacts=[{id:'a',lead_id:'lead',first_name:'Jane',last_name:'Smith',email:null},{id:'b',lead_id:'lead',first_name:'Alex',last_name:'Brown',email:null}];
+ resolveOrgWorkerConfig.mockResolvedValue({});cachedMailProvider.mockReturnValue('hosted');
+ worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'unverifiable',reason},domainNoteSuppressed:true});
+ const out=await run('medium');
+ expect(out.domains.steps.join(' ')).not.toContain('Tried ');
+ const notes=out.domains.steps.filter(s=>s.startsWith('acme.com:'));
+ expect(notes).toHaveLength(1);
+ expect(notes[0]).toContain('10 addresses were not checked');
+ expect(notes[0]).toContain(reason==='waiting_for_domain'?"waiting for this domain's next check":'lead ran out of time');
+ expect(out.domains.steps.join(' ')).not.toContain('limit for this run or domain');
+});
+it('counts still-prioritised candidates when time ends before their jobs start',async()=>{
+ let now=0;vi.spyOn(Date,'now').mockImplementation(()=>now);
+ contacts[0].email=null;resolveOrgWorkerConfig.mockResolvedValue({});cachedMailProvider.mockReturnValue('hosted');
+ worker.verifyEmail.mockImplementation(async()=>{now+=40000;return {ok:true,value:{status:'invalid',reason:'mailbox_missing'}};});
+ const out=await run('medium');
+ expect(worker.verifyEmail).toHaveBeenCalledTimes(1);
+ expect(out.domains.steps.join(' ')).toContain('4 addresses were not checked because the lead ran out of time');
+ expect(out.domains.steps.join(' ')).toContain('Tried 1 common format');
+});
 it('UKRM keeps one ranked suggestion per director after invalid and unverifiable checks within the domain cap', async () => {
   lead.business_name = 'UKRM'; lead.website = null;
   contacts = [

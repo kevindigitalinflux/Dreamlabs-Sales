@@ -69,6 +69,8 @@ export class GuessChecks {
   private counts = new Map<string, number>();
   private stopped = false;
   constructor(private maxChecks = 6) {}
+  /** Remaining admission slots, preserving the lead and domain allowances. */
+  remaining(domain: string): number { return Math.max(0, Math.min(this.maxChecks - this.attempted.size, 5 - (this.counts.get(domain) ?? 0))); }
   canCheck(email: string, _legacy = false): boolean {
     const key = email.toLowerCase();
     const d = key.split('@')[1] ?? '';
@@ -83,6 +85,12 @@ export class GuessChecks {
   record(email: string, status: string | null, reason: string): void {
     const key = email.toLowerCase();
     const d = key.split('@')[1] ?? '';
+    // Admission is not an attempt when the gate never dispatched the address.
+    if (['waiting_for_domain', 'lead_time_exhausted', 'hosted_unverifiable'].includes(reason)) {
+      if (this.attempted.delete(key)) this.counts.set(d, Math.max(0, (this.counts.get(d) ?? 0) - 1));
+      if (reason === 'hosted_unverifiable') this.blocked.add(d);
+      return;
+    }
     if (!this.attempted.has(key)) {
       this.attempted.add(key);
       this.counts.set(d, (this.counts.get(d) ?? 0) + 1);
