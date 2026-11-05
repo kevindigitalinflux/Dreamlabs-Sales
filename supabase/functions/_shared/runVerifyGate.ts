@@ -60,7 +60,8 @@ export class RunVerifyGate {
         const windowAt = starts.length >= 4 ? starts[starts.length - 4]! + 60000 : 0;
         const wait = Math.max(0, (prior?.pendingUntil || 0) - this.now(), windowAt - this.now());
         if (wait > 0) {
-          if (wait > deadline - this.now()) {
+          // A lease is an upper bound, not a prediction of the worker's response time.
+          if (windowAt - this.now() > deadline - this.now() || this.now() >= deadline) {
             if (!prior?.waitingNoted) {
               if (!await this.store.swap(snapshot.version, {...snapshot.state,[domain]:{...prior,waitingNoted:true}})) continue;
               this.notices.add(domain + ': The email check was skipped while this domain was waiting for its next check.');

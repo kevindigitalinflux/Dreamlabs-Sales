@@ -181,6 +181,29 @@ beforeEach(() => {
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it('runs at least four real guess requests for a live-shaped hosted Medium lead with a valid canary',async()=>{
+ const {makeWorkerClient:realClient}=await vi.importActual('../../supabase/functions/_shared/workerClient');
+ const {RunVerifyGate}=await import('../../supabase/functions/_shared/runVerifyGate');
+ let state={},version=0;vi.useFakeTimers();vi.setSystemTime(0);
+ lead.website='https://acme.com';lead.email=null;
+ contacts=['Jane Smith','Alex Brown','Mary Jones','Tom Green'].map((name,i)=>({id:`p${i}`,lead_id:'lead',first_name:name.split(' ')[0],last_name:name.split(' ')[1],email:null}));
+ const requests=[];
+ const gate=new RunVerifyGate({read:async()=>({state:structuredClone(state),version:String(version)}),swap:async(v,s)=>{if(v!==String(version))return false;state=structuredClone(s);version++;return true;}},()=>Date.now(),ms=>new Promise(resolve=>setTimeout(resolve,ms)),async()=>true);
+ const fetcher=vi.fn(async(url,init)=>{
+  if(!String(url).endsWith('/verify-email'))return new Response(JSON.stringify({emails:[],phones:[]}));
+  const {email}=JSON.parse(init.body);requests.push({email,at:Date.now()});await new Promise(resolve=>setTimeout(resolve,1000));
+  return new Response(JSON.stringify({email,status:'valid',reason:'deliverable'}));
+ });
+ const usage={rpc:async()=>({data:{ok:true,day:'2026-11-05',used:1,limit:150,global_used:1,global_limit:400},error:null})};
+ resolveOrgWorkerConfig.mockResolvedValue({url:'https://fake.invalid',secret:'local-placeholder'});
+ cachedMailProvider.mockReturnValue('hosted');
+ makeWorkerClient.mockImplementation(opts=>realClient({...opts,usage,verifyGate:gate,fetchImpl:fetcher}));
+ const pending=run('medium');await vi.advanceTimersByTimeAsync(130000);const out=await pending;vi.useRealTimers();
+ const guesses=requests;
+ expect(guesses.length).toBeGreaterThanOrEqual(4);
+ expect(out.domains.steps.join(' ')).toContain(`Checked ${requests.length} email addresses with our own checker`);
+ expect(state['acme.com']).toMatchObject({hosted:true,canaryDone:true});
+});
 it.each(['waiting_for_domain','lead_time_exhausted'])('reports unchecked guesses once per domain for %s, without claiming they were tried',async reason=>{
  contacts=[{id:'a',lead_id:'lead',first_name:'Jane',last_name:'Smith',email:null},{id:'b',lead_id:'lead',first_name:'Alex',last_name:'Brown',email:null}];
  resolveOrgWorkerConfig.mockResolvedValue({});cachedMailProvider.mockReturnValue('hosted');
