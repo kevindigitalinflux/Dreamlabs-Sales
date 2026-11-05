@@ -5,7 +5,7 @@ import {makeWorkerClient,type WorkerClient} from './workerClient.ts';
 import {resolveOrgWorkerConfig} from './orgApiKeys.ts';
 import {RunVerifyGate} from './runVerifyGate.ts';
 import {cachedMailProvider,lookupMx} from './dnsLookup.ts';
-import {emailSyntaxValid,emailDomainTypo} from './emailPrecheckRules.ts';
+import {emailSyntaxValid,emailDomainTypo,isRoleAddress,roleAddressNeedsReview,ROLE_ADDRESS_LABEL} from './emailPrecheckRules.ts';
 
 export interface EmailPrecheckResult {status:'valid'|'invalid'|'unverifiable';label:string;hardBounce?:boolean;warning?:string;overridden?:boolean;overridable?:boolean}
 interface Input {leadId?:string;address:string;timeLeftMs?:()=>number}
@@ -38,18 +38,25 @@ export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{wo
   return async(input:Input):Promise<EmailPrecheckResult>=>{
     const email=input.address.trim().toLowerCase();
     if(!emailSyntaxValid(email))return {status:'invalid',label:'This email address has invalid syntax',overridable:false};
+    const domain=email.split('@')[1]!;
     const typo=emailDomainTypo(email);
-    const disclose=(value:EmailPrecheckResult):EmailPrecheckResult=>typo?{...value,label:`${value.label}. Possible domain typo: did you mean ${typo}? Address was not changed.`}:value;
+    const roleVerdict=(value:EmailPrecheckResult):EmailPrecheckResult=>value.label!=='This address has replied before.'&&!value.label.startsWith('Not checked:')&&value.status!=='invalid'
+      &&(roleAddressNeedsReview(email,cachedMailProvider(domain)??'unknown',false)||(isRoleAddress(email)&&value.label==='Not confirmed'))
+      ?{...value,status:'unverifiable',label:ROLE_ADDRESS_LABEL}:value;
+    const disclose=(raw:EmailPrecheckResult):EmailPrecheckResult=>{const value=roleVerdict(raw);return typo?{...value,label:`${value.label}. Possible domain typo: did you mean ${typo}? Address was not changed.`}:value;};
     // Always refresh hard-bounce evidence, including before a cached valid result is reused.
     const history=makeEmailOutcomeLookup(service,orgId);
     const known=await history.status(email);
     if(known)return disclose(known.status==='invalid'?{status:'invalid',label:'This address bounced before.',hardBounce:true}:{status:'valid',label:'This address has replied before.'});
+    const mxLookup=deps.lookupMx??((d:string)=>lookupMx(d,3000,true));
+    const roleMx=isRoleAddress(email)?await mxLookup(domain):undefined;
+    if(roleMx==='none')return disclose(await remember(input,email,{status:'invalid',label:'This email domain has no mail server'}));
     const recent=await history.recentCheck(email,now());
-    if(recent)return disclose(verdict(recent.outcome==='checked_valid'?'valid':recent.outcome==='checked_invalid'?'invalid':'unverifiable'));
+    if(recent){const base=verdict(recent.outcome==='checked_valid'?'valid':recent.outcome==='checked_invalid'?'invalid':'unverifiable');const policy=roleVerdict(base);
+      if(policy.status!==base.status)await remember(input,email,policy);return disclose(policy);}
     const remembered=cache.get(email);
     if(remembered&&remembered.at>=now()-14*86400000)return disclose(remembered.result);
-    const domain=email.split('@')[1]!;
-    const mx=await (deps.lookupMx??((d:string)=>lookupMx(d,3000,true)))(domain);
+    const mx=roleMx??await mxLookup(domain);
     if(mx==='none')return disclose(await remember(input,email,{status:'invalid',label:'This email domain has no mail server'}));
     const deadline=Date.now()+110000;
     let checked:Awaited<ReturnType<WorkerClient['verifyEmail']>>;
@@ -60,7 +67,8 @@ export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{wo
       checked=await worker.verifyEmail(email,{timeoutMs:33000});
     }catch{console.error('email precheck: checker unavailable');return disclose(verdict('unverifiable'));}
     if(!checked.ok)return disclose(checked.failure==='limit_reached'?{status:'unverifiable',label:'Not checked: daily check allowance reached'}:verdict('unverifiable'));
-    const result=verdict(checked.value.status==='valid'?'valid':checked.value.status==='invalid'?'invalid':'unverifiable');
+    const result=checked.value.status!=='invalid'&&roleAddressNeedsReview(email,cachedMailProvider(domain)??'unknown',checked.value.reason==='catch_all')
+      ?{status:'unverifiable' as const,label:ROLE_ADDRESS_LABEL}:verdict(checked.value.status==='valid'?'valid':checked.value.status==='invalid'?'invalid':'unverifiable');
     if(['waiting_for_domain','lead_time_exhausted'].includes(checked.value.reason))return disclose(result);
     return disclose(await remember(input,email,result));
   };

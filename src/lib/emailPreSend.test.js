@@ -1,9 +1,12 @@
-import {expect,it,vi} from 'vitest';
+import {afterEach,expect,it,vi} from 'vitest';
+vi.mock('../../supabase/functions/_shared/dnsLookup',()=>({cachedMailProvider:vi.fn(()=>null),lookupMx:vi.fn(async()=>'mx')}));
+import {cachedMailProvider} from '../../supabase/functions/_shared/dnsLookup';
 import {makeEmailPrechecker} from '../../supabase/functions/_shared/emailPreSend';
 import {replyDatabase} from './replyTestDatabase';
 import {USAGE_DEFAULTS} from '../../supabase/functions/_shared/usageRules';
 const now=()=>Date.parse('2026-11-05T12:00:00Z');
 const input={leadId:'lead',address:'person@example.com'};
+afterEach(()=>cachedMailProvider.mockReturnValue(null));
 function fixture(outcomes=[]) {
  const db=replyDatabase({email_outcomes:outcomes});db.service.rpc=vi.fn(async()=>({error:null}));
  const worker={verifyEmail:vi.fn(async()=>({ok:true,value:{status:'valid',reason:'deliverable'}})),scrapeSite:vi.fn(),lines:()=>[]};
@@ -51,4 +54,11 @@ it('allows a quota-exhausted send with an explicit non-cached label and the appr
  expect(await f.check(input)).toMatchObject({status:'unverifiable',label:'Not checked: daily check allowance reached'});
  expect(f.db.service.rpc).not.toHaveBeenCalled();
  expect(USAGE_DEFAULTS.worker_verify).toEqual({orgLimit:600,globalLimit:1200});
+});
+it('does not promote hosted role SMTP acceptance to confirmation, but preserves a real reply',async()=>{
+ cachedMailProvider.mockReturnValue('hosted');
+ const f=fixture();expect(await f.check({...input,address:'info@example.com'})).toMatchObject({status:'unverifiable',label:'Role address, not confirmed'});
+ expect(f.db.service.rpc).toHaveBeenCalledWith('record_email_outcome',expect.objectContaining({p_outcome:'checked_unverifiable'}));
+ const replied=fixture([{org_id:'org',address:'info@example.com',outcome:'replied',seen_at:'2026-11-04'}]);
+ expect(await replied.check({...input,address:'info@example.com'})).toMatchObject({status:'valid',label:'This address has replied before.'});
 });

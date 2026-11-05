@@ -50,6 +50,7 @@ import { lookupOpenCorporatesOfficer } from './openCorporates.ts';
 import { linkedinMatch, planWebsiteAutoUpdate, type AutoApplied } from './deepFindAutoApply.ts';
 import { evaluateReadiness, readinessText } from './leadReadiness.ts';
 import { makeEmailOutcomeLookup } from './emailOutcomeLookup.ts';
+import {roleAddressNeedsReview,ROLE_ADDRESS_LABEL} from './emailPrecheckRules.ts';
 
 import { WALL_BUDGET_MS, LEAD_RESERVE_MS, leadDeadline } from './deepFindTimeBudget.ts';
 export { WALL_BUDGET_MS } from './deepFindTimeBudget.ts';
@@ -226,6 +227,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   for (const raw of [lead.owner_name, ...(Array.isArray(lead.additional_owners) ? lead.additional_owners : [])]) if (typeof raw === 'string') ownerSuppressed(raw);
 
   const applyLead = async (field: string, value: string, phone?: BusinessPhone) => {
+    if(field==='email'&&roleNeedsReview(value)){suggestions.push({name:'Company contact',field:'email',value,label:ROLE_ADDRESS_LABEL});return false;}
     if (field === 'owner_name' && ownerSuppressed(value)) return false;
     const saved = await applyDeepFindBlank(service, scope, 'leads', lead, field, value, autoApplied, checkpoint, phone);
     if (field === 'website' && !saved) {
@@ -253,6 +255,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     }
     const email=str(prepared.email);
     if(email&&(await outcomes.status(email))?.status==='invalid'){prepared.email=null;prepared.email_revealed=false;await checkEmail(email);}
+    else if(email&&roleNeedsReview(email)){prepared.email=null;prepared.email_revealed=false;prepared.is_primary=false;prepared.include_in_sequences=false;
+      suggestions.push({name:`${str(prepared.first_name)??''} ${str(prepared.last_name)??''}`.trim()||'Company contact',field:'email',value:email,label:ROLE_ADDRESS_LABEL});}
     return prepared;
   };
   const prepareContacts = async (proposals: Record<string, unknown>[]) => {
@@ -292,6 +296,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     publishedEvidence.push({email:str(lead.email)!,first:owner?.first ?? null,last:owner?.last ?? null,published:true});
   }
   const checkedEmails = new Map<string, Awaited<ReturnType<typeof worker.verifyEmail>>>();
+  const roleNeedsReview=(email:string)=>roleAddressNeedsReview(email,cachedMailProvider(emailDomain(email)??'')??'unknown',
+    [...checkedEmails].some(([address,result])=>emailDomain(address)===emailDomain(email)&&result.ok&&result.value.reason==='catch_all'));
+  const roleUnconfirmed=(email:string)=>roleNeedsReview(email)&&outcomes.peek(email)?.reason!=='previously_replied';
+  const verifiedEmailResult=(email:string,result:Awaited<ReturnType<typeof worker.verifyEmail>>|null|undefined)=>!!result?.ok&&result.value.status==='valid'&&!roleUnconfirmed(email);
   const invalidGuesses = new Set<string>();
   const invalidSavedEmail = (contact: ExistingContact | null | undefined) => {
     const email = str(contact?.email);
@@ -301,6 +309,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // Selection-only copies: saved addresses remain untouched, even when the checker rejects them.
   const lookupContacts = () => all().map(c => invalidSavedEmail(c) ? { ...c, email: null } : c);
   const formatEvidence = (email: string) => {
+    if(roleUnconfirmed(email))return false;
     if(outcomes.peek(email)?.status==='invalid')return false;
     const checked = checkedEmails.get(email.toLowerCase());
     return !checked?.ok || checked.value.status !== 'invalid';
@@ -318,7 +327,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (ownerSuppressed(s.name)) return false;
     const checked = s.field === 'email' ? checkedEmails.get(s.value.toLowerCase()) : null;
     return !checked?.ok || checked.value.status !== 'invalid';
-  }).map(s=>outcomes.peek(s.value)?.status==='valid'?{...s,label:'This address has replied before.',guess_rank:undefined}:s), lead, all());
+  }).map(s=>s.field==='email'&&outcomes.peek(s.value)?.status==='valid'?{...s,label:'This address has replied before.',guess_rank:undefined}
+    :s.field==='email'&&roleUnconfirmed(s.value)?{...s,label:ROLE_ADDRESS_LABEL,guess_rank:undefined}:s), lead, all());
   };
   const checkEmail = async (email: string, opts?: { timeoutMs?: number; timeBudgetMs?: number }) => {
     const key = email.toLowerCase();
@@ -341,6 +351,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       : remaining === null ? await worker.verifyEmail(email) : await worker.verifyEmail(email, { timeoutMs: remaining,
         timeBudgetMs: opts?.timeBudgetMs === undefined ? undefined : Math.max(0,opts.timeBudgetMs-(Date.now()-checkStarted)) });
     checkedEmails.set(key, result);
+    if(result.ok&&result.value.status!=='invalid'&&roleUnconfirmed(key)) {
+      const note=`${key}: ${ROLE_ADDRESS_LABEL}`;if(!steps.includes(note))steps.push(note);
+    }
     const domain = emailDomain(key);
     if (domain) {
       if (result.ok && ['waiting_for_domain', 'lead_time_exhausted'].includes(result.value.reason)) {
@@ -381,6 +394,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     }
     for (const [field, value] of Object.entries(patch)) {
       if(field==='email'&&(await outcomes.status(value))?.status==='invalid'){await checkEmail(value);continue;}
+      if(field==='email'&&roleNeedsReview(value)){suggestions.push({name,field,value,label:ROLE_ADDRESS_LABEL});continue;}
       if (field === 'email' && invalidSavedEmail(contact)) {
         if (str(value) && formatEvidence(value)) suggestions.push({ name, field, value, label: 'Replacement candidate; review before adding.' });
         continue;
@@ -388,7 +402,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       if (str(contact[field]) || !str(value)) continue;
       if (field === 'email') {
         const checked = left() > WORKER_TIMEOUT_MS.verify + 2_000 ? await checkEmail(value) : checkedEmails.get(value.toLowerCase());
-        if (checked?.ok && checked.value.status === 'valid') {
+        if(roleNeedsReview(value)){suggestions.push({name,field,value,label:ROLE_ADDRESS_LABEL});continue;}
+        if (verifiedEmailResult(value,checked)) {
           changed = await applyDeepFindBlank(service, scope, 'decision_maker_candidates', contact, field, value, autoApplied, checkpoint) || changed;
         } else if (!checked?.ok || checked.value.status !== 'invalid') {
           suggestions.push({ name, field, value, label: 'Found during Deep find; our checker has not confirmed this address. Review it.' });
@@ -691,7 +706,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   for (const email of publishedEmails.slice(0, MAX_VERIFY_PER_LEAD)) {
     if (left() < WORKER_TIMEOUT_MS.verify + 2_000) break;
     const checked = await checkEmail(email);
-    if (checked.ok && checked.value.status === 'valid') break;
+    if (verifiedEmailResult(email,checked)) break;
   }
 
   // (1c) the email format on each confirmed domain, from addresses we already know there (contacts, the lead's own
@@ -774,7 +789,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         }
         else if (checked.value.status === 'unverifiable') domainDetail(d, unverifiableReasons[checked.value.reason] ?? unverifiableReasons.unknown!);
         else if (checked.value.status === 'invalid') invalidGuesses.add(guess);
-        else if (checked.value.status === 'valid') validCheckPeople.add(name);
+        else if (verifiedEmailResult(guess,checked)) validCheckPeople.add(name);
       });
     }
     await guessBudget.run(jobs);
@@ -808,7 +823,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
           checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : checked.failure);
           if (!checked.ok && checked.failure !== 'timeout') { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
         }
-        const action = verifyAction(checked && checked.ok ? checked.value.status : null, !!hunterKey && !guessBudget.exhausted && !checks.blocked.has(d) && !checks.hasUnverifiable(d) && !checks.catchAll.has(d) && verifications < 3 && left() > 45_000);
+        const action = roleNeedsReview(guess)?'suggest':verifyAction(checked && checked.ok ? checked.value.status : null, !!hunterKey && !guessBudget.exhausted && !checks.blocked.has(d) && !checks.hasUnverifiable(d) && !checks.catchAll.has(d) && verifications < 3 && left() > 45_000);
         if (action === 'drop') { invalidGuesses.add(guess); continue; }
         if (action === 'accept') {
           confirmedGuessPeople.add(name);
@@ -865,7 +880,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
             checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; break;
           }
           if (checked.value.status === 'invalid') invalidGuesses.add(guess);
-          if (verifyAction(checked.value.status, false) !== 'accept') continue;
+          if (roleNeedsReview(guess)||verifyAction(checked.value.status, false) !== 'accept') continue;
           valid = checks.shouldStopPerson(checked.value.status);
           if (valid) confirmedGuessPeople.add(name);
           const contact = person.contactId ? all().find((c) => c.id === person.contactId) : null;
@@ -893,7 +908,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (guessBudget.exhausted && !steps.includes('Email guess checks reached the 105 second limit for this lead. Remaining time was kept for people lookups.')) steps.push('Email guess checks reached the 105 second limit for this lead. Remaining time was kept for people lookups.');
   };
   const discoverPublicFormat = async () => {
-      if ((effort === 'high' || effort === 'extra_high') && geminiKey && !publicFormatSearchUsed && ![...checkedEmails.values()].some(c => c.ok && c.value.status === 'valid')) {
+      if ((effort === 'high' || effort === 'extra_high') && geminiKey && !publicFormatSearchUsed && ![...checkedEmails].some(([email,c])=>verifiedEmailResult(email,c))) {
         const domain = [...verified][0];
         if (domain && !patterns.get(domain) && left() > 40_000 && await spend.ai('public email format')) {
           publicFormatSearchUsed = true;
@@ -922,7 +937,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
 
   if (effort !== 'custom') {
     const decision = deepPhaseDecision(effort, {
-      verifiedEmail: emails.some(email => { const c = checkedEmails.get(email.toLowerCase()); return c?.ok && c.value.status === 'valid'; }),
+      verifiedEmail: emails.some(email => verifiedEmailResult(email,checkedEmails.get(email.toLowerCase()))),
       namedPerson: (!!parseLeadPersonName(lead.owner_name) && !ownerSuppressed(String(lead.owner_name))) || all().some(c => (isOwnerRole(c.title) || (['hunter', 'apollo', 'web'].includes(str(c.source) ?? '') && !!str(c.title))) && c.kind !== 'general' && !c.dismissed_at && c.name_obfuscated !== true && !!parseLeadPersonName(`${str(c.first_name) ?? ''} ${str(c.last_name) ?? ''}`))
         || officers.some(o => !!parseLeadPersonName(`${o.first_name ?? ''} ${o.last_name ?? ''}`))
         || [...trustedOwnerPeople, ...extraSitePeople, ...pages.flatMap(extractTeamMembers), ...webPeople].some(p => !!str(p.role) && !!parseLeadPersonName(p.name) && !ownerSuppressed(p.name)),
@@ -998,7 +1013,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // (2) Hunter's company list on every domain: every named person with a role
   const lists = new Map<string, { emails: unknown[]; pattern: string | null }>();
   for (const d of domains) {
-    if (!hunterKey || left() < 20_000 || [...checkedEmails.values()].some(c => c.ok && c.value.status === 'valid')) break;
+    if (!hunterKey || left() < 20_000 || [...checkedEmails].some(([email,c])=>verifiedEmailResult(email,c))) break;
     if (!await spend.hunter('company lists')) break;
     // limit 10: Hunter bills about 1 credit per 10 addresses, so one reserved credit covers this call.
     const res = await hunterDomainList(d, hunterKey, 6_000, 10);
@@ -1132,7 +1147,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     }
     if (suggestions.some(s => displayPersonKey(s.name) === displayPersonKey(name) && s.field === 'email')) continue;
     const provider = cachedMailProvider(domain) ?? 'unknown';
-    const includeProvider = ![...checkedEmails].some(([email, result]) => emailDomain(email) === domain && result.ok && result.value.status === 'valid');
+    const includeProvider = ![...checkedEmails].some(([email, result]) => emailDomain(email) === domain && verifiedEmailResult(email,result));
     suggestions.push(...unverifiedEmailSuggestions(name, candidates.slice(0, 3), provider, false).map(s => {
       const evidence = [...publishedEvidence, ...[...siteEmails.values()].flat().map(email => ({email,first:null,last:null,published:true}))].filter(s => formatEvidence(s.email));
       const known = all().map(c => ({first:str(c.first_name) ?? '',last:str(c.last_name) ?? ''})).concat(lookupPeople());
@@ -1301,7 +1316,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   ]);
   if (finalLead.error || !finalLead.data || finalContacts.error) throw new Error('Could not read final readiness facts');
   const readiness = evaluateReadiness({ lead: finalLead.data, contacts: finalContacts.data ?? [], domains: discovery.domains,
-    validEmails: [...checkedEmails].filter(([, c]) => c.ok && c.value.status === 'valid').map(([email]) => email),
+    validEmails: [...checkedEmails].filter(([email,c])=>verifiedEmailResult(email,c)).map(([email]) => email),
     websiteSuspect: suspicion.suspect && domainFromWebsite(finalLead.data.website) === siteDomain });
   await checkpoint();
   const { data: savedReadiness, error: readinessError } = await service.from('leads').update(readiness)

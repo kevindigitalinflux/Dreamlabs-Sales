@@ -181,6 +181,22 @@ beforeEach(() => {
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it.each(['hosted','catch_all'])('labels a discovered %s role address for review and never selects it as primary',async kind=>{
+ lead.email=null;contacts[0].email=null;resolveOrgWorkerConfig.mockResolvedValue({});
+ cachedMailProvider.mockReturnValue(kind==='hosted'?'hosted':'unknown');
+ worker.scrapeSite.mockResolvedValue({ok:true,value:{emails:[{value:'info@acme.com',source:'https://acme.com/contact'}],phones:[]}});
+ worker.verifyEmail.mockResolvedValue(kind==='hosted'?{ok:true,value:{status:'valid',reason:'deliverable'}}:{ok:true,value:{status:'risky',reason:'catch_all'}});
+ const out=await run('medium');
+ expect(out.domains.suggestions).toContainEqual(expect.objectContaining({value:'info@acme.com',label:'Role address, not confirmed'}));
+ expect(lead.email).toBeNull();expect(writes.some(w=>w.table==='leads'&&'email' in w.patch)).toBe(false);
+});
+it('does not count an SMTP-valid hosted role inbox as a confirmed lead address',async()=>{
+ lead.email='info@acme.com';contacts[0].email=null;resolveOrgWorkerConfig.mockResolvedValue({});cachedMailProvider.mockReturnValue('microsoft');
+ worker.verifyEmail.mockImplementation(async email=>({ok:true,value:email===lead.email?{status:'valid',reason:'deliverable'}:{status:'invalid',reason:'mailbox_missing'}}));
+ const out=await run('low');
+ expect(out.domains.steps.join(' ')).toContain('Role address, not confirmed');
+ expect(out.domains.readiness_missing).toContain('verified_email');
+});
 it.each(['bounced_hard','replied'])('uses exact %s evidence before any worker check or suggestion',async outcome=>{
  contacts[0].email=null;lead.email='jane.smith@acme.com';resolveOrgWorkerConfig.mockResolvedValue({});
  worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'invalid',reason:'mailbox_missing'}});

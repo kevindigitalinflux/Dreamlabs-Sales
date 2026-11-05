@@ -1,5 +1,5 @@
 import {readableInvokeError} from './invokeError';
-import {emailDomainTypo,emailSyntaxValid} from '../../supabase/functions/_shared/emailPrecheckRules';
+import {emailDomainTypo,emailSyntaxValid,isRoleAddress,ROLE_ADDRESS_LABEL} from '../../supabase/functions/_shared/emailPrecheckRules';
 export interface VerificationView {status:'valid'|'invalid'|'unverifiable';label:string;hardBounce?:boolean;overridden?:boolean;overridable?:boolean}
 export interface EmailSendView {ok:boolean;blocked:boolean;error?:string;verification?:VerificationView}
 /** Display only evidence belonging to this exact organisation and address. */
@@ -10,7 +10,7 @@ export function emailEvidenceView(orgId:string,address:string,rows:{org_id:strin
   if(own.some(r=>r.outcome==='replied'))return {status:'valid',label:'This address has replied before.'};
   const recent=own.filter(r=>Date.parse(r.seen_at)>=now-14*86400000&&Date.parse(r.seen_at)<=now).sort((a,b)=>Date.parse(b.seen_at)-Date.parse(a.seen_at))[0];
   const result:VerificationView=recent?.outcome==='checked_invalid'?{status:'invalid',label:'Our checker says this address does not exist'}
-    :recent?.outcome==='checked_valid'?{status:'valid',label:'Confirmed'}:{status:'unverifiable',label:'Not confirmed'};
+    :recent?.outcome==='checked_valid'?{status:'valid',label:'Confirmed'}:{status:'unverifiable',label:isRoleAddress(address)?ROLE_ADDRESS_LABEL:'Not confirmed'};
   const typo=emailDomainTypo(address);return typo?{...result,label:`${result.label}. Possible domain typo: did you mean ${typo}? Address was not changed.`}:result;
 }
 /** Read non-2xx verification details without consuming the error Response used elsewhere. */
