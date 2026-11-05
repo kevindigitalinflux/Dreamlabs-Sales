@@ -451,3 +451,18 @@ it('spends no second usage unit while waiting and emits the domain waiting note 
  expect(f).toHaveBeenCalledTimes(1);expect(reserveCalls(u)).toHaveLength(1);expect(refundCalls(u)).toHaveLength(0);
  expect(client.lines().filter(l=>l.includes('waiting for its next check'))).toHaveLength(1);
 });
+
+it('waits for three same-domain checks using lead time, separately from each call timeout', async () => {
+ const { RunVerifyGate } = await import('../../supabase/functions/_shared/runVerifyGate');
+ let now=0, state:Record<string,unknown>={}; let version=0;
+ const starts:number[]=[];
+ const gate=new RunVerifyGate({read:async()=>({state,version:String(version)}),swap:async(v,s)=>{
+  if(v!==String(version))return false;state=s;version++;return true;
+ }},()=>now,async ms=>{now+=ms;});
+ const u=usage();
+ const f=vi.fn<typeof fetch>(async(_url,init)=>{starts.push(now);return new Response(JSON.stringify({...JSON.parse(String(init?.body)),status:'invalid',reason:'mailbox_missing'}));});
+ const client=makeWorkerClient({usage:u,orgId:'org',config:CONFIG,fetchImpl:f,verifyGate:gate,verifyTimeLeftMs:()=>130000-now});
+ for(const email of ['a','b','c']) expect(await client.verifyEmail(`${email}@example.com`,{timeoutMs:33000})).toMatchObject({ok:true,value:{status:'invalid'}});
+ expect(starts).toEqual([0,12001,24002]);
+ expect(reserveCalls(u)).toHaveLength(3);expect(refundCalls(u)).toHaveLength(0);
+});

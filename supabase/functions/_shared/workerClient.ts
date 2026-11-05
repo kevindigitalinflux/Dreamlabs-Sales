@@ -111,7 +111,9 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
         return { ok: true, value: reply };
       };
       const timeout = options?.timeoutMs ?? WORKER_TIMEOUT_MS.verify;
-      const gateBudget = Math.min(opts.verifyTimeLeftMs?.() ?? timeout + 2000, options ? timeout + 2000 : Infinity);
+      const remaining = opts.verifyTimeLeftMs?.() ?? timeout + 2000;
+      if (opts.verifyGate && remaining < timeout + 2000) return { ok: true, value: { status: 'unverifiable', reason: 'lead_time_exhausted' }, domainNoteSuppressed: true };
+      const gateBudget = Math.max(0, remaining - timeout - 2000);
       const result = opts.verifyGate && config && !stopped.verify && verifyCalls < MAX_VERIFY_PER_LEAD ? await opts.verifyGate.run(email, gateBudget, perform) : await perform(timeout);
       if (!result.ok && !result.domainNoteSuppressed) addLine(result.line);
       return result;

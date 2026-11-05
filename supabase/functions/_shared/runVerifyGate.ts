@@ -55,7 +55,7 @@ export class RunVerifyGate {
         if (prior?.pendingUntil && prior.pendingUntil <= this.now()) return slow(); // An abandoned call is never assumed safe.
         const wait = Math.max(0, (prior?.pendingUntil || prior?.nextAt || 0) - this.now());
         if (wait > 0) {
-          if (wait + 33000 > deadline - this.now()) {
+          if (wait > deadline - this.now()) {
             if (!prior?.waitingNoted) {
               if (!await this.store.swap(snapshot.version, {...snapshot.state,[domain]:{...prior,waitingNoted:true}})) continue;
               this.notices.add(domain + ': The email check was skipped while this domain was waiting for its next check.');
@@ -65,13 +65,13 @@ export class RunVerifyGate {
           await this.sleep(Math.min(wait, 1000));
           continue;
         }
-        started = this.now(); token = started + Math.min(33000, deadline - started) + 2000;
-        if (deadline - started < 33000) return skipped('The email check was skipped because its time allowance was reached.');
+        started = this.now(); token = started + 33000 + 2000;
+        if (started > deadline) return skipped('The email check was skipped because its time allowance was reached.');
         if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, nextAt: started + 12001, pendingUntil: token, blocked: false, hosted, canaryDone } })) { acquired = true; break; }
         if (attempt === 99) throw new Error('Checker state contention');
       }
       if (!acquired) throw new Error('Checker state unavailable');
-      const result = deadline - this.now() >= 33000 ? await once()
+      const result = this.now() <= deadline ? await once()
         : skipped('The email check was skipped because its time allowance was reached.');
       const blocked = !result.ok ? result.failure === 'timeout' : result.value.reason === 'timeout' || result.value.reason === 'provider_blocks_checks';
       for (let attempt = 0; attempt < 100; attempt++) {
