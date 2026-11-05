@@ -125,7 +125,7 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
       return { ok: true, value: found };
     },
     lines() {
-      return [verifyTallyLine(tally), scrapeSummary, ...failureLines].filter((l): l is string => !!l);
+      return [verifyTallyLine(tally), scrapeSummary, ...failureLines, ...(opts.verifyGate?.lines() ?? [])].filter((l): l is string => !!l);
     },
   };
 }

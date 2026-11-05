@@ -427,3 +427,14 @@ it('does not reserve or refund another check after the run/domain blocks checks'
  expect(await client.verifyEmail('second@example.com')).toMatchObject({ok:false,failure:'timeout'});
  expect(f).toHaveBeenCalledTimes(1);expect(reserveCalls(u)).toHaveLength(1);expect(refundCalls(u)).toHaveLength(0);
 });
+
+it('keeps usage refusal closed during pacing failure and emits one fallback note per lead', async()=>{
+ const { RunVerifyGate }=await import('../../supabase/functions/_shared/runVerifyGate');
+ const gate=new RunVerifyGate({read:async()=>{throw new Error('offline');},swap:async()=>false});
+ const u=usage({data:REFUSED,error:null});const f=worker(200,VERIFY_OK);
+ const client=makeWorkerClient({usage:u,orgId:'org',config:CONFIG,fetchImpl:f,verifyGate:gate});
+ expect(await client.verifyEmail('first@example.com')).toMatchObject({ok:false,failure:'limit_reached'});
+ expect(await client.verifyEmail('second@example.com')).toMatchObject({ok:false,failure:'limit_reached'});
+ expect(f).not.toHaveBeenCalled();expect(reserveCalls(u)).toHaveLength(1);
+ expect(client.lines().filter(l=>l==='Run-wide email check pacing was unavailable; checks ran without it.')).toHaveLength(1);
+});

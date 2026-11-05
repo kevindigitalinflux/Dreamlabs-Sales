@@ -12,11 +12,22 @@ const slow = (): WorkerResult<VerifyReply> => ({ ok: false, failure: 'timeout', 
 
 /** Durable per-run breaker and conservative spacing; no usage is reserved while waiting. */
 export class RunVerifyGate {
+  private unavailable = false;
+  private localBlocked = new Set<string>();
+  /** One plain fallback notice for this lead. */
+  lines(): string[] { return this.unavailable ? ['Run-wide email check pacing was unavailable; checks ran without it.'] : []; }
   constructor(private store: VerifyGateStore, private now = () => Date.now(),
     private sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))) {}
   async run(email: string, budget: number, perform: (timeout: number) => Promise<WorkerResult<VerifyReply>>): Promise<WorkerResult<VerifyReply>> {
     const domain = email.toLowerCase().split('@')[1];
     if (!domain) return skipped('The email checker could not read this domain.');
+    if (this.localBlocked.has(domain)) return slow();
+    let dispatch: Promise<WorkerResult<VerifyReply>> | null = null;
+    const once = () => dispatch ??= perform(33000).then(result => {
+      if ((!result.ok && result.failure === 'timeout') || (result.ok && ['timeout', 'provider_blocks_checks'].includes(result.value.reason))) this.localBlocked.add(domain);
+      return result;
+    });
+    if (this.unavailable) return once();
     const deadline = this.now() + budget;
     let started = 0;
     let token = 0;
@@ -40,7 +51,7 @@ export class RunVerifyGate {
         if (attempt === 99) throw new Error('Checker state contention');
       }
       if (!acquired) throw new Error('Checker state unavailable');
-      const result = deadline - this.now() >= 33000 ? await perform(33000)
+      const result = deadline - this.now() >= 33000 ? await once()
         : skipped('The email check was skipped because its time allowance was reached.');
       const blocked = !result.ok ? result.failure === 'timeout' : result.value.reason === 'timeout' || result.value.reason === 'provider_blocks_checks';
       for (let attempt = 0; attempt < 100; attempt++) {
@@ -51,8 +62,13 @@ export class RunVerifyGate {
       }
       throw new Error('Checker result could not be saved');
     } catch (error) {
-      console.error('Deep find checker state failed', error instanceof Error ? error.message : 'unknown error');
-      return skipped('The email checker state could not be saved, so further checks were skipped.');
+      if (dispatch) {
+        // A failed worker promise must never cause a second request; an already returned result remains usable.
+        try { await dispatch; } catch { throw error; }
+      }
+      if (!this.unavailable) console.error('Deep find run-wide email pacing unavailable');
+      this.unavailable = true;
+      return once();
     }
   }
 }
