@@ -1,0 +1,25 @@
+# Fix round 1c: guess checks are starved by the run pacing gate (Claude live test of 6da955a)
+
+You are Codex, the builder. Claude is architect and reviewer. Kevin directs. Work in `C:/Users/kevin/Projects/dreamlabs-sales-accuracy`; stay on the current branch `codex/deepfind-registry-brand-match` (it equals `main` 6da955a, which is live and deployed, plus this brief). Tests first, one commit per item, no push, merge or deploy, no schema or worker change, no change to allowances or reservation/refund rules. Stop after the report addendum (a new short section at the END of `docs/DEEPFIND-REGISTRY-BRAND-MATCH-BUILD-REPORT.md`).
+
+## What the live test showed (production, 2026-11-05, lead Fold7, Medium, `deep_find_leads` id a5c6fa3e)
+The shared run state works through the real database: `_verify_gate` was written and read back, `fold7.com` was detected as hosted, the canary ran and `canaryDone` was saved. But the step lines show the checker barely ran:
+- "Checked 1 email address with our own checker (1 valid, 0 not real, 0 could not be confirmed)." That one check was the lead's own address.
+- Four people each said "Tried 1 common format on fold7.com (none confirmed)" and one said "The email check limit for this run or domain was reached", yet no guess check reached the worker.
+- "fold7.com: The email check was skipped while this domain was waiting for its next check."
+The whole lead took 5 seconds. So the guess checks were skipped by our own pacing, then reported as "none confirmed". That is the opposite of what Kevin asked for (more verification, fewer "not verified" suggestions).
+
+## Root causes (Claude read the code; confirm with failing tests first)
+1. `workerClient.ts` `verifyEmail`: `gateBudget = Math.min(verifyTimeLeftMs(), options ? timeout + 2000 : Infinity)`. Guess checks pass `options.timeoutMs` (33 000), so the gate gets 35 000 ms. `RunVerifyGate.run` skips instead of waiting when `wait + 33000 > budget - now`, i.e. whenever the wait is more than 2 s. With 12 s spacing every second check on a domain is skipped, not paced. The budget for WAITING must be the lead's remaining time, not the single-call timeout.
+2. `GuessBudget` (`personEmailFinding.ts`): `GUESS_TOTAL_MS` is still 36 000 while each check now needs a 33 000 ms window (`timeout()` returns 0 when less than 33 000 remains). So after the first wave of up to three concurrent jobs, no further guess job can start. The total must be large enough for several sequential checks.
+3. The spacing is too strict. The worker's own rule is 5 checks per minute per domain (a sliding window), and typical answers take 0.4 to 2 s. One check per 12 s wastes the allowance. Use a per-domain sliding window instead: allow up to 4 starts per 60 s (one below the worker's limit as headroom for other organisations), wait for the oldest start to age out when the window is full.
+4. Skipped-for-pacing results are reported as "Tried N common formats (none confirmed)". A guess that was never checked must say so plainly ("Not checked: waiting for this domain's next check") and must not count as tried.
+
+## Items (tests first, one commit each)
+1. Wait budget: pass the lead's remaining time (`verifyTimeLeftMs()` minus the 33 s call window and a 2 s reserve) to the gate as the waiting budget, separate from the 33 000 ms call timeout. Test: three checks on one domain with the window full wait and then run, they are not skipped, as long as the lead's time allows.
+2. Sliding window: replace `nextAt = started + 12001` with per-domain `starts: number[]` in the gate state (keep the compare-and-swap, the lease, `blocked`, `hosted`, `canaryDone`, `hostedUnverifiable` and the fail-open path unchanged). Limit 4 starts per 60 s. Tests: 4 immediate starts, the 5th waits for the oldest to age out, an old state without `starts` still reads.
+3. `GuessBudget`: raise `GUESS_TOTAL_MS` so a lead can complete at least six guess checks per hosted-free domain inside its 130 s lead budget while keeping the existing people reserve; report the new number and the maths. Test with the fake clock.
+4. Honest step lines: pacing-skipped checks are not counted in "Tried N common formats" and the domain note says how many were not checked and why, once per domain.
+5. Re-run the live-shaped test in the engine fake-worker suite: a Medium lead with a hosted domain (canary valid), four named people, worker answers in 1 s. At least four guess checks reach the worker; the run note says so. Keep every existing test green. Full gates: `npx tsc --noEmit`, `npx vitest run`, `npm run build`, `git diff --check`, `node scripts/places-edge-typecheck.mjs` with `VITE_SUPABASE_URL=http://127.0.0.1:54321 VITE_SUPABASE_ANON_KEY=local-test-placeholder`.
+
+Commits with `git -c core.hooksPath=NUL commit`, ending `Co-Authored-By: Codex <noreply@openai.com>`.
