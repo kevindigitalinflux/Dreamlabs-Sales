@@ -13,7 +13,7 @@ describe('defaults', () => {
   it('match the agreed caps', () => {
     expect(USAGE_DEFAULTS).toEqual({
       worker_scrape: { orgLimit: 100, globalLimit: 400 },
-      worker_verify: { orgLimit: 150, globalLimit: 300 },
+      worker_verify: { orgLimit: 600, globalLimit: 1200 },
       worker_fetch: { orgLimit: 300, globalLimit: 1000 },
     });
     expect(USAGE_RESOURCES).toEqual(['worker_scrape', 'worker_verify', 'worker_fetch']);

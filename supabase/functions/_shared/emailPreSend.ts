@@ -59,7 +59,7 @@ export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{wo
         verifyGate:sendGate(orgId),verifyTimeLeftMs:()=>Math.max(0,Math.min(deadline-Date.now(),input.timeLeftMs?.()??Infinity))});
       checked=await worker.verifyEmail(email,{timeoutMs:33000});
     }catch{console.error('email precheck: checker unavailable');return disclose(verdict('unverifiable'));}
-    if(!checked.ok)return disclose(verdict('unverifiable'));
+    if(!checked.ok)return disclose(checked.failure==='limit_reached'?{status:'unverifiable',label:'Not checked: daily check allowance reached'}:verdict('unverifiable'));
     const result=verdict(checked.value.status==='valid'?'valid':checked.value.status==='invalid'?'invalid':'unverifiable');
     if(['waiting_for_domain','lead_time_exhausted'].includes(checked.value.reason))return disclose(result);
     return disclose(await remember(input,email,result));

@@ -27,5 +27,6 @@ export async function readEmailSendResponse(data:unknown,error:unknown):Promise<
 export function emailReleaseSummary(results:EmailSendView[]):string {
   const sent=results.filter(r=>r.ok).length;const blocked=results.filter(r=>r.blocked).length;
   const unconfirmed=results.filter(r=>r.ok&&r.verification?.status!=='valid').length;
-  return `Sent ${sent}; blocked ${blocked}; not confirmed ${unconfirmed}; failed ${results.length-sent-blocked}`;
+  const disclosures=[...new Set(results.flatMap(r=>r.ok&&r.verification?.label.startsWith('Not checked:')?[r.verification.label]:[]))];
+  return `Sent ${sent}; blocked ${blocked}; not confirmed ${unconfirmed}; failed ${results.length-sent-blocked}${disclosures.length?`; ${disclosures.join('; ')}`:''}`;
 }

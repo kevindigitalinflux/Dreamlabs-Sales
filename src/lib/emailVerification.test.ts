@@ -16,3 +16,7 @@ it('reports sent, blocked and not-confirmed counts separately',()=>{
  expect(emailReleaseSummary([{ok:true,blocked:false,verification:{status:'valid',label:'Confirmed'}},{ok:false,blocked:true},{ok:true,blocked:false,verification:{status:'unverifiable',label:'Not confirmed'}},{ok:false,blocked:false}]))
  .toBe('Sent 2; blocked 1; not confirmed 1; failed 1');
 });
+it('preserves the daily allowance disclosure in the visible release result',()=>{
+ expect(emailReleaseSummary([{ok:true,blocked:false,verification:{status:'unverifiable',label:'Not checked: daily check allowance reached'}}]))
+ .toContain('Not checked: daily check allowance reached');
+});

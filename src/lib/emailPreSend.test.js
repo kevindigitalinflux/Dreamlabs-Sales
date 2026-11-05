@@ -1,6 +1,7 @@
 import {expect,it,vi} from 'vitest';
 import {makeEmailPrechecker} from '../../supabase/functions/_shared/emailPreSend';
 import {replyDatabase} from './replyTestDatabase';
+import {USAGE_DEFAULTS} from '../../supabase/functions/_shared/usageRules';
 const now=()=>Date.parse('2026-11-05T12:00:00Z');
 const input={leadId:'lead',address:'person@example.com'};
 function fixture(outcomes=[]) {
@@ -44,4 +45,10 @@ it('flags common domain typos without changing or silently correcting the addres
  const f=fixture();const address='person@gmial.com';
  expect(await f.check({...input,address})).toMatchObject({label:expect.stringContaining('gmail.com')});
  expect(f.worker.verifyEmail).toHaveBeenCalledWith(address,{timeoutMs:33000});
+});
+it('allows a quota-exhausted send with an explicit non-cached label and the approved quotas',async()=>{
+ const f=fixture();f.worker.verifyEmail.mockResolvedValue({ok:false,failure:'limit_reached',line:'limit'});
+ expect(await f.check(input)).toMatchObject({status:'unverifiable',label:'Not checked: daily check allowance reached'});
+ expect(f.db.service.rpc).not.toHaveBeenCalled();
+ expect(USAGE_DEFAULTS.worker_verify).toEqual({orgLimit:600,globalLimit:1200});
 });
