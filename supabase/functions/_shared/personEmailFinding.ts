@@ -66,6 +66,7 @@ export class GuessChecks {
   readonly blocked = new Set<string>();
   readonly attempted = new Set<string>();
   readonly timedOut = new Set<string>();
+  private known = new Set<string>();
   private timeoutAddresses = new Set<string>();
   private timeoutCounts = new Map<string, number>();
   private unverifiableAddresses = new Set<string>();
@@ -78,7 +79,7 @@ export class GuessChecks {
   canCheck(email: string, _legacy = false): boolean {
     const key = email.toLowerCase();
     const d = key.split('@')[1] ?? '';
-    return !this.stopped && !this.catchAll.has(d) && !this.blocked.has(d) && !this.attempted.has(key)
+    return !this.stopped && !this.catchAll.has(d) && !this.blocked.has(d) && !this.attempted.has(key) && !this.known.has(key)
       && this.attempted.size < this.maxChecks && (this.counts.get(d) ?? 0) < 5;
   }
   claim(email: string): boolean {
@@ -89,6 +90,10 @@ export class GuessChecks {
   record(email: string, status: string | null, reason: string): void {
     const key = email.toLowerCase();
     const d = key.split('@')[1] ?? '';
+    if(['bounced_hard','previously_replied'].includes(reason)) {
+      if(this.attempted.delete(key))this.counts.set(d,Math.max(0,(this.counts.get(d)??0)-1));
+      this.known.add(key);return;
+    }
     // Admission is not an attempt when the gate never dispatched the address.
     if (['waiting_for_domain', 'lead_time_exhausted', 'hosted_unverifiable'].includes(reason)) {
       if (this.attempted.delete(key)) this.counts.set(d, Math.max(0, (this.counts.get(d) ?? 0) - 1));

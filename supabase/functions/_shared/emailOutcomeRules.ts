@@ -16,7 +16,7 @@ export function hardBounceRecipients(mail: BounceMessage): string[] {
   const sources = mail.deliveryStatus?.length ? mail.deliveryStatus.slice(0,10) : [fallback];
   const recipients = new Set<string>();
   for (const source of sources) for (const block of source.slice(0,100_000).replace(/\r\n?/g,'\n').replace(/\n[ \t]+/g,' ').split(/\n\s*\n/)) {
-    if (/\b4\.\d{1,3}\.\d{1,3}\b|mailbox (?:is )?full|quota exceeded|greylist|try again later/i.test(block)) continue;
+    if (/\b4\.\d{1,3}\.\d{1,3}\b|mailbox (?:is )?full|quota exceeded|over quota|gr[ae]ylist|temporar|try again later/i.test(block)) continue;
     const action = /^action:\s*(\S+)/im.exec(block)?.[1];
     if (action && action.toLowerCase()!=='failed') continue;
     if (!/\b5\.1\.(?:1|10)\b|\buser unknown\b|\bmailbox (?:not found|does not exist)\b/i.test(block)) continue;

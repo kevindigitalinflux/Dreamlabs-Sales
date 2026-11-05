@@ -3,6 +3,11 @@ import { GuessBudget, GuessChecks } from '../../supabase/functions/_shared/perso
 import { parseCreateRequest } from '../../supabase/functions/_shared/deepFindRules';
 
 afterEach(() => vi.useRealTimers());
+it.each(['bounced_hard','previously_replied'])('does not spend worker guess allowance on %s evidence',reason=>{
+ const checks=new GuessChecks();checks.claim('a@example.com');checks.record('a@example.com',reason==='bounced_hard'?'invalid':'valid',reason);
+ expect(checks.attempted.size).toBe(0);expect(checks.canCheck('a@example.com')).toBe(false);
+ expect(checks.remaining('example.com')).toBe(5);
+});
 it.each(['waiting_for_domain','lead_time_exhausted'])('does not count %s as tried or block another candidate',reason=>{
  const checks=new GuessChecks();
  for(const email of ['a@example.com','b@example.com']) {expect(checks.claim(email)).toBe(true);checks.record(email,'unverifiable',reason);}

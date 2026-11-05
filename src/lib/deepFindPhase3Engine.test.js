@@ -181,6 +181,38 @@ beforeEach(() => {
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it.each(['bounced_hard','replied'])('uses exact %s evidence before any worker check or suggestion',async outcome=>{
+ contacts[0].email=null;lead.email='jane.smith@acme.com';resolveOrgWorkerConfig.mockResolvedValue({});
+ worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'invalid',reason:'mailbox_missing'}});
+ const original=service.from.bind(service);
+ service.from=table=>{
+  if(table!=='email_outcomes')return original(table);
+  const filters=[];const q={select:()=>q,eq:(key,value)=>{filters.push([key,value]);return q;},then:resolve=>{
+   const row={org_id:'org',address:'jane.smith@acme.com',domain:'acme.com',outcome,seen_at:'2026-11-04'};
+   const data=filters.every(([key,value])=>row[key]===value)?[row]:[];return resolve({data,count:data.length,error:null});
+  }};return q;
+ };
+ const out=await run('medium');
+ expect(worker.verifyEmail.mock.calls.map(c=>c[0])).not.toContain('jane.smith@acme.com');
+ expect(out.domains.steps.join(' ')).toContain(outcome==='bounced_hard'?'This address bounced before.':'This address has replied before.');
+ if(outcome==='bounced_hard')expect(out.domains.suggestions.map(s=>s.value)).not.toContain('jane.smith@acme.com');
+ else expect(out.domains.readiness_missing).not.toContain('verified_email');
+});
+it('learns a pattern-supported format from two replied people, with no circular worker evidence',async()=>{
+ contacts=[{id:'a',lead_id:'lead',first_name:'Alex',last_name:'Brown',email:null},{id:'b',lead_id:'lead',first_name:'Mary',last_name:'Jones',email:null},{id:'target',lead_id:'lead',first_name:'Jane',last_name:'Smith',email:null}];
+ resolveOrgWorkerConfig.mockResolvedValue(null);
+ const original=service.from.bind(service);
+ service.from=table=>{
+  if(table!=='email_outcomes')return original(table);
+  const filters=[];const q={select:()=>q,eq:(key,value)=>{filters.push([key,value]);return q;},then:resolve=>{
+   const rows=['alex.brown@acme.com','mary.jones@acme.com'].map(address=>({org_id:'org',address,domain:'acme.com',outcome:'replied',seen_at:'2026-11-04'}));
+   const data=rows.filter(row=>filters.every(([key,value])=>row[key]===value));return resolve({data,count:data.length,error:null});
+  }};return q;
+ };
+ const out=await run('medium');
+ expect(out.domains.suggestions).toContainEqual(expect.objectContaining({name:'Jane Smith',value:'jane.smith@acme.com',label:expect.stringContaining('Pattern-supported')}));
+ expect(worker.verifyEmail).not.toHaveBeenCalled();
+});
 it.each([[false,1000],[true,1000],[true,2000]])('runs four hosted Medium guesses with saved email=%s and %s ms replies',async(savedEmail,latency)=>{
  const {makeWorkerClient:realClient}=await vi.importActual('../../supabase/functions/_shared/workerClient');
  const {RunVerifyGate}=await import('../../supabase/functions/_shared/runVerifyGate');

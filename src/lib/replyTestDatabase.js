@@ -17,7 +17,7 @@ export function replyDatabase(seed = {}) {
         tables[table].push(...rows); writes.push({ table, patch });
       }
       if (operation === 'update') { rows.forEach(row => Object.assign(row, patch)); writes.push({ table, patch }); }
-      return { data: rows.map(row => ({ ...row })), error: null };
+      return { data: rows.map(row => ({ ...row })), count: rows.length, error: null };
     };
     const q = { select: () => q, eq: (key, value) => { predicates.push(row => row[key] === value); return q; },
       in: (key, values) => { predicates.push(row => values.includes(row[key])); return q; },
