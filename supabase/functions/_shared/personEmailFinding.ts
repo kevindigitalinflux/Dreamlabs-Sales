@@ -5,7 +5,7 @@ import { displayPersonKey } from './personIdentity.ts';
 import type { MailProvider } from './dnsLookup.ts';
 export const PEOPLE_RESERVE_MS = 25_000;
 export const PEOPLE_LOOKUP_FLOOR_MS = 15_000;
-export const GUESS_TOTAL_MS = 36_000;
+export const GUESS_TOTAL_MS = 105_000;
 export const GUESS_CHECK_TIMEOUT_MS = 33_000;
 
 /** One wall-clock allowance shared by all guess paths and later domain batches for a lead. */

@@ -841,7 +841,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       }
     }
 
-    if (guessBudget.exhausted && !steps.includes('Email guess checks reached the 36 second limit for this lead. Remaining time was kept for people lookups.')) steps.push('Email guess checks reached the 36 second limit for this lead. Remaining time was kept for people lookups.');
+    if (guessBudget.exhausted && !steps.includes('Email guess checks reached the 105 second limit for this lead. Remaining time was kept for people lookups.')) steps.push('Email guess checks reached the 105 second limit for this lead. Remaining time was kept for people lookups.');
   };
   const discoverPublicFormat = async () => {
       if ((effort === 'high' || effort === 'extra_high') && geminiKey && !publicFormatSearchUsed && ![...checkedEmails.values()].some(c => c.ok && c.value.status === 'valid')) {

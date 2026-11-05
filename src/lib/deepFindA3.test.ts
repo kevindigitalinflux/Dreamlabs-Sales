@@ -59,7 +59,7 @@ it('keeps invalid results eligible for the next candidate', () => {
   checks.record('first@ukrm.com', 'invalid', 'mailbox_missing');
   expect(checks.canCheck('next@ukrm.com')).toBe(true);
 });
-it('shares a 36 second wall-clock budget and skips a second shortened check', async () => {
+it('shares a 105 second wall-clock budget and skips a final shortened check', async () => {
   vi.useFakeTimers();
   const budget = new GuessBudget(() => 70_000, () => true);
   let active = 0, peak = 0;
@@ -69,7 +69,7 @@ it('shares a 36 second wall-clock budget and skips a second shortened check', as
     active--;
   });
   const pending = budget.run(jobs);
-  await vi.advanceTimersByTimeAsync(36_000);
+  await vi.advanceTimersByTimeAsync(105_000);
   await pending;
   expect(peak).toBe(3);
   expect(budget.exhausted).toBe(true);

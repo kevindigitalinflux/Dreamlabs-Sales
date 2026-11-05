@@ -1,7 +1,7 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { RunVerifyGate, type VerifyGateStore } from '../../supabase/functions/_shared/runVerifyGate';
 import { WORKER_TIMEOUT_MS } from '../../supabase/functions/_shared/workerRules';
-import { GUESS_CHECK_TIMEOUT_MS, GuessChecks } from '../../supabase/functions/_shared/personEmailFinding';
+import { GUESS_CHECK_TIMEOUT_MS, GuessChecks, GuessBudget } from '../../supabase/functions/_shared/personEmailFinding';
 
 function fixture() {
  let state: Record<string, unknown> = {}; let version = 0; let now = 0;
@@ -45,6 +45,22 @@ it('reads old domain state without starts and preserves its recent start conserv
  await f.gate().run('a@example.com',95000,f.check);
  expect(f.starts).toEqual([0]);
  expect((await f.store.read()).state['example.com']).toMatchObject({starts:[0,0],hosted:true,canaryDone:true});
+});
+it('has time for six sequential one-second guesses, including a full-window wait and the people reserve',async()=>{
+ let now=0,state:Record<string,unknown>={};const starts:number[]=[];
+ const clock=vi.spyOn(Date,'now').mockImplementation(()=>now);
+ try {
+  const gate=new RunVerifyGate({read:async()=>({state,version:'v'}),swap:async(_v,s)=>{state=s;return true;}},()=>now,async ms=>{now+=ms;});
+  const budget=new GuessBudget(()=>130000-now,()=>true);
+  for(let i=0;i<6;i++) {
+   expect(budget.timeout()).toBe(33000);
+   await gate.run(`${i}@example.com`,130000-now-25000-33000,async()=>{
+    starts.push(now);now+=1000;return {ok:true,value:{status:'invalid',reason:'mailbox_missing'}};
+   });
+  }
+  expect(starts).toEqual([0,1000,2000,3000,60000,61000]);
+  expect(130000-now).toBeGreaterThanOrEqual(25000);
+ } finally {clock.mockRestore();}
 });
 it('keeps the worker available when the store fails', async () => {
  let called = false;
