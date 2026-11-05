@@ -148,7 +148,11 @@ export function groundedFormatSamples(domain: string, _answer: string, sourceEvi
 
 /** Stable owner/decision-maker ordering for the domain's first canary candidate. */
 export function prioritiseCheckPeople<T extends { first: string; last: string; title?: string | null }>(people: T[], owners: unknown[]): T[] {
+  return [...people].sort((a, b) => checkPersonPriority(a, owners) - checkPersonPriority(b, owners));
+}
+
+/** Owners first, then decision makers, then other named people. */
+export function checkPersonPriority(person: { first: string; last: string; title?: string | null }, owners: unknown[]): number {
   const names = new Set(owners.filter((name): name is string => typeof name === 'string').map(displayPersonKey));
-  const score = (person: T) => names.has(displayPersonKey(person.first + ' ' + person.last)) ? 0 : isOwnerRole(person.title) ? 1 : 2;
-  return [...people].sort((a, b) => score(a) - score(b));
+  return names.has(displayPersonKey(person.first + ' ' + person.last)) ? 0 : isOwnerRole(person.title) ? 1 : 2;
 }

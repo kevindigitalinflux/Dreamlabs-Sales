@@ -846,7 +846,7 @@ it.each([false, true])('late-domain inference stops Hunter after one unverifiabl
     .mockResolvedValueOnce({ domains: [{ domain: 'newco.com', sources: ['web'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] });
   readCompanyPages.mockImplementation(async url => url.includes('newco.com') ? ['<title>Acme</title><p>alex.brown@newco.com</p>'] : []);
   await run('medium');
-  expect(worker.verifyEmail).toHaveBeenCalledWith('jane.smith@newco.com', { timeoutMs: expect.any(Number) });
+  expect(worker.verifyEmail).toHaveBeenCalledWith('alex.brown@newco.com', { timeoutMs: expect.any(Number) });
   expect(worker.verifyEmail.mock.calls[0][1].timeoutMs).toBeLessThanOrEqual(33_000);
   expect(hunterVerifyEmail).not.toHaveBeenCalled();
 });
@@ -967,4 +967,24 @@ it('uses the owner best-ranked guess first for a hosted-domain canary',async()=>
  worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'unverifiable',reason:'unknown'}});
  await run('low');
  expect(worker.verifyEmail.mock.calls[0][0]).toBe('jane.smith@acme.com');
+});
+
+it('spends checks on owner formats before lower-priority people on an ordinary domain',async()=>{
+ contacts=[{id:'junior',lead_id:'lead',first_name:'Alex',last_name:'Brown',title:'Assistant',email:null},
+ {id:'owner',lead_id:'lead',first_name:'Jane',last_name:'Smith',title:'Founder',email:null}];
+ lead.owner_name='Jane Smith';cachedMailProvider.mockReturnValue('unknown');resolveOrgWorkerConfig.mockResolvedValue({});
+ worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'invalid',reason:'mailbox_missing'}});
+ await run('low');
+ expect(worker.verifyEmail.mock.calls.slice(0,3).map(([email])=>email)).toEqual(['jane.smith@acme.com','jane@acme.com','jsmith@acme.com']);
+});
+it('selects a decision maker before taking the five-person checker limit',async()=>{
+ contacts=Array.from({length:6},(_,i)=>({id:String(i),lead_id:'lead',first_name:['Alex','Tom','Mary','John','Max','Jane'][i],last_name:'Smith',title:i===5?'Founder':'Assistant',email:null}));
+ resolveOrgWorkerConfig.mockResolvedValue({});worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'valid',reason:'deliverable'}});
+ await run('low');expect(worker.verifyEmail.mock.calls[0][0]).toBe('jane.smith@acme.com');
+});
+it('checks a saved decision-maker address before a lower-priority saved contact',async()=>{
+ contacts=[{id:'junior',lead_id:'lead',first_name:'Alex',last_name:'Brown',title:'Assistant',email:'alex@acme.com'},
+ {id:'owner',lead_id:'lead',first_name:'Jane',last_name:'Smith',title:'Founder',email:'jane@acme.com'}];
+ resolveOrgWorkerConfig.mockResolvedValue({});worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'valid',reason:'deliverable'}});
+ await run('low');expect(worker.verifyEmail.mock.calls[0][0]).toBe('jane@acme.com');
 });

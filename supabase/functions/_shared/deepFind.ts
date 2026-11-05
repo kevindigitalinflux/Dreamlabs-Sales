@@ -35,7 +35,7 @@ import {
 import { makeRunVerifyGate, saveRunResult } from './runVerifyGateStore.ts';
 import { makeWorkerClient } from './workerClient.ts';
 import { MAX_VERIFY_PER_LEAD, WORKER_TIMEOUT_MS, scrapeTimeoutFor, unconfirmedLabel, verifyAction, type WorkerFailure } from './workerRules.ts';
-import { prioritiseCheckPeople, rankedEmailCandidates, unverifiedEmailSuggestions, providerGuessLine, GuessBudget, GuessChecks, optionalPeopleBudget, personEmailLine, COMMON_GUESS_LABEL } from './personEmailFinding.ts';
+import { checkPersonPriority, prioritiseCheckPeople, rankedEmailCandidates, unverifiedEmailSuggestions, providerGuessLine, GuessBudget, GuessChecks, optionalPeopleBudget, personEmailLine, COMMON_GUESS_LABEL } from './personEmailFinding.ts';
 import { makeFirecrawlClient } from './firecrawlClient.ts';
 import { FIRECRAWL_DAILY_PAGES, firecrawlDomainFor } from './firecrawlRules.ts';
 import { classifyDeepFindCheckpoint, DeepFindAuthorisationLost } from './deepFindCheckpoint.ts';
@@ -616,7 +616,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     }
   }
 
-  const emails = [...new Set([str(lead.email), ...all().filter(c => !c.dismissed_at).map(c => str(c.email))].filter((e): e is string => !!e))];
+  const checkOwners = [lead.owner_name, ...(Array.isArray(lead.additional_owners) ? lead.additional_owners : [])];
+  const checkContacts = prioritiseCheckPeople(all().map(c => ({ ...c, first: str(c.first_name) ?? '', last: str(c.last_name) ?? '', title: str(c.title) })), checkOwners);
+  const emails = [...new Set([str(lead.email), ...checkContacts.filter(c => !c.dismissed_at).map(c => str(c.email))].filter((e): e is string => !!e))];
   // Re-check saved emails: an address alone, catch-all or unavailable verdict is never verified evidence.
   // Published site/scrape addresses use the same checker before built guesses, for every effort.
   const savedCheckEmails = effort === 'custom' ? [str(lead.email)].filter((email): email is string => !!email) : emails;
@@ -678,12 +680,12 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       patterns.set(d, pattern);
       if (pattern) steps.push(patternLine(d, pattern));
     }
-    // Round-robin candidates across people. Both inferred and common formats share the same three slots.
+    // Previous order: Round-robin candidates across people. Both inferred and common formats share the same three slots.
+    // Person importance now precedes inferred/common pattern rank; retain the original shared slots.
     const availablePeople = lookupPeople();
-    const hostedDomain = checkDomains.some(d => ['microsoft', 'google', 'hosted'].includes(cachedMailProvider(d) ?? ''));
-    const guessPeople = (hostedDomain ? prioritiseCheckPeople(availablePeople, [lead.owner_name, ...(Array.isArray(lead.additional_owners) ? lead.additional_owners : [])]) : availablePeople).slice(0, 5);
+    const guessPeople = prioritiseCheckPeople(availablePeople, checkOwners).slice(0, 5);
     const jobs: ((timeoutMs: number) => Promise<void>)[] = [];
-    for (let rank = 0; rank < 6; rank++) for (const d of checkDomains.slice(0, 4)) for (const person of guessPeople) {
+    for (const importance of [0, 1, 2]) for (let rank = 0; rank < 6; rank++) for (const d of checkDomains.slice(0, 4)) for (const person of guessPeople.filter(p => checkPersonPriority(p, checkOwners) === importance)) {
       const guess = rankedEmailCandidates(person.first, person.last, d, patterns.get(d) ?? null)[rank];
       if (!guess) continue;
       jobs.push(async timeoutMs => {
