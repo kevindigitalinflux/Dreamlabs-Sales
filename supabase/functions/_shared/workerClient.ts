@@ -10,7 +10,7 @@ import {
   type ScrapeFound, type ScrapeMode, type VerifyReply, type WorkerConfig, type WorkerFailure,
 } from './workerRules.ts';
 
-export type WorkerResult<T> = ({ ok: true; value: T } | { ok: false; failure: WorkerFailure; line: string }) & { domainNoteSuppressed?: boolean };
+export type WorkerResult<T> = ({ ok: true; value: T } | { ok: false; failure: WorkerFailure; line: string }) & { domainNoteSuppressed?: boolean; allowanceReached?:boolean };
 
 export interface WorkerClient {
   verifyEmail(email: string, opts?: { timeoutMs?: number; timeBudgetMs?: number }): Promise<WorkerResult<VerifyReply>>;
@@ -23,7 +23,7 @@ export interface WorkerClientOptions { usage: UsageClient; orgId: string; config
 
 type Kind = 'verify' | 'scrape';
 type Stopped = { failure: WorkerFailure; line: string };
-type RawResult = { ok: true; json: unknown } | { ok: false; failure: WorkerFailure; line: string };
+type RawResult = { ok: true; json: unknown } | { ok: false; failure: WorkerFailure; line: string; allowanceReached?:boolean };
 
 export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
   const { usage, orgId, config } = opts;
@@ -48,7 +48,7 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
     if (!config) return stop(kind, 'not_configured', workerFailureLine('not_configured'));
     const resource = WORKER_RESOURCE[kind];
     const reserve = await reserveUsage(usage, orgId, resource, units);
-    if (!reserve.ok) return stop(kind, 'limit_reached', refusalLine(reserve.reason, resource, reserve.limit));
+    if (!reserve.ok) return {...stop(kind, 'limit_reached', refusalLine(reserve.reason, resource, reserve.limit)),allowanceReached:reserve.reason==='org_limit'||reserve.reason==='shared_pool'};
     if (Date.now() >= deadline) {
       // The local deadline expired before dispatch: the worker did no work. Keep later calls eligible.
       await refundUsage(usage, orgId, resource, units, reserve.day);
@@ -102,7 +102,7 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
         }
         if(!admitted){verifyCalls++;admitted=true;firstStarted=Date.now();}attempts++;
         const raw = await call('verify', 1, '/verify-email', { email }, options?.timeoutMs);
-        if (!raw.ok) return { ok: false, failure: raw.failure, line: raw.line };
+        if (!raw.ok) return { ok: false, failure: raw.failure, line: raw.line,allowanceReached:raw.allowanceReached };
         const reply = parseVerifyReply(raw.json, email);
         if (!reply) { const line = workerFailureLine('bad_response'); addLine(line); return { ok: false, failure: 'bad_response', line }; }
         return { ok: true, value: reply };

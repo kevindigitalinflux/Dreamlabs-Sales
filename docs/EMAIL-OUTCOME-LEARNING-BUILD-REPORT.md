@@ -66,6 +66,8 @@ BEGIN
   VALUES(p_org_id,p_lead_id,clean_address,p_outcome,p_source_message_id,p_seen_at)
   ON CONFLICT (org_id,address,outcome) DO UPDATE SET
     seen_at = greatest(email_outcomes.seen_at,EXCLUDED.seen_at),
+    lead_id = CASE WHEN EXCLUDED.seen_at > email_outcomes.seen_at
+      THEN EXCLUDED.lead_id ELSE email_outcomes.lead_id END,
     source_message_id = CASE WHEN EXCLUDED.seen_at > email_outcomes.seen_at
       THEN EXCLUDED.source_message_id ELSE email_outcomes.source_message_id END;
 
@@ -85,6 +87,27 @@ REVOKE ALL ON FUNCTION public.record_email_outcome(uuid,uuid,text,text,text,time
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.record_email_outcome(uuid,uuid,text,text,text,timestamptz,boolean)
   TO service_role;
+
+-- Expose only the derived warning, not another pipeline's private source addresses.
+CREATE FUNCTION public.email_domain_bounce_warnings(p_org_id uuid,p_domains text[])
+RETURNS TABLE(domain text) LANGUAGE plpgsql STABLE SECURITY DEFINER
+SET search_path = public, pg_temp AS $$
+BEGIN
+  IF public.is_org_member(p_org_id) IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'Not authorised' USING ERRCODE = '42501';
+  END IF;
+  IF coalesce(cardinality(p_domains),0) > 40 OR EXISTS (
+    SELECT 1 FROM unnest(p_domains) AS requested(value)
+    WHERE value IS NULL OR length(value) NOT BETWEEN 1 AND 253 OR value !~ '^[a-z0-9.-]+$'
+  ) THEN RAISE EXCEPTION 'Invalid domain request'; END IF;
+  RETURN QUERY SELECT e.domain FROM public.email_outcomes e
+    WHERE e.org_id = p_org_id AND e.domain = ANY(p_domains)
+      AND e.outcome = 'bounced_hard' AND e.seen_at >= now() - interval '14 days' AND e.seen_at <= now()
+    GROUP BY e.domain HAVING count(DISTINCT e.address) >= 3;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.email_domain_bounce_warnings(uuid,text[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.email_domain_bounce_warnings(uuid,text[]) TO authenticated;
 COMMIT;
 ```
 
@@ -173,3 +196,68 @@ Failing pure and engine tests first required the seven named role prefixes, host
 Pre-send checks apply the same role policy, including reclassification of older role cache entries after MX/provider lookup, and cache hosted role acceptance as checked_unverifiable. Review badges label unchecked/unverifiable role addresses plainly. A genuine human reply remains stronger evidence and retains This address has replied before; even then Deep find does not automatically select a hosted role inbox as primary. Invalid verdicts still block, and the daily-allowance disclosure is preserved rather than overwritten by a role label.
 
 Twelve new role cases cover all prefixes, non-hosted/named exceptions, hosted/catch-all discovery, readiness and the real-reply exception. The combined role/engine/pre-send/view/discovery group passes 243 tests; TypeScript, edge shim and whitespace pass. No production role-mailbox probe occurred. C4 measured comparison and final report remain.
+
+## Part C item 4 — measured comparison and final handoff
+
+All thirteen ordered items (A1-A4, B1-B5, C1-C4) are complete locally. C4 contains the final report/checkpoint. The final fake-worker comparison uses 120 distinct addresses across 60 domains, one-second answers, and the actual prechecker/client/gate/usage/shared-send path. Fetch, DNS, SMTP and database writes are local doubles. Each result category has 30 addresses: invalid, valid, initially unknown, and unavailable worker. With retry enabled, the unknown group returns valid on its one retry. This is a controlled fixture, not a measured production bounce-rate improvement.
+
+| Metric | Original no-precheck counterfactual | Part B policy, no retry | Part C bounded retry |
+|---|---:|---:|---:|
+| Intended recipients | 120 | 120 | 120 |
+| Physical verifier requests / reservations | 0 | 120 | 150 |
+| No-work refunds | 0 | 30 | 30 |
+| Invalid recipients blocked | 0 | 30 | 30 |
+| Emails reaching fake SMTP | 120 | 90 | 90 |
+| Sent without any pre-send attempt | 120 | 0 | 0 |
+| Sent without a completed checker answer | 120 | 30 | 30 |
+| Sent after a completed but inconclusive answer | 0 | 30 | 0 |
+| Sent without confirmation | 120 | 60 | 30 |
+| Checker-confirmed sends | 0 | 30 | 60 |
+
+The original column is inferred from the baseline sender's absence of pre-send verification and these entirely uncached fixture addresses; it is not an executed old production run. The two feature columns are directly asserted in the fake-worker suite. Unavailable-worker requests do no verification work: they are NOT called checked/confirmed merely because HTTP was attempted. These 30 sends intentionally remain allowed and labelled Not confirmed under Kevin's rule. No claim is made that SMTP-valid guarantees future delivery. A recovered unknown needs roughly 62 seconds in this one-second-response fixture (first answer, sixty-second delay, second answer); serial releases can therefore take substantially longer.
+
+Final review also added failing-before regressions for raw trailing CRLF before normalisation, and usage-service failures being mislabelled as exhausted quotas. Syntax now rejects raw line breaks; worker results distinguish actual quota refusal from failed accounting without changing reservation/refund behavior. A final privacy review found that lead visibility RLS could hide source rows from a rep's direct domain-count query. The Contacts warning now uses the proposed membership-checked email_domain_bounce_warnings aggregate RPC in the SAME migration SQL above. It returns only requested domains with at least three distinct hard bounces in fourteen days, not hidden lead identities or addresses. Requests are bounded to forty domains server-side and twenty per client batch. The raw-outcome read policy remains visibility-constrained. Two read-boundary tests cover org arguments, batching, failures and unexpected returned domains. The proposed recording RPC's source-lead association follows a strictly newer event alongside its source identifier; its single-source deletion limitation still applies. Neither RPC nor the table was executed.
+
+### Final gates and deployment manifest
+
+Final full suite: **2,989 passed, one skipped, zero failures**. npx tsc --noEmit passes. npm run build passes (2,949 modules, existing chunk-size warning). git diff --check passes. The standard node scripts/places-edge-typecheck.mjs passes 25 entrypoints; an additional ignored local config includes enrich-apollo, enrich-hunter and parse-icp and passes 28 entrypoints, covering the full conservative import manifest. Full tests/build used VITE_SUPABASE_URL=http://127.0.0.1:54321 and VITE_SUPABASE_ANON_KEY=local-test-placeholder. No dependency/manifest/lockfile change. The brief's required gates are all green.
+
+Static relative-import traversal yields this conservative 23-function rollout union (not deployment authorisation): check-replies, check-sequences, draft-linkedin-message, draft-reply, email-settings, enrich-apollo, enrich-hunter, enrich-leads-bulk, find-decision-makers, generate-email, org-api-settings, parse-csv-leads, parse-icp, parse-notes, parse-session-notes, run-deep-find, run-lookup-jobs, run-selected-autopilot, scrape-companies-house, scrape-cro, scrape-google-places, send-email and suggest-sequence. Some import shared configuration/rules indirectly; Claude should review the exact bundle union. Frontend changes are the Contacts domain warning, review/composer verification badges, row override confirmation, separate bulk-result counts and Deep find allowance text. No worker/VPS rollout is needed.
+
+The SQL above proposes one table, one service-only outcome/suppression transaction and one authenticated org-scoped aggregate read. It remains solely in this report: **no migration was applied, no production SQL ran, and no migration file was created**. The metadata audit below is also review text only. The table/RPC must be approved, locally audited and applied before dependent functions/frontend are rolled out; missing outcome storage deliberately fails closed. Backfill is an explicit owner-authenticated action to run only after that rollout, not something this build invoked.
+
+Independent Claude review, SQL compilation/transaction tests, RLS and cross-pipeline aggregate privacy, real DSN samples/MIME variants, real mailbox cursors/recovery, real SMTP/worker latency and browser/mobile/theme/dialog checks remain unverified. In particular, DSNs can be forged; sent-log/thread/ownership matching is a conservative correlation guard, not authentication of a remote mail server. Outcomes use one source-lead FK per org/address/outcome; deleting that associated lead conservatively forgets the evidence even if another lead also uses the address. Future third-party sends outside sendLeadEmail are not covered; no such production send path was found in this repository. The existing mailbox-settings test email is not a lead send and remains outside this recipient guard. Warm-isolate send pacing is not a durable global gate; the worker limiter remains authoritative across isolates. Longer retries do not override lead/function budgets or the people reserve.
+
+No push, merge, deploy, Supabase write, secret use, paid fallback, worker/VPS edit, live mailbox action or real email/message occurred. The possible fixture.invalid DNS-only request from an initially unstubbed legacy test is disclosed under B3; final tests stub that path. Roles remain Codex builder and Claude architect/reviewer. Subscription usage is unavailable; no percentage is asserted. Project checkpoint documents are updated and the vault branch handoff will reference the final revision without overwriting accepted-main snapshots. No background jobs remain. Stop here for Claude's review; there is no unfinished builder item or authorisation for production actions.
+
+### Proposed metadata audit — NOT executed, no fixture writes
+
+This is an intentional rollback sentinel for a disposable local database after applying the reviewed draft there. It checks metadata/grants only; it does not replace business-effect, concurrency, org-isolation or deletion fixtures. Do not use it as permission to apply anything to production.
+
+```sql
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relname = 'email_outcomes' AND c.relrowsecurity
+  ) THEN RAISE EXCEPTION 'Email outcome RLS missing'; END IF;
+  IF has_table_privilege('anon','public.email_outcomes','SELECT')
+    OR has_table_privilege('authenticated','public.email_outcomes','INSERT')
+    OR has_table_privilege('authenticated','public.email_outcomes','UPDATE')
+    OR has_table_privilege('authenticated','public.email_outcomes','DELETE')
+  THEN RAISE EXCEPTION 'Untrusted email outcome privileges'; END IF;
+  IF NOT has_table_privilege('authenticated','public.email_outcomes','SELECT')
+    OR NOT has_table_privilege('service_role','public.email_outcomes','INSERT')
+  THEN RAISE EXCEPTION 'Required email outcome grants missing'; END IF;
+  IF has_function_privilege('authenticated',
+    'public.record_email_outcome(uuid,uuid,text,text,text,timestamptz,boolean)','EXECUTE')
+    OR has_function_privilege('anon','public.email_domain_bounce_warnings(uuid,text[])','EXECUTE')
+    OR NOT has_function_privilege('authenticated','public.email_domain_bounce_warnings(uuid,text[])','EXECUTE')
+  THEN RAISE EXCEPTION 'Email outcome RPC grants incorrect'; END IF;
+  IF (SELECT count(*) FROM pg_constraint WHERE conrelid = 'public.email_outcomes'::regclass
+      AND contype = 'f' AND confdeltype = 'c') <> 2
+  THEN RAISE EXCEPTION 'Lead/org deletion cascades missing'; END IF;
+  RAISE EXCEPTION 'Email outcome metadata audit passed; rollback requested';
+END;
+$$;
+```

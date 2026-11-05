@@ -37,7 +37,7 @@ export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{wo
   };
   return async(input:Input):Promise<EmailPrecheckResult>=>{
     const email=input.address.trim().toLowerCase();
-    if(!emailSyntaxValid(email))return {status:'invalid',label:'This email address has invalid syntax',overridable:false};
+    if(!emailSyntaxValid(input.address))return {status:'invalid',label:'This email address has invalid syntax',overridable:false};
     const domain=email.split('@')[1]!;
     const typo=emailDomainTypo(email);
     const roleVerdict=(value:EmailPrecheckResult):EmailPrecheckResult=>value.label!=='This address has replied before.'&&!value.label.startsWith('Not checked:')&&value.status!=='invalid'
@@ -66,7 +66,7 @@ export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{wo
         verifyGate:sendGate(orgId),verifyTimeLeftMs:()=>Math.max(0,Math.min(deadline-Date.now(),input.timeLeftMs?.()??Infinity)),retryTransient:domain=>cachedMailProvider(domain)==='unknown'});
       checked=await worker.verifyEmail(email,{timeoutMs:33000});
     }catch{console.error('email precheck: checker unavailable');return disclose(verdict('unverifiable'));}
-    if(!checked.ok)return disclose(checked.failure==='limit_reached'?{status:'unverifiable',label:'Not checked: daily check allowance reached'}:verdict('unverifiable'));
+    if(!checked.ok)return disclose(checked.failure==='limit_reached'&&checked.allowanceReached!==false?{status:'unverifiable',label:'Not checked: daily check allowance reached'}:verdict('unverifiable'));
     const result=checked.value.status!=='invalid'&&roleAddressNeedsReview(email,cachedMailProvider(domain)??'unknown',checked.value.reason==='catch_all')
       ?{status:'unverifiable' as const,label:ROLE_ADDRESS_LABEL}:verdict(checked.value.status==='valid'?'valid':checked.value.status==='invalid'?'invalid':'unverifiable');
     if(['waiting_for_domain','lead_time_exhausted'].includes(checked.value.reason))return disclose(result);

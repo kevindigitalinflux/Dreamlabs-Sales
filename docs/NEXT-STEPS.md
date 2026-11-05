@@ -1,5 +1,7 @@
 # Next steps (the to-do list for Codex and Claude)
 
+- [ ] Email outcome learning: Parts A/B/C and all thirteen builder items complete locally on codex/email-outcome-learning (2026-11-05). Claude reviews the exact commits and docs/EMAIL-OUTCOME-LEARNING-BUILD-REPORT.md, including proposed SQL. No migration was applied and no publication/backfill/send test is authorised. Remains unchecked until independent review.
+
 - [ ] Verifier round 1c: all six items built locally on codex/deepfind-registry-brand-match, 2026-11-05; independent Claude review and live validation pending. Read the final registry build-report addendum. Continuation remains a proposal, not an authorised build. No publication is authorised.
 
 - [ ] TODO 32: Setup skill download built locally on `codex/setup-skill-download` (2026-10-30). Claude review pending; do not mark reviewed or deployed. Read `docs/SETUP-SKILL-DOWNLOAD-BUILD-REPORT.md`. Kevin must authorize publication separately.

@@ -2,6 +2,7 @@ import {validEmail} from './contacts.ts';
 const TYPOS:Record<string,string>={'gmial.com':'gmail.com','gamil.com':'gmail.com','gmail.con':'gmail.com','gmail.co':'gmail.com','hotmial.com':'hotmail.com','outlok.com':'outlook.com','outllook.com':'outlook.com','yaho.com':'yahoo.com','yahoo.con':'yahoo.com'};
 /** Project-supported ASCII mailbox syntax, with DNS-label and dot-atom bounds. */
 export function emailSyntaxValid(address:string):boolean {
+  if(/[\r\n]/.test(address))return false;
   const email=validEmail(address);if(!email||email.length>254)return false;
   const [local,domain]=email.split('@');
   return !!local&&local.length<=64&&!/^\.|\.$|\.\./.test(local)&&!!domain

@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react';
 import {supabase} from '../../lib/supabase';
-import {DOMAIN_BOUNCE_WARNING} from '../../../supabase/functions/_shared/emailOutcomeSignals';
+import {DOMAIN_BOUNCE_WARNING,loadDomainBounceWarnings} from '../../../supabase/functions/_shared/emailOutcomeSignals';
 
 /** Org-scoped aggregate warnings for the domains displayed in this lead's Contacts card. */
 export function DomainBounceWarnings({orgId,addresses,website}:{orgId:string;addresses:(string|null)[];website:string|null}) {
@@ -13,13 +13,8 @@ export function DomainBounceWarnings({orgId,addresses,website}:{orgId:string;add
     setState({key,warnings:[],error:false,loading:true});
     void (async()=>{
       try {
-        const counts=await Promise.all(domainKey.split(',').filter(Boolean).map(async domain=>{
-          const {count,error}=await supabase.from('email_outcomes').select('id',{count:'exact',head:true})
-            .eq('org_id',orgId).eq('domain',domain).eq('outcome','bounced_hard').gte('seen_at',new Date(Date.now()-14*86400000).toISOString());
-          if(error||count===null)throw new Error('Bounce history unavailable');
-          return (count??0)>=3?domain:null;
-        }));
-        if(!cancelled)setState({key,warnings:counts.filter((d):d is string=>!!d),error:false,loading:false});
+        const warnings=await loadDomainBounceWarnings(supabase,orgId,domainKey.split(',').filter(Boolean));
+        if(!cancelled)setState({key,warnings,error:false,loading:false});
       }catch{console.error('bounce history: could not load domain counts');if(!cancelled)setState({key,warnings:[],error:true,loading:false});}
     })();
     return()=>{cancelled=true;};

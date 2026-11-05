@@ -200,7 +200,7 @@ describe('makeWorkerClient', () => {
     const c = make(u, f);
     const r = await c.verifyEmail('max@loveliving.uk');
     const line = refusalLine('org_limit', 'worker_verify', 150);
-    expect(r).toEqual({ ok: false, failure: 'limit_reached', line });
+    expect(r).toEqual({ ok: false, failure: 'limit_reached', line,allowanceReached:true });
     expect(f).not.toHaveBeenCalled();
     expect(refundCalls(u).length).toBe(0);
     expect(c.lines()).toEqual([line]);
@@ -213,7 +213,7 @@ describe('makeWorkerClient', () => {
     const u = usage({ data: null, error: { message: 'db down' } });
     const f = worker(200, VERIFY_OK);
     const r = await make(u, f).verifyEmail('max@loveliving.uk');
-    expect(r).toEqual({ ok: false, failure: 'limit_reached', line: refusalLine('error', 'worker_verify') });
+    expect(r).toEqual({ ok: false, failure: 'limit_reached', line: refusalLine('error', 'worker_verify'),allowanceReached:false });
     expect(f).not.toHaveBeenCalled();
     expect(refundCalls(u).length).toBe(0);
   });
@@ -385,6 +385,11 @@ it('retains usage when our timer fires and fetch throws an ordinary error', asyn
   await vi.advanceTimersByTimeAsync(18_000);
   expect(await pending).toMatchObject({ ok: false, failure: 'timeout' });
   expect(refundCalls(u)).toHaveLength(0);
+});
+it('distinguishes unavailable usage accounting from an actual exhausted allowance without dispatch',async()=>{
+ const u=usage({data:null,error:{message:'fixture unavailable'}});const f=worker(200,VERIFY_OK);
+ expect(await make(u,f).verifyEmail('max@loveliving.uk')).toMatchObject({ok:false,failure:'limit_reached',allowanceReached:false});
+ expect(f).not.toHaveBeenCalled();expect(refundCalls(u)).toHaveLength(0);
 });
 it('classifies an aborted response body as timeout and keeps later checks eligible', async () => {
   const u = usage();

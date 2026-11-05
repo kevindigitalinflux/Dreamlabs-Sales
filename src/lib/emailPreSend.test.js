@@ -39,6 +39,10 @@ it('blocks invalid syntax without a worker or DNS request',async()=>{
  const f=fixture();expect(await f.check({...input,address:'bad\r\nrecipient'})).toMatchObject({status:'invalid',overridable:false});
  expect(f.worker.verifyEmail).not.toHaveBeenCalled();expect(f.mx).not.toHaveBeenCalled();
 });
+it('rejects trailing CRLF before normalisation can hide header injection characters',async()=>{
+ const f=fixture();expect(await f.check({...input,address:'person@example.com\r\n'})).toMatchObject({status:'invalid',overridable:false});
+ expect(f.worker.verifyEmail).not.toHaveBeenCalled();
+});
 it('blocks a domain known to have no MX without a worker call',async()=>{
  const f=fixture();f.mx.mockResolvedValue('none');
  expect(await f.check(input)).toMatchObject({status:'invalid',label:'This email domain has no mail server'});
@@ -54,6 +58,10 @@ it('allows a quota-exhausted send with an explicit non-cached label and the appr
  expect(await f.check(input)).toMatchObject({status:'unverifiable',label:'Not checked: daily check allowance reached'});
  expect(f.db.service.rpc).not.toHaveBeenCalled();
  expect(USAGE_DEFAULTS.worker_verify).toEqual({orgLimit:600,globalLimit:1200});
+});
+it('does not call a usage-service failure an exhausted daily allowance',async()=>{
+ const f=fixture();f.worker.verifyEmail.mockResolvedValue({ok:false,failure:'limit_reached',allowanceReached:false,line:'usage unavailable'});
+ expect(await f.check(input)).toMatchObject({status:'unverifiable',label:'Not confirmed'});expect(f.db.service.rpc).not.toHaveBeenCalled();
 });
 it('does not promote hosted role SMTP acceptance to confirmation, but preserves a real reply',async()=>{
  cachedMailProvider.mockReturnValue('hosted');
