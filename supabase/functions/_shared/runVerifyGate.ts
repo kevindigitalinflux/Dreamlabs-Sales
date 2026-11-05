@@ -6,11 +6,11 @@ export interface VerifyGateStore {
   read(): Promise<{ state: Record<string, unknown>; version: string }>;
   swap(version: string, state: Record<string, unknown>): Promise<boolean>;
 }
-interface DomainState { nextAt: number; pendingUntil: number; blocked: boolean; hosted?: boolean; canaryDone?: boolean; hostedUnverifiable?: boolean; waitingNoted?: boolean; noted?: boolean }
+interface DomainState { starts?: number[]; nextAt?: number; pendingUntil: number; blocked: boolean; hosted?: boolean; canaryDone?: boolean; hostedUnverifiable?: boolean; waitingNoted?: boolean; noted?: boolean }
 const skipped = (line: string): WorkerResult<VerifyReply> => ({ ok: false, failure: 'busy', line });
 const slow = (): WorkerResult<VerifyReply> => ({ ok: false, failure: 'timeout', domainNoteSuppressed: true, line: 'This mail server answers too slowly to check, so these are best guesses.' });
 
-/** Durable per-run breaker and conservative spacing; no usage is reserved while waiting. */
+/** Durable per-run breaker and domain sliding window; no usage is reserved while waiting. */
 export class RunVerifyGate {
   private unavailable = false;
   private localHosted = new Set<string>();
@@ -47,13 +47,18 @@ export class RunVerifyGate {
       for (let attempt = 0; attempt < 100; attempt++) {
         const snapshot = await this.store.read();
         const prior = snapshot.state[domain] as DomainState | undefined;
-        if (prior && (!Number.isFinite(prior.nextAt) || !Number.isFinite(prior.pendingUntil) || typeof prior.blocked !== 'boolean')) throw new Error('Invalid checker state');
+        if (prior && (!Number.isFinite(prior.pendingUntil) || typeof prior.blocked !== 'boolean'
+          || (prior.starts !== undefined ? !Array.isArray(prior.starts) || prior.starts.some(t => !Number.isFinite(t)) : !Number.isFinite(prior.nextAt)))) throw new Error('Invalid checker state');
         if (prior?.hostedUnverifiable) return hostedSkip();
         if (prior?.blocked) return slow();
         hosted = prior?.hosted ?? await this.isHosted(domain);
         canaryDone = prior?.canaryDone ?? false;
         if (prior?.pendingUntil && prior.pendingUntil <= this.now()) return slow(); // An abandoned call is never assumed safe.
-        const wait = Math.max(0, (prior?.pendingUntil || prior?.nextAt || 0) - this.now());
+        // Migrate one recent legacy start without retaining the old fixed spacing.
+        const starts = (prior?.starts ?? (prior?.nextAt ? [prior.nextAt - 12001] : []))
+          .filter(t => t > this.now() - 60000).sort((a,b) => a-b);
+        const windowAt = starts.length >= 4 ? starts[starts.length - 4]! + 60000 : 0;
+        const wait = Math.max(0, (prior?.pendingUntil || 0) - this.now(), windowAt - this.now());
         if (wait > 0) {
           if (wait > deadline - this.now()) {
             if (!prior?.waitingNoted) {
@@ -67,7 +72,7 @@ export class RunVerifyGate {
         }
         started = this.now(); token = started + 33000 + 2000;
         if (started > deadline) return skipped('The email check was skipped because its time allowance was reached.');
-        if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, nextAt: started + 12001, pendingUntil: token, blocked: false, hosted, canaryDone } })) { acquired = true; break; }
+        if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, starts: [...starts, started], pendingUntil: token, blocked: false, hosted, canaryDone } })) { acquired = true; break; }
         if (attempt === 99) throw new Error('Checker state contention');
       }
       if (!acquired) throw new Error('Checker state unavailable');
@@ -79,7 +84,7 @@ export class RunVerifyGate {
         const prior = snapshot.state[domain] as DomainState | undefined;
         if (prior?.pendingUntil !== token) throw new Error('Checker lease changed');
         const relevant = result.ok ? ['unverifiable','risky'].includes(result.value.status) : result.failure === 'timeout';
-        if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, nextAt: started + 12001, pendingUntil: 0, blocked, hosted, canaryDone: true, hostedUnverifiable: this.localHosted.has(domain), noted: prior?.noted || relevant } })) return relevant && prior?.noted ? {...result,domainNoteSuppressed:true} : result;
+        if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, pendingUntil: 0, blocked, hosted, canaryDone: true, hostedUnverifiable: this.localHosted.has(domain), noted: prior?.noted || relevant } })) return relevant && prior?.noted ? {...result,domainNoteSuppressed:true} : result;
       }
       throw new Error('Checker result could not be saved');
     } catch (error) {

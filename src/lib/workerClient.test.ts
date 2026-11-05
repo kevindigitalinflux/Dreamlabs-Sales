@@ -446,6 +446,7 @@ it('spends no second usage unit while waiting and emits the domain waiting note 
  const u=usage(),f=worker(200,{email:'first@example.com',status:'valid',reason:'deliverable'});
  const client=makeWorkerClient({usage:u,orgId:'org',config:CONFIG,fetchImpl:f,verifyGate:gate});
  await client.verifyEmail('first@example.com');
+ state['example.com']={...(state['example.com'] as object),starts:[0,0,0,0]};
  expect(await client.verifyEmail('second@example.com')).toMatchObject({ok:true,value:{reason:'waiting_for_domain'}});
  await client.verifyEmail('third@example.com');
  expect(f).toHaveBeenCalledTimes(1);expect(reserveCalls(u)).toHaveLength(1);expect(refundCalls(u)).toHaveLength(0);
@@ -454,7 +455,7 @@ it('spends no second usage unit while waiting and emits the domain waiting note 
 
 it('waits for three same-domain checks using lead time, separately from each call timeout', async () => {
  const { RunVerifyGate } = await import('../../supabase/functions/_shared/runVerifyGate');
- let now=0, state:Record<string,unknown>={}; let version=0;
+ let now=0, state:Record<string,unknown>={'example.com':{starts:[0,0,0,0],pendingUntil:0,blocked:false}}; let version=0;
  const starts:number[]=[];
  const gate=new RunVerifyGate({read:async()=>({state,version:String(version)}),swap:async(v,s)=>{
   if(v!==String(version))return false;state=s;version++;return true;
@@ -463,6 +464,6 @@ it('waits for three same-domain checks using lead time, separately from each cal
  const f=vi.fn<typeof fetch>(async(_url,init)=>{starts.push(now);return new Response(JSON.stringify({...JSON.parse(String(init?.body)),status:'invalid',reason:'mailbox_missing'}));});
  const client=makeWorkerClient({usage:u,orgId:'org',config:CONFIG,fetchImpl:f,verifyGate:gate,verifyTimeLeftMs:()=>130000-now});
  for(const email of ['a','b','c']) expect(await client.verifyEmail(`${email}@example.com`,{timeoutMs:33000})).toMatchObject({ok:true,value:{status:'invalid'}});
- expect(starts).toEqual([0,12001,24002]);
+ expect(starts).toEqual([60000,60000,60000]);
  expect(reserveCalls(u)).toHaveLength(3);expect(refundCalls(u)).toHaveLength(0);
 });

@@ -31,7 +31,20 @@ it('paces a sixth same-domain check beyond a minute without reserving while wait
  const f = fixture();
  for (let i=0;i<6;i++) expect((await f.gate().run(`${i}@example.com`, 120000, f.check)).ok).toBe(true);
  expect(f.starts).toHaveLength(6);
- expect(f.starts[5]! - f.starts[0]!).toBeGreaterThan(60000);
+ expect(f.starts[5]! - f.starts[0]!).toBeGreaterThanOrEqual(60000);
+});
+it('allows four immediate starts then waits for the oldest sliding-window start', async () => {
+ const f=fixture();
+ for(let i=0;i<6;i++) await f.gate().run(`${i}@example.com`,95000,f.check);
+ expect(f.starts).toEqual([0,0,0,0,60000,60000]);
+ expect((await f.store.read()).state['example.com']).toMatchObject({starts:[60000,60000]});
+});
+it('reads old domain state without starts and preserves its recent start conservatively',async()=>{
+ const f=fixture();
+ await f.store.swap('0',{'example.com':{nextAt:12001,pendingUntil:0,blocked:false,hosted:true,canaryDone:true}});
+ await f.gate().run('a@example.com',95000,f.check);
+ expect(f.starts).toEqual([0]);
+ expect((await f.store.read()).state['example.com']).toMatchObject({starts:[0,0],hosted:true,canaryDone:true});
 });
 it('keeps the worker available when the store fails', async () => {
  let called = false;
@@ -52,9 +65,9 @@ it('keeps an abandoned pending call closed across a new gate instance', async ()
  expect(f.starts).toEqual([]);
 });
 it('does not dispatch a shorter check when spacing leaves less than 33 seconds', async () => {
- const f=fixture(); await f.gate().run('a@example.com',33000,f.check);
+ const f=fixture(); for(let i=0;i<4;i++) await f.gate().run(`${i}@example.com`,0,f.check);
  expect(await f.gate().run('b@example.com',0,f.check)).toMatchObject({ok:true,value:{reason:'waiting_for_domain'}});
- expect(f.starts).toHaveLength(1);
+ expect(f.starts).toHaveLength(4);
 });
 
 it.each(['read', 'swap', 'invalid'])('runs the worker once when gate infrastructure fails: %s', async failure => {
@@ -102,11 +115,11 @@ it('records hosted_unverifiable once in durable state and one note at the canary
 });
 
 it('emits a waiting notice only once per domain across lead instances',async()=>{
- const f=fixture();await f.gate().run('a@example.com',33000,f.check);
+ const f=fixture();for(let i=0;i<4;i++)await f.gate().run(`${i}@example.com`,0,f.check);
  const waiting=f.gate();await waiting.run('b@example.com',0,f.check);
  const later=f.gate();await later.run('c@example.com',0,f.check);
  expect(waiting.lines().filter(l=>l.includes('waiting for its next check'))).toHaveLength(1);
- expect(later.lines()).toEqual([]);expect(f.starts).toHaveLength(1);
+ expect(later.lines()).toEqual([]);expect(f.starts).toHaveLength(4);
 });
 
 it('persists domain-note suppression independently of the worker verdict',async()=>{
