@@ -94,3 +94,12 @@ Existing trigger, owner, schema and daily/lead allowances remain unchanged. The 
 ## Email outcome learning and pre-send verification (local branch, 2026-11-05)
 
 Owner remains the Supabase email/Deep find engine. Existing check-replies polling now correlates permanent DSN recipients and genuine replies with sent mail, then calls the proposed service-only outcome transaction; it records evidence, pauses matching active lead sequences and adds a deduplicated bounce note. An explicit authenticated email-settings backfill_bounces action scans up to 200 INBOX messages from thirty days, with a cursor, and never repeats alerts/drafts/sends. Derived domain warnings use the proposed membership-checked aggregate RPC; no warning rows or new schedule are stored. The shared sendLeadEmail boundary checks exact org/address outcomes, cached checks and free syntax/MX/typo rules before the existing worker/gate. Invalid blocks, explicit per-row override is bounded, and nonconfirming/unavailable checks disclose rather than block. Non-hosted transient retries wait at least sixty seconds and retain full call/time/usage rules. All SQL exists only in docs/EMAIL-OUTCOME-LEARNING-BUILD-REPORT.md and is unapplied. Local build complete; independent review and separate rollout approval remain required. No automation was invoked against production.
+
+
+## Bounce backfill correction (local branch, 2026-11-06)
+
+| Automation | Trigger | Effects | Owner |
+| --- | --- | --- | --- |
+| Existing bounce learning/backfill correction | Existing check-replies poll or explicit authenticated email-settings backfill_bounces action; no new schedule | Correlates permanent recipient failures using structured or Gmail fallback evidence; existing outcome RPC remains the suppression/note/sequence transaction. Explicit backfill adds count-only diagnostics and retains the 200-message cap/cursor. | Supabase email engine; Codex builder, Claude reviewer |
+
+Built and fixture-tested locally only. No migration or real automation run occurred in this task. See final EMAIL-OUTCOME-LEARNING-BUILD-REPORT.md addendum for count/status semantics and pending independent review.

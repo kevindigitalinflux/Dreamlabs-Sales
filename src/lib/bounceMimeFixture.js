@@ -10,7 +10,7 @@ export function bounceMimeFixture({structured=false, failedHeader=true, returned
   '--B1', 'Content-Type: multipart/alternative; boundary="B2"', '',
   '--B2', 'Content-Type: text/plain; charset=utf-8', '', '** Address not found **', '',
   ...(sentence?[`Your message wasn't delivered to ${recipient} because the address couldn't be found, or is unable to receive mail.`]:[]),
-  '', 'The response was:', `550 ${status} The email account that you tried to reach is inactive.`,
+  '', 'The response was:', status?`550 ${status} The email account that you tried to reach is inactive.`:'No delivery status supplied.',
   '--B2', 'Content-Type: text/html; charset=utf-8', '', '<p>Address not found</p>', '--B2--',
   '--B1', 'Content-Type: image/png', 'Content-ID: <icon.png>', 'Content-Transfer-Encoding: base64', '', 'aWNvbg==', '--B1--',
   '--B0', 'Content-Type: message/delivery-status', '',

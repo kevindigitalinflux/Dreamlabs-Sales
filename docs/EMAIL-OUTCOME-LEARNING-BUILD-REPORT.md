@@ -261,3 +261,46 @@ BEGIN
 END;
 $$;
 ```
+
+
+## Email outcome backfill fix — final local addendum (2026-11-06)
+
+Kevin authorised all five ordered items in docs/EMAIL-OUTCOME-BACKFILL-FIX-BRIEF.md. Codex remains builder and sole checkout writer; Claude remains architect/reviewer. The clean starting revision was d621191 (the supplied brief commit above deployed 312d0f4), not the brief's older stated HEAD. Branch: codex/email-outcome-backfill-fix. Existing migration 072 was inherited unchanged; this task neither created nor executed a migration or SQL. No role change or unresolved kickoff decision was needed. The requested Caveman skill was read; the existing SessionStart hook emitted CAVEMAN MODE ACTIVE — mode: caveman. No configuration or trust changes were needed. RTK history confirms interception of ordinary test/Git commands; PowerShell wrappers are not claimed universally compressed. Subscription allowance is unavailable; no paid fallback was used.
+
+### Ordered items and tests-first evidence
+
+1. **7a2f737 — MIME fixtures.** Built anonymised nested multipart/report, related/alternative plain/HTML parts, image, empty message/delivery-status and text/rfc822-headers. Both the Gmail-style 5.2.1 and structured 5.1.1 fixtures failed first. The blanket Auto-Submitted: auto-replied rejection also affected the structured counterpart. This deliberately red fixture commit preserves the reproduction; final branch is green.
+2. **f2300d2 — hard statuses.** Six new rule assertions failed first, then the rule suite passed. Added 5.2.1, 5.1.2, 5.1.3 and 5.1.6. Microsoft's exact 550 5.4.1 Recipient address rejected: Access denied counts as hard by the brief: delivery to that tenant recipient is unavailable. Other 5.4.1 routing failures remain non-hard. Existing 5.1.1/5.1.10 and explicit nonexistent-mailbox wording remain. Capacity (5.2.2/5.2.3), system (5.3.x), policy (5.7.x), temporary (4.x.x), successful replies, auto-replies, out-of-office and delayed notices do not suppress addresses. Auto-Submitted alone no longer disqualifies a recognised DSN. The empty-status fixture still failed at this boundary, awaiting item 3.
+3. **a75a731 — evidence and matching.** Thirteen MIME assertions failed before extraction changes; two further malformed-part probes failed before correction. The five-file focused suite then passed 58 tests. Returned-header To and Message-ID now survive decoding, including text/rfc822-headers and message/rfc822 headers. Original bodies and top-level To are not fallback evidence. Without usable structured recipient/status blocks, fallback priority is X-Failed-Recipients, returned-header To, then the exact wasn't-delivered sentence. Empty, missing and malformed status parts are tolerated. Usable structured recipient blocks retain independent statuses, preventing hard failures from being lent to soft/successful recipients. Multiple failed recipients are matched independently. Every recorded address must equal to_email in the caller's own sent log; a never-sent address records nothing even with a correct thread ID. Lead/org and membership checks remain.
+4. **6f42b8b — diagnostics.** Both new counter tests failed first; all 60 focused tests then passed. Existing fields remain; by_reason and status_codes return counts only. No addresses, bodies, provider strings or arbitrary diagnostic keys enter diagnostics/logs.
+5. **This commit — local run and report.** Ran 18 raw fixture DSNs through the actual MIME adapter/backfill twice using an in-memory inbox/database/RPC double. Thirteen hard-recipient fixtures per pass matched across all three fallback sources. Final failing-before boundary probes also fixed Gmail's Delay subject variant, Action: failed without status, explicit SMTP 450/250 contradicting user-unknown wording, and a delayed structured action beside a hard human-readable body. These remain within the requested status/malformed-part scope. No real mailbox was read.
+
+### Message-ID findings and limits
+
+smtp.ts generates an angle-bracketed UUID Message-ID; sendLeadEmail.ts stores the returned ID directly in email_logs.message_id, preserving case. Bounce matching now trims whitespace/angle brackets and lowercases both stored and DSN IDs. Outgoing headers are unchanged. In-Reply-To, References and returned-header Message-ID supply evidence. Tests cover bare/bracketed/mixed-case/missing stored IDs, returned headers alone, wrong threads and ambiguous unthreaded ownership.
+
+No production sent logs were queried: whether the 120 historical sends actually contain Message-IDs remains **unverified**. When supplied thread IDs have no match and every same-address sent row in the bounded query lacks a stored ID, the fallback requires exactly one unique lead/org for that address. Known conflicting IDs never fall back. The existing unthreaded rule also applies without usable DSN IDs. Scope remains this sender's latest 1,000 sent rows within the existing thirty-day lower lookback, plus ownership checks. Existing 100-recipient extraction and 20-link write caps remain. DSN correlation is not cryptographic authentication: a forged DSN naming an address genuinely sent in a matching thread is not proven authentic.
+
+### Count semantics and bounded fixture results
+
+The first four reasons count DSNs. hard means at least one accepted hard status, even without a recipient. soft_status means non-hard DSN with numeric SMTP/enhanced status or recognised failure wording; it includes policy/unknown/rejected classifications, not only retryable failures. no_recipient_found means no valid address in eligible evidence. no_status_found means no numeric status or recognised permanent-mailbox wording. Reasons overlap. status_codes counts each enhanced code once per DSN, even when repeated in several parts.
+
+The last two reasons count extracted hard recipients inspected for matching. recipient_not_in_sent_log means no same-address row in the bounded sender query. message_id_not_found means addressed rows exist but none matches supplied thread IDs; safe missing-ID fallback may still succeed. Reasons are not an exhaustive partition of unmatched: ambiguous ownership, absent membership or the link cap can leave unmatched recipients. Do not sum these counts as distinct messages/outcomes.
+
+Each local fixture pass returned:
+
+    messages_read: 18, bounces_found: 18, recipients_extracted: 15,
+    matched: 13, unmatched: 2, capped: false, complete: true, next_before_uid: null
+    by_reason: {hard: 16, soft_status: 1, no_recipient_found: 1,
+                no_status_found: 1, recipient_not_in_sent_log: 1, message_id_not_found: 1}
+    status_codes: {"5.2.1": 12, "5.1.1": 3, "5.1.2": 1, "5.2.2": 1}
+
+Thirteen valid fixtures produced thirteen distinct org/address/outcome keys across both passes; 26 mocked RPC calls were made. Other fixtures covered soft failure, absent recipient, never-sent recipient, wrong thread and absent status. The double models deduplicated evidence keys; it does not prove SQL transaction behavior. No reply alerts, drafts, sends or watermark/table writes occurred. All new identities, addresses and message IDs use example.com; prior legacy fixture domains were not rewritten.
+
+### Final gates and deployment graph
+
+Final gates pass: **3,032 tests, one skipped, zero failures**; npx tsc --noEmit; npm run build (2,949 modules, existing chunk-size warning); git diff --check; node scripts/places-edge-typecheck.mjs (25 entrypoints). Commands used VITE_SUPABASE_URL=http://127.0.0.1:54321 and VITE_SUPABASE_ANON_KEY=local-test-placeholder. Full suite reran after the final SMTP/delayed-action fixes. No dependency, frontend, worker, database security or migration change occurred.
+
+Recursive traversal of relative import declarations from every function index.ts yields four runtime importers of changed shared modules: **email-settings, check-replies, send-email, run-selected-autopilot**. The latter two reach emailOutcomeLearning via emailPreSend/sendLeadEmail, although recordEmailOutcome behavior is unchanged. Including type-only imports additionally reaches **draft-reply**, via replyDraft/replyPolling. Conservative rollout union: **check-replies, draft-reply, email-settings, run-selected-autopilot, send-email**. All five are covered by the 25-entrypoint shim. No frontend/worker rollout or migration is needed for this fix. This manifest is review information, not deployment authorisation.
+
+Independent Claude review, Deno/provider runtime, production stored-ID presence, real mailbox MIME variants and production backfill/SQL behavior remain pending. No push, merge, deploy, SQL, migration, real send, mailbox read, provider/worker/VPS call, secret use, other-checkout write or vault sync occurred. Hooks were disabled for commits. Repository handoff/status notes accompany this addendum. All five builder items are complete; no jobs remain. Stop here for Claude's review of the five exact commits. Any rollout or real backfill test needs Kevin's separate authorisation.

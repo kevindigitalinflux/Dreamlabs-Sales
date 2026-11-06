@@ -1,5 +1,7 @@
 # Next steps (the to-do list for Codex and Claude)
 
+- [ ] Email outcome backfill fix (2026-11-06): items 1–5 complete locally on codex/email-outcome-backfill-fix. Tests first, five item commits; 3,032 tests pass, one skipped. Claude reviews the final addendum in docs/EMAIL-OUTCOME-LEARNING-BUILD-REPORT.md and the exact branch before any separately authorised rollout or real mailbox test. No migration or publication occurred in this task. Remains unchecked until independent review.
+
 - [ ] Email outcome learning: Parts A/B/C and all thirteen builder items complete locally on codex/email-outcome-learning (2026-11-05). Claude reviews the exact commits and docs/EMAIL-OUTCOME-LEARNING-BUILD-REPORT.md, including proposed SQL. No migration was applied and no publication/backfill/send test is authorised. Remains unchecked until independent review.
 
 - [ ] Verifier round 1c: all six items built locally on codex/deepfind-registry-brand-match, 2026-11-05; independent Claude review and live validation pending. Read the final registry build-report addendum. Continuation remains a proposal, not an authorised build. No publication is authorised.

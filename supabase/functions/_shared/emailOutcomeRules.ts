@@ -11,6 +11,7 @@ export interface BounceMessage {
 }
 /** Restrict permanent failures to recipient failures; policy and capacity failures do not suppress addresses. */
 export function hardBounceStatus(block:string): boolean {
+  if(/^[ \t]*(?:diagnostic-code:[ \t]*smtp;[ \t]*)?[24]\d{2}(?:[ \t]|$)/im.test(block))return false;
   if (/\b4\.\d{1,3}\.\d{1,3}\b|mailbox (?:is )?full|quota exceeded|over quota|gr[ae]ylist|temporar|try again later/i.test(block)) return false;
   const action=/^action:\s*(\S+)/im.exec(block)?.[1];
   if(action&&action.toLowerCase()!=='failed')return false;
@@ -26,7 +27,7 @@ export function hardBounceRecipients(mail: BounceMessage): string[] {
 }
 /** Diagnostics contain only fixed reasons and validated numeric status codes, never message content. */
 export function analyseBounceMessage(mail:BounceMessage) {
-  const ignored=/out[ -]of[ -]office|automatic reply|auto[ -]?reply|delayed|delivery (?:delay|warning)/i.test(mail.subject??'')
+  const ignored=/out[ -]of[ -]office|automatic reply|auto[ -]?reply|\bdelay(?:ed)?\b|delivery warning/i.test(mail.subject??'')
     || (mail.headers.some(h => h.key.toLowerCase()==='auto-submitted' && h.value.trim().toLowerCase()==='auto-replied')
       && automaticMail(mail.headers.map(h=>[h.key,h.value]),mail.subject??'',mail.from?.address??'')!=='bounce');
   const headerText = mail.headers.filter(h=>/^(?:final-recipient|original-recipient|x-failed-recipients|status|diagnostic-code|action)$/i.test(h.key))
@@ -46,7 +47,8 @@ export function analyseBounceMessage(mail:BounceMessage) {
       ?? /^(?:original-recipient):\s*(.+)$/im.exec(block)?.[1];
     if(!field||!bounceAddresses(field).length)continue;
     hasRecipient=true;
-    if(!(/\b[245]\.\d{1,3}\.\d{1,3}\b|^action:|\buser unknown\b|\bmailbox (?:not found|does not exist)\b/im.test(block)))continue;
+    const action=/^action:[ \t]*(\S+)/im.exec(block)?.[1];
+    if(!(/\b[245]\.\d{1,3}\.\d{1,3}\b|\buser unknown\b|\bmailbox (?:not found|does not exist)\b/im.test(block))&&(!action||action.toLowerCase()==='failed'))continue;
     hasRecipientBlock=true;
     // Other explicit permanent statuses (for example policy refusal) cannot prove a mailbox is absent.
     if (!hardBounceStatus(block)) continue;

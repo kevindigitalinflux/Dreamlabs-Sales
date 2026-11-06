@@ -24,6 +24,7 @@ it.each([
  {failedHeader:false,returned:false,sentence:true},
  {deliveryStatus:'malformed status part'},
  {deliveryStatus:'Final-Recipient: rfc822; person@example.com'},
+ {deliveryStatus:'Final-Recipient: rfc822; person@example.com\r\nAction: failed'},
  {deliveryStatus:'Final-Recipient: malformed\r\nStatus: 5.2.1'},
 ])('learns each independent fallback source %j',async options=>{
  const parsed=await parseReplyMime(bounceMimeFixture(options));
