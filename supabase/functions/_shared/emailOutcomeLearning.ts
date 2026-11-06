@@ -1,5 +1,5 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
-import { hardBounceRecipients } from './emailOutcomeRules.ts';
+import { analyseBounceMessage } from './emailOutcomeRules.ts';
 import { messageIds } from './replyRules.ts';
 import { planStepDrafts } from './sequenceRecipients.ts';
 import type { Contact } from './contacts.ts';
@@ -18,8 +18,13 @@ export async function recordEmailOutcome(service: SupabaseClient, input: {
 
 /** Match DSNs only to genuine sent mail in this mailbox, then verify the lead's organisation before learning. */
 export async function learnBounceOutcomes(service:SupabaseClient,userId:string,mail:ParsedReply,seenAt:Date) {
-  const recipients=hardBounceRecipients(mail);
-  const result={recipients:recipients.length,matched:0,unmatched:recipients.length};
+  const analysis=analyseBounceMessage(mail);
+  const recipients=analysis.recipients;
+  const result={recipients:recipients.length,matched:0,unmatched:recipients.length,
+    by_reason:{hard:Number(analysis.hard),soft_status:Number(!analysis.hard&&analysis.hasStatus),
+      no_recipient_found:Number(!analysis.hasRecipient),no_status_found:Number(!analysis.hasStatus),
+      recipient_not_in_sent_log:0,message_id_not_found:0},
+    status_codes:Object.fromEntries(analysis.statusCodes.map(code=>[code,1])) as Record<string,number>};
   const source=messageIds(mail.messageId??'')[0]??mail.sourceId;
   if(!recipients.length||!source)return result;
   const normaliseId=(value:unknown)=>typeof value==='string'?value.trim().replace(/^<|>$/g,'').toLowerCase():'';
@@ -34,6 +39,8 @@ export async function learnBounceOutcomes(service:SupabaseClient,userId:string,m
     if(links>=20)break;
     const addressed=(sent??[]).filter(row=>String(row.to_email).trim().toLowerCase()===address);
     const threaded=addressed.filter(row=>ids.includes(normaliseId(row.message_id)));
+    if(!addressed.length)result.by_reason.recipient_not_in_sent_log++;
+    else if(ids.length&&!threaded.length)result.by_reason.message_id_not_found++;
     // Missing stored IDs may use the same conservative unthreaded rule; known conflicting IDs never do.
     const unthreaded=!ids.length||(!threaded.length&&addressed.length>0&&addressed.every(row=>!normaliseId(row.message_id)));
     const matches=[...new Map((unthreaded?addressed:threaded)

@@ -6,7 +6,9 @@ import { learnBounceOutcomes } from './emailOutcomeLearning.ts';
 /** One explicit, capped INBOX backfill; no alerts, drafts, messages, or normal polling watermark writes. */
 export async function backfillBounceOutcomes(service:SupabaseClient,userId:string,inbox:ReplyInbox,
   parse:(source:Uint8Array)=>Promise<ParsedReply>,deadline:number,now=new Date(),beforeUid?:number) {
-  const out={messages_read:0,bounces_found:0,recipients_extracted:0,matched:0,unmatched:0,capped:false,complete:false,next_before_uid:null as number|null};
+  const out={messages_read:0,bounces_found:0,recipients_extracted:0,matched:0,unmatched:0,capped:false,complete:false,next_before_uid:null as number|null,
+    by_reason:{hard:0,soft_status:0,no_recipient_found:0,no_status_found:0,recipient_not_in_sent_log:0,message_id_not_found:0},
+    status_codes:{} as Record<string,number>};
   const since=new Date(now.getTime()-30*86400000);
   let lock:{release():void}|undefined;
   const timer=setTimeout(()=>inbox.abort?.(),Math.max(1,deadline-Date.now()-1000));
@@ -29,6 +31,8 @@ export async function backfillBounceOutcomes(service:SupabaseClient,userId:strin
           out.bounces_found++;
           const learned=await learnBounceOutcomes(service,userId,{...mail,sourceId:inbox.uidValidity?`imap:${userId}:${inbox.uidValidity}:${uid}`:undefined},received);
           out.recipients_extracted+=learned.recipients;out.matched+=learned.matched;out.unmatched+=learned.unmatched;
+          for(const key of Object.keys(out.by_reason) as (keyof typeof out.by_reason)[])out.by_reason[key]+=learned.by_reason[key];
+          for(const [code,count] of Object.entries(learned.status_codes))out.status_codes[code]=(out.status_codes[code]??0)+count;
         }
         out.next_before_uid=uid;
         break;

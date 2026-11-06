@@ -29,3 +29,27 @@ it('does not learn old, automatic, soft, or unparseable mail and closes on failu
  await expect(backfillBounceOutcomes(f.db.service,'sender',f.inbox,f.parse,Date.now()+60000,new Date('2026-11-05'))).rejects.toThrow('Bounce backfill could not finish');
  expect(f.inbox.logout).toHaveBeenCalledTimes(2);
 });
+it('reports bounded count-only reasons and distinct status codes per DSN',async()=>{
+ const f=fixture(7);const header=address=>[{key:'X-Failed-Recipients',value:address}];
+ const mail=(text,headers=header('missing@example.com'),inReplyTo='<sent@example.com>')=>({from:{address:'mailer-daemon@example.com'},headers,attachments:[],text,inReplyTo});
+ const messages=[
+  mail('550 5.2.1 inactive; repeated 5.2.1'),
+  mail('550 5.1.1 user unknown',header('never-sent@example.com')),
+  mail('552 5.2.2 mailbox full'),
+  mail('Delivery failed without a status'),
+  mail('550 5.1.3 invalid address',[]),
+  mail('550 5.1.6 mailbox gone',header('missing@example.com'),'<unknown@example.com>'),
+  mail('550 5.1.2 bad domain'),
+ ];
+ f.parse.mockImplementation(async source=>messages[source[0]-1]);
+ const out=await backfillBounceOutcomes(f.db.service,'sender',f.inbox,f.parse,Date.now()+60000,new Date('2026-11-05'));
+ expect(out).toMatchObject({messages_read:7,bounces_found:7,recipients_extracted:4,matched:2,unmatched:2,
+  by_reason:{hard:5,soft_status:1,no_recipient_found:1,no_status_found:1,recipient_not_in_sent_log:1,message_id_not_found:1},
+  status_codes:{'5.2.1':1,'5.1.1':1,'5.2.2':1,'5.1.3':1,'5.1.6':1,'5.1.2':1}});
+ expect(JSON.stringify(out)).not.toContain('@');expect(JSON.stringify(out)).not.toContain('inactive');
+});
+it('counts missing stored IDs even when safe unthreaded matching succeeds',async()=>{
+ const f=fixture(1);f.db.tables.email_logs[0].message_id=null;
+ const out=await backfillBounceOutcomes(f.db.service,'sender',f.inbox,f.parse,Date.now()+60000,new Date('2026-11-05'));
+ expect(out).toMatchObject({matched:1,by_reason:{hard:1,message_id_not_found:1}});
+});

@@ -22,9 +22,13 @@ export function hardBounceStatus(block:string): boolean {
 }
 /** Extract only explicitly nonexistent mailboxes from bounded, separate DSN recipient blocks. */
 export function hardBounceRecipients(mail: BounceMessage): string[] {
-  if (/out[ -]of[ -]office|automatic reply|auto[ -]?reply|delayed|delivery (?:delay|warning)/i.test(mail.subject??'')) return [];
-  if (mail.headers.some(h => h.key.toLowerCase()==='auto-submitted' && h.value.trim().toLowerCase()==='auto-replied')
-    && automaticMail(mail.headers.map(h=>[h.key,h.value]),mail.subject??'',mail.from?.address??'')!=='bounce') return [];
+  return analyseBounceMessage(mail).recipients;
+}
+/** Diagnostics contain only fixed reasons and validated numeric status codes, never message content. */
+export function analyseBounceMessage(mail:BounceMessage) {
+  const ignored=/out[ -]of[ -]office|automatic reply|auto[ -]?reply|delayed|delivery (?:delay|warning)/i.test(mail.subject??'')
+    || (mail.headers.some(h => h.key.toLowerCase()==='auto-submitted' && h.value.trim().toLowerCase()==='auto-replied')
+      && automaticMail(mail.headers.map(h=>[h.key,h.value]),mail.subject??'',mail.from?.address??'')!=='bounce');
   const headerText = mail.headers.filter(h=>/^(?:final-recipient|original-recipient|x-failed-recipients|status|diagnostic-code|action)$/i.test(h.key))
     .map(h=>`${h.key}: ${h.value}`).join('\n');
   const text = (mail.text ?? '').slice(0,100_000).split(/\n\s*(?:-+\s*original message|content-type:\s*message\/rfc822)/i)[0] ?? '';
@@ -32,24 +36,35 @@ export function hardBounceRecipients(mail: BounceMessage): string[] {
     ? `${headerText}\n${text.replace(/\n\s*\n/g,'\n')}` : `${headerText}\n${text}`;
   const sources = [...(mail.deliveryStatus??[]).slice(0,10),fallback];
   const recipients = new Set<string>();
+  const statusCodes=[...new Set(sources.flatMap(source=>source.slice(0,100_000).match(/\b[245]\.\d{1,3}\.\d{1,3}\b/g)??[]))].slice(0,100);
+  const hasStatus=statusCodes.length>0||sources.some(source=>/\b[245]\d{2}\b|\buser unknown\b|\bmailbox (?:not found|does not exist)\b/i.test(source.slice(0,100_000)));
+  let hard=false;
   let hasRecipientBlock=false;
+  let hasRecipient=false;
   for (const source of sources) for (const block of source.slice(0,100_000).replace(/\r\n?/g,'\n').replace(/\n[ \t]+/g,' ').split(/\n\s*\n/)) {
     const field = /^(?:final-recipient):\s*(.+)$/im.exec(block)?.[1]
       ?? /^(?:original-recipient):\s*(.+)$/im.exec(block)?.[1];
-    if(!field||!bounceAddresses(field).length||!(/\b[245]\.\d{1,3}\.\d{1,3}\b|^action:|\buser unknown\b|\bmailbox (?:not found|does not exist)\b/im.test(block)))continue;
+    if(!field||!bounceAddresses(field).length)continue;
+    hasRecipient=true;
+    if(!(/\b[245]\.\d{1,3}\.\d{1,3}\b|^action:|\buser unknown\b|\bmailbox (?:not found|does not exist)\b/im.test(block)))continue;
     hasRecipientBlock=true;
     // Other explicit permanent statuses (for example policy refusal) cannot prove a mailbox is absent.
     if (!hardBounceStatus(block)) continue;
+    hard=true;
     for (const email of bounceAddresses(field)) recipients.add(email);
   }
   // Structured recipients own their statuses. Never lend one recipient's failure to another.
-  if(hasRecipientBlock)return [...recipients].slice(0,100);
-  if(!hardBounceStatus(fallback))return [];
   const failed=mail.headers.filter(h=>h.key.toLowerCase()==='x-failed-recipients').flatMap(h=>bounceAddresses(h.value));
   const returned=(mail.returnedRecipientHeaders??[]).slice(0,10).flatMap(bounceAddresses);
   const sentence=[...text.matchAll(/\bYour message wasn['’]t delivered to\s+(<?[^\s<>]+@[^\s<>]+>?)/gi)].flatMap(m=>bounceAddresses(m[1]));
-  for(const email of failed.length?failed:returned.length?returned:sentence)recipients.add(email);
-  return [...recipients].slice(0,100);
+  const fallbackRecipients=failed.length?failed:returned.length?returned:sentence;
+  hasRecipient=hasRecipient||fallbackRecipients.length>0;
+  if(!hasRecipientBlock) {
+    hard=hardBounceStatus(fallback);
+    if(hard)for(const email of fallbackRecipients)recipients.add(email);
+  }
+  hard=hard&&!ignored;
+  return {recipients:hard?[...recipients].slice(0,100):[],hard,hasRecipient,hasStatus,statusCodes};
 }
 /** Parse bounded recipient header tokens without admitting display names or arbitrary body addresses. */
 export function bounceAddresses(value:string):string[] {

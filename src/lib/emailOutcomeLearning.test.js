@@ -9,7 +9,7 @@ function fixture() {
  db.service.rpc=vi.fn(async()=>({data:true,error:null}));return db;
 }
 it('links a hard bounce to this mailbox and org and requests atomic suppression and a note',async()=>{
- const db=fixture();expect(await learnBounceOutcomes(db.service,'sender',bounce,new Date('2026-11-05'))).toEqual({recipients:1,matched:1,unmatched:0});
+ const db=fixture();expect(await learnBounceOutcomes(db.service,'sender',bounce,new Date('2026-11-05'))).toMatchObject({recipients:1,matched:1,unmatched:0});
  expect(db.service.rpc).toHaveBeenCalledWith('record_email_outcome',expect.objectContaining({p_org_id:'org',p_lead_id:'lead',p_address:'person@example.com',p_outcome:'bounced_hard',p_pause_sequences:true}));
 });
 it.each(['other-mailbox','other-org','wrong-thread'])('rejects a %s match',async mode=>{
