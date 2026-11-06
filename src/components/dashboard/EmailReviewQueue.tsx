@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { MailCheck, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import {discardReviewDraft} from '../../lib/draftReviewActions';
 import type { DraftLog } from '../../hooks/useDrafts';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
@@ -26,11 +27,13 @@ interface EmailReviewQueueProps {
    * wiped once the action completes. Has no effect unless `selected` etc.
    * are also provided. */
   selectionDisabled?: boolean;
+  errors?:Record<string,string>;
 }
 
 /** Drafts awaiting review — sequence output + manual saves. Nothing sends without a click. */
-export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selected, onToggle, onToggleAll, selectionDisabled }: EmailReviewQueueProps) {
+export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selected, onToggle, onToggleAll, selectionDisabled, errors={} }: EmailReviewQueueProps) {
   const [discardingId, setDiscardingId] = useState<string | null>(null);
+  const [discardErrors,setDiscardErrors]=useState<Record<string,string>>({});
   const addresses=useMemo(()=>drafts.map(d=>d.to_email),[drafts]);
   const verification=useEmailVerification(addresses);
   if (loading) return <Skeleton className="h-20 w-full" />;
@@ -39,9 +42,11 @@ export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selecte
   }
   async function discard(id: string) {
     setDiscardingId(id);
-    await supabase.from('email_logs').delete().eq('id', id);
-    setDiscardingId(null);
-    onChanged();
+    try {
+      const error=await discardReviewDraft(supabase,id);
+      if(error)setDiscardErrors(previous=>({...previous,[id]:error}));else onChanged();
+    } catch(error) {console.error('draft discard failed',error);setDiscardErrors(previous=>({...previous,[id]:'Could not discard this draft. Try again.'}));}
+    finally {setDiscardingId(null);}
   }
   const selectable = selected !== undefined && onToggle !== undefined && onToggleAll !== undefined;
   return (
@@ -73,7 +78,7 @@ export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selecte
             <button
               type="button"
               onClick={() => void discard(d.id)}
-              disabled={discardingId === d.id}
+              disabled={selectionDisabled||discardingId === d.id}
               aria-label="Discard draft"
               className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-muted hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -81,8 +86,9 @@ export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selecte
                 ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-violet border-t-transparent motion-reduce:animate-none" aria-hidden />
                 : <Trash2 className="h-4 w-4" aria-hidden />}
             </button>
-            <Button variant="secondary" onClick={() => onReview(d)}>Review &amp; send</Button>
+            <Button variant="secondary" disabled={selectionDisabled} onClick={() => onReview(d)}>Review &amp; send</Button>
           </div>
+          {(errors[d.id]||discardErrors[d.id])&&<p role="alert" className="w-full text-sm text-danger">{errors[d.id]||discardErrors[d.id]}</p>}
         </li>
       ))}
     </ul>

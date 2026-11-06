@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router';
-import {readEmailSendResponse,emailReleaseSummary,type EmailSendView} from '../../lib/emailVerification';
+import {emailReleaseSummary,type EmailSendView} from '../../lib/emailVerification';
 import { supabase } from '../../lib/supabase';
 import { useDrafts } from '../../hooks/useDrafts';
 import type { DraftLog } from '../../hooks/useDrafts';
 import { useOrgLeads } from '../../hooks/useOrgLeads';
-import { Button } from '../ui/Button';
+import {useReviewBatch} from '../../hooks/useReviewBatch';
+import {ReviewBatchControls} from '../ui/ReviewBatchControls';
+import {discardReviewDraft,releaseReviewDraft,reviewedDraftMatches} from '../../lib/draftReviewActions';
 import { EmailReviewQueue } from '../dashboard/EmailReviewQueue';
 import { EmailComposer } from './EmailComposer';
 import { PostSendPreview } from './PostSendPreview';
@@ -24,9 +26,10 @@ export function ReleaseQueue() {
   const { drafts, loading, error, refresh } = useDrafts(true);
   const { currentOrg } = useOrg();
   const { leads } = useOrgLeads();
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const review=useReviewBatch(drafts.map(d=>d.id));
+  const lock=useRef(false);const [checking,setChecking]=useState(false);
+  const visible=drafts.filter(d=>!review.done.has(d.id));
   const [reviewing, setReviewing] = useState<DraftLog | null>(null);
-  const [releasing, setReleasing] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
   const [report, setReport] = useState<PostSendReport | null>(null);
   const reviewLead = reviewing?.lead ? leads.find((l) => l.id === reviewing.lead!.id) ?? null : null;
@@ -36,83 +39,54 @@ export function ReleaseQueue() {
   // checkbox's all-selected comparison both go stale, even though the
   // release loop itself only ever iterates `drafts` and so can't act on a
   // dead id.
-  useEffect(() => {
-    setSelected((prev) => {
-      const draftIds = new Set(drafts.map((d) => d.id));
-      const next = new Set([...prev].filter((id) => draftIds.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-  }, [drafts]);
-
-  function toggleSelected(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
-
-  function toggleSelectAll() {
-    setSelected((prev) => (prev.size === drafts.length ? new Set() : new Set(drafts.map((d) => d.id))));
-  }
-
-  async function handleRelease() {
-    setReleasing(true);
-    setSummary(null);
-    setReport(null);
-    const reports: (PostSendReport | null)[] = [];
-    const results:EmailSendView[]=[];
-    let firstFailReason: string | null = null;
+  // useReviewBatch scopes selection to the current rows and retains failures.
+  async function handleBatch(action:'release'|'reject') {
+    if(lock.current||review.busy||reviewing||!review.selected.size)return;
+    if(!window.confirm(action==='release'?'Send the selected reviewed drafts now?':'Reject selected drafts? This removes them from the review queue.'))return;
+    lock.current=true;setChecking(true);
+    try {
+    setSummary(null);setReport(null);
+    const reports:(PostSendReport|null)[]=[];const results:EmailSendView[]=[];
     // Recheck immediately before release: a draft may have acquired an Autopilot link since selection.
-    const fresh = await loadReleaseDrafts(supabase, currentOrg?.id ?? null);
-    if (fresh.error) { setSummary(fresh.error); setReleasing(false); return; }
-    for (const draft of fresh.drafts) {
-      if (!selected.has(draft.id)) continue;
-      const { data, error } = await supabase.functions.invoke('send-email', {
-        body: {
-          to_email: draft.to_email, subject: draft.subject, body: draft.body, lead_id: draft.lead?.id, log_id: draft.id,
-          decision_maker_candidate_id: draft.decision_maker_candidate_id,
-        },
-      });
-      const result=await readEmailSendResponse(data,error);results.push(result);
-      if (!result.ok) {
-        if (!firstFailReason) firstFailReason = result.error ?? 'Send failed';
-      } else {
+    const fresh=await loadReleaseDrafts(supabase,currentOrg?.id??null);
+    if(fresh.error){setSummary(fresh.error);return;}
+    const available=new Map(fresh.drafts.map(d=>[d.id,d]));
+    await review.run(visible,d=>d.id,async draft=>{
+      const current=available.get(draft.id);
+      if(!current)return 'This draft changed or now requires Autopilot review. Refresh before trying again.';
+      if(!reviewedDraftMatches(draft,current))return 'This draft changed after selection. Review it again before releasing or rejecting it.';
+      if(action==='reject')return discardReviewDraft(supabase,current.id);
+      const result=await releaseReviewDraft(supabase,current);results.push(result.view);
+      if(!result.error){
         // Keep which lead each line is about: prefix with the business name (lines then stay distinct per lead).
-        const rep = parsePostSend(data);
-        const who = draft.lead?.business_name ?? draft.to_email;
-        reports.push(rep ? { lines: rep.lines.map((l) => `${who}: ${l}`), warnings: rep.warnings.map((w) => `${who}: ${w}`) } : null);
+        const rep=parsePostSend(result.data);const who=current.lead?.business_name??current.to_email;
+        reports.push(rep?{lines:rep.lines.map(l=>`${who}: ${l}`),warnings:rep.warnings.map(w=>`${who}: ${w}`)}:null);
       }
-    }
-    setReleasing(false);
+      return result.error;
+    },action==='release'?'Release':'Reject');
     setReport(mergePostSend(reports));
-    setSelected(new Set());
-    setSummary(emailReleaseSummary(results)+(firstFailReason?`: ${firstFailReason}`:''));
+    if(action==='release')setSummary(emailReleaseSummary(results));
     await refresh();
+    } catch(error) {console.error('release queue refresh failed',error);setSummary('Could not refresh the review queue. Refresh before trying again.');}
+    finally {lock.current=false;setChecking(false);}
   }
 
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm text-muted">Autopilot drafts need individual review. <Link className="underline" to="/outreach/autopilot">Review Autopilot drafts</Link></p>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      {selected.size > 0 && (
-        <div className="flex items-center justify-end">
-          <Button onClick={() => void handleRelease()} disabled={releasing} loading={releasing}>
-            {releasing ? 'Releasing…' : `Release selected (${selected.size})`}
-          </Button>
-        </div>
-      )}
-      {summary && <p role="status" className="text-sm text-success">{summary}</p>}
+      <ReviewBatchControls review={{...review,busy:review.busy||checking||!!reviewing,summary:summary??review.summary}} ids={visible.map(d=>d.id)} approveLabel="Release selected" rejectLabel="Reject selected" onApprove={()=>void handleBatch('release')} onReject={()=>void handleBatch('reject')} />
       {report && <PostSendPreview lines={null} report={report} />}
       <EmailReviewQueue
-        drafts={drafts}
+        drafts={visible}
         loading={loading}
         onReview={setReviewing}
         onChanged={() => void refresh()}
-        selected={selected}
-        onToggle={toggleSelected}
-        onToggleAll={toggleSelectAll}
-        selectionDisabled={releasing}
+        selected={review.selected}
+        onToggle={review.toggle}
+        onToggleAll={review.all}
+        selectionDisabled={review.busy||checking||!!reviewing}
+        errors={review.errors}
       />
       {reviewing && reviewLead && (
         <EmailComposer
