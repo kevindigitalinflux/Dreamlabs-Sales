@@ -115,3 +115,8 @@ This checkout is now codex/email-outcome-learning, based on clean origin/main 04
 ## Email outcome backfill fix — final local checkpoint (2026-11-06)
 
 All five brief items are complete locally in this accuracy checkout on codex/email-outcome-backfill-fix, tests first and one commit per item. Read the final EMAIL-OUTCOME-LEARNING-BUILD-REPORT.md addendum and latest docs/HANDOFF.md. Final gates pass: 3,032 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. Eighteen fixture DSNs ran locally twice; no real mailbox was read. Independent Claude review and production validation remain pending. No migration/SQL, push/merge/deploy, frontend or worker/VPS change occurred. Stop after report; no unfinished builder item remains.
+
+
+## Multi-select round 2 — final local checkpoint (2026-11-06)
+
+Current branch is codex/multi-select-round-2, based on the completed backfill branch db137e6 per Kevin's explicit checkout command. Seven actual review screens are built locally, tests first and one commit per screen; ImportPreview is absent and skipped with evidence. Read docs/MULTI-SELECT-ROUND-2-BUILD-REPORT.md and latest handoff. Application 2fe4a0e passes 239 files / 3,089 tests plus one skipped, TypeScript/build/25-entrypoint shim/whitespace. Changes from the task base are frontend only. Independent Claude review and browser/phone/live checks remain pending. No push/merge/deploy/migration or live send occurred. Stop after report.

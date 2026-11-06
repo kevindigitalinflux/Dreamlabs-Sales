@@ -1864,3 +1864,8 @@ On codex/email-outcome-learning in dreamlabs-sales-accuracy, all thirteen ordere
 ### Email outcome backfill fix — local completion (2026-11-06)
 
 Items 1–5 complete on codex/email-outcome-backfill-fix, tests first and one commit each. Read the final EMAIL-OUTCOME-LEARNING-BUILD-REPORT.md addendum and latest handoff. Empty-status Gmail DSNs now survive auto-replied classification, extract bounded fallback recipients, normalise stored/thread IDs and retain sent-address/ownership checks. Hard/soft rules and count-only diagnostics are covered; eighteen fixture DSNs ran twice with thirteen matches per pass. Final gates pass: 3,032 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. No migration, production mailbox/provider/SQL action, frontend/worker change or publication occurred. Independent review pending; stop after report.
+
+
+### Multi-select round 2 — local completion (2026-11-06)
+
+Built seven frontend review screens on codex/multi-select-round-2, from db137e6 as Kevin requested. ImportPreview does not exist; the separate markdown setup preview remains unchanged. Read docs/MULTI-SELECT-ROUND-2-BUILD-REPORT.md for exact commits, shared single-row actions, fifty-row cap, retained failures, parked draft ownership/follow-up and Dream Agent partial-save retention. Application 2fe4a0e passes 239 files / 3,089 tests, one skipped, TypeScript/build/edge shim/whitespace. No function or migration change, publication, real send, external service action or vault sync occurred. Independent review and real browser/phone/live validation remain pending. Stop after report.
