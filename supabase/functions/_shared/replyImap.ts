@@ -23,9 +23,9 @@ export async function parseReplyMime(source: Uint8Array): Promise<ParsedReply> {
   const email = await PostalMime.parse(source);
   const decode=(value:ArrayBuffer|Uint8Array|string)=>typeof value==='string'?value:new TextDecoder().decode(value);
   const deliveryStatus=email.attachments.filter(a=>a.mimeType==='message/delivery-status').slice(0,10).map(a=>decode(a.content).slice(0,100_000));
-  const originalMessageIds=email.attachments.filter(a=>a.mimeType==='message/rfc822').slice(0,10).flatMap(a=>{
-    const headers=decode(a.content).slice(0,20_000).split(/\r?\n\r?\n/)[0]??'';
-    return messageIds(/^message-id:\s*(.+)$/im.exec(headers)?.[1]??'');
-  });
-  return { ...email, deliveryStatus, originalMessageIds, headers: email.headers.map(h => ({ key: h.key ?? '', value: h.value ?? '' })) };
+  const returnedHeaders=email.attachments.filter(a=>['message/rfc822','text/rfc822-headers'].includes(a.mimeType)).slice(0,10)
+    .map(a=>(decode(a.content).slice(0,20_000).split(/\r?\n\r?\n/)[0]??'').replace(/\r\n?/g,'\n').replace(/\n[ \t]+/g,' '));
+  const originalMessageIds=returnedHeaders.flatMap(headers=>messageIds(/^message-id:[ \t]*(.+)$/im.exec(headers)?.[1]??''));
+  const returnedRecipientHeaders=returnedHeaders.flatMap(headers=>[...headers.matchAll(/^to:[ \t]*(.*)$/gim)].map(m=>m[1]));
+  return { ...email, deliveryStatus, originalMessageIds, returnedRecipientHeaders, headers: email.headers.map(h => ({ key: h.key ?? '', value: h.value ?? '' })) };
 }

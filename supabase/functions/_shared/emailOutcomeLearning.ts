@@ -22,7 +22,8 @@ export async function learnBounceOutcomes(service:SupabaseClient,userId:string,m
   const result={recipients:recipients.length,matched:0,unmatched:recipients.length};
   const source=messageIds(mail.messageId??'')[0]??mail.sourceId;
   if(!recipients.length||!source)return result;
-  const ids=[...new Set([...(mail.originalMessageIds??[]),...messageIds(mail.inReplyTo??''),...messageIds(mail.references??'')])];
+  const normaliseId=(value:unknown)=>typeof value==='string'?value.trim().replace(/^<|>$/g,'').toLowerCase():'';
+  const ids=[...new Set([...(mail.originalMessageIds??[]),...messageIds(mail.inReplyTo??''),...messageIds(mail.references??'')].map(normaliseId))];
   // Bounded lookback prevents a spoofed DSN from targeting arbitrary historical addresses.
   const {data:sent,error}=await service.from('email_logs').select('id,org_id,lead_id,to_email,message_id,sent_at')
     .eq('sent_by',userId).eq('status','sent').gte('sent_at',new Date(seenAt.getTime()-30*86400000).toISOString())
@@ -31,9 +32,13 @@ export async function learnBounceOutcomes(service:SupabaseClient,userId:string,m
   let links=0;
   for(const address of recipients) {
     if(links>=20)break;
-    const matches=[...new Map((sent??[]).filter(row=>String(row.to_email).trim().toLowerCase()===address&&(!ids.length||ids.includes(row.message_id)))
+    const addressed=(sent??[]).filter(row=>String(row.to_email).trim().toLowerCase()===address);
+    const threaded=addressed.filter(row=>ids.includes(normaliseId(row.message_id)));
+    // Missing stored IDs may use the same conservative unthreaded rule; known conflicting IDs never do.
+    const unthreaded=!ids.length||(!threaded.length&&addressed.length>0&&addressed.every(row=>!normaliseId(row.message_id)));
+    const matches=[...new Map((unthreaded?addressed:threaded)
       .map(row=>[`${row.org_id}:${row.lead_id}`,row])).values()];
-    if(!ids.length&&matches.length!==1)continue; // An unthreaded DSN must not choose between leads or organisations.
+    if(unthreaded&&matches.length!==1)continue; // An unthreaded DSN must not choose between leads or organisations.
     let matched=false;
     for(const row of matches) {
       if(links>=20)break;

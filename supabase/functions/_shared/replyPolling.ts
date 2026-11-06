@@ -7,6 +7,7 @@ export interface ParsedReply {
   messageId?: string; inReplyTo?: string; references?: string; subject?: string; text?: string; html?: string; date?: string;
   from: { address?: string }; headers: { key: string; value: string }[]; attachments: unknown[];
   deliveryStatus?: string[]; originalMessageIds?: string[]; sourceId?: string;
+  returnedRecipientHeaders?: string[];
 }
 export interface ReplyContext {
   replyId: string; senderId: string; lead: Record<string, unknown>; body: string; subject: string;
