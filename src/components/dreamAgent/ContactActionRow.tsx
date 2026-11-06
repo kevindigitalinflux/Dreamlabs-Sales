@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import {ConfirmActionButton} from './ConfirmActionButton';
+import type {AgentConfirmHandle} from '../../lib/dreamAgentBulk';
 import { UserPlus, UserCog } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -9,6 +11,7 @@ import type { ActionResolution } from '../../hooks/useDreamAgentSession';
 import type { DecisionMakerCandidate } from '../../types';
 
 interface ContactActionRowProps {
+  onBulkReady?:(handle:AgentConfirmHandle|null)=>void;
   action: ContactAction;
   resolution: ActionResolution;
   leadName: string;
@@ -31,7 +34,7 @@ type TextKey = 'first_name' | 'last_name' | 'title' | 'label' | 'email' | 'phone
  * that cannot be saved as it stands shows why and its Confirm button is off. Nothing
  * is written until the user confirms and applies.
  */
-export function ContactActionRow({ action, resolution, leadName, existing, leadContacts, contactsLoaded, messages, onResolve }: ContactActionRowProps) {
+export function ContactActionRow({ action, resolution, leadName, existing, leadContacts, contactsLoaded, messages, onResolve,onBulkReady }: ContactActionRowProps) {
   const [draft, setDraft] = useState<ContactDraft>(() => (resolution.status === 'confirmed_contact' ? resolution.draft : draftFromAction(action, existing)));
   const [dirty, setDirty] = useState(false);
   const confirmed = resolution.status === 'confirmed_contact';
@@ -81,13 +84,13 @@ export function ContactActionRow({ action, resolution, leadName, existing, leadC
       {problem && <p role="alert" className="text-sm text-danger">{problem}</p>}
       <div className="flex items-center justify-between">
         <Button variant="ghost" onClick={() => onResolve({ status: 'dismissed' })}>Dismiss</Button>
-        <Button
+        <ConfirmActionButton onReady={onBulkReady} problem={problem}
           variant={confirmed ? 'secondary' : 'primary'}
           disabled={problem !== null}
           onClick={() => onResolve({ status: 'confirmed_contact', draft })}
         >
           {confirmed ? 'Confirmed ✓' : 'Confirm'}
-        </Button>
+        </ConfirmActionButton>
       </div>
     </div>
   );

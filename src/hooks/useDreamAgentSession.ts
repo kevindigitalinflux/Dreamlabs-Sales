@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import {applyAgentBatch} from '../lib/dreamAgentApplyBatch';
 import { applyLeadUpdate } from '../lib/leadUpdates';
 import type { LeadPatch } from '../lib/leadUpdates';
 import { sanitizeDreamAgentActions, splitContactPatch } from '../lib/dreamAgentActions';
@@ -19,6 +20,7 @@ const NO_MESSAGES: string[] = [];
 const NO_ACTIONS: DreamAgentAction[] = [];
 const NO_RESOLUTIONS: Record<number, ActionResolution> = {};
 const NO_REPORT: ContactReport = { failed: [], notes: [] };
+const NO_APPLY_ERRORS:Record<number,string>={};
 export type { ContactReport };
 
 export type ActionResolution =
@@ -37,7 +39,7 @@ export type ActionResolution =
  * original note plus any free-text refinements), the AI's latest full action
  * list, and each action's per-row resolution state. Nothing here writes to the
  * database except confirmAll, and only for actions whose resolution status starts
- * with "confirmed_" — every other action is silently discarded, matching the
+ * with "confirmed_" — every other action remains available for review, matching the
  * guardrail: nothing applies without an explicit confirm.
  */
 export function useDreamAgentSession() {
@@ -48,6 +50,8 @@ export function useDreamAgentSession() {
   // Persisted per org so leaving the page (e.g. to look up a lead's name) and
   // coming back doesn't wipe the in-progress conversation or its proposed actions.
   const storageScope = currentOrg?.id ?? 'none';
+  const [applyErrors,setApplyErrors]=usePersistedState<Record<number,string>>(`dream-agent:apply-errors:${storageScope}`,NO_APPLY_ERRORS);
+  const [applySummary,setApplySummary]=usePersistedState(`dream-agent:apply-summary:${storageScope}`,'');
   const [messages, setMessages] = usePersistedState<string[]>(`dream-agent:messages:${storageScope}`, NO_MESSAGES);
   const [actions, setActions] = usePersistedState<DreamAgentAction[]>(`dream-agent:actions:${storageScope}`, NO_ACTIONS);
   const [resolutions, setResolutions] = usePersistedState<Record<number, ActionResolution>>(`dream-agent:resolutions:${storageScope}`, NO_RESOLUTIONS);
@@ -104,7 +108,7 @@ export function useDreamAgentSession() {
     const sanitized = sanitizeDreamAgentActions(rawActions, validIds, packages.allowed, new Set(icps.map((p) => p.id)), idx);
     setRound((r) => r + 1);
     setMessages(nextMessages);
-    setActions(sanitized);
+    setActions(sanitized);setApplyErrors({});setApplySummary('');
     setResolutions(Object.fromEntries(sanitized.map((_, i) => [i, { status: 'pending' } as ActionResolution])));
   }, [currentOrg, messages, packages, icps]);
 
@@ -126,13 +130,15 @@ export function useDreamAgentSession() {
   }
 
   /** Applies the confirmed contact rows (see applyConfirmedContacts), then refreshes the affected leads' contacts. */
-  const applyContacts = useCallback(async () => {
-    if (!session) return;
-    const { report, leadIds } = await applyConfirmedContacts(actions, resolutions, session.user.id);
+  const applyContacts = useCallback(async (indices:number[]) => {
+    if (!session) return [];
+    const selected=Object.fromEntries(indices.map(index=>[index,resolutions[index]]));
+    const { report, leadIds,outcomes } = await applyConfirmedContacts(actions, selected, session.user.id);
     setContactReport(report);
-    if (leadIds.length === 0) return;
+    if (leadIds.length === 0) return outcomes;
     const fresh = await fetchContacts(leadIds);
     if (fresh) setContactIndex((prev) => ({ ...prev, ...fresh }));
+    return outcomes;
   }, [actions, resolutions, session]);
 
   const confirmAll = useCallback(async () => {
@@ -140,10 +146,11 @@ export function useDreamAgentSession() {
     setLoading(true);
     setError(null);
     setContactReport(NO_REPORT);
-    for (let i = 0; i < actions.length; i += 1) {
+    try {
+    const result=await applyAgentBatch(actions,resolutions,async i=>{
       const action = actions[i];
       const resolution = resolutions[i];
-      if (!resolution || !resolution.status.startsWith('confirmed_')) continue;
+
 
       if (action.type === 'update' && resolution.status === 'confirmed_update') {
         const { data: before } = await supabase.from('leads').select('*').eq('id', action.lead_id).single();
@@ -152,7 +159,7 @@ export function useDreamAgentSession() {
         const { fill, additions } = splitContactPatch(before as Lead | null ?? undefined, action.patch);
         const leadPatch: LeadPatch = { ...patchToLeadPatch(action.patch), ...fill, ...mergeAdditions(before as Lead | null ?? undefined, additions) };
         const err = await applyLeadUpdate(action.lead_id, leadPatch, before as Lead | null, session.user.id);
-        if (err) { setError(err); continue; }
+        if (err) return err;
         await supabase.from('lead_notes').insert({
           lead_id: action.lead_id, created_by: session.user.id, note_type: 'ai_summary',
           content: `Dream Agent: ${action.excerpt}\n\n${action.rationale}`,
@@ -174,7 +181,7 @@ export function useDreamAgentSession() {
           last_contacted_at: stage !== 'new_lead' ? new Date().toISOString() : null,
           org_id: currentOrg.id, pipeline_id: resolution.pipeline_id, created_by: session.user.id,
         }).select('id').single();
-        if (insertErr) { setError(insertErr.message); continue; }
+        if (insertErr) return insertErr.message;
         await supabase.from('lead_notes').insert({
           lead_id: newLead.id, created_by: session.user.id, note_type: 'ai_summary',
           content: `Dream Agent: ${action.excerpt}\n\n${action.rationale}`,
@@ -193,7 +200,7 @@ export function useDreamAgentSession() {
           business_name: resolution.business_name, stage: 'new_lead',
           org_id: currentOrg.id, pipeline_id: resolution.pipeline_id, created_by: session.user.id,
         }).select('id').single();
-        if (insertErr) { setError(insertErr.message); continue; }
+        if (insertErr) return insertErr.message;
         await supabase.from('lead_notes').insert({
           lead_id: newLead.id, created_by: session.user.id, note_type: 'ai_summary',
           content: `Dream Agent: ${action.excerpt}`,
@@ -207,15 +214,17 @@ export function useDreamAgentSession() {
       if (action.type === 'update_company_context' && resolution.status === 'confirmed_update_company_context') {
         const { error: updateErr } = await supabase.from('organizations')
           .update({ company_context: resolution.edited_context.trim() || null }).eq('id', currentOrg.id);
-        if (updateErr) { setError(updateErr.message); continue; }
+        if (updateErr) return updateErr.message;
       }
-    }
-    await applyContacts();
-    setLoading(false);
-    setActions([]);
-    setResolutions({});
-    setMessages([]);
+      return null;
+    },applyContacts);
+    setActions(result.actions);setResolutions(result.resolutions);setApplyErrors(result.errors);
+    setApplySummary(`Applied ${result.succeeded}; failed ${Object.keys(result.errors).length}. Remaining rows stay available.`);
+    setRound(previous=>previous+1);
+    if(!result.actions.length)setMessages([]);
+    }catch(error){console.error('Dream Agent apply failed',error);setError('Could not finish applying these changes. Review the remaining rows.');}
+    finally {setLoading(false);}
   }, [actions, resolutions, currentOrg, session, applyContacts]);
 
-  return { messages, actions, resolutions, loading, error, contactIndex, contactReport, round, sendMessage, resolveAction, confirmAll };
+  return { messages, actions, resolutions, loading, error, contactIndex, contactReport, round, sendMessage, resolveAction, confirmAll,applyErrors,applySummary };
 }

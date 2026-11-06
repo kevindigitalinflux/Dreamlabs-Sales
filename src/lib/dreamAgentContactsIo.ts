@@ -45,28 +45,30 @@ export async function applyConfirmedContacts(
   actions: DreamAgentAction[],
   resolutions: Record<number, { status: string; draft?: ContactDraft }>,
   userId: string,
-): Promise<{ report: ContactReport; leadIds: string[] }> {
+): Promise<{ report: ContactReport; leadIds: string[]; outcomes:{index:number;error:string|null}[] }> {
   const items = actions.flatMap((action, index) => {
     const draft = resolutions[index]?.status === 'confirmed_contact' ? resolutions[index].draft : undefined;
     return isContactAction(action) && draft ? [{ index, action, draft }] : [];
   });
   const report: ContactReport = { failed: [], notes: [] };
-  if (items.length === 0) return { report, leadIds: [] };
+  const outcomes:{index:number;error:string|null}[]=[];
+  if (items.length === 0) return { report, leadIds: [],outcomes };
   const leadIds = [...new Set(items.map((i) => i.action.lead_id))];
   const live = await fetchContacts(leadIds);
   if (!live) {
     report.failed.push('Contacts could not be saved because the current contacts could not be read. Please try again.');
-    return { report, leadIds };
+    return { report, leadIds,outcomes:items.map(item=>({index:item.index,error:report.failed[0]})) };
   }
   const { steps: inputs, skipped } = selectApplicable(items, live);
-  for (const s of skipped) report.failed.push(`Skipped ${s.name}: ${s.reason}`);
+  for (const s of skipped) {report.failed.push(`Skipped ${s.name}: ${s.reason}`);outcomes.push({index:s.index,error:s.reason});}
   const steps = planContactSteps(inputs);
   const results = await applyContactSteps({ client: supabase, userId, dismiss: dismissDecisionMaker }, steps, live);
   for (const r of results) {
+    outcomes.push({index:r.index,error:r.ok?null:r.message??'Could not save this contact.'});
     const step = steps.find((x) => x.index === r.index);
     const name = step ? contactDraftName(step.kind, step.draft) : 'a contact';
     if (!r.ok) report.failed.push(`Could not save ${name}: ${r.message ?? 'something went wrong'}`);
     else if (r.message) report.notes.push(`${name}: ${r.message}`);
   }
-  return { report, leadIds };
+  return { report, leadIds,outcomes };
 }

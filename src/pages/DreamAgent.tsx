@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router';
-import { Send, Sparkles, Upload } from 'lucide-react';
-import { parseCsv } from '../lib/csv';
+import { useCallback, useEffect, useState } from 'react';
+import { useLocation } from 'react-router';
+import { Send, Sparkles } from 'lucide-react';
 import { useDreamAgentSession } from '../hooks/useDreamAgentSession';
 import { useVoiceDictation } from '../hooks/useVoiceDictation';
 import { useIcps } from '../hooks/useIcps';
@@ -12,26 +11,17 @@ import { useOrg } from '../hooks/useOrg';
 import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/Button';
 import { SelectField, Textarea } from '../components/ui/Input';
-import { ActionRow } from '../components/dreamAgent/ActionRow';
+import {AgentActionReview} from '../components/dreamAgent/AgentActionReview';
+import {DreamAgentCsv} from '../components/dreamAgent/DreamAgentCsv';
 import type { Lead } from '../types';
-
 /** Dream Agent: free-form session notes (typed or voice) parsed into confirm-before-
  * apply lead updates across however many leads a note touches. */
 export function DreamAgent() {
   const { currentOrg } = useOrg();
   const { currentPipeline, pipelines } = usePipeline();
-  const { messages, actions, resolutions, loading, error, contactIndex, contactReport, round, sendMessage, resolveAction, confirmAll } = useDreamAgentSession();
-  const navigate = useNavigate();
+  const { messages, actions, resolutions, loading, error, contactIndex, contactReport, round, sendMessage, resolveAction, confirmAll,applyErrors,applySummary } = useDreamAgentSession();
   const location = useLocation();
   const [tab, setTab] = useState<'notes' | 'csv'>(() => ((location.state as { tab?: 'notes' | 'csv' } | null)?.tab === 'csv' ? 'csv' : 'notes'));
-  const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [csvPipelineChoice, setCsvPipelineChoice] = useState<'existing' | 'new'>('existing');
-  const [csvPipelineId, setCsvPipelineId] = useState('');
-  const [csvNewPipelineName, setCsvNewPipelineName] = useState('');
-  const [csvBusy, setCsvBusy] = useState(false);
-  const [csvError, setCsvError] = useState<string | null>(null);
-  const [csvDragActive, setCsvDragActive] = useState(false);
-  const csvInputRef = useRef<HTMLInputElement>(null);
   // Persisted per org: what's been typed survives a trip to another screen
   // (e.g. to look up a lead's name) and only clears on send or manual delete.
   const [draft, setDraft] = usePersistedState(`dream-agent:draft:${currentOrg?.id ?? 'none'}`, '');
@@ -87,29 +77,6 @@ export function DreamAgent() {
     await refreshLeads();
   }
 
-  async function handleCsvUpload() {
-    if (!csvFile || !currentOrg) return;
-    setCsvBusy(true); setCsvError(null);
-    const text = await csvFile.text();
-    const rows = parseCsv(text);
-    if (rows.length < 2) { setCsvBusy(false); setCsvError('This file has no data rows.'); return; }
-    const [csvHeaders, ...dataRows] = rows;
-    const { data, error: invokeErr } = await supabase.functions.invoke('parse-csv-leads', {
-      body: {
-        org_id: currentOrg.id,
-        pipeline_id: csvPipelineChoice === 'existing' ? csvPipelineId : undefined,
-        pipeline_is_new: csvPipelineChoice === 'new',
-        pipeline_name: csvPipelineChoice === 'new' ? csvNewPipelineName : undefined,
-        csv_headers: csvHeaders, rows: dataRows,
-      },
-    });
-    setCsvBusy(false);
-    if (invokeErr) { setCsvError(invokeErr.message); return; }
-    const result = data as { job_id?: string; error?: string };
-    if (result.error) { setCsvError(result.error); return; }
-    if (result.job_id) navigate(`/scraper/jobs/${result.job_id}`);
-  }
-
   const anyConfirmed = Object.values(resolutions).some((r) => r.status.startsWith('confirmed_'));
 
   return (
@@ -128,67 +95,7 @@ export function DreamAgent() {
         </button>
       </div>
 
-      {tab === 'csv' && (
-        <div className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4">
-          <label className="flex min-h-11 items-center gap-2">
-            <input type="radio" name="csv-pipeline-choice" checked={csvPipelineChoice === 'existing'} onChange={() => setCsvPipelineChoice('existing')} className="h-4 w-4 accent-violet-500" />
-            Add to an existing pipeline
-          </label>
-          {csvPipelineChoice === 'existing' && (
-            <SelectField label="Pipeline" value={csvPipelineId} onChange={(e) => setCsvPipelineId(e.target.value)}>
-              <option value="">Choose pipeline…</option>
-              {orgPipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </SelectField>
-          )}
-          <label className="flex min-h-11 items-center gap-2">
-            <input type="radio" name="csv-pipeline-choice" checked={csvPipelineChoice === 'new'} onChange={() => setCsvPipelineChoice('new')} className="h-4 w-4 accent-violet-500" />
-            Create a new pipeline
-          </label>
-          {csvPipelineChoice === 'new' && (
-            <input type="text" placeholder="New pipeline name" value={csvNewPipelineName} onChange={(e) => setCsvNewPipelineName(e.target.value)} className="min-h-11 rounded-lg border border-line bg-surface px-3 text-base outline-none focus:border-cyan" />
-          )}
-          <input
-            ref={csvInputRef}
-            type="file"
-            accept=".csv"
-            onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
-            className="hidden"
-          />
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => csvInputRef.current?.click()}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') csvInputRef.current?.click(); }}
-            onDragOver={(e) => { e.preventDefault(); setCsvDragActive(true); }}
-            onDragLeave={() => setCsvDragActive(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setCsvDragActive(false);
-              const file = e.dataTransfer.files?.[0];
-              if (file) setCsvFile(file);
-            }}
-            className={`flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 text-center transition-colors ${csvDragActive ? 'border-cyan bg-cyan/5' : 'border-line hover:border-cyan/60'}`}
-          >
-            <Upload className="h-6 w-6 text-muted" aria-hidden />
-            {csvFile ? (
-              <p className="text-sm font-semibold">{csvFile.name}</p>
-            ) : (
-              <>
-                <p className="text-sm font-semibold">Click to upload or drag and drop</p>
-                <p className="text-xs text-muted">CSV files only</p>
-              </>
-            )}
-          </div>
-          {csvError && <p role="alert" className="text-sm text-danger">{csvError}</p>}
-          <Button
-            onClick={() => void handleCsvUpload()}
-            disabled={csvBusy || !csvFile || (csvPipelineChoice === 'existing' && !csvPipelineId) || (csvPipelineChoice === 'new' && !csvNewPipelineName.trim())}
-            loading={csvBusy}
-          >
-            {csvBusy ? 'Uploading…' : 'Upload and review'}
-          </Button>
-        </div>
-      )}
+      {tab==='csv'&&<DreamAgentCsv />}
 
       {tab === 'notes' && (
       <>
@@ -197,23 +104,9 @@ export function DreamAgent() {
         {messages.map((m, i) => (
           <p key={i} className="rounded-xl border border-line bg-surface/60 p-4 text-sm">{m}</p>
         ))}
-        {actions.map((action, i) => (
-          <ActionRow
-            key={`${round}-${i}-${action.type}`}
-            action={action}
-            resolution={resolutions[i] ?? { status: 'pending' }}
-            leadsById={leadsById}
-            pipelines={orgPipelines}
-            scopedPipelineId={matchPipelineId}
-            needsPipelinePicker={!matchPipelineId}
-            isOrgAdmin={currentOrg?.role === 'admin'}
-            onResolve={(resolution) => resolveAction(i, resolution)}
-            icpNames={icpNames}
-            contactsByLead={contactIndex}
-            messages={messages}
-            onPickLead={(leadId) => action.type === 'ambiguous' && void handleClarify(action.mentioned_text, leadId)}
-          />
-        ))}
+        <AgentActionReview key={`${currentOrg?.id}:${round}`} actions={actions} resolutions={resolutions} busy={loading} onResolve={resolveAction} applyErrors={applyErrors}
+          onPickLead={(index,id)=>{const action=actions[index];if(action.type==='ambiguous')void handleClarify(action.mentioned_text,id);}}
+          rowProps={{leadsById,pipelines:orgPipelines,scopedPipelineId:matchPipelineId,needsPipelinePicker:!matchPipelineId,isOrgAdmin:currentOrg?.role==='admin',icpNames,contactsByLead:contactIndex,messages}} />
         {actions.length > 0 && (
           <div className="flex justify-end">
             <Button onClick={() => void confirmAll()} disabled={!anyConfirmed || loading} loading={loading}>
@@ -224,6 +117,7 @@ export function DreamAgent() {
       </div>
 
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      {applySummary&&<p role="status" className="text-sm">{applySummary}</p>}
       {contactReport.failed.map((m) => <p key={m} role="alert" className="text-sm text-danger">{m}</p>)}
       {contactReport.notes.map((m) => <p key={m} role="status" className="text-sm text-muted">{m}</p>)}
 

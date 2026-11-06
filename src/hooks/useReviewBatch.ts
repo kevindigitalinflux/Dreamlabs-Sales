@@ -2,13 +2,13 @@ import {useRef,useState} from 'react';
 import {useRowSelection} from './useRowSelection';
 import {runReviewBatch} from '../lib/reviewBatch';
 /** Successful rows leave; failed and unprocessed rows retain their selection and errors. */
-export function useReviewBatch(ids:string[]) {
+export function useReviewBatch(ids:string[],initialSelected:string[]=[]) {
  const [done,setDone]=useState<Set<string>>(new Set());
  const [errors,setErrors]=useState<Record<string,string>>({});
  const [summary,setSummary]=useState('');
  const [busy,setBusy]=useState(false);
  const locked=useRef(false);
- const selection=useRowSelection(ids.filter(id=>!done.has(id)));
+ const selection=useRowSelection(ids.filter(id=>!done.has(id)),initialSelected);
  const reset=()=>{selection.clear();setDone(new Set());setErrors({});setSummary('');};
  async function run<T>(rows:T[],key:(row:T)=>string,action:(row:T)=>Promise<string|null>,label:string,chosen=selection.selected) {
   if(locked.current||!chosen.size)return;
