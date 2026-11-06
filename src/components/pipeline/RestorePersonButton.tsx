@@ -9,7 +9,7 @@ import { Button } from '../ui/Button';
  * Shows its own error. With `showStatus` it also keeps a role=status line ("Restored <name>") after success;
  * callers whose row disappears announce the result themselves through `onRestored`.
  */
-export function RestorePersonButton({ contactId, name, onRestored, showStatus = false }: { contactId: string; name: string; onRestored?: (message: string) => void; showStatus?: boolean }) {
+export function RestorePersonButton({ contactId, name, onRestored, showStatus = false, externalBusy=false }: { contactId: string; name: string; onRestored?: (message: string) => void; showStatus?: boolean;externalBusy?:boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -25,7 +25,7 @@ export function RestorePersonButton({ contactId, name, onRestored, showStatus = 
 
   return (
     <span className="inline-flex min-w-0 flex-col items-start gap-1">
-      {!done && <Button variant="secondary" className="min-h-11 text-[13px]" loading={busy} onClick={() => void restore()} aria-label={`Restore ${name}`}>
+      {!done && <Button variant="secondary" className="min-h-11 text-[13px]" disabled={externalBusy} loading={busy} onClick={() => void restore()} aria-label={`Restore ${name}`}>
         {!busy && <RotateCcw size={14} aria-hidden />}Restore {name}
       </Button>}
       {showStatus && <span role="status" className="text-[13px] font-semibold">{done}</span>}
