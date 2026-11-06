@@ -26,3 +26,21 @@ it('does not extract addresses from an ordinary human or out-of-office reply',()
  expect(hardBounceRecipients(mail('user unknown person@example.com'))).toEqual([]);
  expect(hardBounceRecipients(mail('Final-Recipient: rfc822; person@example.com\nStatus: 5.1.1',[{key:'Auto-Submitted',value:'auto-replied'}]))).toEqual([]);
 });
+it.each(['5.2.1','5.1.2','5.1.3','5.1.6'])('accepts permanent recipient failure %s',code=>{
+ expect(hardBounceRecipients(mail(`Final-Recipient: rfc822; person@example.com\nStatus: ${code}\nDiagnostic-Code: smtp; 550 ${code} recipient unavailable`))).toEqual(['person@example.com']);
+});
+it('accepts the Microsoft tenant recipient rejection, but not other 5.4.1 failures',()=>{
+ expect(hardBounceRecipients(mail('Final-Recipient: rfc822; person@example.com\n550 5.4.1 Recipient address rejected: Access denied'))).toEqual(['person@example.com']);
+ expect(hardBounceRecipients(mail('Final-Recipient: rfc822; person@example.com\n550 5.4.1 Routing failure'))).toEqual([]);
+});
+it.each(['5.2.2','5.2.3','5.3.0','5.3.4','5.7.1','5.7.26','4.1.1','4.2.1'])('does not learn non-recipient status %s despite user-unknown text',code=>{
+ expect(hardBounceRecipients(mail(`Final-Recipient: rfc822; person@example.com\nStatus: ${code}\nuser unknown`))).toEqual([]);
+});
+it.each(['Automatic reply','Out of office','Delayed delivery notification'])('ignores %s despite a quoted permanent failure',subject=>{
+ expect(hardBounceRecipients({...mail('Final-Recipient: rfc822; person@example.com\nStatus: 5.2.1'),subject})).toEqual([]);
+});
+it('allows auto-replied for a DSN report, but not an ordinary auto-reply',()=>{
+ const text='Final-Recipient: rfc822; person@example.com\nStatus: 5.1.1';
+ expect(hardBounceRecipients(mail(text,[{key:'Auto-Submitted',value:'auto-replied'},{key:'Content-Type',value:'multipart/report; report-type=delivery-status'}]))).toEqual(['person@example.com']);
+ expect(hardBounceRecipients(mail(text,[{key:'Auto-Submitted',value:'auto-replied'}]))).toEqual([]);
+});
