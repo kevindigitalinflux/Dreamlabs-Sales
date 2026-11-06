@@ -14,6 +14,7 @@ interface EnrichmentReviewProps {
   results: EnrichmentResult[];
   leadsById: Record<string, Lead>;
   onClose: () => void;
+  onDismiss?:(leadId:string)=>Promise<string|null>;
   /** `patches` are field writes (blank fields filled, or overwrites when "replace" is on);
    * `additions` are found values kept alongside what the lead already has, to be saved as a note. */
   onApply: (
@@ -27,7 +28,7 @@ interface EnrichmentReviewProps {
  * is individually checkable, checked by default; nothing writes until
  * Apply.
  */
-export function EnrichmentReview({ open, results, leadsById, onClose, onApply }: EnrichmentReviewProps) {
+export function EnrichmentReview({ open, results, leadsById, onClose, onApply,onDismiss }: EnrichmentReviewProps) {
   const [checked, setChecked] = useState<Record<string, Set<EnrichableField>>>({});
   const review=useReviewBatch(results.filter(r=>(checked[r.lead_id]?.size??0)>0).map(r=>r.lead_id));
   const visible=results.filter(r=>!review.done.has(r.lead_id));
@@ -79,7 +80,7 @@ export function EnrichmentReview({ open, results, leadsById, onClose, onApply }:
 
   async function act(action:'apply'|'dismiss') {
     if(!window.confirm(action==='apply'?'Apply the selected leads using the checked fields and chosen fill rules?':'Dismiss selected details? No lead values will change.'))return;
-    await review.run(visible,r=>r.lead_id,r=>action==='dismiss'?Promise.resolve(null):applyEnrichmentRow(r,checked,fromSnapshot,replaceExisting,onApply),action==='apply'?'Apply':'Dismiss');
+    await review.run(visible,r=>r.lead_id,r=>action==='dismiss'?(onDismiss?.(r.lead_id)??Promise.resolve(null)):applyEnrichmentRow(r,checked,fromSnapshot,replaceExisting,onApply),action==='apply'?'Apply':'Dismiss');
   }
 
   return (
