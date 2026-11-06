@@ -14,10 +14,12 @@ interface NeedsInputRowProps {
   onRetry: () => void;
   /** True only for the person who started the run: the draft is sent from their mailbox. */
   canReview: boolean;
+  externalBusy?:boolean;
+  onReviewingChange?:(open:boolean)=>void;
 }
 
 /** The action on a "Needs your input" row: review and send the parked draft, or open the lead when there is none. */
-export function NeedsInputRow({ row, onChanged, onRetry, canReview }: NeedsInputRowProps) {
+export function NeedsInputRow({ row, onChanged, onRetry, canReview,externalBusy=false,onReviewingChange }: NeedsInputRowProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<{ lead: Lead; log: EmailLog } | null>(null);
@@ -33,8 +35,11 @@ export function NeedsInputRow({ row, onChanged, onRetry, canReview }: NeedsInput
   const logId = row.email_log_id;
 
   async function start() {
+    if(externalBusy||loading)return;
+    onReviewingChange?.(true);
     setLoading(true);
     setError(null);
+    try {
     const [logRes, leadRes] = await Promise.all([
       supabase.from('email_logs').select('*').eq('id', logId).maybeSingle(),
       supabase.from('leads').select('*').eq('id', row.lead_id).maybeSingle(),
@@ -43,26 +48,29 @@ export function NeedsInputRow({ row, onChanged, onRetry, canReview }: NeedsInput
     if (logRes.data && !['draft', 'failed'].includes((logRes.data as EmailLog).status)) {
       setError('This email was already sent.');
       onChanged(null, false);
+      onReviewingChange?.(false);
       return;
     }
     if (logRes.error || leadRes.error || !logRes.data || !leadRes.data) {
       setError(logRes.error?.message ?? leadRes.error?.message ?? 'The draft or the lead is no longer available.');
       onChanged(null, false);
+      onReviewingChange?.(false);
       return;
     }
     setSession({ log: logRes.data as EmailLog, lead: leadRes.data as Lead });
+    } catch(error){console.error('parked draft review failed',error);setLoading(false);setError('Could not load this draft. Try again.');onReviewingChange?.(false);}
   }
 
   return (
     <div className="flex flex-col items-start gap-1 sm:items-end">
-      <Button variant="secondary" onClick={() => void start()} disabled={loading} loading={loading}>Review and send</Button>
+      <Button variant="secondary" onClick={() => void start()} disabled={loading||externalBusy} loading={loading}>Review and send</Button>
       {error && <p role="alert" className="text-xs text-danger">{error}</p>}
       {session && (
         <NeedsInputReview
           lead={session.lead}
           log={session.log}
           sequenceId={row.sequence_id}
-          onDone={(err, sent) => { setSession(null); onChanged(err, sent); }}
+          onDone={(err, sent) => { setSession(null);onReviewingChange?.(false); onChanged(err, sent); }}
         />
       )}
     </div>

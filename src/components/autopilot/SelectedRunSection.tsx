@@ -10,6 +10,7 @@ import type { AutopilotRun } from '../../types';
 import { RunHeader } from './RunHeader';
 import { RunLeadGroups } from './RunLeadGroups';
 import { NeedsInputRow } from './NeedsInputRow';
+import {ParkedDraftReview} from './ParkedDraftReview';
 
 interface SelectedRunSectionProps {
   run: AutopilotRun;
@@ -29,6 +30,8 @@ export function SelectedRunSection({ run, refresh, stopRun, controlRun }: Select
   const draftIds = leads.rows.filter((r) => r.status === 'needs_input' && r.email_log_id).map((r) => r.email_log_id as string);
   const drafts = useDraftStatuses(draftIds);
   const [followUpError, setFollowUpError] = useState<string | null>(null);
+  const [bulkBusy,setBulkBusy]=useState(false);
+  const [reviewingDraft,setReviewingDraft]=useState(false);
   const lookup = drafts.error !== null ? 'failed' : drafts.ready ? 'ready' : 'checking';
   const rows = applyDraftResolution(leads.rows, drafts.statuses, lookup);
 
@@ -40,6 +43,8 @@ export function SelectedRunSection({ run, refresh, stopRun, controlRun }: Select
       )}
       {drafts.error && <p role="alert" className="text-sm text-danger">Could not check which parked drafts were sent: {drafts.error}</p>}
       {followUpError && <p role="alert" className="text-sm text-danger">{followUpError}</p>}
+      {session?.user.id===run.created_by&&currentOrg&&<ParkedDraftReview key={run.id} rows={rows} userId={session.user.id} orgId={currentOrg.id} blocked={reviewingDraft}
+        onBusyChange={setBulkBusy} onChanged={()=>{void drafts.refresh();window.dispatchEvent(new Event(NEEDS_INPUT_CHANGED_EVENT));}} />}
       <RunLeadGroups
         rows={rows}
         loading={leads.loading}
@@ -54,6 +59,8 @@ export function SelectedRunSection({ run, refresh, stopRun, controlRun }: Select
             }}
             onRetry={() => void drafts.refresh()}
             canReview={!!session?.user.id && session.user.id === run.created_by}
+            externalBusy={bulkBusy||reviewingDraft}
+            onReviewingChange={setReviewingDraft}
           />
         )}
       />

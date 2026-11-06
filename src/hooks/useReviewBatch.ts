@@ -10,14 +10,15 @@ export function useReviewBatch(ids:string[]) {
  const locked=useRef(false);
  const selection=useRowSelection(ids.filter(id=>!done.has(id)));
  const reset=()=>{selection.clear();setDone(new Set());setErrors({});setSummary('');};
- async function run<T>(rows:T[],key:(row:T)=>string,action:(row:T)=>Promise<string|null>,label:string) {
-  if(locked.current||!selection.selected.size)return;
+ async function run<T>(rows:T[],key:(row:T)=>string,action:(row:T)=>Promise<string|null>,label:string,chosen=selection.selected) {
+  if(locked.current||!chosen.size)return;
   locked.current=true;setBusy(true);
   try {
-   const results=await runReviewBatch(rows,selection.selected,key,action);
+   const results=await runReviewBatch(rows,chosen,key,action);
    const successes=results.filter(r=>!r.error).map(r=>key(r.row));
    setDone(previous=>new Set([...previous,...successes]));
    for(const id of successes)selection.remove(id);
+   for(const r of results)if(r.error&&!selection.selected.has(key(r.row)))selection.toggle(key(r.row));
    setErrors(previous=>{const next={...previous};for(const r of results){const id=key(r.row);if(r.error)next[id]=r.error;else delete next[id];}return next;});
    setSummary(`${label}: ${successes.length} succeeded, ${results.length-successes.length} failed.${selection.selected.size>results.length?' Remaining rows stay selected.':''}`);
   } finally {locked.current=false;setBusy(false);}
