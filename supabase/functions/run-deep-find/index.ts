@@ -1,7 +1,7 @@
 // supabase/functions/run-deep-find/index.ts
 // DEPLOY WITH verify_jwt = false (see supabase/config.toml): the pg_cron tick sends only x-cron-secret, no Authorization
 // header, so the gateway would answer 401. The function authenticates every action itself:
-//   create  signed-in user: validates the leads (RLS read, same org, caller is a member and can edit each one), max 25,
+//   create  signed-in user: validates the leads (RLS read, same org, caller is a member and can edit each one), max 50,
 //           30 creates per user per day, 5 active runs per org, leads not already queued or running; then inserts the
 //           run and its queued rows with the SERVICE client (clients have no INSERT on the 057 tables) and starts
 //           processing in the background.

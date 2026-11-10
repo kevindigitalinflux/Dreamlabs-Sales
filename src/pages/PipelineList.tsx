@@ -188,8 +188,13 @@ export function PipelineList() {
       </div>
 
       {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-surface/40 p-3">
-          <span className="text-sm font-semibold">{selected.size} selected</span>
+        <div className="sticky top-0 z-20 flex flex-wrap items-center gap-3 rounded-xl border border-line bg-card p-3 shadow-sm">
+          <span className="text-sm font-semibold">{selected.size} {selected.size === 1 ? 'lead' : 'leads'} selected</span>
+          <span className={`text-xs ${selected.size > DEEP_FIND_MAX_LEADS ? 'font-semibold text-danger-strong' : 'text-muted'}`} role={selected.size > DEEP_FIND_MAX_LEADS ? 'alert' : undefined}>
+            {selected.size > DEEP_FIND_MAX_LEADS
+              ? `Deep find takes at most ${DEEP_FIND_MAX_LEADS} leads at a time. Deselect ${selected.size - DEEP_FIND_MAX_LEADS} to use it.`
+              : `Deep find: up to ${DEEP_FIND_MAX_LEADS} leads at a time.`}
+          </span>
           <Button variant="secondary" onClick={() => setDraftModalOpen(true)}>
             <PenLine className="h-4 w-4" aria-hidden />
             Draft emails
