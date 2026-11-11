@@ -98,6 +98,7 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
     const { data, error: invokeErr } = await supabase.functions.invoke('generate-email', {
       body: {
         lead_id: target.leadId, template_id: tid, use_ai: useAi,
+        bulk_review:true,recipient_email:target.email,
         // A decision-maker is addressed by name and written to by role; the lead's own contact keeps its default.
         recipient_name: target.name ?? undefined, recipient_title: target.title ?? undefined,
       },

@@ -1,3 +1,6 @@
+import {recipientTier,type RecipientEvidence} from './recipientTier.ts';
+import {prepareRecipientEvidence,supportedTierPattern} from './recipientTierEvidence.ts';
+import {autoApplyRecipients,type AutoRecipient} from './recipientAutoApply.ts';
 import { reserveRegistryProof } from './registryProofGate.ts';
 import { createPlacesContext, type PlacesContext } from './placesClient.ts';
 // supabase/functions/_shared/deepFind.ts
@@ -1306,6 +1309,47 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (error) console.error('deep find: linkedin capture failed');
   }
 
+  const recipientEvidence:Record<string,RecipientEvidence>={};
+  const candidateRows=new Map<string,{address:string;name:string;contactId?:string}>();
+  for(const c of all())if(str(c.email))candidateRows.set(str(c.email)!.toLowerCase(),{address:str(c.email)!,name:[str(c.first_name),str(c.last_name)].filter(Boolean).join(' '),contactId:c.id});
+  for(const s of suggestions)if((!s.field||s.field==='email')&&str(s.value))candidateRows.set(s.value.toLowerCase(),{address:s.value,name:s.name});
+  for(const email of [...siteEmails.values()].flat())if(!candidateRows.has(email.toLowerCase()))candidateRows.set(email.toLowerCase(),{address:email,name:'Company contact'});
+  if(str(lead.email))candidateRows.set(str(lead.email)!.toLowerCase(),{address:str(lead.email)!,name:str(lead.owner_name)??'Company contact'});
+  const publicSamples=[...publishedEvidence,...[...siteEmails.values()].flat().map(email=>({email,first:null,last:null,published:true}))];
+  const proofFor=async(address:string):Promise<RecipientEvidence>=>{
+    const email=address.toLowerCase();await outcomes.status(email);const domain=emailDomain(email)??'';
+    const mx=left()>3500?await lookupMx(domain,3000,true):'error';const checked=checkedEmails.get(email);
+    const published=[...siteEmails.values()].flat().some(address=>address.toLowerCase()===email);
+    const recent=await outcomes.recentCheck(email,Date.now());
+    return prepareRecipientEvidence(email,{savedNonGuessed:savedEvidenceSafe&&!previousGuesses.has(email)&&str(lead.email)?.toLowerCase()===email,generated:previousGuesses.has(email)||suggestions.some(s=>s.value?.toLowerCase()===email&&!!s.guess_rank),publishedByCompany:published,
+      checker:checked?.ok?(checked.value.status==='valid'?'valid':checked.value.status==='invalid'?'invalid':'unverifiable'):recent?.outcome==='checked_invalid'?'invalid':recent?.outcome==='checked_valid'?'valid':undefined,
+      bouncedHard:outcomes.peek(email)?.reason==='bounced_hard',replied:outcomes.peek(email)?.reason==='previously_replied',hasMailServer:mx==='none'?false:mx==='mx'?true:null,
+      provider:cachedMailProvider(domain)??'unknown',catchAll:checked?.ok&&checked.value.reason==='catch_all',optedOut:lead.opted_out===true,blocklisted:savedDomains(lead.blocked_domains).includes(domain)});
+  };
+  const samples=[];for(const sample of publicSamples.slice(0,40))samples.push({...sample,evidence:await proofFor(sample.email)});
+  const automatic:AutoRecipient[]=[];
+  for(const candidate of [...candidateRows.values()].slice(0,50)){
+    const parsed=parseLeadPersonName(candidate.name);const contact=parsed?exactContact(parsed.first,parsed.last):null;
+    const evidence=await proofFor(candidate.address);if(parsed)evidence.pattern=supportedTierPattern(candidate.address,parsed,samples,all().flatMap(c=>str(c.first_name)&&str(c.last_name)?[{first:str(c.first_name)!,last:str(c.last_name)!}]:[]));
+    recipientEvidence[candidate.address.toLowerCase()]=evidence;
+    automatic.push({...candidate,contactId:str(lead.email)?contact?.id:undefined,tier:recipientTier(candidate.address,evidence),savedEmail:str(lead.email)&&contact?str(contact.email):str(lead.email),
+      dismissed:ownerSuppressed(candidate.name)||isSuggestionDismissed({name:candidate.name,field:'email',value:candidate.address},lead)||!!contact?.dismissed_at});
+  }
+  const selectPrimary=async(candidate:AutoRecipient)=>{
+    const contact=candidate.contactId?all().find(c=>c.id===candidate.contactId):null;
+    if(!contact||candidate.dismissed||!['T1','T2'].includes(candidate.tier.tier)||all().some(c=>c.is_primary&&!c.dismissed_at))return;
+    await checkpoint();
+    const selected=await service.from('decision_maker_candidates').update({is_primary:true}).eq('id',contact.id).eq('lead_id',lead.id).eq('email',candidate.address).is('dismissed_at',null).select('id');
+    if(selected.error)throw Error('Could not select the supported main contact');
+    if(selected.data?.length)contact.is_primary=true;
+  };
+  for(const candidate of automatic)if(candidate.savedEmail?.toLowerCase()===candidate.address.toLowerCase())await selectPrimary(candidate);
+  await autoApplyRecipients(automatic,async candidate=>{
+    const contact=candidate.contactId?all().find(c=>c.id===candidate.contactId):null;
+    const saved=await applyDeepFindBlank(service,scope,contact?'decision_maker_candidates':'leads',contact??lead,'email',candidate.address,autoApplied,checkpoint,undefined,candidate.tier);
+    if(saved)await selectPrimary(candidate);
+    return saved;
+  },async content=>{await checkpoint();const note=await service.from('lead_notes').insert({lead_id:lead.id,created_by:run.created_by,note_type:'general',content});if(note.error)throw Error('Could not save recipient evidence note');});
   const finalSuggestions = groupUnverifiedGuesses(await reviewableSuggestions()).slice(0, 25);
   steps.push(...dismissedStepLines());
   // Re-read saved facts after automatic fills; unsaved suggestions cannot make a lead ready.
@@ -1315,7 +1359,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     service.from('decision_maker_candidates').select('*').eq('lead_id', lead.id),
   ]);
   if (finalLead.error || !finalLead.data || finalContacts.error) throw new Error('Could not read final readiness facts');
-  const readinessInput = { lead: finalLead.data, contacts: finalContacts.data ?? [], domains: discovery.domains,
+  const readinessInput = { lead: finalLead.data, recipientEvidence, contacts: finalContacts.data ?? [], domains: discovery.domains,
     validEmails: [...checkedEmails].filter(([email,c])=>verifiedEmailResult(email,c)).map(([email]) => email),
     websiteSuspect: suspicion.suspect && domainFromWebsite(finalLead.data.website) === siteDomain };
   const readiness=evaluateReadiness(readinessInput);
@@ -1331,6 +1375,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     people_found: stats.hunterPeople + stats.officersAdded + apolloPeople,
     domains: {
       ...metadata,
+      recipient_evidence:recipientEvidence,
       ...readiness,
       dismissed_people: dismissedPeople,
       registry_evidence: registryEvidence,

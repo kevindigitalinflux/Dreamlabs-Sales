@@ -9,6 +9,7 @@ import { formatIcpContext, loadIcp, resolveIcpId, topPainPoint } from '../_share
 import { applyCustomVariables, loadCustomVariables } from '../_shared/customVariables.ts';
 import { painPointList, resolvePainPoint } from '../_shared/painPointPick.ts';
 import { loadPainPointNotes, saveAiPainPoint } from '../_shared/painPointStorage.ts';
+import {loadRecipientContext} from '../_shared/recipientContext.ts';
 
 Deno.serve(async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
@@ -29,12 +30,19 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
-  const body = (await req.json()) as { lead_id?: string; template_id?: string; use_ai?: boolean; recipient_name?: string; recipient_title?: string; recipient_kind?: string };
+  const body = (await req.json()) as { lead_id?: string; template_id?: string; use_ai?: boolean; recipient_name?: string; recipient_title?: string; recipient_kind?: string;bulk_review?:boolean;recipient_email?:string };
   if (!body.lead_id || !body.template_id) return json({ error: 'lead_id and template_id required' }, 400, headers);
 
   // RLS applies: contractors can only draft for leads they can see.
   const { data: lead, error: leadErr } = await client.from('leads').select('*').eq('id', body.lead_id).single();
   if (leadErr || !lead) return json({ error: 'Lead not found' }, 404, headers);
+  if(body.bulk_review===true){
+    try{
+      const context=await loadRecipientContext(service,lead.org_id,lead.id);const address=body.recipient_email?.trim().toLowerCase();
+      if(!address||![lead.email,...(lead.additional_emails??[]),...context.contacts.map(c=>c.email)].some(e=>e?.trim().toLowerCase()===address))return json({error:'Choose a saved recipient for this lead.'},400,headers);
+      const tier=await context.assess(address);if(!['T1','T2'].includes(tier.result.tier))return json({error:tier.result.reason},409,headers);
+    }catch(error){console.error('bulk draft evidence unavailable');return json({error:'Could not check recipient evidence. Try again.'},503,headers);}
+  }
   // When drafting for a specific decision-maker rather than the lead's own
   // contact, override owner_name for template substitution and AI drafting
   // -- every downstream consumer (buildTemplateVars, draftEmail) already

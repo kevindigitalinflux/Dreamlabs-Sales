@@ -8,6 +8,12 @@ const dm = (over: Partial<DecisionMakerCandidate>): DecisionMakerCandidate => ({
 }) as unknown as DecisionMakerCandidate;
 
 describe('buildBulkTargets', () => {
+  it('uses the primary contact for a first email without enrolling that contact', () => {
+    const contact = dm({ is_primary: true, include_in_sequences: false });
+    const targets = buildBulkTargets([lead({ email: 'info@acme.com' })], [contact], false);
+    expect(targets.map(row => row.email)).toEqual(['jane@acme.com']);
+    expect(contact.include_in_sequences).toBe(false);
+  });
   it('writes only to the lead\'s own address when others are not included', () => {
     const t = buildBulkTargets([lead({ email: 'info@acme.com' })], [dm({})], false);
     expect(t.map((x) => x.email)).toEqual(['info@acme.com']);

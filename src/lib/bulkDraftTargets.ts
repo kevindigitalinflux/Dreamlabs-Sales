@@ -14,7 +14,7 @@ export interface BulkTarget {
 }
 
 /**
- * Who a bulk draft writes to. For each selected lead: its own email, and, when
+ * Who a bulk draft writes to. For each selected lead: its primary contact or own email, and, when
  * `includeOthers` is on, its additional addresses and every decision-maker found for it,
  * each as a separate email (so a company with three decision-makers gets three, each
  * written for that person). An address is only used once per lead, ignoring case, so a
@@ -31,7 +31,9 @@ export function buildBulkTargets(leads: Lead[], decisionMakers: DecisionMakerCan
       seen.add(norm);
       targets.push({ leadId: lead.id, businessName: lead.business_name, ...t });
     };
-    if (lead.email) add({ email: lead.email, name: null, title: null, candidateId: null, kind: 'lead' });
+    const primary=decisionMakers.find(dm=>dm.lead_id===lead.id&&dm.is_primary&&!dm.dismissed_at&&dm.email);
+    if(primary?.email)add({email:primary.email,name:[primary.first_name,primary.last_name].filter(Boolean).join(' ')||null,title:primary.title,candidateId:primary.id,kind:'decision_maker'});
+    else if (lead.email) add({ email: lead.email, name: null, title: null, candidateId: null, kind: 'lead' });
     if (!includeOthers) continue;
     for (const extra of lead.additional_emails ?? []) add({ email: extra, name: null, title: null, candidateId: null, kind: 'additional' });
     for (const dm of decisionMakers) {
