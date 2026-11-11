@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import {loadTierMetrics} from '../_shared/tierMetrics.ts';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { sendMail } from '../_shared/smtp.ts';
 import { testMailboxConnection } from '../_shared/mailboxTest.ts';
@@ -31,6 +32,13 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
   const body = (await req.json()) as Record<string, unknown>;
+  if(body.action==='tier_metrics'){
+    if(typeof body.org_id!=='string')return json({error:'Organisation required'},400,headers);
+    const member=await service.from('org_members').select('org_id').eq('org_id',body.org_id).eq('user_id',user.id).maybeSingle();
+    if(member.error||!member.data)return json({error:'Organisation not found'},404,headers);
+    try{return json(await loadTierMetrics(service,body.org_id),200,headers);}
+    catch{console.error('Tier metrics unavailable');return json({error:'Could not load complete tier safety rates'},503,headers);}
+  }
 
   if (body.action === 'get') {
     const { data } = await service

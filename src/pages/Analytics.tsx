@@ -8,6 +8,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { Skeleton } from '../components/ui/Skeleton';
 import { PipelineSection } from '../components/analytics/PipelineSection';
 import { OutreachSection } from '../components/analytics/OutreachSection';
+import {TierSafety} from '../components/analytics/TierSafety';
 
 const PERIOD_LABELS: Record<AnalyticsPeriod, string> = {
   this_month: 'This month',
@@ -24,6 +25,7 @@ export function Analytics() {
 
   return (
     <div className="flex flex-col gap-6">
+      <TierSafety/>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[28px] font-extrabold">Analytics</h1>
         <div role="group" aria-label="Time period" className="flex items-center gap-1 rounded-lg border border-line p-1">

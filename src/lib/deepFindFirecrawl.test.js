@@ -47,7 +47,7 @@ beforeEach(() => {
     let updating = false;
     const data = table === 'leads' ? { id: 'lead', org_id: 'org', updated_at: 'version', website: 'https://example.com', business_name: 'Example', owner_name: null, ...leadOverrides }
       : table === 'deep_find_runs' ? { status: 'active' } : contacts;
-    const query = { select: () => query, eq: () => query, is: () => query, order:()=>query,limit:()=>query, maybeSingle: async () => {
+    const query = { select: () => query, eq: () => query, is: () => query, range:()=>query,gte:()=>query,order:()=>query,limit:()=>query, maybeSingle: async () => {
       if (table === 'deep_find_runs') {
         checkpointReads++;
         return { data: { status: checkpointReads === cancelledAt ? 'cancelled' : 'active' },
