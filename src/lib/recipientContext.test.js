@@ -11,6 +11,10 @@ it('classifies own saved company email, generated provenance and hard bounces us
 it('fails closed if current evidence cannot be read',async()=>{
  const db=replyDatabase();db.failures.add('email_outcomes:select');await expect(loadRecipientContext(db.service,'org','lead')).rejects.toThrow();
 });
+it('blocks an org-wide domain even when saved company evidence is strong',async()=>{
+ const db=replyDatabase({leads:[{id:'lead',org_id:'org',email:'alex@staff.example.com'}],outreach_blocklist:[{id:'block',org_id:'org',value:'example.com'}]});
+ expect((await (await loadRecipientContext(db.service,'org','lead')).assess('alex@staff.example.com')).result).toMatchObject({tier:'never',basis:'blocklisted'});
+});
 it('downgrades T2 during measured risk, recovers automatically, and refreshes stored sample negatives',async()=>{
  const address='alex.brown@example.com',at=new Date(Date.now()-86400000).toISOString();
  const db=replyDatabase({leads:[{id:'lead',org_id:'org',email:address}],email_outcomes:[],decision_maker_candidates:[

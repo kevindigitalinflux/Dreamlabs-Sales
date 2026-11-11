@@ -13,6 +13,8 @@ writeFileSync(new URL('edge.d.ts', scratch), `declare namespace Deno { function 
 declare module 'https://deno.land/x/denomailer@1.6.0/mod.ts' { export class SMTPClient { constructor(config: unknown); send(message: unknown): Promise<void>; close(): Promise<void>; } }
 `);
 const functions = ['auto-enroll-cold-outreach', 'org-api-settings', 'scrape-google-places', 'run-deep-find', 'enrich-leads-bulk', 'run-autopilot', 'run-lookup-jobs', 'run-selected-autopilot', 'scrape-companies-house', 'scrape-cro', 'reveal-decision-maker', 'apollo-phone-webhook', 'find-decision-makers', 'check-sequences', 'send-email', 'check-replies', 'email-settings', 'draft-reply', 'draft-linkedin-message', 'generate-email', 'parse-csv-leads', 'parse-notes', 'parse-session-notes', 'pipeline-shares', 'suggest-sequence'];
+// These three additional consumers share the org-only verifier key resolver.
+functions.push('enrich-apollo','enrich-hunter','parse-icp');
 writeFileSync(new URL('tsconfig.json', scratch), JSON.stringify({ compilerOptions: {
   target: 'ES2022', lib: ['ES2022', 'DOM', 'DOM.Iterable'], module: 'ESNext', moduleResolution: 'bundler',
   strict: true, skipLibCheck: true, noEmit: true, allowImportingTsExtensions: true,

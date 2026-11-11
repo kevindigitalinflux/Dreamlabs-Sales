@@ -1,3 +1,4 @@
+> **Current checkpoint (2026-11-11):** continuation items 2–12 handled locally; see the final report section below. Item 5 automatic fallback and item 12 storage/quota integration remain explicitly deferred for uncovered schema. Migration 074 was supplied as applied and is used without alteration. Final gates: 3,182 passed, one skipped; TypeScript/build/28-entrypoint edge shim/whitespace pass. Historical item-1-only stop text below is superseded by Kevin's continuation instruction. No publication or SQL execution occurred.
 # Pipeline tighten — item 1 and mandatory SQL checkpoint (2026-11-11)
 
 **Partial build: item 1's policy foundation is complete; items 2–12 are not built.** Kevin explicitly required migration SQL to be written in this report followed by a stop, without applying it. Source inspection identified required storage for trustworthy send-time tier measurement and mailbox-specific hard-bounce attribution. That instruction is the stop reason; this is not an allowance claim or a completed-pipeline claim.
@@ -191,7 +192,7 @@ The tested planner chooses only formats ranked after the bounced guess, excludes
 
 ```sql
 create table public.email_fallback_attempts (
-  org_id uuid not null references public.organisations(id),
+  org_id uuid not null references public.organizations(id),
   person_key text not null check (length(person_key) between 3 and 400),
   source_log_id uuid not null,
   draft_log_id uuid,
@@ -208,7 +209,7 @@ create function public.queue_email_fallback(
 ) returns uuid language plpgsql security definer set search_path = public as $$
 declare s email_logs%rowtype; d uuid;
 begin
- if auth.role() <> 'service_role' then raise exception 'Service only'; end if;
+ if auth.role() is distinct from 'service_role' then raise exception 'Service only'; end if;
  select * into strict s from email_logs where id=p_source for update;
  if s.status <> 'sent' or s.hard_bounced_at is null
     or s.recipient_tier_basis <> 'supported_pattern'
@@ -325,3 +326,107 @@ The automatic rule is strict: **at least 30 recorded T2 sends and rate greater t
 Safety reads now use ordered 1,000-row pages, declining inconsistent counts/errors or more than 100,000 rows rather than silently trusting a partial set. Org outcome/send history in the recipient reader uses the same complete-read guard; per-lead provenance stays bounded. This is a conservative service limit and may require an aggregate RPC for very large org histories later.
 
 Tests first: 29/30-send boundary, exactly/above 8%, recovery, real snapshots only, sent_ok subset, org/time/status isolation. Reader integration proves downgrade/recovery and revocation of a stored supporting sample. Pagination test covers 1,001 rows and read failure. Focused tests: 6 passed. TypeScript and 25-entrypoint edge shim passed. New Analytics component is under 150 lines. Deploy union adds `email-settings` and frontend; no new schema. No production metric or outcome was read. Browser/RLS/database concurrency remain unverified.
+
+## Item 12 — disabled second-opinion seam and uncovered storage
+
+`secondOpinion.ts` is OFF by default and has no production caller, vendor, network adapter or key-entry UI. It computes the original tier from trusted evidence and considers only T2 candidates whose own check is unresolved on hosted/unknown mail. An org-bound own key, positive integer daily cap and durable reservation must precede a call. Global/foreign credentials, settled own verdicts, opt-out, cap refusal and non-T2 candidates make no call. `email_verifier` is a typed org-only resolver slot; even a future global environment variable/fallback flag cannot supply its key.
+
+A vendor valid result upgrades only with explicit non-catch-all proof and proven work. Invalid maps to never; risky/catch-all/unknown do not upgrade. Uncertain dispatch is charged conservatively; only proven no-work gets one refund attempt. Fake-provider tests verify ordering, default-off behavior, org isolation, verdicts, malformed proof and refund rules. No real vendor call, dependency, credential or spend occurred. The existing worker `reserveUsage`/`refundUsage` implementation is resource-typed for worker quotas; reusing those counters would violate the instruction not to touch `usage_resources`. The seam follows its reserve-before-call/refund-only-no-work pattern through injected methods. The actual external-verifier quota/storage adapter is deferred until the following uncovered schema is reviewed and applied.
+
+### Proposed verifier storage SQL — report only, NOT APPLIED
+
+This extends the existing org Vault-key slot pattern, with an independent service-only reservation ledger. It does not create a global key or alter worker resources. Any eventual settings action must be admin-only, preserve secret-redaction rules and remain disabled until Kevin approves the vendor and spending. Key validation must not fall through to Hunter's endpoint. No settings action or live quota adapter is enabled in this build.
+
+```sql
+begin;
+alter table public.org_api_settings drop constraint org_api_settings_provider_check;
+alter table public.org_api_settings add constraint org_api_settings_provider_check
+ check(provider = any(array['gemini','google_places','google_places_pro','companies_house',
+ 'apollo','hunter','anthropic','opencorporates','cro','lookup_worker','firecrawl','email_verifier']));
+create table public.email_verifier_limits (
+ org_id uuid primary key references public.organizations(id),
+ enabled boolean not null default false,
+ daily_cap integer not null default 0 check(daily_cap between 0 and 1000)
+);
+create table public.email_verifier_reservations (
+ id uuid primary key default gen_random_uuid(),
+ org_id uuid not null references public.organizations(id),
+ day date not null,
+ refunded boolean not null default false,
+ created_at timestamptz not null default now()
+);
+create index on public.email_verifier_reservations(org_id,day);
+alter table public.email_verifier_limits enable row level security;
+alter table public.email_verifier_reservations enable row level security;
+revoke all on public.email_verifier_limits,public.email_verifier_reservations from public,anon,authenticated;
+grant select,insert,update on public.email_verifier_limits,public.email_verifier_reservations to service_role;
+create function public.reserve_email_verifier(p_org uuid) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare limits public.email_verifier_limits%rowtype; token uuid;
+ d date := (clock_timestamp() at time zone 'Europe/London')::date;
+begin
+ if auth.role() is distinct from 'service_role' then raise exception 'Service only'; end if;
+ select * into limits from public.email_verifier_limits where org_id=p_org for update;
+ if not found or not limits.enabled or limits.daily_cap < 1 then return null; end if;
+ if (select count(*) from public.email_verifier_reservations
+     where org_id=p_org and day=d and not refunded) >= limits.daily_cap then return null; end if;
+ insert into public.email_verifier_reservations(org_id,day) values(p_org,d) returning id into token;
+ return jsonb_build_object('orgId',p_org,'id',token,'day',d);
+end $$;
+create function public.refund_email_verifier(p_org uuid,p_id uuid) returns boolean
+language plpgsql security definer set search_path = '' as $$
+declare changed uuid;
+begin
+ if auth.role() is distinct from 'service_role' then raise exception 'Service only'; end if;
+ update public.email_verifier_reservations set refunded=true
+ where id=p_id and org_id=p_org and not refunded returning id into changed;
+ return changed is not null;
+end $$;
+revoke all on function public.reserve_email_verifier(uuid) from public,anon,authenticated;
+revoke all on function public.refund_email_verifier(uuid,uuid) from public,anon,authenticated;
+grant execute on function public.reserve_email_verifier(uuid) to service_role;
+grant execute on function public.refund_email_verifier(uuid,uuid) to service_role;
+commit;
+```
+
+Existing service-only `app_set_org_api_key` / `app_get_org_api_key` can store the future `email_verifier` secret with the existing org/provider Vault naming. Limits and ledger stay service-only; eventual settings writes require an authenticated org-admin check. Schema/RPC concurrency, retention and rolled-back audits require architect review before rollout. No migration file was added. Item 5's table reference is `public.organizations` (the actual repository table name); its incomplete proposal is not executable rollout SQL.
+
+### Vendor evaluation harness (description only)
+
+An offline-labelled CSV contains address, domain, known outcome, observed-at timestamp and actual send-time tier. After Kevin selects vendors, approves spending and enters their own keys outside chat, a local harness should: stratify/split domains to prevent leakage; deduplicate addresses; reserve a small explicit trial allowance; call each provider's documented verification API through an adapter; retain redacted verdict/latency/cost/proven-no-work metadata; map valid/invalid/risky/unknown consistently; and print confusion matrices, precision and recall per actual tier, hosted/catch-all segment and vendor. Report unknown/abstention coverage separately and do not treat absence of a hard bounce as infallible ground truth. Match a held-out outcome window and include delayed-bounce uncertainty. No login/sign-in enumeration or unsolicited test sends. This build does not execute or install the harness.
+
+### Final integration recovery check
+
+Inspection found selected Autopilot's old warning recovery wrote a new `sent_at` without tier evidence, including when the warning was only a checker-cache warning. The common sender now returns its original complete failed-log mutation internally. Recovery reuses that exact payload, so status, sent_at, message id and all 074 fields stay in one mutation; it never invents a later snapshot/time or rewrites a successfully logged send merely because verification warned. A red regression proved the complete recovery payload before the fix. This internal payload is not exposed by the HTTP response.
+
+Analytics endpoint tests additionally prove authentication, exact org membership, aggregate-only output and fail-closed reads. The edge shim now covers 28 entrypoints, adding the three org-key consumers omitted by the prior 25-entrypoint check. Final gates and handoff follow below.
+
+## Final local report — 2026-11-11
+
+Kevin's continuation authorisation supersedes the original SQL-and-stop instruction. Item 1 remains the reviewed base; migration 074 is supplied as already applied. Items 2–12 were handled in order, tests first for testable behavior and one commit per item. Report-only research required no test. All implemented changes are local and await Claude's independent review.
+
+| Item | Local result | Commit |
+|---|---|---|
+| 2 | Name plus saved T1/T2 readiness, informational secondary flags, legacy-key reads | c07d506 |
+| 3 | Blank-only supported recipients, primary first-email selection and server bulk-draft tier check | 4b1672f |
+| 4 | Read-time sent_ok, atomic 074 send snapshot and exact-log one-time hard-bounce stamp | 48e9bc3 |
+| 5 | Tested fallback planner; automatic durable queue deferred for lifetime schema | fd663cb |
+| 6 | All-effort company proof with separate durable run allowance and conservative grounded pick | b86c788 |
+| 7 | Bulk mailbox reputation pause and one-batch explicit resume; manual single exempt | 512e67a |
+| 8 | Needs a look filters in existing Pipeline List and Waiting to release | 365a50d |
+| 9 | Primary-source evidence/licence/VPS spike, report only | 9ce4637 |
+| 10 | Capacity, cost, integration fixture updates and report checkpoint | ce79149 |
+| 11 | Actual send-time tier analytics and rolling T2 confidence guard | fda7f8a |
+| 12 | Disabled tested provider seam, BYO-only resolver slot and report-only quota/key SQL | Final item commit carries this report |
+
+**Deferred, not operational:** item 5's bounce-to-draft orchestrator cannot safely create drafts until the reviewed lifetime-person ledger/transaction exists. Item 12's credential settings and atomic org quota adapter cannot be connected until its schema and a vendor are approved. Their SQL/proposals are report-only, not applied, not migration files and not database-tested. The fallback SQL is explicitly incomplete pending identity/provenance checks and audit; do not paste it into production. Other items did not stop at those schema boundaries.
+
+Final gates on the complete application tree: **254 test files; 3,182 passed, one skipped, zero failed**. `npx tsc --noEmit`, `npm run build`, expanded 28-entrypoint `node scripts/places-edge-typecheck.mjs` and `git diff --check` pass. Local test environment used only `http://127.0.0.1:54321` and a placeholder anon value; fake database/provider fixtures performed no external work. The build retains its pre-existing large-chunk warning. Test JSON remains in gitignored `.superpowers/pipeline-tighten-final-gates.json`.
+
+Exact transitive changed-module deployment union (22 functions), if separately reviewed and authorised: `check-replies`, `check-sequences`, `draft-linkedin-message`, `draft-reply`, `email-settings`, `enrich-apollo`, `enrich-hunter`, `enrich-leads-bulk`, `find-decision-makers`, `generate-email`, `parse-csv-leads`, `parse-icp`, `parse-notes`, `parse-session-notes`, `run-deep-find`, `run-lookup-jobs`, `run-selected-autopilot`, `scrape-companies-house`, `scrape-cro`, `scrape-google-places`, `send-email`, `suggest-sequence`; plus frontend. Most broad consumers share `orgApiKeys`; their existing providers retain their behavior. `run-autopilot` is not in this import union, and there is no standalone `email-outcome-backfill` entrypoint: backfill runs through `email-settings`. This corrects the preliminary item 4/10 names. No migration or worker deployment is part of this local handoff.
+
+Remaining validation: independent Claude review; real Deno runtime; disposable database constraint/trigger/RLS and race audits; live DSN/mailbox correlation; real DNS/provider latency; browser/keyboard/phone/light/dark checks; real account allowance and billing observations. Historical unclassified sends and ambiguous DSNs limit measurement coverage. The new filters are bounded review hints and can be stale; server decisions recheck facts. Very large complete-read histories fail closed. Existing oversized components were not broadly refactored; the newly added Analytics component is under 150 lines.
+
+No push, merge, deployment, migration/SQL execution, production read/write, real send, provider spend, worker/VPS change, `usage_resources` edit, dependency change, other-checkout edit or vault sync occurred. Hooks were disabled for commits as requested. Codex remains builder; Claude remains architect/reviewer. Builder stops after this report and final handoff. Next action is Claude review, with particular attention to 074 atomic writes/recovery, tier evidence provenance, exact DSN attribution, quota boundaries and the two schema-dependent deferrals.
+
+Final audit addendum: new evidence paths now include the complete org-wide outreach blocklist (exact address, domain and parent domain), alongside lead-specific blocked domains. The same blocklist gates existing early Deep find blank email writes, not only final tier selection. Red regressions demonstrated that strong saved/checker evidence could otherwise escape that org block; reader and real-engine tests now pass. Final Deep find tier evaluation also shares one MX lookup per domain instead of repeating DNS for every sample. These corrections are included in the final item-12 integration commit. The complete gates were rerun afterward: 254 files / 3,182 passed, one skipped; TypeScript/build/28-entrypoint edge shim/whitespace pass.

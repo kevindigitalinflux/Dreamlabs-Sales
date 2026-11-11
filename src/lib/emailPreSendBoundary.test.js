@@ -39,6 +39,13 @@ it('writes 074 snapshot in the same successful draft update',async()=>{
  expect(updates[0].patch).toMatchObject({status:'sent',recipient_tier_at_send:'T1',recipient_tier_basis:'checker_valid',recipient_tier_version:1});
  expect(updates[0].patch.recipient_tier_recorded_at).toBe(updates[0].patch.sent_at);
 });
+it('returns the original complete send mutation for recovery instead of inventing a later timestamp',async()=>{
+ const db=replyDatabase({email_logs:[{id:'draft',org_id:'org',sent_by:'sender',status:'draft'}]});
+ const from=db.service.from;db.service.from=table=>{const q=from(table);q.or=()=>q;return q;};db.failures.add('email_logs:update');
+ const result=await sendLeadEmail(db.service,{...input,logId:'draft',draft:{org_id:'org',attachments:[]}});
+ expect(result.ok).toBe(true);expect(result.sentLogPatch).toMatchObject({status:'sent',recipient_tier_at_send:'T3'});
+ expect(result.sentLogPatch.recipient_tier_recorded_at).toBe(result.sentLogPatch.sent_at);
+});
 it('requires an explicit row override and never overrides a learned hard bounce',async()=>{
  checkEmailBeforeSend.mockResolvedValueOnce({status:'invalid',label:'Our checker says this address does not exist'});
  expect(await sendLeadEmail(replyDatabase().service,{...input,overrideInvalid:true})).toMatchObject({ok:true,verification:{overridden:true}});

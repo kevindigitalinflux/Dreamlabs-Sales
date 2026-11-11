@@ -45,6 +45,15 @@ it('a checked saved email plus a confirmed saved site makes the lead ready', asy
   expect(lead.readiness).toBe('ready');
   expect(out.domains.readiness).toBe('ready');
 });
+it('never auto-applies a checker-valid address on the org-wide blocked domain',async()=>{
+ lead.email=null;contacts[0].email=null;resolveOrgWorkerConfig.mockResolvedValue({});
+ worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'valid',reason:'deliverable'}});
+ const original=service.from.bind(service);service.from=table=>{
+  if(table!=='outreach_blocklist')return original(table);
+  const q={select:()=>q,eq:()=>q,order:()=>q,range:()=>q,then:resolve=>resolve({data:[{id:'block',value:'acme.com'}],count:1,error:null})};return q;
+ };
+ expect((await run('low')).status).toBe('done');expect(writes.filter(write=>'email' in write.patch)).toEqual([]);
+});
 const profile = 'https://www.linkedin.com/in/jane-smith';
 const run = (effort) => processDeepFindLead(service, { id: 'run', org_id: 'org', created_by: 'user', status: 'active' }, { id: 'result', lead_id: 'lead', org_id: 'org', domains: effort ? { effort } : {} });
 it('suggests a person direct phone from a fetched staff page without writing it or fetching another page', async () => {

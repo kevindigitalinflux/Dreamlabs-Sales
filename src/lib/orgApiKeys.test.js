@@ -28,6 +28,12 @@ it('returns an organisation Firecrawl key only through the org-scoped Vault RPC'
   expect(f.rpc).toHaveBeenCalledWith('app_get_org_api_key', { target_org: 'org', target_provider: 'firecrawl' });
   expect(f.env).not.toHaveBeenCalled();
 });
+it('keeps the dormant verifier slot BYO-only even with global fallback enabled',async()=>{
+ const missing=fixture();expect(await resolveOrgApiKey(missing.service,'org','email_verifier')).toBeNull();
+ expect(missing.env).not.toHaveBeenCalled();expect(missing.from).not.toHaveBeenCalledWith('organizations');
+ const own=fixture({configured:true,value:'fake-own'});expect(await resolveOrgApiKey(own.service,'org','email_verifier')).toBe('fake-own');
+ expect(own.rpc).toHaveBeenCalledWith('app_get_org_api_key',{target_org:'org',target_provider:'email_verifier'});expect(own.env).not.toHaveBeenCalled();
+});
 it('actual worker resolver fails closed and logs no raw database errors', async () => {
   const f = fixture({ error: new Error('private-test-error') });
   const log = vi.spyOn(console, 'error').mockImplementation(() => {});

@@ -160,10 +160,10 @@ export async function sendDraft(
     await ctx.releaseSend();
     return { outcome: 'failed', reason: plainReason(result.error), ...base };
   }
-  if (result.warning) {
+  if (result.sentLogPatch) {
     // Sent but the log row may still say draft; fix it so a person cannot release it a second time.
     try {
-      const { error } = await ctx.service.from('email_logs').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', emailLogId);
+      const { error } = await ctx.service.from('email_logs').update(result.sentLogPatch).eq('id', emailLogId);
       if (error) console.error('autopilot: could not mark the sent email as sent');
     } catch { console.error('autopilot: could not mark the sent email as sent'); }
   }

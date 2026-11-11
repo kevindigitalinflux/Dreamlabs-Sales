@@ -84,7 +84,7 @@ export interface SendLeadEmailInput {
 }
 
 export type SendLeadEmailResult =
-  | { ok: true; logId: string | null; warning?: string; verification?:EmailPrecheckResult }
+  | { ok: true; logId: string | null; warning?: string; verification?:EmailPrecheckResult;sentLogPatch?:Record<string,unknown> }
   | { ok: false; error: string; status?: number; logId?: string | null; warning?: string; verification?:EmailPrecheckResult };
 
 /**
@@ -267,5 +267,5 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
 
   const warning = [logFailed?'Email sent but logging failed':null,verification.warning].filter(Boolean).join(' ')||undefined;
   if (status === 'failed') return { ok: false, error: 'Send failed: ' + errorMessage, status: 400, logId, verification, ...(warning ? { warning } : {}) };
-  return { ok: true, logId, verification, ...(warning ? { warning } : {}) };
+  return { ok: true, logId, verification, ...(warning ? { warning } : {}),...(logFailed?{sentLogPatch:row}:{}) };
 }

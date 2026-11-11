@@ -2,7 +2,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { resolveWorkerConfig } from './workerConfig.ts';
 import { readWorkerConfig, type WorkerConfig } from './workerRules.ts';
 
-export type ApiProvider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates' | 'cro' | 'lookup_worker' | 'firecrawl';
+export type ApiProvider = 'gemini' | 'google_places' | 'google_places_pro' | 'companies_house' | 'apollo' | 'hunter' | 'anthropic' | 'opencorporates' | 'cro' | 'lookup_worker' | 'firecrawl' | 'email_verifier';
 
 const GLOBAL_ENV_VARS: Partial<Record<ApiProvider, string>> = {
   gemini: 'GEMINI_API_KEY',
@@ -45,14 +45,16 @@ export async function resolveOrgApiKey(
   service: SupabaseClient<any>, orgId: string, provider: ApiProvider,
   onSource?: (source: 'org' | 'global') => void,
 ): Promise<string | null> {
-  const { data: settings } = await service
+  const { data: settings, error:settingsError } = await service
     .from('org_api_settings').select('is_configured').eq('org_id', orgId).eq('provider', provider).maybeSingle();
+  if(provider==='email_verifier'&&settingsError)return null;
   if (settings?.is_configured) {
-    const { data: key } = await service.rpc('app_get_org_api_key', { target_org: orgId, target_provider: provider });
+    const { data: key,error:keyError } = await service.rpc('app_get_org_api_key', { target_org: orgId, target_provider: provider });
+    if(provider==='email_verifier'&&keyError)return null;
     if (key) { onSource?.('org'); return key as string; }
   }
   // BYO-only regardless of any current or future environment variable or organisation fallback flag.
-  if (provider === 'firecrawl' || provider === 'lookup_worker') return null;
+  if (provider === 'firecrawl' || provider === 'lookup_worker' || provider==='email_verifier') return null;
   const { data: org } = await service.from('organizations').select('use_global_api_fallback').eq('id', orgId).single();
   const variable = GLOBAL_ENV_VARS[provider];
   if (org?.use_global_api_fallback && variable) { onSource?.('global'); return Deno.env.get(variable) ?? null; }

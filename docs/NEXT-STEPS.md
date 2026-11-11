@@ -1,6 +1,7 @@
 # Next steps (the to-do list for Codex and Claude)
 
-- [ ] Pipeline tighten: item 1 policy/adapters complete on codex/pipeline-tighten; required storage SQL is report-only and triggers the explicit stop. Read docs/PIPELINE-TIGHTEN-REPORT.md. Items 2–12 remain unfinished; no consumer integration or tier-based automation is enabled. Claude review and Kevin-approved next steps required. Gates: 3,145 passed, one skipped, TypeScript/build/edge shim/whitespace.
+- [x] Pipeline tighten local continuation: items 2–12 handled in order on codex/pipeline-tighten; 074 atomic send snapshots/exact bounce stamps integrated. Read the final docs/PIPELINE-TIGHTEN-REPORT.md section. Gates: 254 files, 3,182 passed and one skipped; TypeScript/build/28-entrypoint edge shim/whitespace pass.
+- [ ] Pipeline tighten: Claude reviews the local commits and schema proposals. Item 5 durable fallback queue and item 12 key/quota integration remain deferred for uncovered schema; neither is enabled. Browser/runtime/database checks and any rollout need separate authorization. No push, merge, deploy, SQL, live provider or worker action occurred.
 
 - [ ] Readiness website fix (2026-11-11): all six builder items complete on codex/readiness-website-fix. Read docs/READINESS-WEBSITE-FIX-REPORT.md. Gates pass: 239 files / 3,103 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. Claude reviews predicate, importer correction and text-only refresh proposal. No rollout or refresh authorised; remains unchecked until independent review.
 

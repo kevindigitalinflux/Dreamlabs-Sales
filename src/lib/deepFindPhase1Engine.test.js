@@ -37,7 +37,7 @@ beforeEach(() => {
       if (table === 'leads' && patch?.website) beforeWebsiteWrite?.();
       const found = records().filter((r) => filters.every(([k,v]) => Array.isArray(r[k]) ? v === '{' + r[k].map(x => JSON.stringify(x)).join(',') + '}' : r[k] === v));
       if (patch) { writes.push({ table, patch, filters: [...filters] }); if (deny) return { data: [], error: null }; for (const row of found) { Object.assign(row, patch); if (table === 'leads') row.updated_at = 'trigger-version'; } }
-      return { data: found.map((r) => ({ ...r })), error: null };
+      return { data: found.map((r) => ({ ...r })), count:found.length,error: null };
     };
     const q = { range:()=>q,gte:()=>q,order:()=>q,limit:()=>q,select: () => q, eq: (k,v) => { filters.push([k,v]); return q; }, is: (k,v) => { filters.push([k,v]); return q; },
       update: (p) => { patch = p; return q; }, upsert: (p) => { writes.push({ table, patch: p }); return q; },

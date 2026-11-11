@@ -3,15 +3,17 @@ import type { AutoApplied } from './deepFindAutoApply.ts';
 import { isReviewPhone, isSuggestionDismissed, registrySkipReason } from './deepFindSuggestions.ts';
 import type { BusinessPhone } from './phoneNumbers.ts';
 import type {TierResult} from './recipientTier.ts';
+import {isRecipientBlocked} from './selectedLeadPipelineRules.ts';
 
 /** One authorized blank fill and its Undo record. Exact old-value filters protect concurrent edits. */
 export async function applyDeepFindBlank(
-  service: SupabaseClient, scope: { leadId: string; orgId: string },
+  service: SupabaseClient, scope: { leadId: string; orgId: string; blockedEmails?:Set<string> },
   table: AutoApplied['table'], row: Record<string, unknown> & { id: string }, field: string, after: string,
   changes: AutoApplied[], checkpoint: () => Promise<void>, phone?: BusinessPhone, recipient?:TierResult,
 ): Promise<boolean> {
   const allowed = table === 'leads' ? ['website', 'phone', 'owner_name', 'company_number',...(recipient&&['T1','T2'].includes(recipient.tier)?['email']:[])] : ['email', 'title', 'linkedin_url'];
   if (!allowed.includes(field) || !after.trim() || (typeof row[field] === 'string' && row[field].trim())) return false;
+  if(field==='email'&&scope.blockedEmails&&isRecipientBlocked(after,scope.blockedEmails))return false;
   if (changes.length >= 100 || (field === 'phone' && !isReviewPhone(after))) return false;
   if (row[field] !== null && row[field] !== undefined && typeof row[field] !== 'string') return false;
   if (table === 'decision_maker_candidates' && row.dismissed_at) return false;

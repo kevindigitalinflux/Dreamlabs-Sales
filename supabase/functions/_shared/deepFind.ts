@@ -3,6 +3,8 @@ import {prepareRecipientEvidence,supportedTierPattern} from './recipientTierEvid
 import {autoApplyRecipients,type AutoRecipient} from './recipientAutoApply.ts';
 import {sentOkAddresses} from './sentRecipientEvidence.ts';
 import {loadTierMetrics,T2_PAUSED} from './tierMetrics.ts';
+import {readComplete} from './readComplete.ts';
+import {isRecipientBlocked} from './selectedLeadPipelineRules.ts';
 import { reserveRegistryProof } from './registryProofGate.ts';
 import {reserveRunRegistryProof} from './registryProofAllowance.ts';
 import { createPlacesContext, type PlacesContext } from './placesClient.ts';
@@ -217,7 +219,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   let registryEvidence: Record<string, unknown> = {};
   if (effort !== 'low' && !configured.geminiKey) steps.push('LinkedIn search skipped: no Gemini key is configured.');
   const all = () => [...rows, ...created];
-  const scope = { leadId: lead.id, orgId: run.org_id };
+  let blockedEmails:Set<string>;
+  try{const blocked=await readComplete(()=>service.from('outreach_blocklist').select('id,value',{count:'exact'}).eq('org_id',run.org_id));blockedEmails=new Set(blocked.data.map(row=>String(row.value)));}
+  catch{console.error('Deep find: blocklist unavailable');return {status:'failed',reason:'Could not check the organisation blocklist. Try again.'};}
+  const scope = { leadId: lead.id, orgId: run.org_id,blockedEmails };
   const ownerSuppressed = (name: string) => {
     const parsed = parseLeadPersonName(name);
     const contact = parsed ? findSamePerson(all(), parsed.first, parsed.last) : null;
@@ -1325,15 +1330,17 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   for(const email of [...siteEmails.values()].flat())if(!candidateRows.has(email.toLowerCase()))candidateRows.set(email.toLowerCase(),{address:email,name:'Company contact'});
   if(str(lead.email))candidateRows.set(str(lead.email)!.toLowerCase(),{address:str(lead.email)!,name:str(lead.owner_name)??'Company contact'});
   const publicSamples=[...publishedEvidence,...[...siteEmails.values()].flat().map(email=>({email,first:null,last:null,published:true}))];
+  const finalMx=new Map<string,Promise<'mx'|'none'|'error'>>();
   const proofFor=async(address:string):Promise<RecipientEvidence>=>{
     const email=address.toLowerCase();await outcomes.status(email);const domain=emailDomain(email)??'';
-    const mx=left()>3500?await lookupMx(domain,3000,true):'error';const checked=checkedEmails.get(email);
+    if(!finalMx.has(domain))finalMx.set(domain,left()>3500?lookupMx(domain,3000,true):Promise.resolve('error'));
+    const mx=await finalMx.get(domain);const checked=checkedEmails.get(email);
     const published=[...siteEmails.values()].flat().some(address=>address.toLowerCase()===email);
     const recent=await outcomes.recentCheck(email,Date.now());
     return prepareRecipientEvidence(email,{savedNonGuessed:savedEvidenceSafe&&!previousGuesses.has(email)&&str(lead.email)?.toLowerCase()===email,generated:previousGuesses.has(email)||suggestions.some(s=>s.value?.toLowerCase()===email&&!!s.guess_rank),publishedByCompany:published,
       checker:checked?.ok?(checked.value.status==='valid'?'valid':checked.value.status==='invalid'?'invalid':'unverifiable'):recent?.outcome==='checked_invalid'?'invalid':recent?.outcome==='checked_valid'?'valid':undefined,
       bouncedHard:outcomes.peek(email)?.reason==='bounced_hard',replied:outcomes.peek(email)?.reason==='previously_replied',sentOk:delivered.has(email),hasMailServer:mx==='none'?false:mx==='mx'?true:null,
-      provider:cachedMailProvider(domain)??'unknown',catchAll:checked?.ok&&checked.value.reason==='catch_all',optedOut:lead.opted_out===true,blocklisted:savedDomains(lead.blocked_domains).includes(domain),supportedGuessAllowed});
+      provider:cachedMailProvider(domain)??'unknown',catchAll:checked?.ok&&checked.value.reason==='catch_all',optedOut:lead.opted_out===true,blocklisted:isRecipientBlocked(email,blockedEmails)||savedDomains(lead.blocked_domains).includes(domain),supportedGuessAllowed});
   };
   const samples=[];for(const sample of publicSamples.slice(0,40))samples.push({...sample,evidence:await proofFor(sample.email)});
   const automatic:AutoRecipient[]=[];
