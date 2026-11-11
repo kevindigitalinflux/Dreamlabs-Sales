@@ -49,7 +49,7 @@ export function PickerFilterBar({ value, onChange, pipelines }: Props) {
     </div>
     <label className="flex min-h-11 items-center gap-2 text-sm">
       <input type="checkbox" className={CHECKBOX} checked={value.verifiedEmail} onChange={e => onChange({ ...value, verifiedEmail: e.target.checked })} />
-      Has a verified email
+      Has a sendable email
     </label>
     <p className="text-xs text-muted">Verified email uses the last saved Deep find check, including saved contacts. It does not run a new check.</p>
     <label className="flex min-h-11 items-center gap-2 text-sm">

@@ -48,7 +48,7 @@ import { lookupApolloPhone } from './apolloHunterLookup.ts';
 import { searchApolloDecisionMakers } from './apolloPeopleSearch.ts';
 import { lookupOpenCorporatesOfficer } from './openCorporates.ts';
 import { linkedinMatch, planWebsiteAutoUpdate, type AutoApplied } from './deepFindAutoApply.ts';
-import { evaluateReadiness, readinessText } from './leadReadiness.ts';
+import { evaluateReadiness, readinessText, sendableReadinessRecipients } from './leadReadiness.ts';
 import { makeEmailOutcomeLookup } from './emailOutcomeLookup.ts';
 import {roleAddressNeedsReview,ROLE_ADDRESS_LABEL} from './emailPrecheckRules.ts';
 
@@ -1315,14 +1315,15 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     service.from('decision_maker_candidates').select('*').eq('lead_id', lead.id),
   ]);
   if (finalLead.error || !finalLead.data || finalContacts.error) throw new Error('Could not read final readiness facts');
-  const readiness = evaluateReadiness({ lead: finalLead.data, contacts: finalContacts.data ?? [], domains: discovery.domains,
+  const readinessInput = { lead: finalLead.data, contacts: finalContacts.data ?? [], domains: discovery.domains,
     validEmails: [...checkedEmails].filter(([email,c])=>verifiedEmailResult(email,c)).map(([email]) => email),
-    websiteSuspect: suspicion.suspect && domainFromWebsite(finalLead.data.website) === siteDomain });
+    websiteSuspect: suspicion.suspect && domainFromWebsite(finalLead.data.website) === siteDomain };
+  const readiness=evaluateReadiness(readinessInput);
   await checkpoint();
   const { data: savedReadiness, error: readinessError } = await service.from('leads').update(readiness)
     .eq('id', lead.id).eq('org_id', run.org_id).eq('updated_at', finalLead.data.updated_at).select('id');
   if (readinessError || !savedReadiness?.length) throw new Error('Could not save lead readiness');
-  const readinessLine = readinessText(readiness.readiness, readiness.readiness_missing);
+  const readinessLine = readinessText(readiness.readiness, readiness.readiness_missing,sendableReadinessRecipients(readinessInput).length);
   steps.push(readinessLine);
   return {
     status: 'done',

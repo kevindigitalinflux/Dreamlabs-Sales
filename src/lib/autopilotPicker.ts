@@ -25,7 +25,7 @@ export function emptyPickerFilters(): PickerFilters {
 /** A saved readiness assessment uses checker-valid addresses, never email presence/provider guesses alone. */
 export function hasVerifiedEmail(lead: Lead): boolean {
   const addresses = [lead.email, ...(lead.additional_emails ?? []), ...(lead.email_contacts ?? []).filter(c => !c.dismissed_at).map(c => c.email)];
-  return !!lead.readiness && Array.isArray(lead.readiness_missing) && !lead.readiness_missing.includes('verified_email')
+  return !!lead.readiness && Array.isArray(lead.readiness_missing) && !lead.readiness_missing.some(key=>key==='verified_email'||key==='sendable_email')
     && addresses.some(address => !!address?.trim());
 }
 
