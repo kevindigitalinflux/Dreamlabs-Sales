@@ -5,6 +5,13 @@ const lead = { owner_name: 'Jane Smith', website: 'https://acme.com', email: 'he
 const domains = [{ domain: 'acme.com', needs_check: false, sources: ['site_confirms'] }];
 const base = { lead, contacts: [], domains, validEmails: ['hello@acme.com'], websiteSuspect: false };
 describe('lead readiness', () => {
+  it('confirms a nonsuspect corporate website corroborated by saved same-domain emails without page-name proof', () => {
+    expect(evaluateReadiness({
+      lead: { owner_name: 'Jane Smith', website: 'https://www.example.com/gb-en/about/company-index?ref=fixture', email: 'person@example.com', country: 'GB', phone: null },
+      contacts: [], validEmails: ['person@example.com'], websiteSuspect: false,
+      domains: [{ domain: 'example.com', needs_check: false, sources: ['website', 'lead_email', 'contact_email'] }],
+    })).toEqual({ readiness: 'ready', readiness_missing: [] });
+  });
   it('requires all three facts for ready', () => expect(evaluateReadiness(base)).toEqual({ readiness: 'ready', readiness_missing: [] }));
   it.each([
     [{ lead: { ...lead, owner_name: null } }, 'decision_maker'],
