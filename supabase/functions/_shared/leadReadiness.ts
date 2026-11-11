@@ -47,8 +47,9 @@ export function evaluateReadiness({ lead, contacts, domains, validEmails, websit
   const email = [lead.email, ...list(lead.additional_emails), ...live.map(c => c.email)]
     .some(value => !!text(value) && checked.has(text(value).toLowerCase()));
   const domain = domainFromWebsite(text(lead.website));
-  const website = !!domain && !isDirectoryDomain(domain) && !savedDomains(lead.blocked_domains).includes(domain)
-    && domains.some(d => d.domain === domain && !d.needs_check && d.sources.includes('site_confirms'));
+  const website = !!domain && !websiteSuspect && !isDirectoryDomain(domain) && !savedDomains(lead.blocked_domains).includes(domain)
+    && domains.some(d => d.domain === domain && !d.needs_check
+      && d.sources.some(source => ['site_confirms', 'lead_email', 'contact_email'].includes(source)));
   // Parse with the shared numbering-plan module; invalid text and historical metadata never establish a mismatch.
   const foreignPhone = lead.country === 'GB' && [lead.phone, ...list(lead.additional_phones)].some(value => {
     const parsed = parsePhone(value, 'GB');

@@ -13,6 +13,11 @@ describe('lead readiness', () => {
     })).toEqual({ readiness: 'ready', readiness_missing: [] });
   });
   it('requires all three facts for ready', () => expect(evaluateReadiness(base)).toEqual({ readiness: 'ready', readiness_missing: [] }));
+  it.each(['lead_email', 'contact_email'])('accepts either same-domain email evidence source: %s', source => {
+    expect(evaluateReadiness({ ...base, lead: { ...lead, website: 'https://example.com', email: 'person@example.com' },
+      validEmails: ['person@example.com'], domains: [{ domain: 'example.com', needs_check: false, sources: ['website', source] }],
+    })).toEqual({ readiness: 'ready', readiness_missing: [] });
+  });
   it.each([
     [{ lead: { ...lead, owner_name: null } }, 'decision_maker'],
     [{ validEmails: [] }, 'verified_email'],
@@ -40,7 +45,7 @@ describe('lead readiness', () => {
     expect(evaluateReadiness({ ...base, lead: { ...lead, email: null }, contacts: [{ email: lead.email, dismissed_at: 'date' }] }).readiness_missing).toContain('verified_email');
   });
   it('wrong website overrides otherwise ready', () => {
-    expect(evaluateReadiness({ ...base, websiteSuspect: true })).toEqual({ readiness: 'needs_work', readiness_missing: ['company_match'] });
+    expect(evaluateReadiness({ ...base, websiteSuspect: true })).toEqual({ readiness: 'needs_work', readiness_missing: ['confirmed_website', 'company_match'] });
   });
   it.each(['+353 1 234 5678', '(212) 555-0198'])('GB foreign number flags company mismatch: %s', phone => {
     const value = phone.startsWith('(') ? '+1 212 555 0198' : phone;
