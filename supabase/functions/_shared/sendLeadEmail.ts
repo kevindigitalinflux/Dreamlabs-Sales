@@ -3,6 +3,7 @@ import { buildMailContent } from './emailFormat.ts';
 import { ATTACHMENT_BUCKET, MAX_TOTAL_ATTACHMENT_BYTES, parseAttachments, safeFilename } from './emailAttachments.ts';
 import {checkEmailBeforeSend,type EmailPrecheckResult} from './emailPreSend.ts';
 import {tierSnapshot} from './sentRecipientEvidence.ts';
+import {loadMailboxReputation,REPUTATION_PAUSED} from './mailboxReputation.ts';
 
 // deno-lint-ignore no-explicit-any
 type ServiceClient = any;
@@ -44,6 +45,8 @@ export async function loadSenderMailbox(
 }
 
 export interface SendLeadEmailInput {
+  bulkRelease?:boolean;
+  reputationAcknowledged?:boolean;
   /** Optional caller deadline; SMTP/final-save reserves remain outside this checker share. */
   checkTimeLeftMs?:()=>number;
   /** Human-confirmed override for this recipient only; never applies to learned hard bounces. */
@@ -154,6 +157,10 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
   // so a crafted request can't make this function mail another organisation's documents.
   const attachOrgId = orgId ?? draftOrgId;
   if(!attachOrgId)return {ok:false,error:'Could not determine the email organisation',status:400};
+  if(input.bulkRelease){
+    try{if((await loadMailboxReputation(service,attachOrgId,senderId)).paused&&!input.reputationAcknowledged)return {ok:false,error:REPUTATION_PAUSED,status:409};}
+    catch{console.error('Mailbox reputation unavailable');return {ok:false,error:'Could not check mailbox reputation. Bulk release paused. Try again.',status:503};}
+  }
   let verification:EmailPrecheckResult;
   try{verification=await checkEmailBeforeSend(service,{orgId:attachOrgId,leadId:leadId??undefined,address:input.to,timeLeftMs:input.checkTimeLeftMs});}
   catch{console.error('email precheck: outcome history unavailable');return {ok:false,error:'Could not check previous email outcomes. Try again.',status:503};}
@@ -161,6 +168,7 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
     if(input.overrideInvalid!==true||verification.hardBounce||verification.overridable===false)return {ok:false,error:verification.label,status:409,verification};
     verification={...verification,overridden:true};
   }
+  if(input.bulkRelease&&!['T1','T2'].includes(verification.tier?.tier??'T3'))return {ok:false,error:verification.tier?.reason??'This address needs individual review before sending.',status:409,verification};
   if (attachments.length > 0) {
     if (!attachOrgId || attachments.some((a) => !a.path.startsWith(`${attachOrgId}/`) || a.path.includes('..'))) {
       return { ok: false, error: 'Attachment not allowed', status: 400 };

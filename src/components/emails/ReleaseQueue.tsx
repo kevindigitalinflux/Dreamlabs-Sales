@@ -32,6 +32,7 @@ export function ReleaseQueue() {
   const [reviewing, setReviewing] = useState<DraftLog | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [report, setReport] = useState<PostSendReport | null>(null);
+  const [resumeReputation,setResumeReputation]=useState(false);
   const reviewLead = reviewing?.lead ? leads.find((l) => l.id === reviewing.lead!.id) ?? null : null;
 
   // A discard (or any other refresh) can drop a draft that's still checked
@@ -42,7 +43,7 @@ export function ReleaseQueue() {
   // useReviewBatch scopes selection to the current rows and retains failures.
   async function handleBatch(action:'release'|'reject') {
     if(lock.current||review.busy||reviewing||!review.selected.size)return;
-    if(!window.confirm(action==='release'?'Send the selected reviewed drafts now?':'Reject selected drafts? This removes them from the review queue.'))return;
+    if(!window.confirm(action==='release'?(resumeReputation?'Send these reviewed drafts despite the mailbox bounce warning? This can damage sender reputation.':'Send the selected reviewed drafts now?'):'Reject selected drafts? This removes them from the review queue.'))return;
     lock.current=true;setChecking(true);
     try {
     setSummary(null);setReport(null);
@@ -56,7 +57,7 @@ export function ReleaseQueue() {
       if(!current)return 'This draft changed or now requires Autopilot review. Refresh before trying again.';
       if(!reviewedDraftMatches(draft,current))return 'This draft changed after selection. Review it again before releasing or rejecting it.';
       if(action==='reject')return discardReviewDraft(supabase,current.id);
-      const result=await releaseReviewDraft(supabase,current);results.push(result.view);
+      const result=await releaseReviewDraft(supabase,current,resumeReputation);results.push(result.view);
       if(!result.error){
         // Keep which lead each line is about: prefix with the business name (lines then stay distinct per lead).
         const rep=parsePostSend(result.data);const who=current.lead?.business_name??current.to_email;
@@ -68,13 +69,14 @@ export function ReleaseQueue() {
     if(action==='release')setSummary(emailReleaseSummary(results));
     await refresh();
     } catch(error) {console.error('release queue refresh failed',error);setSummary('Could not refresh the review queue. Refresh before trying again.');}
-    finally {lock.current=false;setChecking(false);}
+    finally {lock.current=false;setChecking(false);setResumeReputation(false);}
   }
 
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm text-muted">Autopilot drafts need individual review. <Link className="underline" to="/outreach/autopilot">Review Autopilot drafts</Link></p>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" checked={resumeReputation} onChange={event=>setResumeReputation(event.target.checked)} disabled={checking||review.busy}/>I reviewed the mailbox bounce warning and knowingly resume this batch</label>
       <ReviewBatchControls review={{...review,busy:review.busy||checking||!!reviewing,summary:summary??review.summary}} ids={visible.map(d=>d.id)} approveLabel="Release selected" rejectLabel="Reject selected" onApprove={()=>void handleBatch('release')} onReject={()=>void handleBatch('reject')} />
       {report && <PostSendPreview lines={null} report={report} />}
       <EmailReviewQueue

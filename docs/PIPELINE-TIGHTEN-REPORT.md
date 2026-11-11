@@ -244,3 +244,11 @@ Low and Custom now join Medium/High/Extra high for unresolved UK company proof. 
 A grounded number can auto-pick only a unique plausible active company present in the Companies House search results, with matching name and matching location when supplied. Two plausible active matches, mismatched names, absent search numbers and dissolved companies remain for human choice. Missing Gemini key, exhausted allowance, unavailable reservation or insufficient remaining time produces a plain skip line and does not fail the run. The existing Companies House key remains required.
 
 Tests first covered all efforts and the stricter grounded pick. Focused registry tests: 74 passed (including separate allowance/retry/cap coverage). Edge shim passed. Cost for 100 leads requires 100 grounded requests plus model tokens; current official pricing is linked in the final research/capacity section. This is an estimate, not a live billing measurement. Deploy: `deep-find` only. No provider call or live reservation was made.
+
+## Item 7 — mailbox reputation guard
+
+Bulk release checks the sending user's mailbox in the draft's organisation on every send. At least 20 genuine sends in the last 7 days and hard bounces on at least 5% pause the batch. Numerator uses exact-log `hard_bounced_at`; ambiguous historical DSNs cannot be assigned to arbitrary sends, so old unattributed bounces are not invented. Missing/incomplete safety evidence pauses bulk release. Ordered pagination avoids the API's default row limit.
+
+Waiting to release has an explicit acknowledgement checkbox and a stronger confirmation for knowingly resuming one batch. It resets after the batch. This acknowledgement cannot override T3, hard bounce, opt-out or blocklist checks. Manual single sends bypass only the reputation gate. The dormant fallback boundary also requires reputation permission; automatic fallback creation remains schema-blocked under item 5.
+
+Focused threshold/send-boundary tests: 8 passed, including 20-send/5%, fewer than 20, mailbox/time isolation, manual single sending and weak-tier refusal after acknowledgement. Frontend TypeScript and edge shim passed after correcting the item 6 fixture type. No database/provider/browser test occurred. Deploy: frontend and `send-email`; shared sender consumers inherit the guard when explicitly using bulk release.

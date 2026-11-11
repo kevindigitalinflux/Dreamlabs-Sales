@@ -12,6 +12,17 @@ it('blocks invalid addresses at the common SMTP boundary with a plain reason',as
  expect(await sendLeadEmail(replyDatabase().service,input)).toMatchObject({ok:false,status:409,error:'Our checker says this address does not exist'});
  expect(sendMail).not.toHaveBeenCalled();
 });
+it('pauses bulk at the reputation boundary while leaving a manual single send available',async()=>{
+ const db=replyDatabase({email_logs:Array.from({length:20},(_,i)=>({id:String(i),org_id:'org',sent_by:'sender',status:'sent',sent_at:new Date().toISOString(),hard_bounced_at:i===0?new Date().toISOString():null}))});
+ expect(await sendLeadEmail(db.service,{...input,bulkRelease:true})).toMatchObject({ok:false,status:409});
+ expect(sendMail).not.toHaveBeenCalled();
+ expect(await sendLeadEmail(db.service,input)).toMatchObject({ok:true});
+});
+it('requires a supported recipient even after knowingly resuming bulk',async()=>{
+ const db=replyDatabase();checkEmailBeforeSend.mockResolvedValueOnce({status:'unverifiable',label:'Not confirmed',tier:{tier:'T3',basis:'weak_evidence',reason:'Review this address.'}});
+ expect(await sendLeadEmail(db.service,{...input,bulkRelease:true,reputationAcknowledged:true})).toMatchObject({ok:false,status:409});
+ expect(sendMail).not.toHaveBeenCalled();
+});
 it.each(['valid','unverifiable'])('allows %s with explicit verification metadata',async status=>{
  checkEmailBeforeSend.mockResolvedValueOnce({status,label:status==='valid'?'Confirmed':'Not confirmed'});
  expect(await sendLeadEmail(replyDatabase().service,input)).toMatchObject({ok:true,verification:{status}});

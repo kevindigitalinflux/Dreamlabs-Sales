@@ -12,9 +12,9 @@ export async function discardReviewDraft(client:Pick<SupabaseClient,'from'>,id:s
  return error?'Could not discard this draft. Try again.':!data?'This draft changed or was removed. Refresh before trying again.':null;
 }
 /** Existing release payload and server send boundary, one reviewed draft at a time. */
-export async function releaseReviewDraft(client:Pick<SupabaseClient,'functions'>,draft:DraftLog) {
+export async function releaseReviewDraft(client:Pick<SupabaseClient,'functions'>,draft:DraftLog,reputationAcknowledged=false) {
  const {data,error}=await client.functions.invoke('send-email',{body:{to_email:draft.to_email,subject:draft.subject,body:draft.body,
-  lead_id:draft.lead?.id,log_id:draft.id,decision_maker_candidate_id:draft.decision_maker_candidate_id}});
+  lead_id:draft.lead?.id,log_id:draft.id,decision_maker_candidate_id:draft.decision_maker_candidate_id,bulk_release:true,reputation_acknowledged:reputationAcknowledged}});
  const view=await readEmailSendResponse(data,error);
  return {data,view,error:view.ok?null:view.error??'Send failed. Review this draft and try again.'};
 }

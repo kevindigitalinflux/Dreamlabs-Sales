@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
   const user = userData?.user;
   if (!user) return json({ error: 'Not signed in' }, 401, headers);
 
-  const body = (await req.json()) as { to_email?: string; subject?: string; body?: string; lead_id?: string; log_id?: string; decision_maker_candidate_id?: string; attachments?: unknown; template_id?: string; reply_id?: string; override_email_check?:boolean };
+  const body = (await req.json()) as { to_email?: string; subject?: string; body?: string; lead_id?: string; log_id?: string; decision_maker_candidate_id?: string; attachments?: unknown; template_id?: string; reply_id?: string; override_email_check?:boolean;bulk_release?:boolean;reputation_acknowledged?:boolean };
   if (!body.to_email || !body.subject || !body.body) {
     return json({ error: 'to_email, subject and body are required' }, 400, headers);
   }
@@ -105,6 +105,7 @@ Deno.serve(async (req) => {
     leadStage,
     draft,
     overrideInvalid:body.override_email_check===true,
+    bulkRelease:body.bulk_release===true,reputationAcknowledged:body.reputation_acknowledged===true,
     ...thread,
   });
   if (!result.ok) {

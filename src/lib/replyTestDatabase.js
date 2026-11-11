@@ -5,11 +5,12 @@ export function replyDatabase(seed = {}) {
   const service = { rpc: async (name) => ({ data: name === 'reply_alert_recipients' ? [
     { user_id: 'sender', role: 'contractor', can_view: true }, { user_id: 'admin', role: 'admin', can_view: true },
   ] : 'dummy-local-password', error: null }), from(table) {
-    let operation = 'select', patch, count = Infinity; const predicates = [];
+    let operation = 'select', patch, count = Infinity, offset = 0; const predicates = [];
     const run = () => {
       queries.push({ table, operation });
       if (failures.has(`${table}:${operation}`)) return { data: null, error: { message: 'private-payload' } };
-      let rows = (tables[table] ?? []).filter(row => predicates.every(test => test(row))).slice(0, count);
+      let rows = (tables[table] ?? []).filter(row => predicates.every(test => test(row)));
+      const total = rows.length; rows = rows.slice(offset, offset + count);
       if (operation === 'insert' || operation === 'upsert') {
         rows = (Array.isArray(patch) ? patch : [patch]).filter(row => !tables[table].some(old =>
           table === 'email_replies' ? old.message_id === row.message_id : table === 'reply_notifications' && old.reply_id === row.reply_id && old.user_id === row.user_id))
@@ -17,13 +18,14 @@ export function replyDatabase(seed = {}) {
         tables[table].push(...rows); writes.push({ table, patch });
       }
       if (operation === 'update') { rows.forEach(row => Object.assign(row, patch)); writes.push({ table, patch }); }
-      return { data: rows.map(row => ({ ...row })), count: rows.length, error: null };
+      return { data: rows.map(row => ({ ...row })), count: operation==='select'?total:rows.length, error: null };
     };
     const q = { select: () => q, eq: (key, value) => { predicates.push(row => row[key] === value); return q; },
       in: (key, values) => { predicates.push(row => values.includes(row[key])); return q; },
       gte: (key, value) => { predicates.push(row => row[key] >= value); return q; },
       is: (key, value) => { predicates.push(row => (row[key] ?? null) === value); return q; },
       order: () => q, limit: n => { count = n; return q; },
+      range: (first,last) => { offset=first;count=last-first+1;return q; },
       update: value => { operation = 'update'; patch = value; return q; },
       insert: value => { operation = 'insert'; patch = value; return q; },
       upsert: value => { operation = 'upsert'; patch = value; return q; },
