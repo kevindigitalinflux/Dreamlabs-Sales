@@ -74,6 +74,7 @@ export function FilterBar({ filters, onChange, profiles, icps = [] }: FilterBarP
         selected={filters.readiness ?? []}
         onChange={(readiness) => onChange({ ...filters, readiness: readiness as LeadFilters['readiness'] })}
       />
+      <button type="button" aria-pressed={!!filters.needsLookOnly} onClick={()=>onChange({...filters,needsLookOnly:!filters.needsLookOnly})} className="min-h-11 rounded-lg border border-line px-3 text-sm text-muted">Needs a look</button>
     </div>
   );
 }

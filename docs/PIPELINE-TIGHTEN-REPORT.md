@@ -252,3 +252,11 @@ Bulk release checks the sending user's mailbox in the draft's organisation on ev
 Waiting to release has an explicit acknowledgement checkbox and a stronger confirmation for knowingly resuming one batch. It resets after the batch. This acknowledgement cannot override T3, hard bounce, opt-out or blocklist checks. Manual single sends bypass only the reputation gate. The dormant fallback boundary also requires reputation permission; automatic fallback creation remains schema-blocked under item 5.
 
 Focused threshold/send-boundary tests: 8 passed, including 20-send/5%, fewer than 20, mailbox/time isolation, manual single sending and weak-tier refusal after acknowledgement. Frontend TypeScript and edge shim passed after correcting the item 6 fixture type. No database/provider/browser test occurred. Deploy: frontend and `send-email`; shared sender consumers inherit the guard when explicitly using bulk release.
+
+## Item 8 — Needs a look in existing lists
+
+Pipeline List and Waiting to release now have a `Needs a look` toggle. It combines existing missing-sendable/readiness facts, weak-only tier evidence, unresolved company candidates, suspect websites and saved recipients all present in hard-bounce history. It does not add a screen or automation. Pipeline selection keeps the existing bulk Deep find/draft/profile controls; Waiting to release retains `useReviewBatch` and its existing bulk release/reject controls. Unsafe recipients still require individual review because the server enforces tiers independently.
+
+The hints are org-scoped, bounded and read-only. Failed or incomplete hint reads show a warning and retain known readiness-based hints; the filter is a review aid, not an authorization gate. An alternative safe address prevents the bounced-only reason. Existing informational flags do not alone block readiness.
+
+Tests first: review reasons and a safe alternative; combined filter tests 14 passed. TypeScript passed. Browser/phone/theme, RLS and large-history usability remain unverified. Deploy: frontend only. No new component or dependency.

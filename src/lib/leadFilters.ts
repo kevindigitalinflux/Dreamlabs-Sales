@@ -15,12 +15,15 @@ export interface LeadFilters {
   hasPhone?: boolean;
   hasDirectLine?: boolean;
   readiness?: ('ready' | 'almost' | 'needs_work' | 'not_checked')[];
+  needsLookOnly?:boolean;
+  needsLookIds?:string[];
 }
 
 /** Applies search + stage + assignee + customer profile + overdue filters. Empty arrays mean "all". */
 export function filterLeads(leads: Lead[], filters: LeadFilters, today: Date = new Date()): Lead[] {
   const q = filters.search.trim().toLowerCase();
   return leads.filter((lead) => {
+    if(filters.needsLookOnly&&!filters.needsLookIds?.includes(lead.id))return false;
     if (filters.readiness?.length && !filters.readiness.includes(lead.readiness ?? 'not_checked')) return false;
     if (filters.hasPhone || filters.hasDirectLine) {
       const phones = [lead.phone, ...(lead.additional_phones ?? [])].flatMap(value => {

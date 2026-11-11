@@ -20,6 +20,7 @@ import { useIcps } from '../hooks/useIcps';
 import { DeepFindModal } from '../components/deepfind/DeepFindModal';
 import { DeepFindRunsLink } from '../components/deepfind/DeepFindRunsLink';
 import { useDeepFindActivity } from '../hooks/useDeepFindActivity';
+import {useNeedsLook} from '../hooks/useNeedsLook';
 import { DEEP_FIND_MAX_LEADS } from '../lib/deepFindView';
 import { FilterBar } from '../components/pipeline/FilterBar';
 import { ListTable } from '../components/pipeline/ListTable';
@@ -51,6 +52,7 @@ export function PipelineList() {
   const [draftModalOpen, setDraftModalOpen] = useState(false);
   const [deepFindOpen, setDeepFindOpen] = useState(false);
   const deepFind = useDeepFindActivity(currentPipeline?.org_id ?? null);
+  const needsLook=useNeedsLook(leads,currentPipeline?.org_id);
   const [moveTargetId, setMoveTargetId] = useState('');
   const [moving, setMoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -84,8 +86,8 @@ export function PipelineList() {
   }, [loading, leads]);
 
   const visible = useMemo(
-    () => sortLeads(filterLeads(leads, filters), sortKey, sortDir),
-    [leads, filters, sortKey, sortDir],
+    () => sortLeads(filterLeads(leads, {...filters,needsLookIds:needsLook.ids}), sortKey, sortDir),
+    [leads, filters, sortKey, sortDir,needsLook.ids],
   );
 
   function handleSort(key: SortKey) {
@@ -238,6 +240,7 @@ export function PipelineList() {
       )}
 
       <FilterBar filters={filters} onChange={setFilters} profiles={profiles.filter((p) => p.role === 'contractor')} icps={icps} />
+      {needsLook.error&&<p role="alert" className="text-sm text-danger">{needsLook.error}</p>}
 
       {loading && <Skeleton className="h-64 w-full" />}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}

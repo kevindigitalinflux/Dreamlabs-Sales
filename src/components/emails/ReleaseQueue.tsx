@@ -15,6 +15,7 @@ import { mergePostSend, parsePostSend } from '../../lib/postSendPreview';
 import type { PostSendReport } from '../../lib/postSendPreview';
 import { useOrg } from '../../hooks/useOrg';
 import { loadReleaseDrafts } from '../../lib/releaseDrafts';
+import {useNeedsLook} from '../../hooks/useNeedsLook';
 
 /**
  * Same underlying draft queue as the Dashboard's "Emails ready to review"
@@ -25,10 +26,12 @@ import { loadReleaseDrafts } from '../../lib/releaseDrafts';
 export function ReleaseQueue() {
   const { drafts, loading, error, refresh } = useDrafts(true);
   const { currentOrg } = useOrg();
-  const { leads } = useOrgLeads();
-  const review=useReviewBatch(drafts.map(d=>d.id));
+  const { leads } = useOrgLeads(true);
+  const needsLook=useNeedsLook(leads,currentOrg?.id);const [needsLookOnly,setNeedsLookOnly]=useState(false);
+  const filtered=drafts.filter(d=>!needsLookOnly||needsLook.ids.includes(d.lead?.id??''));
+  const review=useReviewBatch(filtered.map(d=>d.id));
   const lock=useRef(false);const [checking,setChecking]=useState(false);
-  const visible=drafts.filter(d=>!review.done.has(d.id));
+  const visible=filtered.filter(d=>!review.done.has(d.id));
   const [reviewing, setReviewing] = useState<DraftLog | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const [report, setReport] = useState<PostSendReport | null>(null);
@@ -76,6 +79,8 @@ export function ReleaseQueue() {
     <div className="flex flex-col gap-3">
       <p className="text-sm text-muted">Autopilot drafts need individual review. <Link className="underline" to="/outreach/autopilot">Review Autopilot drafts</Link></p>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      <button type="button" aria-pressed={needsLookOnly} onClick={()=>setNeedsLookOnly(!needsLookOnly)} className="min-h-11 self-start rounded-lg border border-line px-3 text-sm text-muted">Needs a look</button>
+      {needsLook.error&&<p role="alert" className="text-sm text-danger">{needsLook.error}</p>}
       <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" checked={resumeReputation} onChange={event=>setResumeReputation(event.target.checked)} disabled={checking||review.busy}/>I reviewed the mailbox bounce warning and knowingly resume this batch</label>
       <ReviewBatchControls review={{...review,busy:review.busy||checking||!!reviewing,summary:summary??review.summary}} ids={visible.map(d=>d.id)} approveLabel="Release selected" rejectLabel="Reject selected" onApprove={()=>void handleBatch('release')} onReject={()=>void handleBatch('reject')} />
       {report && <PostSendPreview lines={null} report={report} />}
