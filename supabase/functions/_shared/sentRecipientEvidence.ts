@@ -9,6 +9,6 @@ export function sentOkAddresses(orgId:string,logs:SentLog[],outcomes:Outcome[],n
 }
 /** Spread into the same successful log mutation as status and sent_at, never into a later update. */
 export function tierSnapshot(result:TierResult,sentOk:boolean,sentAt:string) {
- return {recipient_tier_at_send:result.tier==='never'?'T3':result.tier,recipient_tier_basis:result.basis,
+ return {recipient_tier_at_send:result.tier==='never'?'T3':result.tier,recipient_tier_basis:result.tier==='never'?'weak_evidence':result.basis,
   recipient_tier_version:1,recipient_was_sent_ok:result.tier==='T1'&&sentOk,recipient_tier_recorded_at:sentAt};
 }

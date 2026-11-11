@@ -14,7 +14,7 @@ function fixture(count=2) {
 it('backfills outcomes twice without duplicate evidence, reply alerts, notes or watermark changes',async()=>{
  const f=fixture();const now=new Date('2026-11-05');
  for(let i=0;i<2;i++)expect(await backfillBounceOutcomes(f.db.service,'sender',f.inbox,f.parse,Date.now()+60000,now)).toMatchObject({messages_read:2,bounces_found:2,recipients_extracted:2,matched:2,unmatched:0,complete:true});
- expect(f.recorded.size).toBe(1);expect(f.db.writes).toEqual([]);expect(f.release).toHaveBeenCalledTimes(2);
+ expect(f.recorded.size).toBe(1);expect(f.db.writes).toEqual([{table:'email_logs',patch:{hard_bounced_at:'2026-11-04T00:00:00.000Z'}}]);expect(f.release).toHaveBeenCalledTimes(2);
  expect(f.db.service.rpc.mock.calls[0][1]).toMatchObject({p_source_message_id:'imap:sender:42:2',p_seen_at:'2026-11-04T00:00:00.000Z'});
 });
 it('caps reads at 200 messages and returns a cursor for older messages',async()=>{

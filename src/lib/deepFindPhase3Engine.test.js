@@ -30,13 +30,13 @@ import { lookupOpenCorporatesOfficer } from '../../supabase/functions/_shared/op
 import { registryWebNumbers } from '../../supabase/functions/_shared/registryWebProof';
 import { undoDeepFindChange } from './deepFindReview';
 
-let lead, contacts, writes, service, deny, aiAllowed, beforeWebsiteWrite, worker, revoked;
+let lead, contacts, writes, service, deny, aiAllowed, beforeWebsiteWrite, worker, revoked, proofRow;
 it('stores final readiness and explains the missing verified email in the run result', async () => {
   lead.website = 'https://acme.com';
   const out = await run('low');
   expect(lead.readiness).toBe('almost');
-  expect(lead.readiness_missing).toEqual(['verified_email']);
-  expect(out.reason).toContain('Almost: no verified email');
+  expect(lead.readiness_missing).toEqual(['sendable_email']);
+  expect(out.reason).toContain('Almost: no sendable email');
 });
 it('a checked saved email plus a confirmed saved site makes the lead ready', async () => {
   lead.website = 'https://acme.com';
@@ -150,6 +150,7 @@ beforeEach(() => {
   lead = { id: 'lead', org_id: 'org', business_name: 'Acme', website: 'old.com', updated_at: 'version', company_number: null, additional_websites: null };
   contacts = [{ id: 'c', lead_id: 'lead', first_name: 'Jane', last_name: 'Smith', title: 'Founder', email: 'jane@acme.com', linkedin_url: null, dismissed_at: null }];
   writes = [];
+  proofRow={id:'proof',run_id:'run',lead_id:'lead',org_id:'org',domains:{}};
   resolveOrgApiKey.mockImplementation(async (_s, _o, provider) => provider === 'gemini' ? 'fake' : null);
   resolveOrgWorkerConfig.mockResolvedValue(null);
   discoverLeadDomains.mockResolvedValue({ domains: [{ domain: 'acme.com', sources: ['site_confirms'], needs_check: false }], people: [], notes: [], problems: [], sitePages: [] });
@@ -160,7 +161,7 @@ beforeEach(() => {
   lookUpPeople.mockResolvedValue({ created: [], touched: [], emailsFound: 0, suggestions: [], problems: [], results: [] });
   service = { rpc: vi.fn(async (name) => ({ data: name === 'deep_find_reserve' ? aiAllowed : !revoked })), from(table) {
     let patch, additions; const filters = [];
-    const records = () => table === 'deep_find_runs' ? [{ id: 'run', org_id: 'org', status: 'active' }] : table === 'leads' ? [lead] : table === 'decision_maker_candidates' ? contacts : [];
+    const records = () => table === 'deep_find_leads'?[proofRow]:table === 'deep_find_runs' ? [{ id: 'run', org_id: 'org', status: 'active' }] : table === 'leads' ? [lead] : table === 'decision_maker_candidates' ? contacts : [];
     const result = () => {
       if (additions) {
         const input = Array.isArray(additions) ? additions : [additions];
@@ -170,11 +171,11 @@ beforeEach(() => {
         return { data: deny ? [] : inserted.map(r => ({ ...r })), error: null };
       }
       if (table === 'leads' && patch?.website) beforeWebsiteWrite?.();
-      const found = records().filter((r) => filters.every(([k,v]) => Array.isArray(r[k]) ? v === '{' + r[k].map(x => JSON.stringify(x)).join(',') + '}' : r[k] === v));
+      const found = records().filter((r) => filters.every(([k,v]) => k==='domains'?JSON.stringify(r[k])===v:Array.isArray(r[k]) ? v === '{' + r[k].map(x => JSON.stringify(x)).join(',') + '}' : r[k] === v));
       if (patch) { writes.push({ table, patch, filters: [...filters] }); if (deny) return { data: [], error: null }; for (const row of found) { Object.assign(row, patch); if (table === 'leads') row.updated_at = 'trigger-version'; } }
       return { data: found.map((r) => ({ ...r })), count: found.length, error: null };
     };
-    const q = { select: () => q, eq: (k,v) => { filters.push([k,v]); return q; }, is: (k,v) => { filters.push([k,v]); return q; },
+    const q = { order:()=>q,limit:()=>q,select: () => q, eq: (k,v) => { filters.push([k,v]); return q; }, is: (k,v) => { filters.push([k,v]); return q; },
       update: (p) => { patch = p; return q; }, upsert: (p) => { additions = p; return q; }, insert: (p) => { additions = p; return q; },
       maybeSingle: async () => { const out = result(); return { ...out, data: out.data[0] ?? null }; }, then: (resolve) => resolve(result()) };
     return q;
@@ -188,14 +189,14 @@ it.each(['hosted','catch_all'])('labels a discovered %s role address for review 
  worker.verifyEmail.mockResolvedValue(kind==='hosted'?{ok:true,value:{status:'valid',reason:'deliverable'}}:{ok:true,value:{status:'risky',reason:'catch_all'}});
  const out=await run('medium');
  expect(out.domains.suggestions).toContainEqual(expect.objectContaining({value:'info@acme.com',label:'Role address, not confirmed'}));
- expect(lead.email).toBeNull();expect(writes.some(w=>w.table==='leads'&&'email' in w.patch)).toBe(false);
+ expect(lead.email).not.toBe('info@acme.com');expect(writes.some(w=>w.table==='leads'&&w.patch.email==='info@acme.com')).toBe(false);
 });
 it('does not count an SMTP-valid hosted role inbox as a confirmed lead address',async()=>{
  lead.email='info@acme.com';contacts[0].email=null;resolveOrgWorkerConfig.mockResolvedValue({});cachedMailProvider.mockReturnValue('microsoft');
  worker.verifyEmail.mockImplementation(async email=>({ok:true,value:email===lead.email?{status:'valid',reason:'deliverable'}:{status:'invalid',reason:'mailbox_missing'}}));
  const out=await run('low');
  expect(out.domains.steps.join(' ')).toContain('Role address, not confirmed');
- expect(out.domains.readiness_missing).toContain('verified_email');
+ expect(out.domains.readiness_missing).toContain('sendable_email');
 });
 it.each(['bounced_hard','replied'])('uses exact %s evidence before any worker check or suggestion',async outcome=>{
  contacts[0].email=null;lead.email='jane.smith@acme.com';resolveOrgWorkerConfig.mockResolvedValue({});
@@ -212,7 +213,7 @@ it.each(['bounced_hard','replied'])('uses exact %s evidence before any worker ch
  expect(worker.verifyEmail.mock.calls.map(c=>c[0])).not.toContain('jane.smith@acme.com');
  expect(out.domains.steps.join(' ')).toContain(outcome==='bounced_hard'?'This address bounced before.':'This address has replied before.');
  if(outcome==='bounced_hard')expect(out.domains.suggestions.map(s=>s.value)).not.toContain('jane.smith@acme.com');
- else expect(out.domains.readiness_missing).not.toContain('verified_email');
+ else expect(out.domains.readiness_missing).not.toContain('sendable_email');
 });
 it('learns a pattern-supported format from two replied people, with no circular worker evidence',async()=>{
  contacts=[{id:'a',lead_id:'lead',first_name:'Alex',last_name:'Brown',email:null},{id:'b',lead_id:'lead',first_name:'Mary',last_name:'Jones',email:null},{id:'target',lead_id:'lead',first_name:'Jane',last_name:'Smith',email:null}];
@@ -417,7 +418,7 @@ it.each(['google', 'microsoft'])('checks %s guesses and fills a blank only once'
     worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
     const out = await run('low');
     expect(worker.verifyEmail).toHaveBeenCalled();
-    expect(writes.filter(w => 'email' in w.patch)).toHaveLength(1);
+    expect(writes.filter(w => w.table==='decision_maker_candidates' && 'email' in w.patch)).toHaveLength(1);
     expect(contacts[0].email).toBe('jane.smith@acme.com');
     expect(out.domains.suggestions.filter(s => s.field === 'email')).toHaveLength(0);
     expect(out.domains.steps.join(' ')).not.toContain('where checks are less reliable');
@@ -462,7 +463,7 @@ it('fills one blank from a later valid Microsoft format and suppresses provider 
   const out = await run('low');
   expect(worker.verifyEmail.mock.calls.map(([email]) => email)).toContain('jane@acme.com');
   expect(contacts[0].email).toBe('jsmith@acme.com');
-  expect(writes.filter(w => 'email' in w.patch)).toHaveLength(1);
+  expect(writes.filter(w => w.table==='decision_maker_candidates' && 'email' in w.patch)).toHaveLength(1);
   expect(out.domains.suggestions.some(s => s.name === 'Jane Smith' && s.field === 'email')).toBe(false);
   expect(out.domains.suggestions.some(s => s.name === 'Alex Brown' && s.field === 'email')).toBe(false);
   expect(JSON.stringify(out.domains)).not.toContain('uses Microsoft 365');

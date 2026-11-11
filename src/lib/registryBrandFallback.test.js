@@ -3,12 +3,12 @@ vi.mock('../../supabase/functions/_shared/companiesHouse', () => ({ fetchActiveO
 import { fetchCompanyProfile } from '../../supabase/functions/_shared/companiesHouse';
 import { resolveRegistry } from '../../supabase/functions/_shared/deepFindRegistry';
 const lead = {id:'lead',business_name:'Fold7 - Global Creative Advertising Agency London HQ',postcode:'EC1N 8TS',city:'London'};
-it('verifies a web-only number through the registry before using it', async () => {
+it('does not auto-pick a web-only number absent from the CH search results', async () => {
  fetchCompanyProfile.mockResolvedValue({name:'FOLD 7 LIMITED',status:'active',postcode:'EC1N 8TS',locality:'London',address:'16-18 Kirby Street, London EC1N 8TS'});
  const applyNumber=vi.fn(async()=>true);
  const result=await resolveRegistry({},lead,'fake',[],{cached:[],webNumbers:['04001759'],applyNumber});
  expect(fetchCompanyProfile).toHaveBeenCalledWith('04001759','fake');
- expect(result.number).toBe('04001759'); expect(applyNumber).toHaveBeenCalledWith('04001759');
+ expect(result.number).toBeNull(); expect(applyNumber).not.toHaveBeenCalled();
 });
 it.each([
  {name:'UNRELATED LIMITED',status:'active',postcode:'EC1N 8TS',locality:'London',address:'London'},

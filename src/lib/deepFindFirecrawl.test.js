@@ -1,5 +1,6 @@
 // Actual engine with bounded fake provider/database dependencies. No network or credentials.
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+vi.mock('../../supabase/functions/_shared/dnsLookup',()=>({cachedMailProvider:()=> 'unknown',lookupMx:vi.fn(async()=> 'mx')}));
 vi.mock('../../supabase/functions/_shared/orgApiKeys', () => ({ resolveOrgApiKey: vi.fn(), resolveOrgWorkerConfig: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/rateLimit', () => ({ checkRateLimit: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/deepFindRegistry', () => ({ resolveRegistry: vi.fn(), registryStep: () => 'Registry checked.' }));
@@ -46,14 +47,14 @@ beforeEach(() => {
     let updating = false;
     const data = table === 'leads' ? { id: 'lead', org_id: 'org', updated_at: 'version', website: 'https://example.com', business_name: 'Example', owner_name: null, ...leadOverrides }
       : table === 'deep_find_runs' ? { status: 'active' } : contacts;
-    const query = { select: () => query, eq: () => query, is: () => query, maybeSingle: async () => {
+    const query = { select: () => query, eq: () => query, is: () => query, order:()=>query,limit:()=>query, maybeSingle: async () => {
       if (table === 'deep_find_runs') {
         checkpointReads++;
         return { data: { status: checkpointReads === cancelledAt ? 'cancelled' : 'active' },
           error: checkpointReads === checkpointError ? { message: 'private-checkpoint' } : null };
       }
       return { data, error: null };
-    }, insert: (rows) => { write('insert', rows); contacts.push(...rows); return query; },
+    }, insert: (rows) => { write('insert', rows); if(table==='decision_maker_candidates')contacts.push(...(Array.isArray(rows)?rows:[rows])); return query; },
       upsert: (rows) => { write('upsert', rows); return query; }, update: (patch) => {
         updating = true;
         // This spy tracks contact/detail mutations. Readiness is now a separate, expected engine write.
@@ -61,7 +62,7 @@ beforeEach(() => {
         else write('update', patch);
         return query;
       },
-      then: (resolve) => resolve({ data: updating && table === 'leads' ? [data] : data, error: null }) };
+      then: (resolve) => resolve({ data: updating && table === 'leads' ? [data] : data, count:Array.isArray(data)?data.length:0,error: null }) };
     return query;
   } };
 });
@@ -69,7 +70,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const process = () => processDeepFindLead(service, { id: 'run', org_id: 'org', created_by: 'user', status: 'active' }, { id: 'row', lead_id: 'lead', org_id: 'org' });
 it('finishes the Firecrawl path with one readiness assessment and no contact mutation', async () => {
   expect((await process()).status).toBe('done');
-  expect(readinessWrite).toHaveBeenCalledExactlyOnceWith({ readiness: 'needs_work', readiness_missing: ['decision_maker', 'verified_email', 'confirmed_website'] });
+  expect(readinessWrite).toHaveBeenCalledExactlyOnceWith({ readiness: 'almost', readiness_missing: ['decision_maker', 'sendable_email', 'confirmed_website'] });
   expect(write).not.toHaveBeenCalled();
 });
 it('tries common formats without an inferred pattern and fills only the existing blank contact', async () => {
@@ -101,9 +102,7 @@ it('retains a literal website find when the domain is catch-all, without repeati
     people: [], notes: [], problems: [], sitePages: [{ domain: 'example.com', pages: ['<a href="mailto:jane.smith@example.com">Jane Smith</a>'] }] });
   worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'risky', reason: 'catch_all' } });
   const result = await process();
-  expect(result.domains.suggestions.filter((s) => s.value === 'jane.smith@example.com')).toEqual([
-    expect.objectContaining({ label: 'Found on example.com, check it' }),
-  ]);
+  expect(result.domains.auto_applied).toContainEqual(expect.objectContaining({field:'email',after:'jane.smith@example.com'}));
   expect(worker.verifyEmail).toHaveBeenCalledTimes(1);
 });
 it('does not repeat an inferred-format address among common guesses and never exceeds five per domain', async () => {
@@ -178,12 +177,12 @@ it.each(['busy', 'limit_reached', 'unreachable', 'bad_response'])('stops common 
   expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
   expect(write).not.toHaveBeenCalled();
 });
-it('offers a valid guess for a site person for review without inserting a contact', async () => {
+it('saves a checker-valid site person as the blank lead recipient without inserting a contact', async () => {
   vi.mocked(resolveOrgWorkerConfig).mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
   worker.verifyEmail.mockResolvedValue({ ok: true, value: { status: 'valid', reason: 'deliverable' } });
   const result = await process();
-  expect(result.domains.suggestions).toEqual([expect.objectContaining({ name: 'Jane Smith', value: 'jane.smith@example.com', label: 'Guessed from common formats and confirmed by our email checker, check it' })]);
-  expect(write).not.toHaveBeenCalled();
+  expect(result.domains.auto_applied).toContainEqual(expect.objectContaining({table:'leads',field:'email',after:'jane.smith@example.com'}));
+  expect(write.mock.calls.some(([operation])=>operation==='upsert')).toBe(false);
 });
 it('fetches officers after an accidental Ireland choice is corrected to UK', async () => {
   const actual = await vi.importActual('../../supabase/functions/_shared/deepFindRegistry');
@@ -436,12 +435,12 @@ it.each([false, true])('handles only one of concurrent valid candidates with inf
   expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
   const emailWrites = write.mock.calls.filter(([action, patch]) => action === 'update' && patch.email);
   const emailSuggestions = result.domains.suggestions.filter(s => s.name === 'Jane Smith' && s.field === 'email');
-  expect(emailWrites.length + emailSuggestions.length).toBe(1);
-  expect(emailWrites).toHaveLength(1);
+  expect(new Set([...emailWrites.map(([,patch])=>patch.email),...emailSuggestions.map(s=>s.value)]).size).toBe(1);
+  expect(result.domains.auto_applied.filter(change=>change.table==='leads'&&change.field==='email')).toHaveLength(1);
   expect(result.domains.steps.join(' ')).not.toContain('could not be saved');
 });
 
-it('suggests exactly one valid address for a person checked concurrently on two patterned domains', async () => {
+it('applies exactly one lead address for a person checked concurrently on two patterned domains', async () => {
   resolveOrgWorkerConfig.mockResolvedValue({ url: 'https://worker.example.com', secret: 'fake' });
   leadOverrides = { owner_name: 'Jane Smith' };
   contacts = [{ id: 'sample1', first_name: 'Max', last_name: 'Jones', email: 'max.jones@example.com' },
@@ -455,7 +454,7 @@ it('suggests exactly one valid address for a person checked concurrently on two 
   }));
   const result = await process();
   expect(worker.verifyEmail).toHaveBeenCalledTimes(3);
-  expect(result.domains.suggestions.filter(s => s.name === 'Jane Smith' && s.field === 'email')).toHaveLength(1);
+  expect(result.domains.auto_applied.filter(change=>change.table==='leads'&&change.field==='email')).toHaveLength(1);
   expect(result.domains.steps.join(' ')).not.toContain('could not be saved');
 });
 

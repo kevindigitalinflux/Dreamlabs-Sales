@@ -27,5 +27,5 @@ it('runs a bounded 18-DSN MIME backfill locally twice, with thirteen hard outcom
    status_codes:{'5.2.1':12,'5.1.1':3,'5.1.2':1,'5.2.2':1}});
   expect(JSON.stringify(out)).not.toContain('@');
  }
- expect(evidence.size).toBe(13);expect(db.writes).toEqual([]);expect(db.service.rpc).toHaveBeenCalledTimes(26);
+ expect(evidence.size).toBe(13);expect(db.writes).toHaveLength(13);expect(db.writes.every(write=>write.table==='email_logs'&&Object.keys(write.patch).join(',')==='hard_bounced_at')).toBe(true);expect(db.service.rpc).toHaveBeenCalledTimes(26);
 });

@@ -929,7 +929,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   await runFreeDomainChecks([...verified].slice(0, 4));
 
   if (await reserveRegistryProof(effort, registry.how, !!configured.geminiKey, left(), async () => {
-    return await reserveRunRegistryProof(service,run.org_id,run.id,lead.id);
+    const allowed=await reserveRunRegistryProof(service,run.org_id,run.id,lead.id);
+    if(allowed)spend.used.ai['company registry proof']=1;
+    return allowed;
   }, line => steps.push(line), !!str(lead.business_name))) {
     await checkpoint();
     const webNumbers = await registryWebNumbers(str(lead.business_name) ?? '', configured.geminiKey!, Math.min(10_000, left() - 5_000));
@@ -1336,7 +1338,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     const evidence=await proofFor(candidate.address);if(parsed)evidence.pattern=supportedTierPattern(candidate.address,parsed,samples,all().flatMap(c=>str(c.first_name)&&str(c.last_name)?[{first:str(c.first_name)!,last:str(c.last_name)!}]:[]));
     recipientEvidence[candidate.address.toLowerCase()]=evidence;
     automatic.push({...candidate,contactId:str(lead.email)?contact?.id:undefined,tier:recipientTier(candidate.address,evidence),savedEmail:str(lead.email)&&contact?str(contact.email):str(lead.email),
-      dismissed:ownerSuppressed(candidate.name)||isSuggestionDismissed({name:candidate.name,field:'email',value:candidate.address},lead)||!!contact?.dismissed_at});
+      dismissed:ownerSuppressed(candidate.name)||(!!parsed&&samePersonMatches(all(),parsed.first,parsed.last).length>1)
+       ||suggestions.some(s=>s.value?.toLowerCase()===candidate.address.toLowerCase()&&!!s.replaces_saved_email)
+       ||isSuggestionDismissed({name:candidate.name,field:'email',value:candidate.address},lead)||!!contact?.dismissed_at});
   }
   const selectPrimary=async(candidate:AutoRecipient)=>{
     const contact=candidate.contactId?all().find(c=>c.id===candidate.contactId):null;

@@ -280,3 +280,38 @@ Cost: software licence fees are zero for these open-source deployments, but host
 Privacy/terms: domain and person queries reach upstream engines; harvested employee addresses can be personal data even when public. Retain minimal business evidence, honour erasure/opt-out and source terms/robots, avoid sensitive data and do not treat publication as outreach consent. Review-before-send remains. Provider sign-in/login enumeration is excluded. Before any pilot, the architect should review licences and data handling for the exact pinned versions and sources.
 
 Validation proposal: a fixed 100-lead, org-authorised sample; compare existing evidence with each added source, count unique newly supported T1 people, source ownership, stale-address rate, cost and latency. Evaluate send outcomes only through normal human-reviewed outreach. Gains overlap; no combined uplift or extra daily send capacity is claimed.
+
+## Item 10 — capacity and integration checkpoint
+
+This section supersedes the historical item-1-only status table and SQL stop above. Items 2–4 and 6–9 are built locally. Item 5's durable automatic queue is deferred for uncovered schema. Items 11–12 follow this checkpoint. Migration 074 already exists and is applied according to Kevin; it is not a new rollout action for Codex.
+
+Integration verification: 250 test files, 3,167 passed and one skipped; zero failures. TypeScript, production build, 25-entrypoint edge shim and whitespace pass. The build retains the existing large-chunk warning. Full tests first exposed incomplete fake database builders and stale expectations for readiness, first-recipient fills, CH search provenance and bounce stamps. Fixtures now exercise the new reads and expected behavior. A new red regression found that manual invalid overrides needed the allowed T3 `weak_evidence` basis under 074; that is corrected. Ambiguous full names and replacements for typed invalid contact addresses remain review-only, including when the lead's email is empty. New DNS work is mocked in engine tests; no real provider was contacted.
+
+### End-to-end daily capacity
+
+| Stage | Current local limits and implication for two runs of 50 |
+|---|---|
+| Deep find admission | 50/run, 200/org/day, 5/same lead/day. Two new 50-lead batches fit admission, not necessarily evidence yield or wall time. |
+| Worker checks | 600/org/day, 1,200 shared/day; at most 10/lead and 8/domain. Ten actual calls on each lead uses all 600 after 60 leads. At six per lead, 100 consumes the whole org allowance, leaving no fresh pre-send checks. Cached/replied/sent_ok evidence can reduce calls. Shared use by other orgs can bind sooner. |
+| Browser scrapes / page fetches | 100/300 per org/day, shared global ceilings 400/1,000. One browser scrape per lead exhausts the daily scrape allowance at 100; retries or extra domains reduce that. |
+| Hunter | Low 0; Medium 1; High 3; Extra high 6 per lead; whole-run cap 500. For 100 leads nominal ceilings are 0/100/300/600 credits before remaining monthly account credits and per-step stopping. Actual credits were not queried. |
+| Exploratory AI | Low 0; Medium 2; High 4; Extra high 8 per lead; cap 200/run. Fifty High leads consume up to 200; fifty Extra high leads cannot all receive their maximum. Drafting has its existing independent key/cost path. |
+| Company proof | Separate one/lead, at most 50/run, hence at most 100 attempted proof calls for two runs. Unresolved UK leads only; no key/time/allowance means a visible skip. Confirmation now discloses this separately, including on Low. |
+| Other providers | Firecrawl 100 pages/org/day, Places 300 lookups/org/day, Apollo phone 100 enrichments/org/day. Keys, actual account allowances and remaining usage may bind sooner. |
+| Sending | Existing Autopilot run send cap is user-selected, maximum 200, inside its existing window/Pause/Stop rules. Two runs of 50 do not create or raise a mailbox/provider allowance. Ordinary manually reviewed `send-email`/Waiting-to-release calls do not use an Autopilot run's window or counter; this task preserves that existing architecture and adds the bulk reputation/tier gates. No provider sending quota was read. |
+
+Under worst-case ten-check discovery, worker verification binds first at 60 fully checked leads, before allowing fresh send checks. With strong cached evidence, scrape allowance, monthly Hunter credits, exploratory AI cap, mailbox reputation or the actual provider send quota may bind first. There is no honest unconditional promise of 100 sends/day. One first recipient per company is assumed; including extra contacts increases draft/send demand without increasing the 100-lead admission figure.
+
+### Grounded proof estimate for 100 leads
+
+The repository uses `gemini-3.6-flash`. On the checked official Standard pricing page, current promotional input/output prices are $0.75/$3.75 per million tokens through 2026-12-31, then $1.50/$7.50. Assuming 2,000 input and 500 output tokens per lead, 100 calls cost about **$0.3375** in model tokens now ($0.675 at the stated later rates). Google Search includes 5,000 monthly search requests shared across Gemini 3+ models, then $14/1,000 requests. At one billable search query per call, 100 calls add $1.40 after the shared free allowance: about **$1.74 total**, or about $0.34 while that allowance remains. A call can issue multiple billable search queries; output/thinking tokens also vary, so this is not a hard cost cap. Missing key or allowance skips proof with one plain line, never a substitute paid provider. Source: [Google official Gemini pricing](https://aistudio.google.com/docs/pricing#gemini-3.6-flash), checked 2026-11-11.
+
+### Reassessment of the 51 assessed leads
+
+No live lead was read or changed. The old 37 website and four decision-maker deficiencies become informational. The 40 legacy `verified_email` deficiencies need reassessment against saved T1/T2 evidence; they are not automatically 40 improvements. Company-name plus supported-recipient leads can become ready despite those informational flags; suspect websites and foreign-phone mismatch remain needs-work. Conflicting company candidates remain in Needs a look. Exact revised counts cannot be reconstructed from the aggregate 5/14/32 alone. The 294 never-assessed leads stay unassessed until a normal Deep find.
+
+### Rollout and limitations
+
+Current deployment union, after independent review and separate authorisation: frontend, `run-deep-find`, `generate-email`, `send-email`, `run-autopilot`, `run-selected-autopilot`, `check-replies` and `email-outcome-backfill` if present in the final import graph. The final report will confirm entrypoint names after items 11/12. No SQL, deployment, real send, worker/VPS change, new dependency, key read or account spend occurred. Database constraints/concurrency, Deno proper, live provider/DNS, browser, phone width, themes, RLS and independent review remain unverified. Existing oversized components remain oversized; no new component has exceeded 150 lines. A broad unrelated component rewrite is not included.
+
+Privacy reference for item 9: [ICO business-to-business marketing](https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/business-to-business-marketing/) explains that public business-contact personal data still carries data protection obligations. No legal-compliance claim is made for an unbuilt harvesting system.
