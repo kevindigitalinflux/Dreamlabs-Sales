@@ -1,9 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { evaluateReadiness, readinessText } from '../../supabase/functions/_shared/leadReadiness';
+import * as knownPerson from '../../supabase/functions/_shared/knownPerson';
 
 const lead = { owner_name: 'Jane Smith', website: 'https://acme.com', email: 'hello@acme.com', country: 'GB' };
 const domains = [{ domain: 'acme.com', needs_check: false, sources: ['site_confirms'] }];
 const base = { lead, contacts: [], domains, validEmails: ['hello@acme.com'], websiteSuspect: false };
+const emailCorroborated = {
+  lead: { owner_name: 'Jane Smith', website: 'https://example.com', email: 'person@example.com', country: 'GB' },
+  contacts: [], domains: [{ domain: 'example.com', needs_check: false, sources: ['website', 'lead_email', 'contact_email'] }],
+  validEmails: ['person@example.com'], websiteSuspect: false,
+};
+afterEach(() => vi.restoreAllMocks());
 describe('lead readiness', () => {
   it('confirms a nonsuspect corporate website corroborated by saved same-domain emails without page-name proof', () => {
     expect(evaluateReadiness({
@@ -17,6 +24,32 @@ describe('lead readiness', () => {
     expect(evaluateReadiness({ ...base, lead: { ...lead, website: 'https://example.com', email: 'person@example.com' },
       validEmails: ['person@example.com'], domains: [{ domain: 'example.com', needs_check: false, sources: ['website', source] }],
     })).toEqual({ readiness: 'ready', readiness_missing: [] });
+  });
+  it.each([['website'], ['website_link'], ['web_search'], ['website', 'website_link', 'web_search']])('does not treat uncorroborated sources %j as confirmation', (...sources) => {
+    expect(evaluateReadiness({ ...emailCorroborated, domains: [{ ...emailCorroborated.domains[0], sources }] }))
+      .toEqual({ readiness: 'almost', readiness_missing: ['confirmed_website'] });
+  });
+  it('keeps a domain awaiting checks unconfirmed even with site and email evidence', () => {
+    expect(evaluateReadiness({ ...emailCorroborated, domains: [{ ...emailCorroborated.domains[0], needs_check: true, sources: ['site_confirms', 'lead_email', 'contact_email'] }] }))
+      .toEqual({ readiness: 'almost', readiness_missing: ['confirmed_website'] });
+  });
+  it('keeps a blocked same-domain website unconfirmed', () => {
+    expect(evaluateReadiness({ ...emailCorroborated, lead: { ...emailCorroborated.lead, blocked_domains: ['example.com'] } }))
+      .toEqual({ readiness: 'almost', readiness_missing: ['confirmed_website'] });
+  });
+  it('keeps a directory website unconfirmed despite email evidence', () => {
+    // Stub classification so the directory guard is exercised without real website identities in this fixture.
+    vi.spyOn(knownPerson, 'isDirectoryDomain').mockReturnValue(true);
+    expect(evaluateReadiness(emailCorroborated)).toEqual({ readiness: 'almost', readiness_missing: ['confirmed_website'] });
+  });
+  it('does not borrow email evidence from a different domain than the saved website', () => {
+    expect(evaluateReadiness({ ...emailCorroborated, lead: { ...emailCorroborated.lead, website: 'https://website.example.com' },
+      domains: [...emailCorroborated.domains, { domain: 'website.example.com', needs_check: false, sources: ['website'] }],
+    })).toEqual({ readiness: 'almost', readiness_missing: ['confirmed_website'] });
+  });
+  it('keeps a suspect, lookalike website at needs_work despite same-domain email evidence', () => {
+    expect(evaluateReadiness({ ...emailCorroborated, websiteSuspect: true }))
+      .toEqual({ readiness: 'needs_work', readiness_missing: ['confirmed_website', 'company_match'] });
   });
   it.each([
     [{ lead: { ...lead, owner_name: null } }, 'decision_maker'],
