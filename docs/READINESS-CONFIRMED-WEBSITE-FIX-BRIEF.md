@@ -1,0 +1,19 @@
+# Fix brief: readiness says "no confirmed website" although Deep find confirmed the domain
+
+Builder: Codex. Reviewer: Claude. Director: Kevin. Roles unchanged. Branch: `git switch -c codex/readiness-website-fix` from the current `main`. Tests first, one commit per item, no push, merge, deploy, secrets, migration or worker change. Commits `git -c core.hooksPath=NUL commit`, ending `Co-Authored-By: Codex <noreply@openai.com>`. Stop after the report (new file `docs/READINESS-WEBSITE-FIX-REPORT.md`).
+
+## Evidence (Claude, production, read-only)
+Lead "Accenture" (id `bf5d2132-e12b-4517-98c5-e072a071acfb`, Corporate offices pipeline, country GB, website `https://www.accenture.com/gb-en/about/company-index?...`, lead email `julie.sweet@accenture.com`). Two Deep find runs (11-03 and 11-06) both end "Almost: no confirmed website" although their saved `domains` list says `accenture.com` is confirmed: `{"domain":"accenture.com","sources":["website","lead_email","contact_email"],"needs_check":false}`. Stored `readiness = almost`, `readiness_missing = ['confirmed_website']`.
+
+## Cause
+`supabase/functions/_shared/leadReadiness.ts`, `evaluateReadiness`, lines 49-51: a website counts only if `domains.some(d => d.domain === domain && !d.needs_check && d.sources.includes('site_confirms'))`. `site_confirms` is set only when the page itself names the company (title/footer). Large corporate sites often never produce it (bot protection, generic titles), so the website can never be "confirmed" however many other sources agree. Other sources on this domain (`lead_email`, `contact_email`) are independent evidence that the domain really is the company's.
+
+## Required change (small; keep every other readiness rule)
+1. Failing test first in the existing readiness test file: the Accenture shape above (domain not `needs_check`, sources `website`, `lead_email`, `contact_email`, no `site_confirms`, `websiteSuspect` false, no foreign phone) satisfies `confirmed_website`, so readiness is not `almost` for that reason.
+2. Rule: the saved website's domain counts as confirmed when it is not a directory domain, not in `blocked_domains`, `websiteSuspect` is false, `needs_check` is false AND its sources include `site_confirms` OR at least one email-based source (`lead_email` or `contact_email`) on that same domain. A domain with only `website` / `website_link` / web-search sources stays unconfirmed. A suspect website (`websiteSuspect` true) is never confirmed (it already forces `needs_work`).
+3. Negative tests: only `website` (no email source) stays missing; `needs_check: true` stays missing; blocked or directory domain stays missing; a lead email at a DIFFERENT domain than the website stays missing; a Love Living style suspect website stays `needs_work`.
+4. Check where the badge reason text and the Deep find end-of-run reason string come from, and confirm they use the same function (no second copy of the rule in `src/`). If a mirrored copy exists, change both with tests.
+5. Stale stored values: report (text only, do not run anything) how `leads.readiness` is refreshed today (only at the end of a Deep find?) and propose the smallest safe refresh for existing leads (for example a one-off service script or SQL that re-evaluates from the last saved `deep_find_leads.domains`), with the exact statements and which leads would change. Kevin approves before anything runs.
+6. Gates: `npx tsc --noEmit`, `npx vitest run`, `npm run build`, `git diff --check`, `node scripts/places-edge-typecheck.mjs` with `VITE_SUPABASE_URL=http://127.0.0.1:54321 VITE_SUPABASE_ANON_KEY=local-test-placeholder`. Deploy list in the report: functions importing `leadReadiness.ts` (`run-deep-find`, `run-selected-autopilot`, and any other importer from the import graph).
+
+Privacy: no real personal data in tests; use `example.com`.
