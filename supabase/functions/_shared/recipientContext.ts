@@ -4,15 +4,18 @@ import {prepareRecipientEvidence,supportedTierPattern,outcomeTierEvidence} from 
 import {lookupMx,cachedMailProvider} from './dnsLookup.ts';
 import {parseLeadPersonName} from './deepFindRules.ts';
 import {savedDomains} from './domainChecks.ts';
+import {sentOkAddresses} from './sentRecipientEvidence.ts';
 /** Current, bounded, org-scoped facts. This service reader never accepts tier evidence from the browser. */
 export async function loadRecipientContext(service:SupabaseClient,orgId:string,leadId:string) {
- const [l,c,o,h]=await Promise.all([
+ const [l,c,o,h,s]=await Promise.all([
   service.from('leads').select('*').eq('id',leadId).eq('org_id',orgId).maybeSingle(),
   service.from('decision_maker_candidates').select('*').eq('lead_id',leadId),
   service.from('email_outcomes').select('*',{count:'exact'}).eq('org_id',orgId).limit(1000),
   service.from('deep_find_leads').select('domains',{count:'exact'}).eq('lead_id',leadId).eq('org_id',orgId).order('updated_at',{ascending:false}).limit(1000),
+  service.from('email_logs').select('org_id,to_email,status,sent_at,hard_bounced_at',{count:'exact'}).eq('org_id',orgId).eq('status','sent').limit(1000),
  ]);
- if(l.error||c.error||o.error||h.error||!l.data||o.count!==o.data?.length||h.count!==h.data?.length)throw Error('Recipient evidence could not be read completely.');
+ if(l.error||c.error||o.error||h.error||s.error||!l.data||o.count!==o.data?.length||h.count!==h.data?.length||s.count!==s.data?.length)throw Error('Recipient evidence could not be read completely.');
+ const sentOk=new Set(sentOkAddresses(orgId,s.data??[],o.data??[]));
  const lead=l.data;const contacts=(c.data??[]).filter(row=>!row.dismissed_at);
  const proofs:Record<string,RecipientEvidence>={};const guesses=new Set<string>();
  for(const row of h.data??[]) {
@@ -29,7 +32,7 @@ export async function loadRecipientContext(service:SupabaseClient,orgId:string,l
   const checker=checks[0]?.outcome==='checked_valid'?'valid':checks[0]?.outcome==='checked_invalid'?'invalid':undefined;
   const old=proofs[email];const generated=old?.generated===true||guesses.has(email);
   const saved=lead.email?.trim().toLowerCase()===email||contacts.some(row=>row.source==='manual'&&row.email?.trim().toLowerCase()===email);
-  return prepareRecipientEvidence(email,{...old,...history,checker,generated,provider:cachedMailProvider(domain)??'unknown',
+  return prepareRecipientEvidence(email,{...old,...history,sentOk:sentOk.has(email),checker,generated,provider:cachedMailProvider(domain)??'unknown',
    hasMailServer:mail==='none'?false:mail==='mx'?true:null,optedOut:lead.opted_out===true,blocklisted:savedDomains(lead.blocked_domains).includes(domain),
    savedNonGuessed:old?.savedNonGuessed===true||(saved&&!generated&&!old),
   });

@@ -17,6 +17,17 @@ it.each(['valid','unverifiable'])('allows %s with explicit verification metadata
  expect(await sendLeadEmail(replyDatabase().service,input)).toMatchObject({ok:true,verification:{status}});
  expect(sendMail).toHaveBeenCalledTimes(1);
 });
+it('writes 074 snapshot in the same successful draft update',async()=>{
+ const db=replyDatabase({email_logs:[{id:'draft',org_id:'org',sent_by:'sender',status:'draft'}]});
+ // The fixture's filter supports the sender ownership disjunction used by the common sender.
+ const from=db.service.from;db.service.from=table=>{const q=from(table);q.or=()=>q;return q;};
+ checkEmailBeforeSend.mockResolvedValueOnce({status:'valid',label:'Confirmed',tier:{tier:'T1',basis:'checker_valid',reason:'Confirmed'}});
+ await sendLeadEmail(db.service,{...input,logId:'draft',draft:{org_id:'org',attachments:[]}});
+ const updates=db.writes.filter(row=>row.table==='email_logs');
+ expect(updates).toHaveLength(1);
+ expect(updates[0].patch).toMatchObject({status:'sent',recipient_tier_at_send:'T1',recipient_tier_basis:'checker_valid',recipient_tier_version:1});
+ expect(updates[0].patch.recipient_tier_recorded_at).toBe(updates[0].patch.sent_at);
+});
 it('requires an explicit row override and never overrides a learned hard bounce',async()=>{
  checkEmailBeforeSend.mockResolvedValueOnce({status:'invalid',label:'Our checker says this address does not exist'});
  expect(await sendLeadEmail(replyDatabase().service,{...input,overrideInvalid:true})).toMatchObject({ok:true,verification:{overridden:true}});

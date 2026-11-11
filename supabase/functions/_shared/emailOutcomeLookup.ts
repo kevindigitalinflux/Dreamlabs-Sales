@@ -1,5 +1,6 @@
 import type {SupabaseClient} from 'npm:@supabase/supabase-js@2';
 import {validEmail} from './contacts.ts';
+import {sentOkAddresses} from './sentRecipientEvidence.ts';
 export interface KnownEmailOutcome {status:'valid'|'invalid';reason:'previously_replied'|'bounced_hard'}
 /** Exact evidence is org-scoped and memoised for one operation only; missing storage is never a clean bill of health. */
 export function makeEmailOutcomeLookup(service:SupabaseClient,orgId:string) {
@@ -27,7 +28,9 @@ export function makeEmailOutcomeLookup(service:SupabaseClient,orgId:string) {
       const {data,error,count}=await service.from('email_outcomes').select('address',{count:'exact'}).eq('org_id',orgId).eq('domain',domain).eq('outcome','replied');
       // Decline a partial or large confidence sample instead of silently ignoring conflicting formats.
       if(error||typeof count!=='number'||count!==data?.length||count>50){if(error)console.error('email outcomes: reply format history unavailable');return [];}
-      const checked=await Promise.all((data??[]).map(async row=>(await status(row.address))?.status==='valid'?row.address:null));
+      const logs=await service.from('email_logs').select('org_id,to_email,status,sent_at,hard_bounced_at',{count:'exact'}).eq('org_id',orgId).eq('status','sent').limit(1000);
+      const delivered=!logs.error&&logs.count===logs.data?.length?sentOkAddresses(orgId,logs.data??[],[]).filter(email=>email.split('@')[1]===domain):[];
+      const checked=await Promise.all([...new Set([...(data??[]).map(row=>row.address),...delivered])].map(async email=>(await status(email))?.status!=='invalid'?email:null));
       return checked.filter((email):email is string=>!!email).map(email=>({email,first:null,last:null,published:true}));
     },
   };

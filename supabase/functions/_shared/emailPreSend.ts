@@ -6,8 +6,10 @@ import {resolveOrgWorkerConfig} from './orgApiKeys.ts';
 import {RunVerifyGate} from './runVerifyGate.ts';
 import {cachedMailProvider,lookupMx} from './dnsLookup.ts';
 import {emailSyntaxValid,emailDomainTypo,isRoleAddress,roleAddressNeedsReview,ROLE_ADDRESS_LABEL} from './emailPrecheckRules.ts';
+import {loadRecipientContext} from './recipientContext.ts';
+import {recipientTier,type RecipientEvidence,type TierResult} from './recipientTier.ts';
 
-export interface EmailPrecheckResult {status:'valid'|'invalid'|'unverifiable';label:string;hardBounce?:boolean;warning?:string;overridden?:boolean;overridable?:boolean}
+export interface EmailPrecheckResult {status:'valid'|'invalid'|'unverifiable';label:string;hardBounce?:boolean;warning?:string;overridden?:boolean;overridable?:boolean;tier?:TierResult;tierEvidence?:RecipientEvidence}
 interface Input {leadId?:string;address:string;timeLeftMs?:()=>number}
 const gates=new Map<string,{gate:RunVerifyGate;usedAt:number}>();
 /** Warm-isolate coordination only; independent isolates remain bounded by the worker's own domain limiter. */
@@ -75,5 +77,12 @@ export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{wo
 }
 /** Shared boundary used by every real send path; it never sends a message itself. */
 export async function checkEmailBeforeSend(service:SupabaseClient,input:Input&{orgId:string}):Promise<EmailPrecheckResult> {
-  return makeEmailPrechecker(service,input.orgId)(input);
+  const result=await makeEmailPrechecker(service,input.orgId)(input);
+  if(!input.leadId||result.hardBounce)return result;
+  const context=await loadRecipientContext(service,input.orgId,input.leadId);
+  const assessed=await context.assess(input.address);
+  const evidence={...assessed.evidence,checker:result.status};
+  const tier=recipientTier(input.address,evidence);
+  if(tier.tier==='never'&&tier.basis!=='checker_invalid')return {...result,status:'invalid',label:tier.reason,overridable:false,tier,tierEvidence:evidence};
+  return {...result,tier,tierEvidence:evidence};
 }

@@ -172,3 +172,13 @@ Deep find now classifies bounded address evidence before blank-only automatic em
 Bulk drafting chooses the primary contact for the first email even when follow-up enrollment is off. The generation endpoint independently reads org-scoped facts and rejects T3/never bulk targets. Existing manual primary choices are preserved; an unsafe existing primary may therefore require review instead of being silently replaced. A complete evidence read is required; oversized bounded histories fail closed.
 
 Tests were added before the helper and evidence reader; the primary-contact regression also proves enrollment remains off. Focused recipient/target tests: 11 passed. Frontend TypeScript and the 25-entrypoint edge shim passed. Browser, live DNS/provider, database concurrency and independent review remain unverified. Deploy list: `deep-find`, `generate-email`, frontend (after review and separate authorization).
+
+## Item 4 — delivered evidence and migration 074 integration
+
+`sent_ok` is derived from genuine sent logs at least 72 hours old, with no exact-log or org/address hard bounce. A later hard bounce revokes it. Delivered samples feed the existing domain-format evidence; Deep find and bulk drafting use the same T1 basis. Reads currently decline incomplete bounded evidence rather than guessing.
+
+The common SMTP boundary writes all five tier snapshot fields in the **same INSERT or UPDATE** as `status='sent'` and `sent_at`. Failed sends receive no snapshot. Manual overrides retain weak T3 evidence instead of gaining T1. No historical tier is backfilled. Migration 074 is used as supplied; Codex did not apply or modify it.
+
+Bounce learning retains address-wide suppression but stamps `hard_bounced_at` only when a DSN identifies exactly one matching sent log. The write is scoped to its id, org, sender and sent status, conditioned on a null stamp. Repeated DSNs preserve the first timestamp. Ambiguous unthreaded DSNs do not invent per-send attribution.
+
+Tests first: pure 72-hour boundary, negatives, complete snapshot, exact threaded match, duplicate DSN and ambiguous unthreaded attribution; the successful draft regression proves one mutation carries both send state and snapshot. Focused tests: 23 passed. The edge shim passed. Real trigger execution and mailbox/provider validation remain for Claude. Deploy union adds `send-email`, `process-autopilot`, `check-replies` and any entrypoint importing the shared sender/learner; exact final union will be recorded at item 10.

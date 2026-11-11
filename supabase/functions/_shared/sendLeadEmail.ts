@@ -2,6 +2,7 @@ import { sendMail } from './smtp.ts';
 import { buildMailContent } from './emailFormat.ts';
 import { ATTACHMENT_BUCKET, MAX_TOTAL_ATTACHMENT_BYTES, parseAttachments, safeFilename } from './emailAttachments.ts';
 import {checkEmailBeforeSend,type EmailPrecheckResult} from './emailPreSend.ts';
+import {tierSnapshot} from './sentRecipientEvidence.ts';
 
 // deno-lint-ignore no-explicit-any
 type ServiceClient = any;
@@ -200,10 +201,12 @@ export async function sendLeadEmail(service: ServiceClient, input: SendLeadEmail
     errorMessage = 'Email could not be sent. Check your mailbox settings and try again.';
   }
 
+  const sentAt=new Date().toISOString();
   const row: Record<string, unknown> = {
     lead_id: leadId, sent_by: senderId, to_email: input.to,
     subject: input.subject, body: input.body, status, error_message: errorMessage,
-    message_id: messageId, sent_at: new Date().toISOString(),
+    message_id: messageId, sent_at: sentAt,
+    ...(status==='sent'?tierSnapshot(verification.tier??{tier:'T3',basis:'weak_evidence',reason:'No tier evidence recorded'},verification.tierEvidence?.sentOk===true,sentAt):{}),
     attachments, // what this email actually carried, for the sent-mail history
   };
   // Only touch decision_maker_candidate_id when the caller actually supplied

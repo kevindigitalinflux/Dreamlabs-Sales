@@ -12,6 +12,18 @@ it('links a hard bounce to this mailbox and org and requests atomic suppression 
  const db=fixture();expect(await learnBounceOutcomes(db.service,'sender',bounce,new Date('2026-11-05'))).toMatchObject({recipients:1,matched:1,unmatched:0});
  expect(db.service.rpc).toHaveBeenCalledWith('record_email_outcome',expect.objectContaining({p_org_id:'org',p_lead_id:'lead',p_address:'person@example.com',p_outcome:'bounced_hard',p_pause_sequences:true}));
 });
+it('stamps only the exact matched sent log once, including repeated DSNs',async()=>{
+ const db=fixture();db.tables.email_logs.push({...db.tables.email_logs[0],id:'other',message_id:'<other@fixture.invalid>'});
+ await learnBounceOutcomes(db.service,'sender',bounce,new Date('2026-11-05'));
+ await learnBounceOutcomes(db.service,'sender',bounce,new Date('2026-11-06'));
+ expect(db.tables.email_logs[0].hard_bounced_at).toBe('2026-11-05T00:00:00.000Z');
+ expect(db.tables.email_logs[1].hard_bounced_at).toBeUndefined();
+});
+it('does not invent an exact log for an ambiguous unthreaded DSN',async()=>{
+ const db=fixture();db.tables.email_logs.push({...db.tables.email_logs[0],id:'other',message_id:'<other@fixture.invalid>'});
+ await learnBounceOutcomes(db.service,'sender',{...bounce,inReplyTo:undefined},new Date('2026-11-05'));
+ expect(db.tables.email_logs.every(row=>!row.hard_bounced_at)).toBe(true);
+});
 it.each(['other-mailbox','other-org','wrong-thread'])('rejects a %s match',async mode=>{
  const db=fixture();
  if(mode==='other-mailbox')db.tables.email_logs[0].sent_by='other';

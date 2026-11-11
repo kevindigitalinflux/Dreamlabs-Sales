@@ -1,6 +1,7 @@
 import {recipientTier,type RecipientEvidence} from './recipientTier.ts';
 import {prepareRecipientEvidence,supportedTierPattern} from './recipientTierEvidence.ts';
 import {autoApplyRecipients,type AutoRecipient} from './recipientAutoApply.ts';
+import {sentOkAddresses} from './sentRecipientEvidence.ts';
 import { reserveRegistryProof } from './registryProofGate.ts';
 import { createPlacesContext, type PlacesContext } from './placesClient.ts';
 // supabase/functions/_shared/deepFind.ts
@@ -1310,6 +1311,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }
 
   const recipientEvidence:Record<string,RecipientEvidence>={};
+  const sentHistory=await service.from('email_logs').select('org_id,to_email,status,sent_at,hard_bounced_at',{count:'exact'}).eq('org_id',run.org_id).eq('status','sent').limit(1000);
+  const delivered=new Set(!sentHistory.error&&sentHistory.count===sentHistory.data?.length?sentOkAddresses(run.org_id,sentHistory.data??[],[]):[]);
   const candidateRows=new Map<string,{address:string;name:string;contactId?:string}>();
   for(const c of all())if(str(c.email))candidateRows.set(str(c.email)!.toLowerCase(),{address:str(c.email)!,name:[str(c.first_name),str(c.last_name)].filter(Boolean).join(' '),contactId:c.id});
   for(const s of suggestions)if((!s.field||s.field==='email')&&str(s.value))candidateRows.set(s.value.toLowerCase(),{address:s.value,name:s.name});
@@ -1323,7 +1326,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     const recent=await outcomes.recentCheck(email,Date.now());
     return prepareRecipientEvidence(email,{savedNonGuessed:savedEvidenceSafe&&!previousGuesses.has(email)&&str(lead.email)?.toLowerCase()===email,generated:previousGuesses.has(email)||suggestions.some(s=>s.value?.toLowerCase()===email&&!!s.guess_rank),publishedByCompany:published,
       checker:checked?.ok?(checked.value.status==='valid'?'valid':checked.value.status==='invalid'?'invalid':'unverifiable'):recent?.outcome==='checked_invalid'?'invalid':recent?.outcome==='checked_valid'?'valid':undefined,
-      bouncedHard:outcomes.peek(email)?.reason==='bounced_hard',replied:outcomes.peek(email)?.reason==='previously_replied',hasMailServer:mx==='none'?false:mx==='mx'?true:null,
+      bouncedHard:outcomes.peek(email)?.reason==='bounced_hard',replied:outcomes.peek(email)?.reason==='previously_replied',sentOk:delivered.has(email),hasMailServer:mx==='none'?false:mx==='mx'?true:null,
       provider:cachedMailProvider(domain)??'unknown',catchAll:checked?.ok&&checked.value.reason==='catch_all',optedOut:lead.opted_out===true,blocklisted:savedDomains(lead.blocked_domains).includes(domain)});
   };
   const samples=[];for(const sample of publicSamples.slice(0,40))samples.push({...sample,evidence:await proofFor(sample.email)});

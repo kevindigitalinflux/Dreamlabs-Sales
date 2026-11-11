@@ -30,7 +30,7 @@ export async function learnBounceOutcomes(service:SupabaseClient,userId:string,m
   const normaliseId=(value:unknown)=>typeof value==='string'?value.trim().replace(/^<|>$/g,'').toLowerCase():'';
   const ids=[...new Set([...(mail.originalMessageIds??[]),...messageIds(mail.inReplyTo??''),...messageIds(mail.references??'')].map(normaliseId))];
   // Bounded lookback prevents a spoofed DSN from targeting arbitrary historical addresses.
-  const {data:sent,error}=await service.from('email_logs').select('id,org_id,lead_id,to_email,message_id,sent_at')
+  const {data:sent,error}=await service.from('email_logs').select('id,org_id,lead_id,to_email,message_id,sent_at,hard_bounced_at')
     .eq('sent_by',userId).eq('status','sent').gte('sent_at',new Date(seenAt.getTime()-30*86400000).toISOString())
     .order('sent_at',{ascending:false}).limit(1000);
   if(error)throw new Error('Could not match bounce recipients');
@@ -60,6 +60,13 @@ export async function learnBounceOutcomes(service:SupabaseClient,userId:string,m
       const plan=planStepDrafts({contacts:(contacts??[]) as Contact[],leadEmail:lead.email,optedOut:lead.opted_out===true,capRemaining:null});
       await recordEmailOutcome(service,{orgId:row.org_id,leadId:row.lead_id,address,outcome:'bounced_hard',source,seenAt,
         pauseSequences:plan.recipients.some(r=>r.email.trim().toLowerCase()===address)});
+      // Suppression may be address-wide; attribution must identify exactly one real send.
+      const exact=(unthreaded?addressed:threaded).filter(candidate=>candidate.org_id===row.org_id&&candidate.lead_id===row.lead_id);
+      if(exact.length===1&&!exact[0].hard_bounced_at&&Date.parse(exact[0].sent_at)<=seenAt.getTime()){
+        const stamped=await service.from('email_logs').update({hard_bounced_at:seenAt.toISOString()})
+          .eq('id',exact[0].id).eq('org_id',row.org_id).eq('sent_by',userId).eq('status','sent').is('hard_bounced_at',null);
+        if(stamped.error)throw Error('Could not stamp the matched hard bounce');
+      }
       links++;
       matched=true;
     }
