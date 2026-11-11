@@ -182,3 +182,57 @@ The common SMTP boundary writes all five tier snapshot fields in the **same INSE
 Bounce learning retains address-wide suppression but stamps `hard_bounced_at` only when a DSN identifies exactly one matching sent log. The write is scoped to its id, org, sender and sent status, conditioned on a null stamp. Repeated DSNs preserve the first timestamp. Ambiguous unthreaded DSNs do not invent per-send attribution.
 
 Tests first: pure 72-hour boundary, negatives, complete snapshot, exact threaded match, duplicate DSN and ambiguous unthreaded attribution; the successful draft regression proves one mutation carries both send state and snapshot. Focused tests: 23 passed. The edge shim passed. Real trigger execution and mailbox/provider validation remain for Claude. Deploy union adds `send-email`, `process-autopilot`, `check-replies` and any entrypoint importing the shared sender/learner; exact final union will be recorded at item 10.
+
+## Item 5 — fallback policy; schema-dependent queue deferred
+
+The tested planner chooses only formats ranked after the bounced guess, excludes bounced formats, refuses non-guesses and refuses a third lifetime fallback. Its queue boundary requires both reputation permission and a successful durable save. There is no in-memory lifetime counter and no automatic send. Two focused tests pass after the missing-module red test.
+
+**Not enabled:** production 074 does not contain a durable lifetime counter. Automatic bounce-to-draft orchestration is deferred with that schema; normal bounce learning continues. This is a schema boundary, not a claim that fallback drafts are being created. The following proposed SQL is report text only, not applied. The architect must review the canonical person key (company domain plus normalized full identity, independent of contact-row id), original guessed-send provenance, and connect the service-only transaction to the planner after approval. Deleting drafts must never reset the lifetime count.
+
+```sql
+create table public.email_fallback_attempts (
+  org_id uuid not null references public.organisations(id),
+  person_key text not null check (length(person_key) between 3 and 400),
+  source_log_id uuid not null,
+  draft_log_id uuid,
+  address text not null,
+  created_at timestamptz not null default now(),
+  primary key (org_id, person_key, source_log_id)
+);
+alter table public.email_fallback_attempts enable row level security;
+revoke all on public.email_fallback_attempts from public, anon, authenticated;
+grant select, insert on public.email_fallback_attempts to service_role;
+-- No cascading deletion: these records enforce a lifetime limit.
+create function public.queue_email_fallback(
+ p_source uuid, p_person_key text, p_address text
+) returns uuid language plpgsql security definer set search_path = public as $$
+declare s email_logs%rowtype; d uuid;
+begin
+ if auth.role() <> 'service_role' then raise exception 'Service only'; end if;
+ select * into strict s from email_logs where id=p_source for update;
+ if s.status <> 'sent' or s.hard_bounced_at is null
+    or s.recipient_tier_basis <> 'supported_pattern'
+    or s.decision_maker_candidate_id is null then
+   raise exception 'A matched guessed send and named person are required';
+ end if;
+ -- Before rollout: validate p_person_key against the source contact's canonical
+ -- full name and company domain, and reject dismissed/obfuscated/opted-out contacts.
+ -- Validate the next-ranked address and current bounce/blocklist/reputation facts
+ -- server-side. This incomplete proposal must not be applied before those checks.
+ perform pg_advisory_xact_lock(hashtextextended(s.org_id::text || ':' || p_person_key, 0));
+ if exists(select 1 from email_fallback_attempts where org_id=s.org_id
+   and person_key=p_person_key and source_log_id=p_source) then return null; end if;
+ if (select count(*) from email_fallback_attempts where org_id=s.org_id
+   and person_key=p_person_key) >= 2 then return null; end if;
+ insert into email_logs(org_id,lead_id,sent_by,to_email,subject,body,status,decision_maker_candidate_id)
+ values(s.org_id,s.lead_id,s.sent_by,p_address,s.subject,s.body,'draft',s.decision_maker_candidate_id)
+ returning id into d;
+ insert into email_fallback_attempts(org_id,person_key,source_log_id,draft_log_id,address)
+ values(s.org_id,p_person_key,p_source,d,p_address);
+ return d;
+end $$;
+revoke all on function public.queue_email_fallback(uuid,text,text) from public,anon,authenticated;
+grant execute on function public.queue_email_fallback(uuid,text,text) to service_role;
+```
+
+This is an explicitly incomplete review proposal, not rollout-ready migration SQL. No migration file was added. The remaining items continue under Kevin's latest instruction. No deploy entrypoint is added by the dormant pure planner.
