@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { evaluateReadiness, readinessText } from '../../supabase/functions/_shared/leadReadiness';
 import * as knownPerson from '../../supabase/functions/_shared/knownPerson';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { ReadinessBadge } from '../components/pipeline/ReadinessBadge';
 
 const lead = { owner_name: 'Jane Smith', website: 'https://acme.com', email: 'hello@acme.com', country: 'GB' };
 const domains = [{ domain: 'acme.com', needs_check: false, sources: ['site_confirms'] }];
@@ -96,5 +99,11 @@ describe('lead readiness', () => {
     expect(readinessText(null)).toBe('Not checked');
     expect(readinessText('almost', ['verified_email'])).toBe('Almost: no verified email');
     expect(readinessText('needs_work', ['company_match'])).toContain('company match needs checking');
+  });
+  it.each([false, true])('renders the shared assessment text in the badge, with pending domain check %s', needs_check => {
+    const assessment = evaluateReadiness({ ...emailCorroborated, domains: [{ ...emailCorroborated.domains[0], needs_check }] });
+    const reason = readinessText(assessment.readiness, assessment.readiness_missing);
+    expect(reason).toBe(needs_check ? 'Almost: no confirmed website' : 'Ready');
+    expect(renderToStaticMarkup(createElement(ReadinessBadge, { readiness: assessment.readiness, missing: assessment.readiness_missing }))).toContain(reason);
   });
 });
