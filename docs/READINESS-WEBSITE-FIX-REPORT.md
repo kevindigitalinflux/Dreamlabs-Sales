@@ -106,4 +106,28 @@ No live query was made; no production count or membership list is asserted. The 
 
 ## Item 6: final gates and importer manifest
 
-Pending final local gates and report completion. Nothing in item 5 was run.
+All six builder items are complete locally. Item 5 is commit **1ff5718**; item 6 is the final gate/report commit. Final gates were run against 1ff5718 with the implemented source/tests; only repository documentation changes follow those gates.
+
+- npx tsc --noEmit: pass.
+- npx vitest run: **239 files, 3,103 passed, one skipped, zero failures; success=true** in the raw JSON report. The readiness file has 34 passing cases, fourteen more than its starting twenty.
+- npm run build: pass; existing large-chunk warning remains.
+- git diff --check: pass, including final documentation.
+- node scripts/places-edge-typecheck.mjs: pass, existing 25-entrypoint local shim.
+
+Tests/build/type checks used VITE_SUPABASE_URL=http://127.0.0.1:54321 and VITE_SUPABASE_ANON_KEY=local-test-placeholder. Raw full-suite evidence is ignored local .superpowers/readiness-website-fix-tests.json. No dependency/lockfile change occurred. No Deno runtime, browser, production database/provider or concurrency check was performed. SSR badge rendering and mocked directory classification are unit evidence, not live site checks.
+
+### Exact import graph and deployment scope
+
+The only direct runtime importer of leadReadiness.ts under supabase/functions is _shared/deepFind.ts. Relative import/export traversal from every function index.ts, both with and without type-only edges, reaches **run-deep-find only**. Its index imports runDeepFindTick from deepFind.ts. Contrary to the brief's suggested parenthetical, run-selected-autopilot does not import this module in this checkout: it imports selectedAutopilot.ts/selectedLeadPipeline.ts, and traversal found no path to leadReadiness.ts. No additional importing function was found. **Deployment list for this fix: run-deep-find.** This is evidence for review, not authorisation to deploy.
+
+Frontend ReadinessBadge imports readinessText directly (lines 2 and 10); deepFind.ts imports the same function (line 51), evaluates the predicate (1318), conditionally saves the lead (1322), and formats both the step/reason prefix (1325–1329). The formatter and frontend component are unchanged. Existing frontend displays updated stored fields after a fresh read; no frontend rollout is required for the changed server predicate. Old lead values and historical run reasons do not fix themselves merely because the function bundle is redeployed. The text-only refresh proposal remains separately gated by review and Kevin's approval.
+
+### Handoff and limits
+
+Only production code change is the shared website predicate: three added lines, two removed. Existing person/email/phone checks, thresholds, schema, RLS, grants, schedules, worker behavior and verification budgets are unchanged. The deliberately failing item 1 commit is a reproduction checkpoint, not a standalone release candidate; review the complete six-commit branch.
+
+Independent Claude review, Deno/provider runtime and real corporate/blocked/suspect fixtures in production remain pending. No migration/SQL, refresh script, push, merge, deploy, real send, mailbox/provider/worker/VPS call, secret use, paid fallback, other-checkout edit or vault sync occurred. The proposed script and rollback are report text only and were never saved as executable files. All commits used explicit paths, disabled hooks and the Codex trailer. No background jobs remain. Subscription allowance is unavailable.
+
+Caveman remained active. Supported plain Git/rg/test commands appear in RTK history, and full JSON evidence was inspected for final counts. RTK gain also emitted its No hook installed diagnostic; no configuration/trust changes or universal compression claims were made.
+
+Next: Claude reviews all six exact commits and this report, especially suspicion gating, same-domain evidence, the importer-list correction and the refresh proposal's evidence/concurrency limits. Any production rollout or data refresh requires Kevin's separate authorisation. Stop after this report; no builder item remains.

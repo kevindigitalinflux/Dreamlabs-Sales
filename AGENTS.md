@@ -120,3 +120,8 @@ All five brief items are complete locally in this accuracy checkout on codex/ema
 ## Multi-select round 2 — final local checkpoint (2026-11-06)
 
 Current branch is codex/multi-select-round-2, based on the completed backfill branch db137e6 per Kevin's explicit checkout command. Seven actual review screens are built locally, tests first and one commit per screen; ImportPreview is absent and skipped with evidence. Read docs/MULTI-SELECT-ROUND-2-BUILD-REPORT.md and latest handoff. Application 2fe4a0e passes 239 files / 3,089 tests plus one skipped, TypeScript/build/25-entrypoint shim/whitespace. Changes from the task base are frontend only. Independent Claude review and browser/phone/live checks remain pending. No push/merge/deploy/migration or live send occurred. Stop after report.
+
+
+## Readiness website fix — final local checkpoint (2026-11-11)
+
+All six brief items are complete locally on codex/readiness-website-fix, from clean e95f8dd, tests first and one commit per item. Read docs/READINESS-WEBSITE-FIX-REPORT.md and latest handoff. The shared predicate now accepts checked, nonsuspect same-domain email corroboration; negative guards and the shared badge formatter remain covered. Gates pass: 239 files / 3,103 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. Exact function import graph requires run-deep-find only; run-selected-autopilot is not an importer here. Refresh/rollback script is proposal text only, not executed or saved as a script. Independent review and live validation remain pending. No push/merge/deploy/migration/SQL or worker change occurred. Stop after report.

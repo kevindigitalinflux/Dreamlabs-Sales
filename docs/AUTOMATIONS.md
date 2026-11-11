@@ -103,3 +103,12 @@ Owner remains the Supabase email/Deep find engine. Existing check-replies pollin
 | Existing bounce learning/backfill correction | Existing check-replies poll or explicit authenticated email-settings backfill_bounces action; no new schedule | Correlates permanent recipient failures using structured or Gmail fallback evidence; existing outcome RPC remains the suppression/note/sequence transaction. Explicit backfill adds count-only diagnostics and retains the 200-message cap/cursor. | Supabase email engine; Codex builder, Claude reviewer |
 
 Built and fixture-tested locally only. No migration or real automation run occurred in this task. See final EMAIL-OUTCOME-LEARNING-BUILD-REPORT.md addendum for count/status semantics and pending independent review.
+
+
+## Readiness website evidence correction (local branch, 2026-11-11)
+
+| Automation | Trigger | Changes | Owner |
+| --- | --- | --- | --- |
+| Existing Deep find final readiness assessment | Successful final saved-facts assessment for a Deep find lead; no new schedule | Saved website confirmation accepts exact-domain site or email evidence only after directory, block, suspicion and pending-check guards. Existing conditional lead readiness write and formatted run reason remain. | Supabase run-deep-find engine; Codex builder, Claude reviewer |
+
+Built locally only. No stored values were refreshed. The bounded service-script preview/apply/rollback proposal in docs/READINESS-WEBSITE-FIX-REPORT.md is text only, requires separate approval and is not a new installed automation.

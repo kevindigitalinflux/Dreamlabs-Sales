@@ -1,5 +1,7 @@
 # Next steps (the to-do list for Codex and Claude)
 
+- [ ] Readiness website fix (2026-11-11): all six builder items complete on codex/readiness-website-fix. Read docs/READINESS-WEBSITE-FIX-REPORT.md. Gates pass: 239 files / 3,103 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. Claude reviews predicate, importer correction and text-only refresh proposal. No rollout or refresh authorised; remains unchecked until independent review.
+
 - [ ] Multi-select round 2 (2026-11-06): seven screens built locally, one commit per screen on codex/multi-select-round-2; ImportPreview absent, documented skip. Read docs/MULTI-SELECT-ROUND-2-BUILD-REPORT.md. Gates pass: 239 files / 3,089 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. Claude review and real browser/phone/live checks pending. Frontend only; no publication authorised.
 
 - [ ] Email outcome backfill fix (2026-11-06): items 1–5 complete locally on codex/email-outcome-backfill-fix. Tests first, five item commits; 3,032 tests pass, one skipped. Claude reviews the final addendum in docs/EMAIL-OUTCOME-LEARNING-BUILD-REPORT.md and the exact branch before any separately authorised rollout or real mailbox test. No migration or publication occurred in this task. Remains unchecked until independent review.
