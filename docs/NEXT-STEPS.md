@@ -1,5 +1,7 @@
 # Next steps (the to-do list for Codex and Claude)
 
+- [ ] Pipeline tighten: item 1 policy/adapters complete on codex/pipeline-tighten; required storage SQL is report-only and triggers the explicit stop. Read docs/PIPELINE-TIGHTEN-REPORT.md. Items 2–12 remain unfinished; no consumer integration or tier-based automation is enabled. Claude review and Kevin-approved next steps required. Gates: 3,145 passed, one skipped, TypeScript/build/edge shim/whitespace.
+
 - [ ] Readiness website fix (2026-11-11): all six builder items complete on codex/readiness-website-fix. Read docs/READINESS-WEBSITE-FIX-REPORT.md. Gates pass: 239 files / 3,103 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. Claude reviews predicate, importer correction and text-only refresh proposal. No rollout or refresh authorised; remains unchecked until independent review.
 
 - [ ] Multi-select round 2 (2026-11-06): seven screens built locally, one commit per screen on codex/multi-select-round-2; ImportPreview absent, documented skip. Read docs/MULTI-SELECT-ROUND-2-BUILD-REPORT.md. Gates pass: 239 files / 3,089 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. Claude review and real browser/phone/live checks pending. Frontend only; no publication authorised.

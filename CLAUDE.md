@@ -1895,3 +1895,8 @@ Built seven frontend review screens on codex/multi-select-round-2, from db137e6 
 ### Readiness confirmed-website correction — local completion (2026-11-11)
 
 Completed all six items on codex/readiness-website-fix. Shared website confirmation now requires the saved exact domain, no directory/block/suspicion, no pending check and site_confirms or lead_email/contact_email evidence. Other readiness rules are unchanged; badges and run reasons share readinessText. See docs/READINESS-WEBSITE-FIX-REPORT.md for six-item evidence, latest-completed-snapshot refresh/rollback proposal and importer graph. Final gates: 239 files / 3,103 passing tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. Function rollout union is run-deep-find only for this checkout. No refresh, migration/SQL, provider call, publication or worker/VPS change occurred. Independent review pending; stop after report.
+
+
+### Pipeline tighten — tier foundation and required SQL checkpoint (2026-11-11)
+
+On codex/pipeline-tighten from 72c205c, item 1 adds an import-free recipientTier plus adapters to existing pattern/syntax/role/identity rules. Forty-two new tests cover hard-negative precedence, distinct T1-person support and Kevin's hosted-role ruling. No production entrypoint uses the new policy yet. Report docs/PIPELINE-TIGHTEN-REPORT.md contains the proposed nullable service-written send-tier/per-message-bounce metadata needed for truthful reputation/measurement. Nothing applied; Kevin's SQL-and-stop instruction ends this build at item 1. Items 2–12 remain unfinished. Gates: 241 files / 3,145 passed, one skipped, TypeScript/build/edge shim/whitespace. No remote action, worker or usage_resources change; independent review pending.

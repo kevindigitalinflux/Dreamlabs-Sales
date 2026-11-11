@@ -125,3 +125,8 @@ Current branch is codex/multi-select-round-2, based on the completed backfill br
 ## Readiness website fix — final local checkpoint (2026-11-11)
 
 All six brief items are complete locally on codex/readiness-website-fix, from clean e95f8dd, tests first and one commit per item. Read docs/READINESS-WEBSITE-FIX-REPORT.md and latest handoff. The shared predicate now accepts checked, nonsuspect same-domain email corroboration; negative guards and the shared badge formatter remain covered. Gates pass: 239 files / 3,103 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. Exact function import graph requires run-deep-find only; run-selected-autopilot is not an importer here. Refresh/rollback script is proposal text only, not executed or saved as a script. Independent review and live validation remain pending. No push/merge/deploy/migration/SQL or worker change occurred. Stop after report.
+
+
+## Pipeline tighten — item 1 / SQL stop (2026-11-11)
+
+Current branch codex/pipeline-tighten starts from origin/main 72c205c. Item 1 pure tier policy/adapters and 42 tests are built; existing consumer flows are not switched. Kevin confirmed hosted/catch-all role addresses remain T3 unless replied or sent_ok. Read docs/PIPELINE-TIGHTEN-REPORT.md. Required send-time tier and per-log bounce attribution storage is proposed as report SQL only, triggering Kevin's explicit write-SQL-and-stop instruction. Items 2–12 remain unbuilt (item 10 only has this checkpoint). Gates pass: 241 files / 3,145 tests, one skipped, TypeScript/build/25-entrypoint shim/whitespace. No SQL, publication, live data, worker/VPS or usage_resources change occurred. Independent review pending. Do not claim the pipeline is complete or resume without resolving this SQL checkpoint.
