@@ -3,6 +3,7 @@ import {prepareRecipientEvidence,supportedTierPattern} from './recipientTierEvid
 import {autoApplyRecipients,type AutoRecipient} from './recipientAutoApply.ts';
 import {sentOkAddresses} from './sentRecipientEvidence.ts';
 import { reserveRegistryProof } from './registryProofGate.ts';
+import {reserveRunRegistryProof} from './registryProofAllowance.ts';
 import { createPlacesContext, type PlacesContext } from './placesClient.ts';
 // supabase/functions/_shared/deepFind.ts
 // Deep find engine: claims queued leads, discovers the company's domains and people, stores people as contacts that are
@@ -928,8 +929,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   await runFreeDomainChecks([...verified].slice(0, 4));
 
   if (await reserveRegistryProof(effort, registry.how, !!configured.geminiKey, left(), async () => {
-    const enabled = spend.enabled; spend.enabled = true;
-    try { return await spend.ai('company registry proof'); } finally { spend.enabled = enabled; }
+    return await reserveRunRegistryProof(service,run.org_id,run.id,lead.id);
   }, line => steps.push(line), !!str(lead.business_name))) {
     await checkpoint();
     const webNumbers = await registryWebNumbers(str(lead.business_name) ?? '', configured.geminiKey!, Math.min(10_000, left() - 5_000));

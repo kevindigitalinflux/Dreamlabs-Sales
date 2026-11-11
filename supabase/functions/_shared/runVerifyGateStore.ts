@@ -43,7 +43,7 @@ export async function saveRunResult(service: SupabaseClient, id: string, patch: 
     const { data: current, error: readError } = await service.from('deep_find_leads').select('domains, status').eq('id', id).maybeSingle();
     if (readError || !current) throw new Error('Deep find result checkpoint could not be read');
     if (current.status !== 'running') return;
-    const domains = { ...(patch.domains as Record<string, unknown>), ...(current.domains?._verify_gate ? { _verify_gate: current.domains._verify_gate } : {}) };
+    const domains = { ...(patch.domains as Record<string, unknown>), ...(current.domains?._verify_gate ? { _verify_gate: current.domains._verify_gate } : {}), ...(current.domains?._registry_proof ? {_registry_proof:current.domains._registry_proof}:{}) };
     const { data, error } = await service.from('deep_find_leads').update({ ...patch, domains, updated_at: patch.updated_at })
       .eq('id', id).eq('status', 'running').eq('domains', JSON.stringify(current.domains)).select('id');
     if (error) throw new Error('Deep find result checkpoint could not be saved');

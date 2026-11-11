@@ -12,6 +12,7 @@ import { cleanCompanyNumber, companyMatchesLead, hasLocation, locationAgrees, sc
 import { registrySearchNames } from './nameVariants.ts';
 import { registrySkipReason } from './deepFindSuggestions.ts';
 import type { ReviewLead } from './deepFindSuggestions.ts';
+import {groundedRegistryChoice} from './groundedRegistryChoice.ts';
 
 /** The registered company as far as it is known, and how it was settled. */
 export interface RegistryResult {
@@ -120,6 +121,7 @@ export async function resolveRegistry(
   const pick = matchRegistryEvidence(scored, name, loc, { pages: proof.pages ?? [], website: proof.website,
     people: people.map(p => `${p.first} ${p.last}`), officers, webNumbers: proof.webNumbers,
     peopleNumbers: Object.entries(proof.priorEvidence ?? {}).filter(([,e]) => e.E4).map(([number]) => number) });
+  if(proof.webNumbers?.length)pick.chosen=groundedRegistryChoice(proof.cached??scored.filter(c=>seen.has(c.company_number)),name,loc,proof.webNumbers);
   if (!pick.chosen) {
     // No clear match by name: look the company up through the people we know (officer search, then their
     // appointments). Never auto-picked: the user still chooses, with the reason shown.

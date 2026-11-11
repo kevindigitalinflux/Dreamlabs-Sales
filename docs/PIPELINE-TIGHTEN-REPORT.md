@@ -236,3 +236,11 @@ grant execute on function public.queue_email_fallback(uuid,text,text) to service
 ```
 
 This is an explicitly incomplete review proposal, not rollout-ready migration SQL. No migration file was added. The remaining items continue under Kevin's latest instruction. No deploy entrypoint is added by the dormant pure planner.
+
+## Item 6 — company web proof at every effort
+
+Low and Custom now join Medium/High/Extra high for unresolved UK company proof. One grounded call per lead is reserved durably in the existing run JSON, capped at 50 per run. It is separate from drafting and exploratory Deep find AI credits; it does not change `usage_resources`. The existing result compare-and-swap preserves this allowance alongside checker state. Reservations are not refunded after an attempted call or uncertain failure, so retries cannot silently double spend.
+
+A grounded number can auto-pick only a unique plausible active company present in the Companies House search results, with matching name and matching location when supplied. Two plausible active matches, mismatched names, absent search numbers and dissolved companies remain for human choice. Missing Gemini key, exhausted allowance, unavailable reservation or insufficient remaining time produces a plain skip line and does not fail the run. The existing Companies House key remains required.
+
+Tests first covered all efforts and the stricter grounded pick. Focused registry tests: 74 passed (including separate allowance/retry/cap coverage). Edge shim passed. Cost for 100 leads requires 100 grounded requests plus model tokens; current official pricing is linked in the final research/capacity section. This is an estimate, not a live billing measurement. Deploy: `deep-find` only. No provider call or live reservation was made.
