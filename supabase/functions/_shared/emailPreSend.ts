@@ -5,7 +5,7 @@ import {makeWorkerClient,type WorkerClient} from './workerClient.ts';
 import {resolveOrgWorkerConfig} from './orgApiKeys.ts';
 import {RunVerifyGate} from './runVerifyGate.ts';
 import {cachedMailProvider,lookupMx} from './dnsLookup.ts';
-import {emailSyntaxValid,emailDomainTypo,isRoleAddress,roleAddressNeedsReview,ROLE_ADDRESS_LABEL} from './emailPrecheckRules.ts';
+import {emailSyntaxValid,emailDomainTypo,isRoleAddress,isPlaceholderAddress,roleAddressNeedsReview,ROLE_ADDRESS_LABEL} from './emailPrecheckRules.ts';
 import {loadRecipientContext} from './recipientContext.ts';
 import {recipientTier,type RecipientEvidence,type TierResult} from './recipientTier.ts';
 
@@ -40,6 +40,7 @@ export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{wo
   return async(input:Input):Promise<EmailPrecheckResult>=>{
     const email=input.address.trim().toLowerCase();
     if(!emailSyntaxValid(input.address))return {status:'invalid',label:'This email address has invalid syntax',overridable:false};
+    if(isPlaceholderAddress(email))return {status:'invalid',label:'This is a placeholder address, not a real mailbox',overridable:false};
     const domain=email.split('@')[1]!;
     const typo=emailDomainTypo(email);
     const roleVerdict=(value:EmailPrecheckResult):EmailPrecheckResult=>value.label!=='This address has replied before.'&&!value.label.startsWith('Not checked:')&&value.status!=='invalid'

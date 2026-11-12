@@ -5,7 +5,7 @@ import {makeEmailPrechecker} from '../../supabase/functions/_shared/emailPreSend
 import {replyDatabase} from './replyTestDatabase';
 import {USAGE_DEFAULTS} from '../../supabase/functions/_shared/usageRules';
 const now=()=>Date.parse('2026-11-05T12:00:00Z');
-const input={leadId:'lead',address:'person@example.com'};
+const input={leadId:'lead',address:'person@fixture.test'};
 afterEach(()=>cachedMailProvider.mockReturnValue(null));
 function fixture(outcomes=[]) {
  const db=replyDatabase({email_outcomes:outcomes});db.service.rpc=vi.fn(async()=>({error:null}));
@@ -40,7 +40,7 @@ it('blocks invalid syntax without a worker or DNS request',async()=>{
  expect(f.worker.verifyEmail).not.toHaveBeenCalled();expect(f.mx).not.toHaveBeenCalled();
 });
 it('rejects trailing CRLF before normalisation can hide header injection characters',async()=>{
- const f=fixture();expect(await f.check({...input,address:'person@example.com\r\n'})).toMatchObject({status:'invalid',overridable:false});
+ const f=fixture();expect(await f.check({...input,address:'person@fixture.test\r\n'})).toMatchObject({status:'invalid',overridable:false});
  expect(f.worker.verifyEmail).not.toHaveBeenCalled();
 });
 it('blocks a domain known to have no MX without a worker call',async()=>{
@@ -65,8 +65,8 @@ it('does not call a usage-service failure an exhausted daily allowance',async()=
 });
 it('does not promote hosted role SMTP acceptance to confirmation, but preserves a real reply',async()=>{
  cachedMailProvider.mockReturnValue('hosted');
- const f=fixture();expect(await f.check({...input,address:'info@example.com'})).toMatchObject({status:'unverifiable',label:'Role address, not confirmed'});
+ const f=fixture();expect(await f.check({...input,address:'info@fixture.test'})).toMatchObject({status:'unverifiable',label:'Role address, not confirmed'});
  expect(f.db.service.rpc).toHaveBeenCalledWith('record_email_outcome',expect.objectContaining({p_outcome:'checked_unverifiable'}));
- const replied=fixture([{org_id:'org',address:'info@example.com',outcome:'replied',seen_at:'2026-11-04'}]);
- expect(await replied.check({...input,address:'info@example.com'})).toMatchObject({status:'valid',label:'This address has replied before.'});
+ const replied=fixture([{org_id:'org',address:'info@fixture.test',outcome:'replied',seen_at:'2026-11-04'}]);
+ expect(await replied.check({...input,address:'info@fixture.test'})).toMatchObject({status:'valid',label:'This address has replied before.'});
 });

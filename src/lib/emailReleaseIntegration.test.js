@@ -1,5 +1,5 @@
 import {afterEach,expect,it,vi} from 'vitest';
-vi.mock('../../supabase/functions/_shared/smtp',()=>({sendMail:vi.fn(async()=>({messageId:'<sent@example.com>'}))}));
+vi.mock('../../supabase/functions/_shared/smtp',()=>({sendMail:vi.fn(async()=>({messageId:'<sent@fixture.test>'}))}));
 vi.mock('../../supabase/functions/_shared/emailPreSend',async original=>({...await original(),checkEmailBeforeSend:vi.fn()}));
 import {makeEmailPrechecker,checkEmailBeforeSend} from '../../supabase/functions/_shared/emailPreSend';
 import {sendLeadEmail} from '../../supabase/functions/_shared/sendLeadEmail';
@@ -33,7 +33,7 @@ it.each([false,true])('checks 120 release recipients with bounded transient retr
  checkEmailBeforeSend.mockImplementation((_service,input)=>check(input));
  const results=[];
  for(let i=0;i<120;i++) {
-  const pending=sendLeadEmail(db.service,{senderId:'sender',leadId:'lead',orgId:'org',leadStage:'contacted',mailbox:{settings:{},pass:'local-placeholder'},to:`person${i}@company${Math.floor(i/2)}.example.com`,subject:'Reviewed fixture',body:'Fixture only'});
+  const pending=sendLeadEmail(db.service,{senderId:'sender',leadId:'lead',orgId:'org',leadStage:'contacted',mailbox:{settings:{},pass:'local-placeholder'},to:`person${i}@company${Math.floor(i/2)}.fixture.test`,subject:'Reviewed fixture',body:'Fixture only'});
   await vi.advanceTimersByTimeAsync(100000);const result=await pending;
   results.push({ok:result.ok,blocked:!result.ok&&result.verification?.status==='invalid',verification:result.verification});
  }

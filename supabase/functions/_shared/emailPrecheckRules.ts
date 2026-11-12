@@ -1,4 +1,12 @@
 import {validEmail} from './contacts.ts';
+const PLACEHOLDER_DOMAINS=new Set(['example.com','example.org','example.net','domain.com','email.com','test.com','fakeemail.com','mailinator.com','sentry.io','wixpress.com']);
+const PLACEHOLDER_LOCALS=new Set(['test','example','noreply','no-reply','donotreply','do-not-reply','user','name','email','yourname','firstname.lastname']);
+export function isPlaceholderAddress(address:string):boolean {
+ const [local,domain]=address.trim().toLowerCase().split('@');
+ if(PLACEHOLDER_LOCALS.has(local??''))return true;
+ const labels=(domain??'').split('.');
+ return labels.some((_label,index)=>PLACEHOLDER_DOMAINS.has(labels.slice(index).join('.')));
+}
 const TYPOS:Record<string,string>={'gmial.com':'gmail.com','gamil.com':'gmail.com','gmail.con':'gmail.com','gmail.co':'gmail.com','hotmial.com':'hotmail.com','outlok.com':'outlook.com','outllook.com':'outlook.com','yaho.com':'yahoo.com','yahoo.con':'yahoo.com'};
 /** Project-supported ASCII mailbox syntax, with DNS-label and dot-atom bounds. */
 export function emailSyntaxValid(address:string):boolean {
