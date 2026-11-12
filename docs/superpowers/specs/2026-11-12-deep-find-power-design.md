@@ -1,7 +1,7 @@
 # Deep find power and reliability: design
 
 Date: 2026-11-12. Author: Claude (architect). Director: Kevin. Builder: Codex. Reviewer: Claude.
-Status: DRAFT, awaiting Kevin's approval. Nothing in this document is built.
+Status: APPROVED by Kevin 2026-11-12. Nothing in this document is built. Each stage still needs its own brief, review and Kevin's yes for merge, deploy and migration.
 Base: `origin/main` at `e8bd48c`. Related: `docs/DEEPFIND-LIVE-TEST-2026-11-12.md`, `docs/PIPELINE-TIGHTEN-REPORT.md`.
 
 ## 1. Intent
@@ -114,7 +114,8 @@ Each stage is one Codex brief, one branch, reviewed by Claude, then merged and d
 3. A result is accepted only when the snippet shows the person currently holds the role at that company. Former employees are rejected. Accepted people are saved with title, LinkedIn URL and source `role_search`.
 4. Team pages on the company site are read for names and titles.
 5. Companies House and CRO officers are used only as the fallback for small firms, and company secretaries are no longer added as contacts.
-6. One search interface with two providers: Gemini grounded search (existing) and, as an optional later step, a self-hosted SearXNG service on the VPS. Queries per lead are capped and counted against the 5,000 monthly free allowance, with a visible meter.
+6. One search interface with two providers: a self-hosted SearXNG service on the VPS (built in this stage; Kevin, 2026-11-12) and Gemini grounded search (existing). SearXNG is tried first because it is free and unmetered; Gemini is the fallback when SearXNG returns nothing or is throttled. Gemini queries per lead are capped and counted against the 5,000 monthly free allowance, with a visible meter.
+7. SearXNG runs as one more container in the existing `lookup-worker` stack: internal network only, reached only through the wrapper (new route `POST /search`, same secret header, per-org daily quota like scrapes and checks), memory cap 512 MB, JSON output on, several engines enabled so one engine throttling the VPS address does not stop searches. VPS headroom checked 2026-11-12: 2 vCPU, 4.6 GB memory available, load 0.5, 76 GB disk free, so it fits. A fresh Hostinger snapshot is taken first; n8n and Postiz are untouched. Unknown until tested: how quickly search engines throttle a single server address at about 200 to 400 queries a day.
 
 ### Stage 3: markets
 
@@ -149,7 +150,9 @@ Claude's calls (not yet agreed; Kevin can overrule)
 - The Microsoft check is an unofficial use of Microsoft's sign-in page. It may change or be throttled at any time, so nothing depends on it alone.
 - Registries stay UK and Ireland only. No free national registry exists for the US (records are per state) and Claude knows of no free open registry API for the Gulf; EU registries differ per country and were not researched.
 - The daily checker cap (600 per org) is too low for "every format per person" on 50 leads. Proposed: 1,500 per org, 3,000 worker-wide, own VPS, no cost.
-- SearXNG on the VPS is built only if Gemini's free allowance proves too small.
+- SearXNG is the first search source and Gemini the fallback (Kevin asked for SearXNG to be built; the ordering is Claude's call).
+
+Kevin approved this design on 2026-11-12, with SearXNG built rather than deferred. The other four calls above stand as written.
 
 ## 8. Left to the builder
 
