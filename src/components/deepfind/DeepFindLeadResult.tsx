@@ -11,6 +11,7 @@ import { BlockedOwnDomainNotice } from './BlockedOwnDomainNotice';
 import { Heading } from './Heading';
 import { RestorePersonButton } from '../pipeline/RestorePersonButton';
 import { joinNames } from '../../lib/restoreDismissed';
+import { QueuedChecksLine } from './QueuedChecksLine';
 
 const STATUS_ICONS: Record<DeepFindRowWithLead['status'], ReactNode> = {
   queued: <Clock size={14} aria-hidden />,
@@ -114,6 +115,7 @@ export function DeepFindLeadResult({ row, level = 2 }: { row: DeepFindRowWithLea
           </ul>
         </details>
       )}
+      {row.lead && row.status === 'done' && <QueuedChecksLine leadId={row.lead_id} runId={row.run_id} />}
     </li>
   );
 }
