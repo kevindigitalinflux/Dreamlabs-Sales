@@ -1,4 +1,15 @@
-## Status (2026-11-12, Claude) - START HERE
+## Deep find power programme (2026-11-12, Claude, later session) - START HERE
+
+This block is the resume point; the "Status (2026-11-12, Claude)" block below describes what is live and still applies. Roles unchanged: Kevin directs, Claude designs and reviews, Codex builds. Every merge, push, deploy, migration and VPS change needs Kevin's explicit yes.
+
+- **Approved design:** `docs/superpowers/specs/2026-11-12-deep-find-power-design.md` (Kevin approved 2026-11-12, with a self-hosted SearXNG search service to be built in stage 2). It holds the pass marks, the measured evidence, the six stages and the decisions. Read it first.
+- **State:** nothing is built. Worktree `dreamlabs-sales-accuracy`, branch `codex/pipeline-tighten`, three local docs commits ahead of `origin/main` (`92c1d5c`, `d0060a8`, `5f1380a`), NOT pushed. No migration, deploy or VPS change was made. Live database and VPS were only read; nine SMTP probes were run through the existing checker on the VPS.
+- **Next step:** Claude writes the implementation plan and Codex brief for stage 0 (test set, scoring script, structured check reasons, Gemini drain cause, larger Microsoft-check test) and stage 1 (verifier v2). Kevin approves each brief before Codex starts.
+- **People:** Kieran no longer works with Kevin. Users are Kevin, Suj (Digital Influx Academy) and Valentina (UX Tree).
+- **Kevin's authorisations this session:** read-only database and VPS access; throwaway tests; Claude may source test leads in the Mr Brush or DI Dreamlabs orgs (not yet done). Gemini was topped up 2026-11-12; the cause of the earlier drain is still unknown.
+- **Usage:** subscription usage is not visible to Claude in this session.
+
+## Status (2026-11-12, Claude) - what is live
 
 This block supersedes the 2026-11-10 block below. Roles unchanged: Kevin directs, Claude architect/reviewer/deployer, Codex builder. Every merge, push, deploy, migration and role change needs Kevin's explicit yes for that action. Kevin is restarting the session on a different Claude model to push the platform further; resume from here.
 
