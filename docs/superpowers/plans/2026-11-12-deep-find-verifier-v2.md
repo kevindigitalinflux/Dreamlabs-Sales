@@ -11,7 +11,7 @@
 **Spec:** `docs/superpowers/specs/2026-11-12-deep-find-power-design.md` (sections 2, 4, 6 stage 0 and stage 1, 7).
 
 **Deviations from the spec (Claude's calls, flagged to Kevin):**
-- Spec stage 1 item 1 said a confirmed shared inbox counts as safe to send. The code carries Kevin's 2026-11-11 ruling that a hosted role mailbox stays under review. This plan keeps the ruling: a deliverable role answer proves the domain can be checked and is recorded as `role_account`, but it does not make the role address T1.
+- Spec stage 1 item 1 (a confirmed shared inbox counts as safe to send) is built as designed. Kevin confirmed this on 2026-11-12, replacing his 2026-11-11 ruling for one case only: a role address the mail server accepts on a domain that is NOT catch-all becomes T1 (Task 6). Every other role address stays under review as before.
 - Spec item 2 (domain probe) needs no new route: the checker's own catch-all answer is the probe (Task 4).
 - Spec item 6 (check before send) already exists at the send boundary. The hole closed here is the saved address trusted without proof (Task 6) and placeholder addresses (Task 5).
 
@@ -23,7 +23,7 @@
 - Pure rules live in import-free modules under `supabase/functions/_shared/` and are tested from `src/lib/*.test.ts`. Nothing new may import `deepFind.ts` in a test.
 - Worker calls go only through `workerClient.ts`: reserve usage before the request, refund at most once and only when the worker did no work, fail closed, a client timeout is not refunded.
 - No address is ever enrolled or sent by this work. Auto-fill stays blank-only. Classification grants no permission to send.
-- Kevin's 2026-11-11 ruling stands: a role address (`isRoleAddress`) on hosted or catch-all mail stays T3 even when the server accepts it. This plan must not change that.
+- Role addresses (`isRoleAddress`): Kevin's 2026-11-12 decision replaces his 2026-11-11 ruling in exactly one case. A role address becomes T1 only when the checker answered `risky` / `role_account` for that exact address (deliverable, domain not catch-all). Publication alone, a catch-all acceptance, a timeout or Microsoft evidence never lifts a role address; those stay T3 `role_review` as today. Update the comment in `recipientTier.ts` that cites the 2026-11-11 ruling to say this.
 - RLS on every new table; no client INSERT, UPDATE or DELETE on the queue; service-role RPCs are `SECURITY DEFINER` with `SET search_path = public` and `REVOKE ... FROM PUBLIC, anon, authenticated`.
 - New realtime watches are not added. Components stay under 150 lines. No bare `catch {}` around multi-step async work.
 - Exact values: per-domain pacing 4 starts per 60 s (unchanged); queue per-lead cap 30 checks; queue retry delays 90 s, 300 s, 900 s (3 retries, then give up); run window 60 minutes from `deep_find_runs.started_at`; Microsoft checks 20 per minute worker-wide; daily caps `worker_verify` 1,500 per org and 3,000 worker-wide.
@@ -273,8 +273,11 @@ it('prefers the lead site over another verified domain', () => expect(chooseScra
 - Test: `src/lib/recipientTier.test.ts`, `src/lib/recipientContext.test.ts`
 
 **Interfaces:**
-- `RecipientEvidence` gains `msExists?: 'exists' | 'not_found'`. `TierBasis` gains `'ms_exists' | 'ms_not_found' | 'saved_unproven'`.
-- Rule order inside `recipientTier`, after the `roleNeedsReview` line and before `checker==='valid'`:
+- `RecipientEvidence` gains `msExists?: 'exists' | 'not_found'` and `roleConfirmed?: boolean`. `TierBasis` gains `'ms_exists' | 'ms_not_found' | 'saved_unproven' | 'role_confirmed'`.
+- The existing `roleNeedsReview` line becomes two: `roleNeedsReview && roleConfirmed` gives `T1 / role_confirmed / 'The mail server confirms this shared inbox.'`; `roleNeedsReview` otherwise gives T3 `role_review` exactly as today. Hard negatives, `replied` and `sentOk` still come first.
+- `roleConfirmed` is true only when a check of that exact address returned status `risky` with reason `role_account`. Sources: the in-run checked map in `deepFind.ts` (the `prepareRecipientEvidence` call near line 1340), and in `recipientContext` the newest `deep_find_check_queue` row for the address with `kind = 'smtp'`, status `done`, reason `role_account`. Never set it from a catch-all, timeout, published or Microsoft result.
+- `emailPreSend.ts`: a worker answer `risky` / `role_account` is treated like a `valid` answer (send allowed, cached the same way). Role addresses with any other answer keep today's review verdict.
+- Rule order inside `recipientTier`, after the `roleNeedsReview` lines and before `checker==='valid'`:
   1. `msExists === 'exists'` gives `T1 / ms_exists / 'Microsoft confirms this mailbox exists.'`
 - After the `placesEmail` line:
   2. `msExists === 'not_found'` gives `T3 / ms_not_found / 'Microsoft has no mailbox with this address. Review it.'`
@@ -292,12 +295,15 @@ it('keeps a published address T1 even when Microsoft cannot find it', () => expe
 it('no longer trusts a saved address that no check confirmed', () => expect(recipientTier('jo@a.com', { ...base, savedNonGuessed: true, checker: 'unverifiable' })).toMatchObject({ tier: 'T3', basis: 'saved_unproven' }))
 it('still trusts a saved address the checker confirmed', () => expect(recipientTier('jo@a.com', { ...base, savedNonGuessed: true, checker: 'valid' })).toMatchObject({ tier: 'T1' }))
 it('never lets Microsoft evidence lift a role address', () => expect(recipientTier('info@a.com', { ...base, forAddress: 'info@a.com', roleNeedsReview: true, msExists: 'exists' })).toMatchObject({ tier: 'T3', basis: 'role_review' }))
+it('trusts a shared inbox the mail server confirmed', () => expect(recipientTier('info@a.com', { ...base, forAddress: 'info@a.com', roleNeedsReview: true, roleConfirmed: true })).toMatchObject({ tier: 'T1', basis: 'role_confirmed' }))
+it('keeps an unconfirmed shared inbox under review even when published', () => expect(recipientTier('info@a.com', { ...base, forAddress: 'info@a.com', roleNeedsReview: true, publishedByCompany: true })).toMatchObject({ tier: 'T3', basis: 'role_review' }))
+it('a hard bounce beats a confirmed shared inbox', () => expect(recipientTier('info@a.com', { ...base, forAddress: 'info@a.com', roleNeedsReview: true, roleConfirmed: true, bouncedHard: true }).tier).toBe('never'))
 it('does not condemn a shared inbox Microsoft cannot find', () => expect(recipientTier('info@a.com', { ...base, forAddress: 'info@a.com', roleNeedsReview: true, savedNonGuessed: true, msExists: 'not_found' })).toMatchObject({ tier: 'T3', basis: 'role_review' }))
 it('a hard bounce still beats Microsoft', () => expect(recipientTier('jo@a.com', { ...base, bouncedHard: true, msExists: 'exists' }).tier).toBe('never'))
 ```
 
 - [ ] **Step 2: Run** `npx vitest run src/lib/recipientTier.test.ts src/lib/recipientContext.test.ts`. Expected: FAIL. Existing tests that assert `saved_non_guessed` T1 without a checker verdict must be updated to the new rule; list each in the build report.
-- [ ] **Step 3: Implement.** Any UI or analytics map keyed by `TierBasis` gets the three new keys with labels "Microsoft confirmed", "Microsoft has no such mailbox", "Saved, not confirmed".
+- [ ] **Step 3: Implement.** Any UI or analytics map keyed by `TierBasis` gets the four new keys with labels "Microsoft confirmed", "Microsoft has no such mailbox", "Saved, not confirmed", "Shared inbox confirmed". Add pre-send tests: a role address with worker answer `risky` / `role_account` is allowed; the same address with `unverifiable` / `catch_all` keeps today's review verdict.
 - [ ] **Step 4: Run** the full `npx vitest run` and `npx tsc --noEmit`. Expected: PASS.
 - [ ] **Step 5: Commit** `feat: tiers use Microsoft evidence and require proof for saved addresses`.
 
@@ -354,7 +360,7 @@ export function siblingsToSkip(done: { personKey: string | null; verdict: string
   - Every saved address not yet checked is planned first (rank 0), kind `smtp`; on a `microsoft` domain whose state is `catch_all` or `no_answer` it is planned as `ms_exists` instead. Exception: a saved role address is always `smtp` and never `ms_exists`, and is not planned at all on a `catch_all` domain.
   - For each person without a `valid` address, in `priority` order: on a `provable` or `unchecked` domain plan every `candidatesFor` format as `smtp`, rank = its position; on a `microsoft` domain that is `catch_all` or `no_answer` plan the first 4 formats as `ms_exists`; on any other `catch_all` domain plan nothing.
   - Deduplicate by address and kind. Cut at 30, keeping saved addresses, then rank order across people (round-robin by rank so every person gets their most likely format before anyone's second).
-- Rules for `nextStep`: smtp `valid`/`invalid` and `risky role_account` are `done` (`role_account` maps to verdict `unverifiable`, reason `role_account`); `catch_all` is `done unverifiable catch_all`; `timeout`, `unknown`, `checker_error`, worker failures `timeout`, `busy`, `unreachable` retry at `now + QUEUE_RETRY_DELAYS_MS[attempts - 1]` and become `done unverifiable <reason>` once `attempts > 3`; `limit_reached` and `not_configured` are `skipped` with that reason; ms `exists`/`not_found` are `done`, ms `unknown` retries on the same schedule.
+- Rules for `nextStep`: smtp `valid`/`invalid` and `risky role_account` are `done` (`role_account` maps to verdict `valid`, reason `role_account`; the drain records it as `checked_valid` and it is a saved address, so `applyProven` is not called for it); `catch_all` is `done unverifiable catch_all`; `timeout`, `unknown`, `checker_error`, worker failures `timeout`, `busy`, `unreachable` retry at `now + QUEUE_RETRY_DELAYS_MS[attempts - 1]` and become `done unverifiable <reason>` once `attempts > 3`; `limit_reached` and `not_configured` are `skipped` with that reason; ms `exists`/`not_found` are `done`, ms `unknown` retries on the same schedule.
 - `siblingsToSkip`: when a person's row finishes `valid` or `exists`, return the ids of that person's other queued rows.
 
 - [ ] **Step 1: Write the failing tests**, one per rule above, including: 3 people on a provable domain with 8 formats each plus 2 saved addresses yields exactly 30 rows with both saved addresses first and each person's rank-0 format before any rank-1; a Microsoft catch-all domain yields only `ms_exists` rows, 4 per person; a non-Microsoft catch-all yields none; `nextStep({kind:'smtp',attempts:1},{ok:true,status:'unverifiable',reason:'timeout'},1000)` equals `{status:'queued',nextAt:91_000,reason:'timeout'}`; attempts 4 gives `done unverifiable timeout`; `siblingsToSkip` returns only the same person's queued ids.
