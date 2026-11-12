@@ -6,6 +6,8 @@ import {loadTierMetrics,T2_PAUSED} from './tierMetrics.ts';
 import {readComplete} from './readComplete.ts';
 import {isRecipientBlocked} from './selectedLeadPipelineRules.ts';
 import {chooseScrapeDomain} from './scrapeChoice.ts';
+import {enqueueLeadChecks} from './verifyQueue.ts';
+import {buildQueuePlan} from './verifyQueueInput.ts';
 import { reserveRegistryProof } from './registryProofGate.ts';
 import {reserveRunRegistryProof} from './registryProofAllowance.ts';
 import { createPlacesContext, type PlacesContext } from './placesClient.ts';
@@ -1388,6 +1390,28 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   if (readinessError || !savedReadiness?.length) throw new Error('Could not save lead readiness');
   const readinessLine = readinessText(readiness.readiness, readiness.readiness_missing,sendableReadinessRecipients(readinessInput).length);
   steps.push(readinessLine);
+  const queuePeople = prioritiseCheckPeople(lookupPeople(), checkOwners).map((person, priority) => ({ ...person,
+    name: `${person.first} ${person.last}`.trim(), personKey: `${person.first} ${person.last}`.trim().toLowerCase(),
+    contactId: exactContact(person.first, person.last)?.id ?? null, priority }));
+  const queueOwner = parseLeadPersonName(finalLead.data.owner_name);
+  const queueSaved = [finalLead.data.email, ...(Array.isArray(finalLead.data.additional_emails) ? finalLead.data.additional_emails : [])]
+    .filter((value): value is string => typeof value === 'string' && !!value.trim()).map(address => ({ address,
+      contactId: null, personKey: queueOwner && !isRoleAddress(address) ? `${queueOwner.first} ${queueOwner.last}`.trim().toLowerCase() : null,
+      personName: queueOwner && !isRoleAddress(address) ? `${queueOwner.first} ${queueOwner.last}`.trim() : null }));
+  for (const contact of finalContacts.data ?? []) if (!contact.dismissed_at && str(contact.email)) {
+    const named = str(contact.first_name) && str(contact.last_name) && contact.kind !== 'general' && !isRoleAddress(contact.email);
+    queueSaved.push({ address: contact.email, contactId: contact.id, personKey: named ? `${contact.first_name} ${contact.last_name}`.trim().toLowerCase() : null,
+      personName: named ? `${contact.first_name} ${contact.last_name}`.trim() : null });
+  }
+  const queuePlan = buildQueuePlan({ people: queuePeople, domains: [...verified].map(domain => ({ domain, provider: cachedMailProvider(domain) ?? 'unknown' })),
+    savedAddresses: queueSaved, checked: checkedEmails, candidatesFor: (person, domain) => rankedEmailCandidates(person.first, person.last, domain, patterns.get(domain) ?? null) });
+  if (queuePlan.length) {
+    await checkpoint();
+    try {
+      const queued = await enqueueLeadChecks({ rpc: async (name, args) => service.rpc(name, args) }, { orgId: run.org_id, runId: run.id, leadId: lead.id, plan: queuePlan });
+      if (queued > 0) steps.push(`${queued} more addresses are being checked in the background. Results update this lead when they finish.`);
+    } catch (error) { console.error('Deep find background enqueue failed', error instanceof Error ? error.name : 'UnknownError'); }
+  }
   return {
     status: 'done',
     reason: readinessLine + '. ' + (apolloPeople ? `Apollo added ${apolloPeople} decision-maker contacts. ` : '') + (suspicion.suspect ? "The lead's website may belong to another company, so it was not used. " : '') + deepFindSummary(stats),

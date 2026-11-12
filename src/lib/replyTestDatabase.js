@@ -20,7 +20,7 @@ export function replyDatabase(seed = {}) {
       if (operation === 'update') { rows.forEach(row => Object.assign(row, patch)); writes.push({ table, patch }); }
       return { data: rows.map(row => ({ ...row })), count: operation==='select'?total:rows.length, error: null };
     };
-    const q = { select: () => q, eq: (key, value) => { predicates.push(row => row[key] === value); return q; },
+    const q = { select: () => q, eq: (key, value) => { predicates.push(row => key === 'domains' && typeof value === 'string' && typeof row[key] === 'object' ? JSON.stringify(row[key]) === value : row[key] === value); return q; },
       in: (key, values) => { predicates.push(row => values.includes(row[key])); return q; },
       gte: (key, value) => { predicates.push(row => row[key] >= value); return q; },
       is: (key, value) => { predicates.push(row => (row[key] ?? null) === value); return q; },

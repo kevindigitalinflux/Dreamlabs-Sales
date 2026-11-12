@@ -1,5 +1,13 @@
 # Automations Register
 
+## Verifier v2 background checks (local build, independent review pending)
+
+| Automation | Trigger | Changes | Owner |
+| --- | --- | --- | --- |
+| Remaining-address checks | Deep find enqueues after a lead's saved readiness; migration 075 proposes a cron tick every minute for `run-verify-queue` | Claims four rows concurrently with SQL domain pacing; records SMTP outcomes; uses Microsoft results as queue evidence; fills only blank person-contact email fields, preserving enrollment flags; offers replacements for review; refreshes saved readiness and result metadata. Never sends or enrolls. | Deep find |
+
+Migration 075, its cron and the new endpoint are written locally only. No migration, deployment, audit, provider call or live queue run was performed. Queue retries and the 60-minute run window follow the approved verifier-v2 plan and rulings.
+
 Living list of every automation in Dreamlabs Sales — edge functions, scheduled jobs,
 AI calls, and DB triggers. **Update this file whenever an automation is added, changed,
 or retired.** (Requested by Kevin, 2026-07-17.)

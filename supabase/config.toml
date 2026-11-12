@@ -26,3 +26,7 @@ verify_jwt = false
 # Cron uses x-cron-secret; create/cancel validate the user's JWT inside the function.
 [functions.run-lookup-jobs]
 verify_jwt = false
+
+# Cron-only; run-verify-queue checks x-cron-secret before creating its service client.
+[functions.run-verify-queue]
+verify_jwt = false
