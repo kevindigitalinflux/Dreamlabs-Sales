@@ -1,3 +1,10 @@
+## Verifier v2 continuation checkpoint (2026-11-12)
+
+- [x] R1–R8 verbatim plan addendum (`7ff2ddc`), Task 8 pure rules (`36e5a00`), Task 10 status/scoring (`48f7303`).
+- [ ] Resolve missing 074 audit required by R1, then complete Task 7 fixes, Task 6 and Task 9. Original four questions are resolved; do not ask them again.
+- [x] Partial continuation report and handoff. Final gates: 3,262 application tests passed, one skipped; 143 wrapper tests passed; all seven gates green.
+- [ ] Claude reviews this partial continuation. Migration 075 is guarded, unchanged and not approved for execution. No rollout or stage 2 is authorized.
+
 ## Verifier v2 local checkpoint (2026-11-12)
 
 - [x] Tasks 1–5b: honest worker verdicts, Microsoft route/client, check-cap defaults, hosted-mail rule, placeholders and confirmed-site scrape choice.

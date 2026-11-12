@@ -1,3 +1,13 @@
+## Verifier v2 continuation — partial local build (2026-11-12) — START HERE
+
+**Branch:** `codex/verifier-v2`, worktree `C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2`. **Final tested application commit:** `48f7303`. **Final report commit:** branch HEAD carrying this block, titled `docs: verifier v2 build report`; its exact hash accompanies the handoff. **Independent review pending.** Kevin directs; Claude reviews; Codex builds. Claude's acceptance of `50282bb..7ac523b` and Kevin's R1–R8 rulings supersede the older questions below.
+
+Continuation commits: `7ff2ddc` verbatim plan addendum; `36e5a00` Task 8 pure queue rules (28 new tests); `48f7303` Task 10 polling status/scoring SQL (six new tests). All seven gates pass: 259 application files / 3,262 passed / one skipped; six wrapper files / 143 passed; both TypeScript checks, production build, 28-entrypoint edge shim and whitespace. No existing assertion changed in this continuation.
+
+**Resume boundary:** Task 7 fixes stopped because R1 requires regression preservation of a 074 audit absent from this branch. The pipeline report says that audit was never written. Kevin was asked where Claude's audit is, or whether regression cases should instead be built directly from 074. No answer was assumed. Dependent Tasks 6 and 9 remain unbuilt. Tasks 8 and 10 proceeded independently under the conflict rule and are complete locally. Read the new top section of `docs/VERIFIER-V2-BUILD-REPORT.md` before resuming; do not repeat the resolved original questions.
+
+Migration 075 remains unchanged from `7ac523b`, written only, with its first-statement RAISE guard. R1/R4/R5 schema/audit fixes are not built. Do not apply it. No drain/endpoint/enqueue integration or new automation exists. The UI reports table-read errors honestly and the scoring SQL was not run. No SQL/audit, Deno, live worker/Microsoft/provider, browser, secret read, dependency install, send/enrollment, publication, other-worktree edit, vault sync or stage 2 occurred. Builder stops after the report commit; Claude reviews this partial continuation next.
+
 ## Verifier v2 — partial local build (2026-11-12) — START HERE
 
 **Branch:** `codex/verifier-v2`, worktree `C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2`, base `8374783` supplied by Kevin. **Final application/schema commit:** `7ac523b`. **Final report commit:** HEAD of this branch, titled `docs: verifier v2 build report`, carrying this checkpoint. **Independent review pending.** Kevin directs; Claude designed and reviews; Codex remains builder. The accuracy checkout belongs to Claude and was not edited.

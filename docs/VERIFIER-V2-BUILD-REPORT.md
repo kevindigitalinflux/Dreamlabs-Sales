@@ -1,3 +1,61 @@
+# Continuation checkpoint (2026-11-12)
+
+Kevin approved Claude's R1–R8 rulings and reported acceptance of `50282bb..7ac523b`. The original report below is historical. This continuation completes the verbatim plan addendum, Task 8 and Task 10. Task 7 fixes stopped on the missing 074 audit required by R1; dependent Tasks 6 and 9 remain unbuilt. This is a partial build, not a completed verifier queue. Independent review pending.
+
+## Continuation commits
+
+| Step | Commit | Result |
+| --- | --- | --- |
+| 0 | `7ff2ddc` — `docs: verifier v2 plan addendum` | Appended “Addendum (2026-11-12, Claude's rulings)” with R1–R8 verbatim. |
+| Task 7 fixes | No commit | Stopped before modifying schema/audit because the referenced 074 audit is absent. |
+| Task 6 | No commit | Deferred with Task 7: the four new send-snapshot bases need its constraint extension. No tier/context/pre-send changes were made. |
+| Task 8 | `36e5a00` — `feat: pure rules for the background check queue` | Pure planner, retry transitions and sibling decision helper; 28 new tests. |
+| Task 9 | No commit | Depends on Task 6 and the reviewed queue/schema fixes. No drain, endpoint, cron runtime, enqueue integration or automation was enabled. |
+| Task 10 | `48f7303` — `feat: show background email checks and add the pass-mark scoring script` | Six pure copy tests, thin session-client polling component, result-row integration and read-only scoring SQL. |
+| Task 11 | Branch HEAD, `docs: verifier v2 build report` | This report and the final handoff/checkpoint documentation. Its exact hash is supplied with the handoff message. |
+
+## Open question and dependency boundary
+
+**Where is Claude's 074 audit, or does Kevin authorize building its regression cases directly from migration 074 instead?** R1 requires every pre-existing accepted/rejected case in that audit to keep behaving the same. `git ls-tree -r --name-only HEAD supabase/audits` contains no 074 audit. The only 074 file is `supabase/migrations/074_email_log_tier_snapshot.sql`; `docs/PIPELINE-TIGHTEN-REPORT.md` explicitly says at line 129 that the audit “has not been written or executed here.” No tracked 074 audit was found in the plan/spec/report search either. No other worktree or external source was searched, consistent with this build's isolation rules. The question was sent to Kevin while independent work continued; no answer has been assumed.
+
+The 074 trigger `guard_email_log_recipient_evidence` does not enumerate tier bases. The snapshot constraint is the only 074 object that does. Consequently R1 needs no CREATE OR REPLACE trigger change. Its constraint extension remains unbuilt with the stopped Task 7 fixes, as do R4's same-lead sibling condition and R5's stale-claim recovery/LIMIT 200. Migration 075 retains its original first-statement approval guard. It must not be applied in its current state. The existing written audit does not yet include R1/R4/R5 cases.
+
+All four original questions below were resolved by Kevin's rulings; do not ask them again. This missing-audit question is new. Resume with Task 7 fixes after it is resolved, then Task 6 and Task 9. Tasks 8 and 10 are already committed and should not be rebuilt. R3/R6/R8 drain and evidence requirements remain binding for that continuation.
+
+## Tests and final gates
+
+Task 8's first targeted run failed because `verifyQueueRules` did not exist. The implementation's first run exposed a conflicting new fixture: its person already had a valid generated candidate, so the required person-level exclusion correctly omitted all guesses. The fixture now places that valid address among anonymous saved addresses and independently tests exclusion of a person with a valid candidate. All 28 tests then passed. R2's fixtures assert exactly 26 rows for three people and 30 rows for five people, both saved first and every person's rank-0 before rank-1. Other cases cover priority, deduplication, placeholder/role exclusions, provider routing, all retry delays, exhaustion, terminal verdicts and sibling decisions.
+
+Task 10's first targeted run failed because `queuedChecksText` did not exist. All six tests passed after implementation: loading, empty, error, plural pending, singular pending and completed counts. `vite.config.ts` is unchanged. There is no component test file, as R7 directs. The component counts valid/exists together, invalid/not_found together, and skipped/unverifiable together; polls every 30 seconds only while rows remain; logs read errors; clears its interval on completion, error and unmount. It mounts under the step lines once the first-pass result is done, so an initially empty queue read during the first pass cannot suppress the eventual status. No new realtime watch exists.
+
+The scoring script is read-only source, accepts `:pipeline_id`, uses non-dismissed people and aggregates one result row. Readiness `ready` represents the plan's sendable-email metric; `readiness_missing` supplies the company_match flag. Queue provider NULLs count as unknown, and rows without verdicts are grouped by status. The SQL was not executed or database-validated.
+
+All seven gates passed before each code commit. Final tested application commit: `48f7303`.
+
+| Gate | Final result |
+| --- | --- |
+| Root `npx tsc --noEmit` | PASS |
+| Root `npx vitest run` | 259 files; **3,262 passed, one skipped, zero failed** |
+| `npm run build` | PASS; existing chunk-size warning retained |
+| `git diff --check` | PASS |
+| `node scripts/places-edge-typecheck.mjs` | PASS; 28 entrypoints |
+| Wrapper `npx tsc --noEmit` | PASS |
+| Wrapper `npx vitest run` | Six files; **143 passed, zero failed** |
+
+Both code commits used `VITE_SUPABASE_URL=http://127.0.0.1:54321` and `VITE_SUPABASE_ANON_KEY=local-test-placeholder`. Saved local evidence: `.superpowers/continuation8-gates.json`, `.superpowers/continuation10-gates.json` and associated test JSON/logs. These are gitignored scratch artifacts. There were no existing gate failures and no failing gate was committed over in this continuation.
+
+## Changed assertions, deviations and operations not run
+
+No existing test assertion changed in this continuation. The two new test files contain 34 tests. The historical assertion inventory below remains complete for the earlier implementation.
+
+The requested order was followed to the Task 7 stop; Tasks 8 and 10 then proceeded as independent work under Kevin's explicit conflict rule. The skipped dependency tasks have no placeholder implementations or commits. No schema replacement, old audit matrix or architect ruling was invented. Task 8 imports the two named predicate functions as runtime functions; they are used as predicates, not TypeScript types. Task 10 follows R7 rather than the superseded component-test instruction.
+
+Not run: migration 075, any audit (including scoring SQL), Deno, live worker/VPS, Microsoft, Gemini, Hunter, any other provider, browser/phone/theme checks, live SQL or database concurrency. No secret/.env read, dependency installation, vault sync, push, merge, deploy, real send, enrollment, other-worktree write or stage 2 work occurred. Commit hooks were disabled with `git -c core.hooksPath=NUL commit`; commits include the Codex trailer. RTK reports no automatic hook installed; explicit/local output handling was used, with no hook/trust changes.
+
+The branch is ready for Claude's review of this partial continuation. Builder stops after the report commit. Rollout remains unauthorized and the remaining verifier tasks remain explicitly incomplete.
+
+---
+
 # Verifier v2 build report
 
 Worktree: C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2. Branch: codex/verifier-v2. Base: 8374783, explicitly supplied by Kevin instead of origin/main. Codex is builder; Claude is architect/reviewer; Kevin approved this build. Independent review pending.
