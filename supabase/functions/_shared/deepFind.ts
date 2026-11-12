@@ -7,7 +7,7 @@ import {readComplete} from './readComplete.ts';
 import {isRecipientBlocked} from './selectedLeadPipelineRules.ts';
 import {chooseScrapeDomain} from './scrapeChoice.ts';
 import {enqueueLeadChecks} from './verifyQueue.ts';
-import {buildQueuePlan} from './verifyQueueInput.ts';
+import {buildQueuePlan,savedLeadAddressPerson} from './verifyQueueInput.ts';
 import { reserveRegistryProof } from './registryProofGate.ts';
 import {reserveRunRegistryProof} from './registryProofAllowance.ts';
 import { createPlacesContext, type PlacesContext } from './placesClient.ts';
@@ -1396,8 +1396,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   const queueOwner = parseLeadPersonName(finalLead.data.owner_name);
   const queueSaved = [finalLead.data.email, ...(Array.isArray(finalLead.data.additional_emails) ? finalLead.data.additional_emails : [])]
     .filter((value): value is string => typeof value === 'string' && !!value.trim()).map(address => ({ address,
-      contactId: null, personKey: queueOwner && !isRoleAddress(address) ? `${queueOwner.first} ${queueOwner.last}`.trim().toLowerCase() : null,
-      personName: queueOwner && !isRoleAddress(address) ? `${queueOwner.first} ${queueOwner.last}`.trim() : null }));
+      contactId: null, ...savedLeadAddressPerson(address, queueOwner, patterns.get(emailDomain(address) ?? '') ?? null) }));
   for (const contact of finalContacts.data ?? []) if (!contact.dismissed_at && str(contact.email)) {
     const named = str(contact.first_name) && str(contact.last_name) && contact.kind !== 'general' && !isRoleAddress(contact.email);
     queueSaved.push({ address: contact.email, contactId: contact.id, personKey: named ? `${contact.first_name} ${contact.last_name}`.trim().toLowerCase() : null,

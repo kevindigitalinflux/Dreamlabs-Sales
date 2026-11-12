@@ -1,6 +1,20 @@
 import { planQueue, type QueueInput, type QueueCandidate } from './verifyQueueRules.ts';
 import type { WorkerResult } from './workerClient.ts';
 import type { VerifyReply } from './workerRules.ts';
+import { isRoleAddress } from './emailPrecheckRules.ts';
+import { rankedEmailCandidates } from './personEmailFinding.ts';
+import type { DomainPattern, NamedPerson } from './domainPattern.ts';
+
+/** A saved lead address identifies the owner only when it matches one of that owner's ranked formats. */
+export function savedLeadAddressPerson(address: string, owner: NamedPerson | null, pattern: DomainPattern | null): { personKey: string | null; personName: string | null } {
+  const email = address.trim().toLowerCase();
+  const domain = email.split('@')[1] ?? '';
+  if (!owner || isRoleAddress(email) || !rankedEmailCandidates(owner.first, owner.last, domain, pattern).some(candidate => candidate.toLowerCase() === email)) {
+    return { personKey: null, personName: null };
+  }
+  const personName = `${owner.first} ${owner.last}`.trim();
+  return { personKey: personName.toLowerCase(), personName };
+}
 
 /** Adapt already-held first-pass answers; this does no DNS, provider or database work. */
 export function buildQueuePlan(input: {
