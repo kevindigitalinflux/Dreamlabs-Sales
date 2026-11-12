@@ -1,0 +1,93 @@
+# Verifier v2 build report
+
+Worktree: C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2. Branch: codex/verifier-v2. Base: 8374783, explicitly supplied by Kevin instead of origin/main. Codex is builder; Claude is architect/reviewer; Kevin approved this build. Independent review pending.
+
+## Setup and boundaries
+
+The shared workflow, CLAUDE.md, top handoff, approved design and implementation plan were read before building. Work is isolated from Claude's accuracy worktree. Existing application dependencies and edge declarations were copied locally; the wrapper's already-declared locked dependencies were restored using `npm ci --offline --ignore-scripts --no-audit --no-fund`. No new dependency was added, and no external request was made. No .env or secret was read. No hook, trust or vault setting was changed. RTK reports no installed hook in this host; explicit RTK execution is used for long test output, without claiming automatic coverage.
+
+## Plan conflicts requiring clarification
+
+- Task 6: migration 074's `email_logs_tier_snapshot_shape` permits neither T1 `ms_exists`/`role_confirmed` nor T3 `ms_not_found`/`saved_unproven`. The common sender records the classifier's basis. Should written-only migration 075 extend this existing constraint with the four specified bases while preserving all other checks? Until answered, Task 6 cannot be completed safely as written.
+- Task 8: three people with eight formats each plus two saved addresses supply 26 unique candidates, whereas the mandatory test expects exactly 30. Should it expect 26 and use a separate larger fixture for the 30-row cap? No extra candidates will be invented.
+- Tasks 7/9: `deep_find_checks_finish` must update running rows only, but Task 9 asks it to finish other queued siblings as `person_done`. Should `deep_find_checks_expire` perform that queued-sibling transition after a proven result while finish remains running-only? No client/service write policy will be widened without clarification.
+- Task 10: the requested `src/components/deepfind/QueuedChecksLine.test.tsx` is excluded by the current `vite.config.ts` include list (`src/**/*.test.ts`, `src/**/*.test.js`). May the include list add `.test.tsx`, with existing React server rendering and mocks rather than a new dependency? Until answered, the exact test command cannot execute that file. No test configuration or UI behavior was guessed.
+
+These questions were also sent to Kevin asynchronously while independent tasks continue. No answer is inferred from elapsed time.
+
+## Evidence ledger
+
+- Baseline application: 254 files / 3,182 passed, one skipped. Baseline wrapper: 5 files / 129 passed; TypeScript clean. No pre-existing test failure was observed.
+- Task 1: new tests failed twice on the old unknown verdict, then all 29 focused tests passed. All seven gates passed: application 254 files / 3,182 passed, one skipped; wrapper 5 files / 132 passed. Commit 50282bb, `fix: worker reports deliverable role addresses and SMTP timeouts honestly`. Existing assertions unchanged.
+
+The task-specific full gate logs and JSON remain in this worktree's gitignored `.superpowers/` directory. Final counts, commits, changed assertions, deviations and the final handoff are appended when the build stops.
+
+## Not run
+
+Migration 075 or its audit, Deno runtime, live worker/VPS, Microsoft, Gemini, Hunter, other external services and browser checks. No SQL, push, merge, deploy, real send, enrollment, vault sync or stage 2 work is authorized or performed.
+
+## Final task and commit ledger
+
+This is a **partial build**, stopped at the plan conflicts above as Kevin instructed. The requests for clarification remain unanswered at handoff; silence was not treated as approval. Tasks that do not depend on the conflicts were completed in plan order. No failed test or incomplete production implementation for a blocked task is committed.
+
+| Task | Result and commit | Red/green and complete gate evidence |
+|---|---|---|
+| 1 | Complete, `50282bb` — `fix: worker reports deliverable role addresses and SMTP timeouts honestly` | Two new cases initially returned unknown; 29 focused cases passed after the exact mapping changes. App 254 files / 3,182 passed, one skipped; wrapper 5 files / 132 passed. All seven gates passed. |
+| 2 | Complete, `195a25e` — `feat: worker route for the Microsoft mailbox check` | Missing module and two 404 route failures first; 30 focused cases passed. App 3,182 passed, one skipped; wrapper 6 files / 143 passed. All gates passed after the final fixed generic error log. |
+| 3 | Complete, `ea5b025` — `feat: edge client for Microsoft checks and raised check caps` | Six initial parser/method/quota failures; 81 focused cases passed. Full gates found one additional old quota assertion, corrected to the approved values. App 3,187 passed, one skipped; wrapper 143 passed; all gates passed. |
+| 4 | Complete, `fa152ff` — `fix: a role or slow answer no longer writes off a hosted mail domain` | Five new role/catch-all/canary failures first; 31 focused cases passed. App 3,193 passed, one skipped; wrapper 143 passed; all gates passed. |
+| 5 | Complete, `db947cb` — `feat: refuse placeholder email addresses before any check` | Thirty failing helper/boundary tests first; 45 focused cases passed including existing send regressions. Full gates exposed placeholder test fixtures and test-only Deno declarations, both corrected. App 256 files / 3,223 passed, one skipped; wrapper 143 passed; all gates passed. |
+| 5b | Complete, `12c38c4` — `feat: scraper reads every confirmed company site for published addresses` | Missing module first; five pure cases passed, then 58 focused cases passed after checkpoint-fixture correction. App 257 files / 3,228 passed, one skipped; wrapper 143 passed; all gates passed before the retained amended commit. See process deviation below. |
+| 6 | Deferred | New snapshot bases conflict with 074. No tier/context/pre-send role-confirmation changes were made. |
+| 7 | Complete as written-only schema, `7ac523b` — `feat: draft check queue schema and audit (not applied)` | Local static schema/guard/audit check failed with missing files first, then passed. App 3,228 passed, one skipped; wrapper 143 passed; all seven gates passed. SQL and the rollback audit were not executed. |
+| 8 | Deferred | Required example cannot produce 30 distinct rows from 26 inputs. No candidate rows or rules were invented. |
+| 9 | Blocked by 6/8 and the sibling transition question | No enqueue/drain integration, cron entrypoint, readiness/application callback or config change was added. |
+| 10 | Deferred | Test discovery excludes the required `.test.tsx` file. No component, scoring SQL or test-discovery change was made. |
+| 11 | This report/handoff commit — `docs: verifier v2 build report` | Documentation-only final checkpoint; tested application/schema revision is `7ac523b`. The report commit is the final HEAD of `codex/verifier-v2`, identified by this exact message. |
+
+Task 7 implements its explicitly requested `person_done` expiry behavior and keeps finish running-only. That does not resolve how Task 9 should perform its requested queued-sibling finish calls; the drain remains unbuilt. Migration 075 does not silently change migration 074 or permit the four new snapshot bases.
+
+## Final gates and their limits
+
+At application/schema revision `7ac523b`, final complete gates passed:
+
+- `npx tsc --noEmit`: zero diagnostics.
+- `npx vitest run`: **257 files, 3,228 passed, one skipped, zero failed**.
+- `npm run build`: passed; existing large-chunk warning remains.
+- `git diff --check`: clean; staged SQL whitespace also checked before committing.
+- `node scripts/places-edge-typecheck.mjs`: existing **28-entrypoint** shim passed.
+- In `worker/wrapper`, `npx tsc --noEmit`: zero diagnostics; `npx vitest run`: **6 files, 143 passed, zero failed/skipped**.
+
+The required environment was the local URL `http://127.0.0.1:54321` and `local-test-placeholder`. Worker, DNS, SMTP, service and database dependencies in tests were injected fakes. The Microsoft endpoint was tested only through injected fake fetch. No pass mark on the real 50-lead set, actual bounce rate or real Microsoft accuracy is claimed. Stage 0 sourcing, external provider validation and Gemini billing investigation remain Claude's work.
+
+The seven gates were rerun for each code/schema commit. Detailed logs and machine-readable gate/test results are in `.superpowers/task1-*`, `task2-*`, `task3-*`, `task4-*`, `task5-*`, `task5b-*` and `task7-*`; local static schema check is `.superpowers/assert075.mjs`. These scratch files are gitignored, not dependencies or rollout scripts. No pre-existing failing application or wrapper gate was found; interim failures introduced/exposed during this build were resolved before the retained code revisions were handed back.
+
+## Every changed existing assertion and fixture
+
+No existing wrapper assertion was changed: Tasks 1 and 2 added tests. The following is the complete inventory of changed existing application assertions/fixtures.
+
+1. `src/lib/workerRules.test.ts`, `costs and mapping / charges 3 units for a deep scrape and 1 otherwise`: the exact `WORKER_RESOURCE` expected object adds `msExists: 'worker_verify'`. Existing resource entries and the ten-check SMTP lead limit remain asserted unchanged.
+2. `src/lib/usageRules.test.ts`, `defaults / match the agreed caps`: the expected worker verification default changes from 600/1,200 to 1,500/3,000, exactly Task 3. Other resources remain unchanged.
+3. `src/lib/emailPreSend.test.js`, `allows a quota-exhausted send with an explicit non-cached label and the approved quotas`: the exact quota expectation changes to 1,500/3,000. Its status, label and no-cache-write assertions are unchanged.
+4. `src/lib/runVerifyGate.test.ts`, former `uses one hosted canary across instances after %s`:
+   - The catch-all case remains a one-dispatch durable hosted skip, using the actual new worker status `unverifiable` instead of the old fake `risky` catch-all. It retains the one-call/one-provider-detection assertions.
+   - The former `provider_blocks_checks` and `timeout` skip cases become the existing-breaker assertions: second check does not dispatch, returns the existing timeout failure, and durable `hostedUnverifiable`/`canaryDone` stay false. They no longer assert an incorrect catch-all verdict.
+   - The former `unknown` skip case becomes an assertion that another hosted canary can run and return valid. A corresponding `checker_error` case was added, as the new rule requires.
+5. `src/lib/runVerifyGate.test.ts`, `records hosted_unverifiable once in durable state and one note at the canary lead`: its first fake answer changes from unknown to catch-all, the only newly permitted cause of that durable state. The old substring-count assertion becomes the exact new sentence: `example.com: this mail server accepts every address, so mailbox checks were skipped.` Durable state and no repeated later note assertions remain.
+6. `src/lib/emailPreSend.test.js`: the shared normal-recipient input changes `person@example.com` to `person@fixture.test`, so unrelated checker/cache/history tests do not deliberately hit Task 5's new placeholder gate. Assertions of statuses, cache calls, hard-bounce precedence, missing-MX behavior, quota disclosure and malformed syntax remain unchanged. The trailing-CRLF input string is correspondingly renamed, with its invalid/nonoverridable assertions retained. In `does not promote hosted role SMTP acceptance to confirmation, but preserves a real reply`, all three `info@example.com` input/history literals become `info@fixture.test`; expected role-review/replied statuses and labels are unchanged. These are synthetic test data only.
+7. `src/lib/emailReleaseIntegration.test.js`: both parameterized `checks 120 release recipients with bounded transient retry=%s and reports actual confirmation` cases change fixture recipient suffixes from `.example.com` to `.fixture.test`; otherwise Task 5 correctly blocks them before the checker, making the retry test meaningless. The fake SMTP message-id suffix is renamed consistently. Existing call counts, invalid blocks, retry waits and confirmation summary assertions are unchanged. SMTP remains mocked.
+8. `src/lib/deepFindFirecrawl.test.js`: both parameterized `stops all downstream work when checkpoint %s confirms edit rights were lost` cases (1 and 2), and both equivalent cancellation cases (1 and 2), change only the scrape-call expectation from zero to one. Task 5b now requires that confirmed-site scrape even after one published address is found. A new fake-scrape assertion proves it occurs at `checkpointReads === 0`, before the later Firecrawl checkpoint detects the loss/cancellation. The skipped result and every later Hunter/worker/email/contact/request refusal assertion remain unchanged. The production checkpoint sequence and time/usage guards were not changed.
+
+No other existing test assertion was changed. New `.test.ts` files use the plan's requested names alongside the repository's existing `.test.js` pre-send file. The new TypeScript pre-send test contains a test-only ambient `Deno.env.get` declaration so importing the real edge module does not break frontend TypeScript; it neither creates a runtime Deno object nor reads environment values.
+
+## Deviations and process correction
+
+- Setup uses Kevin's supplied local base `8374783`, not the plan's origin/main instruction, and only the new verifier worktree was written. The existing accuracy checkout remains Claude's.
+- Required conflicts were reported rather than resolved by guessing; Tasks 6, 8, 9 and 10 are incomplete, not silently implemented with altered requirements. Their question details are above. The one-hour queue cannot run end to end until those tasks are completed and reviewed.
+- Task 3's newly approved caps required updating the existing pre-send quota assertion outside the plan's three named test files. Task 5 required renaming old placeholder fixtures in existing pre-send/release tests. Task 5b required the four specific earlier-scrape assertions above. These are necessary regression maintenance, not product behavior beyond the named changes.
+- **Process error:** I initially committed Task 5b after its final gate run still had one fixture failure (`retains contacts written before authorisation was lost`). A timing assertion had been put in a shared fixture and incorrectly required zero checkpoints even for the separate officer-insertion case. I acknowledged this, scoped the assertion to the four intended tests, reran all seven gates successfully and amended the commit to retained `12c38c4`. The superseded premature commit is not branch HEAD/history. Later commits parse the saved gate JSON and refuse to commit if any gate is nonzero. This records the deviation from Kevin's no-failing-gate instruction instead of concealing it.
+- No automatic subagent/Claude API review, plugin installation, hook setup or vault sync was performed. The plan-selected executing-plans/TDD workflow was used inline; Kevin's instruction to defer conflicts and leave independent review to Claude overrides any skill suggestion to make autonomous rulings or call another agent.
+
+## Handoff and next action
+
+Independent review pending. Claude should review the seven implementation/schema commits from `8374783` through `7ac523b`, answer the four plan questions, and supply the exact approved continuation for Tasks 6, 8, 9 and 10. Do not remove the 075 guard, run its audit, deploy the wrapper, change live `usage_resources`, push, merge or start stage 2 under this handoff. No send, enrollment or frontend queued-status/scoring implementation was added. The limited current behavior changes are the completed worker/edge mapping, canary rule, placeholder refusal and confirmed-site scrape choice.

@@ -1,3 +1,14 @@
+## Verifier v2 — partial local build (2026-11-12) — START HERE
+
+**Branch:** `codex/verifier-v2`, worktree `C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2`, base `8374783` supplied by Kevin. **Final application/schema commit:** `7ac523b`. **Final report commit:** HEAD of this branch, titled `docs: verifier v2 build report`, carrying this checkpoint. **Independent review pending.** Kevin directs; Claude designed and reviews; Codex remains builder. The accuracy checkout belongs to Claude and was not edited.
+
+Tasks 1, 2, 3, 4, 5, 5b and 7 are complete locally. Worker role/timeout mapping, the fake-tested Microsoft route/client, 1,500/3,000 code defaults, hosted-mail rule, placeholder refusal and confirmed-site scrape selection are built. Migration 075 and its rollback audit are written only; the approval RAISE remains the first statement. No tier-v2 changes, queue planner/drain/cron function, queued-check UI or scoring script were guessed.
+
+**Blocked/deferred Tasks 6, 8, 9 and 10:** new tier snapshot bases conflict with 074; Task 8's 3×8+2 fixture supplies 26 rather than the required 30; Task 9 asks a running-only finish RPC to skip queued siblings; required .test.tsx tests are excluded by current discovery. All four questions are in `docs/VERIFIER-V2-BUILD-REPORT.md` and were sent to Kevin; no answer was assumed. Read that report for every commit, changed existing assertion, gate evidence and the corrected Task 5b premature-commit process error. Claude should resolve the questions before the exact continuation is built.
+
+Final gates: application **257 files / 3,228 passed / one skipped / zero failed**; wrapper **6 files / 143 passed / zero failed**; both TypeScript checks, production build, 28-entrypoint edge shim and whitespace pass. Detailed results remain in this worktree's gitignored `.superpowers/task*-gates.json` and test/log files. Dependency setup reused installed local application/edge files and offline locked wrapper packages; no new dependency or external request. Subscription usage is unavailable.
+
+Not run: migration 075, audit, Deno, live worker/VPS, Microsoft, Gemini, Hunter, browser or any live SQL/provider call. No .env/secret read, send, enrollment, push, merge, deploy, other-worktree write, vault sync or stage 2 work. Builder stops after this report. This block supersedes inherited next-task pointers for this worktree only.
 ## Deep find power programme (2026-11-12, Claude, later session) - START HERE
 
 This block is the resume point; the "Status (2026-11-12, Claude)" block below describes what is live and still applies. Roles unchanged: Kevin directs, Claude designs and reviews, Codex builds. Every merge, push, deploy, migration and VPS change needs Kevin's explicit yes.

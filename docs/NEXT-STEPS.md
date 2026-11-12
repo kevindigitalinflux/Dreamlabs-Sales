@@ -1,3 +1,10 @@
+## Verifier v2 local checkpoint (2026-11-12)
+
+- [x] Tasks 1–5b: honest worker verdicts, Microsoft route/client, check-cap defaults, hosted-mail rule, placeholders and confirmed-site scrape choice.
+- [x] Task 7: migration 075 and local rollback audit written only; approval guard retained.
+- [x] Task 11: partial build report and isolated-worktree handoff.
+- [ ] Claude resolves the four plan/code questions for Tasks 6/8/9/10, then reviews/authorises the exact continuation. Read `VERIFIER-V2-BUILD-REPORT.md`; no queue drain, tier-v2 or UI/scoring implementation is claimed.
+- [ ] Independent review and subsequent separately authorised runtime/database/provider/browser validation. No migration, push, merge, deploy, real send or stage 2 is authorised by this checkpoint.
 # Next steps (the to-do list for Codex and Claude)
 
 - [x] Pipeline tighten local continuation: items 2–12 handled in order on codex/pipeline-tighten; 074 atomic send snapshots/exact bounce stamps integrated. Read the final docs/PIPELINE-TIGHTEN-REPORT.md section. Gates: 254 files, 3,182 passed and one skipped; TypeScript/build/28-entrypoint edge shim/whitespace pass.
