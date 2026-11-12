@@ -1,3 +1,13 @@
+## Verifier v2 — final local build (2026-11-12) — START HERE
+
+**Branch:** `codex/verifier-v2`, worktree `C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2`, base `8374783`. **Final tested application commit:** `eb685ae`. **Final report commit:** branch HEAD carrying this checkpoint, titled `docs: verifier v2 build report`; the exact hash accompanies Kevin's handoff. **Independent review pending.** Kevin directs; Claude reviews; Codex builds. All prior plan questions are resolved by R1–R11; no builder task remains deferred. Historical partial checkpoints below are superseded.
+
+Final continuation: `c472fcd` appends R10/R11 verbatim; `eb685ae` implements Task 9, tests first. It enqueues after saved first-pass readiness, drains four concurrent rows without RunVerifyGate, uses fresh worker clients, obeys R10 batch expiry, preserves enrollment flags, offers saved-address replacements for review, and recomputes readiness through the shared policy. Tasks 1–8 and 10 were retained. Read the new final section at the top of `docs/VERIFIER-V2-BUILD-REPORT.md` for every commit, assertion inventory, R11 Builder decisions and review limits.
+
+Final seven gates pass: **265 application files / 3,327 passed / one skipped / zero failed**; **six wrapper files / 143 passed**; both TypeScript checks, production build, **29-entrypoint** edge shim and whitespace. There are 35 new Task 9 tests; no existing assertion changed in this continuation. The existing test database fixture now models serialized JSON equality for the real queue compare-and-swap checks.
+
+Migration 075 and audit remain written only; its first-statement RAISE guard is intact. No migration/audit/scoring SQL, Deno, real cron endpoint, worker/VPS/Microsoft/provider, browser/mobile/theme or database-concurrency test ran. Queue/first-pass overlap and failure after finish but before downstream effects are explicit review focuses; this is not an atomic runtime proof. No secret/.env read, dependency installation, send/enrollment, push/merge/deploy, other-worktree write, vault sync or stage 2 occurred. Next action: Claude independently reviews the completed local build. Builder stops after the report commit; rollout requires separate authorization.
+
 ## Verifier v2 R9 continuation — partial local checkpoint (2026-11-12) — START HERE
 
 **Branch:** `codex/verifier-v2`, worktree `C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2`. **Final tested application/schema commit:** `f0b8be6`. **Final report commit:** branch HEAD carrying this checkpoint, titled `docs: verifier v2 build report`; its exact hash accompanies the handoff message. **Independent review pending.** Kevin directs; Claude reviews; Codex builds. R9 resolves the missing 074 audit; do not ask that question again.

@@ -1,3 +1,94 @@
+# Final verifier v2 local build (2026-11-12)
+
+All approved builder tasks are now implemented locally on `codex/verifier-v2` in `C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2`. Kevin's R10/R11 resolve the last Task 9 interface question. Tasks 1–8 and 10 were retained; this continuation implements Task 9 and updates the report/handoff. **Final tested application revision: `eb685ae`. Independent review pending.** Kevin directs, Claude reviews, Codex builds. The historical partial reports below remain as the process and assertion-change record; their unfinished-task pointers are superseded by this section.
+
+## Commit inventory
+
+| Task | Implementation commit(s) |
+| --- | --- |
+| 1 — worker verdicts | `50282bb` |
+| 2 — Microsoft worker route | `195a25e` |
+| 3 — edge client and defaults | `ea5b025` |
+| 4 — hosted-mail skip rule | `fa152ff` |
+| 5 — placeholders | `db947cb` |
+| 5b — confirmed-site scrape choice | `12c38c4` |
+| 6 — tier/context/pre-send evidence | `f0b8be6` |
+| 7 — written-only schema/audit and approved fixes | `7ac523b`, `6f82cda` |
+| 8 — pure queue rules | `36e5a00` |
+| 9 — enqueue, background drain and service wiring | `eb685ae` — `feat: background queue checks every remaining address after Deep find` |
+| 10 — queued status and scoring SQL | `48f7303` |
+| Approved plan addenda | `7ff2ddc` (R1–R8), `5a8eb35` (R9), `c472fcd` (R10–R11) |
+| Earlier partial reports | `4115145`, `19ca0c9`, `36e4899` |
+| Final report and handoff | Branch HEAD carrying this section, titled `docs: verifier v2 build report`; exact hash accompanies the final message. |
+
+Base remains Kevin's supplied local `8374783`. Claude's acceptance of `50282bb..7ac523b` was supplied by Kevin; independent review of subsequent work remains pending. All commits used explicit staging paths, disabled hooks and the Codex trailer. No other checkout or branch was edited.
+
+## Task 9 behavior
+
+The first pass builds a queue plan from its existing people, confirmed domains, provider cache, checked-address map, saved lead/additional addresses and current contacts. It enqueues after the conditional readiness save, with the exact approved sentence only when the RPC reports inserted rows. Empty plans add no line. Enqueue failures are logged without claiming background checks were queued or discarding the existing first-pass results.
+
+The cron-only endpoint checks the existing constant-time cron-secret helper before creating its service client, uses a 140,000 ms wall budget, and returns `{processed}`. The drain starts each loop with expire, claims four rows and uses Promise.all. It starts no new loop inside the final 40-second reserve. SMTP and Microsoft dispatch use a fresh makeWorkerClient per claimed row, without RunVerifyGate, verifyTimeLeftMs or retryTransient. Reservation, refund, wrapper pacing and limits remain with the unchanged worker client and SQL RPCs.
+
+Permission checks reload the run, lead organisation, creator membership and edit RPC rather than caching permission across rows. Cancelled/deleted/inaccessible/out-of-window work has no contact/outcome/readiness effects. Permission is checked again after the worker and at subsequent mutation boundaries. Running-only finish must succeed before downstream effects. A row exception is logged with its queue id and fixed error class, while other claimed rows continue. Worker-call exceptions leave the running row for the approved stale-claim recovery; a normal timeout/busy answer follows the approved retry schedule.
+
+SMTP terminal results record checked_valid/checked_invalid/checked_unverifiable; role_account records checked_valid but never invokes the named-person fill. Microsoft rows record no email_outcomes. A valid/exists result with non-null person_key requests one extra expire after the batch, at most once per loop. Valid results without a person key request no extra expire. The drain never imports or uses siblingsToSkip, which remains unchanged and independently tested.
+
+Confirmed named-person addresses fill only a blank, live, uniquely matched contact. Current shared tier evidence must still be T1/T2, dismissal and exact old-email guards must pass, and include_in_sequences is untouched. Existing different addresses become review suggestions with the existing replacement evidence. No invalid saved address is deleted. Automatic fills retain the existing note wording and an Undo record. Readiness is recomputed through loadRecipientContext and evaluateReadiness using saved addresses, not unsaved suggestions. Queue-side result writes compare both JSON and updated_at, so concurrent checker checkpoints are not blindly overwritten.
+
+## Builder decisions
+
+- Split pure drain/input adaptation from `verifyQueueService.ts` so orchestration and real callback guards can be tested without adding any import of deepFind.ts in a test.
+- Added optional QueueDeps.forRow to capture each claimed row's run/creator/contact scope independently during concurrent processing.
+- Narrowed enqueueLeadChecks' dependency to the existing rpc member because enqueue does not need worker or mutation callbacks.
+- Resolve each row's worker configuration during its first authorized asynchronous check, then construct a new client in synchronous workerFor(orgId); no gate/retry/time-left options are passed.
+- Use the existing MX helper/provider cache for provider attribution and current recipient assessment; no new provider, dependency or live lookup was used during this build.
+- End further claims for the whole tick after limit_reached because the existing claim RPC has no organisation-exclusion parameter; already-claimed concurrent rows finish and queued work remains for the normal next tick.
+- Preserve existing first-pass priority and rankedEmailCandidates when adapting queue people, using lower(trim(first + ' ' + last)) keys scoped to each lead.
+- Map hosted_unverifiable to catch_all because Task 4 restricts that durable suppression to actual catch-all evidence; other unanswered attempts map to no_answer, with no new probe.
+- Saved role/general addresses get no person key, preventing a shared inbox from proving a named person's other formats.
+- Use conditional contact writes directly while reusing autoApplyRecipients for its exact note wording, because applyDeepFindBlank would change include_in_sequences contrary to the Task 9 rule.
+- Retain the existing 100-entry automatic-change guard; when it is full, offer confirmed proof for review instead of making an untracked automatic fill.
+- Serialize this invocation's fill/result/readiness callbacks per lead and use full-JSON plus timestamp comparisons across invocations; do not overwrite a concurrently changed result or add a new transaction/RPC.
+- Extend the existing JavaScript query fixture's domains-equality behavior to compare serialized JSON, allowing the real PostgREST comparison to be tested without changing any existing assertion.
+- Catch/log optional enqueue failure and omit the success line so a missing/unavailable queue cannot turn a completed first pass into a false background-success claim.
+
+These decisions are internal wiring under R11. No tier/readiness predicate, RLS, grant, SQL RPC, migration, usage reservation/refund rule, numeric allowance, retry delay, time budget, dependency or existing user-facing copy changed in this continuation. The only new first-pass copy is the plan's exact background sentence. Tasks 8 and 10 were not edited or rebuilt as tasks.
+
+## Tests first and final gates
+
+New drain, service and input tests first failed because the corresponding modules were missing; source-wiring checks failed before the enqueue/endpoint wiring existed. The first focused implementation passed 32 tests. A later red regression exposed that updated_at alone does not protect JSON written by the first-pass checker; the full-JSON comparison fixed it. Another red regression required carrying forward the existing 100-entry Undo guard. A typed-email race case verifies that a concurrent edit survives and no false Added note is written. Final focused coverage is **35 tests in four new files**.
+
+Tests cover the plan's (a)–(j), including fake-RPC duplicate enqueue across two leads, 90-second timeout retry, no-access/cancellation/deletion, allowance stop, final wall reserve, Microsoft not_found without SMTP learning, invalid-saved/valid-guessed replacement, concurrent row error isolation, and R10's null-person/no-extra-expire and multi-proof/one-extra-expire cases. Service tests exercise real callback code with mocked database/providers: fresh client options, live permissions, blank-only writes, enrollment preservation, Undo/note copy, replacement suggestions, current readiness, stable outcome source and concurrent JSON refusal. Endpoint authentication ordering is statically checked and edge-typechecked; no Deno endpoint invocation is claimed.
+
+No existing test assertion changed in this final continuation. `replyTestDatabase.js` gained serialized domains equality for the new JSON comparison tests only. The earlier sections below retain the complete inventory of existing assertions changed by Tasks 1–8/10, including the corrected Task 5b process error. No failing gate was committed over here. The early focused edge check found four json response-helper argument errors, corrected before the full gate runs.
+
+All seven gates passed before `eb685ae`, with the required localhost VITE URL and local-test-placeholder anon key:
+
+| Gate | Final result |
+| --- | --- |
+| Root `npx tsc --noEmit` | PASS |
+| Root `npx vitest run` | **265 files / 3,327 passed / one skipped / zero failed** |
+| `npm run build` | PASS; existing chunk-size warning retained |
+| `git diff --check` | PASS |
+| `node scripts/places-edge-typecheck.mjs` | PASS; **29 entrypoints**, including run-verify-queue |
+| Wrapper `npx tsc --noEmit` | PASS |
+| Wrapper `npx vitest run` | **Six files / 143 passed / zero failed** |
+
+Evidence: gitignored `.superpowers/finaltask9-reviewed-gates.json`, corresponding test JSON/logs, and the earlier red test artifacts. The earlier finaltask9 gate run passed before the justified concurrency/Undo regression additions; the final reviewed gate run covers all code in the task commit. No existing baseline gate failure remains.
+
+## Review questions and unexecuted work
+
+There is no remaining builder blocker or unanswered plan-interface question. Claude should independently review the internal decisions above, especially direct blank-fill guards, current access checks, per-row scope, queue/first-pass overlap and concurrent metadata behavior before rollout. The plan enqueues before the outer first-pass result save; a real first-pass/cron overlap has not been exercised. Queue-side JSON comparisons protect its writes, while the existing first-pass saver retains its original gate/registry merge behavior. That overlap is an explicit database/concurrency review focus, not a claimed tested guarantee.
+
+Finish and subsequent outcome/fill/note/readiness operations are separate mutations, as the plan orders them. A failure after a successful finish can leave durable queue evidence while a downstream side effect needs investigation/repair; no transactional replay RPC or new schema was invented. Concurrent changes are refused/logged, not forced through. These limits require runtime/database validation and must not be read as proof of atomic end-to-end queue effects.
+
+Not run: migration 075, its rollback audit, scoring SQL, live SQL/database/concurrency checks, Deno, the real cron endpoint, live worker/VPS, Microsoft, Gemini, Hunter, any external provider, browser/mobile/theme validation. Migration 075 retains its first-statement RAISE guard and was not changed in this final continuation. Live usage_resources rows remain untouched. No .env or secret read, dependency installation, send, enrollment, vault sync, push, merge, deploy, other-worktree write or stage 2 work occurred.
+
+The local build is ready for Claude's independent review. Report and handoff are committed; builder stops here. Any migration, audit execution, runtime validation or rollout needs separate authorization.
+
+---
+
+
 # R9 continuation checkpoint (2026-11-12)
 
 Kevin's R9 resolves the missing-audit question and supersedes the prior continuation checkpoint below. Task 7 fixes and Task 6 are now built locally. Tasks 8 and 10 were retained without rebuilding. Task 9 stopped before implementation on the R3/QueueDeps interface gap documented here. This remains a partial build; independent review pending.

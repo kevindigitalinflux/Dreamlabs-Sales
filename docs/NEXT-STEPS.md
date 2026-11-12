@@ -1,3 +1,10 @@
+## Verifier v2 final local checkpoint (2026-11-12)
+
+- [x] All approved builder tasks 1–11, including 5b, are implemented locally; migration/audit are written only.
+- [x] Final Task 9: `eb685ae`; approved R10/R11 addendum: `c472fcd`. Earlier Tasks 1–8/10 were retained.
+- [x] Final report/handoff includes all commits, changed assertions, R11 Builder decisions, limits and unexecuted checks. Seven gates pass: 3,327 application tests, one skipped; 143 wrapper tests; 29 edge entrypoints.
+- [ ] Claude independently reviews the completed branch. Database/cron/provider/browser/concurrency validation and any rollout require separate authorization. No migration execution, push, merge, deploy or stage 2 is authorized here.
+
 ## Verifier v2 R9 continuation checkpoint (2026-11-12)
 
 - [x] R9 verbatim addendum (`5a8eb35`); Task 7 schema rulings/audit (`6f82cda`); Task 6 tier/context/pre-send evidence (`f0b8be6`).
