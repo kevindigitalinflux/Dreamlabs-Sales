@@ -1,3 +1,31 @@
+## Status (2026-11-12, Claude) - START HERE
+
+This block supersedes the 2026-11-10 block below. Roles unchanged: Kevin directs, Claude architect/reviewer/deployer, Codex builder. Every merge, push, deploy, migration and role change needs Kevin's explicit yes for that action. Kevin is restarting the session on a different Claude model to push the platform further; resume from here.
+
+**Goal (Kevin):** a rep does two rounds a day: (1) multi-select up to 50 leads and run Deep find; (2) multi-select the ready leads, multi-draft, review in bulk, release. About 100 outreach emails a day. No new "hands-off" button. The email verifier and Deep find must be strong enough that this needs almost no per-lead review.
+
+**Live on `main` `79fcc5d` (pipeline-tighten, deployed 2026-11-11; frontend bundle `index-D_pyh2v2.js` confirmed to contain "Needs a look"; 22 edge functions deployed):**
+- Recipient tiers (`recipientTier.ts`): T1 strong (checker valid, replied before, published by the company, or sent_ok = delivered with no hard bounce after 72 hours), T2 supported guess (format shared by at least 2 T1 addresses of different people at the domain), T3 weak, "never" (bounced, invalid, no mail server, bad syntax, opted out, blocklisted). Hosted/catch-all role addresses stay T3 unless replied or sent_ok.
+- Readiness: "ready" = at least one T1/T2 recipient plus a company name. Website, decision maker and company match are informational (a suspect website or foreign-phone mismatch still forces needs_work). New missing key `sendable_email` (old `verified_email` still read).
+- Deep find auto-applies T1/T2 addresses (blank-only fills, notes added, no enrolment). Bulk drafting picks the primary contact for the first email and the server refuses T3/never targets.
+- Migration 074 (applied 2026-11-11): `email_logs` tier snapshot columns written in the SAME insert/update as status 'sent'; `hard_bounced_at` stamped only when a bounce matches exactly one sent log. Historical sends are unclassified (never backfilled).
+- Company web proof at every effort level: one grounded Gemini search per lead (cap 50 per run), auto-picks a Companies House company only when the number is in the search results, name and location agree and it is active.
+- Mailbox reputation guard: 5% or more hard bounces over at least 20 sends in 7 days pauses bulk release for that mailbox (explicit one-batch resume; manual single sends exempt).
+- "Needs a look" toggle on Pipeline list and Waiting to release.
+- Analytics shows hard-bounce rate by tier over 30 days; T2 is auto-downgraded to T3 when above 8% over at least 30 T2 sends.
+- Disabled second-opinion verifier seam (`secondOpinion.ts`): off, no vendor, org-own key only.
+- Gates at deploy: 254 files / 3,182 tests, tsc, build, 28-entrypoint edge shim, whitespace all pass.
+
+**Rollback tags (new):** `checkpoint-2026-11-11-before-readiness-fix`, `checkpoint-2026-11-11-before-pipeline-tighten` (= `72c205c`). Earlier tags are listed in the 2026-11-10 block.
+
+**Not built / deferred:** bounce-driven fallback draft queue (needs a lifetime-per-person ledger schema; SQL proposal is in `docs/PIPELINE-TIGHTEN-REPORT.md`, not applied); vendor key and quota storage for the second-opinion verifier (SQL in the report, not applied); vendor benchmarking (Kevin tries free trials with his own keys, never pasted into chat; use the 72 recipients from the 2026-11-05 send, 7 known bad).
+
+**Capacity truth (from the report):** worker email checks 600 per org per day bind first (about 60 leads checked at 10 each); browser scrapes 100 per day; Hunter credits, exploratory AI cap (200 per run) and the mailbox's own sending limit can bind sooner. There is no honest guarantee of 100 sends a day yet.
+
+**Unverified:** real Deno runtime, 074 trigger behaviour under real load, live Gmail bounce attribution, browser/phone/theme checks of the new filters, RLS on new reads. Kevin was running the first live Deep find test on 2026-11-12 (Accenture plus about 10 leads stuck on "no verified email"); read his results first.
+
+**Open:** stored readiness of already-assessed leads is stale until Deep find is re-run; Kevin re-saves Settings, Email for kevin@didreamlabs.com; the 2026-11-05 send bounced about 10% from a Gmail mailbox, so a dedicated sending domain (own domain, SPF, DKIM, DMARC, warm-up, separate from the main domain) is recommended before large volume; Deep find continuation (second pass) decision; 10 s discovery budget watch; `DecisionMakerReview` is 225 lines; Hostinger snapshot refresh before VPS changes; VPS firewall reboot test; n8n-mcp 401; pain-point live check. Worktree for this round: `C:\Users\kevin\Projects\dreamlabs-sales-accuracy` (branch `codex/pipeline-tighten`, equal to `origin/main` now).
+
 ## Status (2026-11-10, Claude) - START HERE
 
 This section supersedes every older status block below. Roles unchanged: Kevin directs, Claude architect/reviewer/deployer, Codex builder. Every merge, push, deploy, migration and role change needs Kevin's explicit yes for that action. Repo `C:\Users\kevin\Projects\dreamlabs-sales-accuracy` (any checkout equal to `origin/main`); live https://sales.didreamlabs.com; Supabase `wgomksxelyfkzepbnkdd`.
