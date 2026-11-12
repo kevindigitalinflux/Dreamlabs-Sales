@@ -274,13 +274,14 @@ function pendingPaidAndContactWork() {
 
 it.each([1, 2])('stops all downstream work when checkpoint %s confirms edit rights were lost', async (at) => {
   pendingPaidAndContactWork(); accessLostAt = at;
+  worker.scrapeSite.mockImplementationOnce(async()=>{expect(checkpointReads).toBe(0);return {ok:false,failure:'not_configured'};});
   const result = await process();
   expect(result).toMatchObject({ status: 'skipped', reason: 'Deep find is no longer authorised.' });
   expect(hunterAccount).toHaveBeenCalledOnce(); // Free check precedes the checkpoint.
   expect(hunterDomainList).not.toHaveBeenCalled();
   expect(hunterVerifyEmail).not.toHaveBeenCalled();
   expect(lookUpPeople).not.toHaveBeenCalled();
-  expect(worker.scrapeSite).not.toHaveBeenCalled();
+  expect(worker.scrapeSite).toHaveBeenCalledTimes(1); // Earlier site scrape, before the checkpoint detects lost access.
   expect(worker.verifyEmail).not.toHaveBeenCalled();
   expect(write).not.toHaveBeenCalled();
   expect(request).not.toHaveBeenCalled();
@@ -289,12 +290,13 @@ it.each([1, 2])('stops all downstream work when checkpoint %s confirms edit righ
 
 it.each([1, 2])('stops all downstream work when checkpoint %s confirms cancellation', async (at) => {
   pendingPaidAndContactWork(); cancelledAt = at;
+  worker.scrapeSite.mockImplementationOnce(async()=>{expect(checkpointReads).toBe(0);return {ok:false,failure:'not_configured'};});
   const result = await process();
   expect(result).toMatchObject({ status: 'skipped', reason: 'Deep find is no longer authorised.' });
   expect(hunterDomainList).not.toHaveBeenCalled();
   expect(hunterVerifyEmail).not.toHaveBeenCalled();
   expect(lookUpPeople).not.toHaveBeenCalled();
-  expect(worker.scrapeSite).not.toHaveBeenCalled();
+  expect(worker.scrapeSite).toHaveBeenCalledTimes(1); // Earlier site scrape, before the checkpoint detects cancellation.
   expect(worker.verifyEmail).not.toHaveBeenCalled();
   expect(write).not.toHaveBeenCalled();
   expect(request).not.toHaveBeenCalled();

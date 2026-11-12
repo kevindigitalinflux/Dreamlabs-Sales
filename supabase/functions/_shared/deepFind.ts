@@ -5,6 +5,7 @@ import {sentOkAddresses} from './sentRecipientEvidence.ts';
 import {loadTierMetrics,T2_PAUSED} from './tierMetrics.ts';
 import {readComplete} from './readComplete.ts';
 import {isRecipientBlocked} from './selectedLeadPipelineRules.ts';
+import {chooseScrapeDomain} from './scrapeChoice.ts';
 import { reserveRegistryProof } from './registryProofGate.ts';
 import {reserveRunRegistryProof} from './registryProofAllowance.ts';
 import { createPlacesContext, type PlacesContext } from './placesClient.ts';
@@ -58,7 +59,7 @@ import { lookupOpenCorporatesOfficer } from './openCorporates.ts';
 import { linkedinMatch, planWebsiteAutoUpdate, type AutoApplied } from './deepFindAutoApply.ts';
 import { evaluateReadiness, readinessText, sendableReadinessRecipients } from './leadReadiness.ts';
 import { makeEmailOutcomeLookup } from './emailOutcomeLookup.ts';
-import {roleAddressNeedsReview,ROLE_ADDRESS_LABEL} from './emailPrecheckRules.ts';
+import {isRoleAddress,roleAddressNeedsReview,ROLE_ADDRESS_LABEL} from './emailPrecheckRules.ts';
 
 import { WALL_BUDGET_MS, LEAD_RESERVE_MS, leadDeadline } from './deepFindTimeBudget.ts';
 export { WALL_BUDGET_MS } from './deepFindTimeBudget.ts';
@@ -635,13 +636,12 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // and also feed the email-format step below. Skipped when the worker is off, over its limit, or there is not enough time left for a 25 s scrape.
   // Phones are not pushed as suggestions: the suggestion UI only applies email and LinkedIn.
   // The lead's own website pages were read above (not part of discovery.sitePages): count what they already show,
-  // so a site that gave an address or a phone number is not scraped again.
+  // so only a site that already supplied two named addresses skips the scrape.
   if (siteDomain && verified.has(siteDomain) && pages.length > 0) {
     siteEmails.set(siteDomain, [...new Set([...(siteEmails.get(siteDomain) ?? []), ...domainEmailsOnPages(pages, siteDomain)])]);
   }
-  const hasContactDetails = (d: string) =>
-    (siteEmails.get(d) ?? []).length > 0 || (d === siteDomain && pages.some((html) => !!extractPhone(html)));
-  const scrapeDomain = [...verified].find((d) => !hasContactDetails(d) && !isDirectoryDomain(d));
+  const scrapeDomain = chooseScrapeDomain({verified:[...verified],siteDomain,isDirectory:isDirectoryDomain,
+    namedEmails:domain=>(siteEmails.get(domain)??[]).filter(email=>!isRoleAddress(email)).length});
   const lookupPeople = () => peopleToLookUp({ owner_name: lead.owner_name, additional_owners: [
     ...(Array.isArray(lead.additional_owners) ? lead.additional_owners : []),
     ...extraSitePeople.map((p) => p.name), ...pages.flatMap((html) => extractTeamMembers(html).map((p) => p.name)),
