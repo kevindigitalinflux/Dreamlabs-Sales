@@ -8,7 +8,7 @@ export interface VerifyResult {
   /** Short, fixed reason code. Never raw provider text. */
   reason:
     | 'deliverable' | 'bad_syntax' | 'no_mail_server' | 'mailbox_missing' | 'mailbox_disabled'
-    | 'catch_all' | 'disposable' | 'full_inbox' | 'role_account' | 'provider_blocks_checks' | 'unknown' | 'checker_error'
+    | 'catch_all' | 'disposable' | 'full_inbox' | 'role_account' | 'provider_blocks_checks' | 'unknown' | 'checker_error' | 'timeout'
 }
 
 const EMAIL_RE = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@([a-z0-9-]{1,63}\.)+[a-z]{2,24}$/
@@ -25,7 +25,7 @@ interface ReacherReply {
   is_reachable?: string
   syntax?: { is_valid_syntax?: boolean }
   mx?: { accepts_mail?: boolean }
-  smtp?: { can_connect_smtp?: boolean; has_full_inbox?: boolean; is_catch_all?: boolean; is_deliverable?: boolean; is_disabled?: boolean }
+  smtp?: { can_connect_smtp?: boolean; has_full_inbox?: boolean; is_catch_all?: boolean; is_deliverable?: boolean; is_disabled?: boolean; error?: { type?: string } }
   misc?: { is_disposable?: boolean; is_role_account?: boolean }
 }
 
@@ -41,10 +41,12 @@ export function mapReacher(email: string, reply: unknown): VerifyResult {
   if (r.is_reachable === 'invalid') return done('invalid', 'mailbox_missing')
   if (r.smtp?.is_catch_all) return done('unverifiable', 'catch_all')
   if (r.smtp?.has_full_inbox) return done('risky', 'full_inbox')
+  if (r.smtp?.is_deliverable === true && r.misc?.is_role_account === true) return done('risky', 'role_account')
   if (r.is_reachable === 'safe' && r.smtp?.is_deliverable) {
     return r.misc?.is_role_account ? done('risky', 'role_account') : done('valid', 'deliverable')
   }
   if (r.smtp && r.smtp.can_connect_smtp === false) return done('unverifiable', 'provider_blocks_checks')
+  if (r.smtp?.error?.type === 'Timeout') return done('unverifiable', 'timeout')
   return done('unverifiable', 'unknown')
 }
 

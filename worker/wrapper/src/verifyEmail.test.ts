@@ -12,6 +12,22 @@ describe('normaliseEmail', () => {
 })
 
 describe('mapReacher', () => {
+  it('reports a deliverable role address on a non-catch-all domain as risky role_account', () => {
+    const reply = { is_reachable: 'risky', syntax: { is_valid_syntax: true }, mx: { accepts_mail: true },
+      smtp: { can_connect_smtp: true, is_catch_all: false, is_deliverable: true, is_disabled: false, has_full_inbox: false },
+      misc: { is_role_account: true, is_disposable: false } }
+    expect(mapReacher('hello@a.co.uk', reply)).toEqual({ email: 'hello@a.co.uk', status: 'risky', reason: 'role_account' })
+  })
+  it('reports an SMTP timeout as unverifiable timeout', () => {
+    const reply = { is_reachable: 'unknown', syntax: { is_valid_syntax: true }, mx: { accepts_mail: true },
+      smtp: { error: { type: 'Timeout', message: { secs: 30, nanos: 0 } } } }
+    expect(mapReacher('a@b.com', reply)).toEqual({ email: 'a@b.com', status: 'unverifiable', reason: 'timeout' })
+  })
+  it('still reports a catch-all role address as unverifiable catch_all', () => {
+    const reply = { is_reachable: 'risky', syntax: { is_valid_syntax: true }, mx: { accepts_mail: true },
+      smtp: { can_connect_smtp: true, is_catch_all: true, is_deliverable: true }, misc: { is_role_account: true } }
+    expect(mapReacher('info@b.com', reply).reason).toBe('catch_all')
+  })
   const base = { syntax: { is_valid_syntax: true }, mx: { accepts_mail: true }, misc: {}, smtp: { can_connect_smtp: true } }
   it('safe + deliverable is valid', () =>
     expect(mapReacher('a@b.com', { ...base, is_reachable: 'safe', smtp: { can_connect_smtp: true, is_deliverable: true } })).toMatchObject({ status: 'valid', reason: 'deliverable' }))
