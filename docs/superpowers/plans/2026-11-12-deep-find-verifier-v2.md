@@ -431,3 +431,23 @@ export interface QueueDeps { rpc(name: string, args: Record<string, unknown>): P
 5. Update the production `usage_resources` row `worker_verify` to 1,500 and 3,000.
 6. Deploy `run-verify-queue` and every function that imports the changed shared modules; then merge and push; verify the live bundle.
 7. Run Deep find on the test set, run `scripts/deepfind-score.sql`, report the six numbers against the pass marks.
+
+## Addendum (2026-11-12, Claude's rulings)
+
+R1 (Task 6, your question 1). Migration 075 extends email_logs_tier_snapshot_shape: DROP CONSTRAINT then ADD CONSTRAINT with the identical text from 074 except the T1 basis list adds 'ms_exists','role_confirmed' and the T3 basis list adds 'ms_not_found','saved_unproven'. recipient_tier_version stays 1. If any other object in 074 (for example guard_email_log_recipient_evidence) lists tier bases, extend it the same way with CREATE OR REPLACE and nothing else changed; if none does, say so in the report. Add audit blocks: each new basis is accepted with its tier and rejected with the wrong tier; every pre-existing accepted/rejected case in the 074 audit still behaves the same.
+
+R2 (Task 8, your question 2). The 3-people fixture expects exactly 26 rows (2 saved first, then every person's rank-0 format before any rank-1). Add a second fixture: 5 people x 8 formats + 2 saved = 42 candidates, expects exactly 30 rows, both saved first, all five rank-0 rows before any rank-1.
+
+R3 (Tasks 7/9, your question 3). deep_find_checks_finish stays running-only. Sibling skipping is done only by deep_find_checks_expire. drainQueue calls deep_find_checks_expire at the start of every loop and once more after any row finishes with verdict valid or exists. Remove the plan's instruction to finish siblings from the drain; siblingsToSkip stays as a pure function used only to decide whether to make that extra expire call (returns non-empty).
+
+R4 (fix in 075, found in review). In deep_find_checks_expire the person_done update must also require proven.lead_id = q.lead_id. person_key is defined as lower(trim(first || ' ' || last)) and is only unique within one lead. Add an audit block: two leads in one run share a person_key; proving one does not skip the other's rows.
+
+R5 (fix in 075, found in review). deep_find_checks_expire gains a third update, run before the other two: rows with status='running' and claimed_at < now() - interval '5 minutes', whose run is still inside its 60-minute window and not cancelled, go back to status='queued', next_at=now() (attempts unchanged). Add an audit block. Also add LIMIT 200 to the candidate query in deep_find_checks_claim.
+
+R6 (Task 9, replaces "smtp through verifyEmail with the run's gate"). The drain does NOT use RunVerifyGate. QueueDeps.workerFor(orgId) returns a NEW worker client per claimed row, built with makeWorkerClient and no verifyGate, no verifyTimeLeftMs, no retryTransient. Pacing is the claim RPC (4 starts per 60 s per domain, one row per domain per claim) plus the wrapper's own per-domain limit; a 429 from the wrapper is failure 'busy' and retries on the normal schedule. Each loop claims with deep_find_checks_claim(4) and processes the claimed rows concurrently (Promise.all); every row's errors are caught and logged per row, never a bare catch. Keep the plan's tests (a)-(i), with (g) asserted through the fake enqueue RPC as written and Review Focus 2's pacing covered by the R5/claim audit blocks. Add test (j): one row throwing does not stop the other rows in the same loop from finishing.
+
+R7 (Task 10, your question 4). Do not change vite.config.ts. Create src/lib/queuedChecksText.ts exporting
+  queuedChecksText(input: { state: 'loading' | 'error' | 'ready'; queued: number; running: number; valid: number; invalid: number; unconfirmed: number }): string | null
+returning null for loading and for ready with no rows; 'Background check status is unavailable' for error; `${n} addresses still being checked` (singular 'address' when n is 1) while queued+running > 0; otherwise `Background checks finished: ${valid} confirmed, ${invalid} not real, ${unconfirmed} could not be confirmed`. valid counts verdicts valid and exists; invalid counts invalid and not_found; unconfirmed counts unverifiable and skipped rows. Test it in src/lib/queuedChecksText.test.ts (one case per state plus the singular). QueuedChecksLine.tsx is a thin component that reads the counts and renders that string; it has no test file. scripts/deepfind-score.sql is built as the plan says.
+
+R8 (Task 6 detail). In the drain, a row finishing with reason role_account records outcome checked_valid as the plan says; recipientContext derives roleConfirmed only from a done smtp row with reason role_account for that exact address.
