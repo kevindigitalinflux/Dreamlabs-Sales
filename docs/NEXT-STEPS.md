@@ -1,3 +1,10 @@
+## Verifier v2 R9 continuation checkpoint (2026-11-12)
+
+- [x] R9 verbatim addendum (`5a8eb35`); Task 7 schema rulings/audit (`6f82cda`); Task 6 tier/context/pre-send evidence (`f0b8be6`).
+- [x] Tasks 8/10 retained unchanged. All seven gates pass: 3,292 application tests, one skipped; 143 wrapper tests.
+- [ ] Resolve Task 9's R3/QueueDeps queued-sibling reader gap, then implement Task 9 and update report/handoff. Earlier audit and R1–R8 questions are resolved.
+- [x] Partial R9 continuation report/handoff. Independent review pending; no rollout, migration execution or stage 2 is authorized.
+
 ## Verifier v2 continuation checkpoint (2026-11-12)
 
 - [x] R1–R8 verbatim plan addendum (`7ff2ddc`), Task 8 pure rules (`36e5a00`), Task 10 status/scoring (`48f7303`).

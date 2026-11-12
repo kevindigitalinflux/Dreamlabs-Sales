@@ -1,3 +1,76 @@
+# R9 continuation checkpoint (2026-11-12)
+
+Kevin's R9 resolves the missing-audit question and supersedes the prior continuation checkpoint below. Task 7 fixes and Task 6 are now built locally. Tasks 8 and 10 were retained without rebuilding. Task 9 stopped before implementation on the R3/QueueDeps interface gap documented here. This remains a partial build; independent review pending.
+
+## Commits in this continuation
+
+| Task | Commit | Result |
+| --- | --- | --- |
+| R9 addendum | `5a8eb35` — `docs: verifier v2 plan addendum R9` | Appended R9 verbatim to the existing plan addendum. |
+| Task 7 fixes | `6f82cda` — `fix: check queue schema rulings (not applied)` | R1/R9 exact constraint extension and fixture matrix; R4 lead-scoped sibling cleanup; R5 stale recovery and LIMIT 200. |
+| Task 6 | `f0b8be6` — `feat: tiers use Microsoft evidence and require proof for saved addresses` | Tier precedence, exact queue evidence, in-run role proof and pre-send role confirmation/cache. |
+| Task 9 | No commit | Stopped at the interface conflict below; no implementation or failing test was left in the tree. |
+| Report/handoff | Branch HEAD, `docs: verifier v2 build report` | This checkpoint and the updated handoff; exact report hash accompanies the final message. |
+
+Earlier Task 8 remains `36e5a00`; Task 10 remains `48f7303`. The earlier report inventories every prior implementation commit and assertion change. Claude's acceptance of `50282bb..7ac523b` is Kevin-supplied review evidence, not a claim that Claude reviewed this continuation.
+
+## Task 7 fixes: written only
+
+The new `email_logs_tier_snapshot_shape` body is copied directly from 074. Only the T1 and T3 basis lists extend it: T1 adds ms_exists/role_confirmed; T3 adds ms_not_found/saved_unproven. The version remains 1. A static regression compares the entire copied constraint substring, including whitespace, after normalizing the checkout's CRLF/LF representation. Migration 074 is untouched. No trigger is changed: `guard_email_log_recipient_evidence` contains no basis list, as Kevin accepted in R9.
+
+The first statement remains the mandatory DO/RAISE approval guard. R4 scopes person_done to the same lead as well as run/org/person key. R5 recovers stale running claims inside the active run window before expiry and sibling cleanup, with next_at=now() and unchanged attempts; claim examines at most 200 ordered candidates. Existing pacing, running-only finish, grants and RLS are retained.
+
+The local-only audit remains one DO block with its final rollback exception. Added fixture blocks cover all 11 old accepted pairs, all four new pairs, both wrong tiers for each new basis, all-null acceptance, partial-null rejection, non-sent rejection, wrong version, sent_ok flag/tier restrictions, pre-send recording time, unknown basis, two leads sharing a person key, stale claim recovery without an extra attempt, and recent-claim preservation. Existing expiry/cancellation, one-domain/four-per-minute, access/grant and cascade checks remain. This is written audit coverage, not a database pass claim.
+
+Tests first: the new static schema suite produced four intended failures and one passing approval-guard check, then five passes. All seven gates passed before the schema commit: 260 application files / 3,267 passed / one skipped; six wrapper files / 143 passed. No SQL or audit was run.
+
+## Task 6 behavior and verification
+
+Hard negatives, replies and sent_ok keep precedence. Exact role proof precedes role review; Microsoft exists precedes checker-valid; company/Places publication precedes Microsoft not_found; saved non-guessed addresses without confirmation become saved_unproven T3. A checker-valid saved address already returns T1 at the existing checker-valid branch. The old saved_non_guessed type/basis remains available for stored history and the 074 regression matrix. No exhaustive frontend or analytics TierBasis label map exists in this checkout, so no map required new labels.
+
+`recipientContext` reads the newest done queue row for each of smtp and ms_exists, scoped by organisation, lead and exact normalized address. Only exists/not_found supplies Microsoft evidence. Only a done smtp row whose reason is role_account supplies roleConfirmed. Read errors or thrown reads leave these facts unset without failing the caller. Old JSON flags cannot establish either fact. The existing in-run map supplies roleConfirmed only for exact risky/role_account answers. No Microsoft, publication or catch-all result grants role confirmation.
+
+The pre-send checker accepts risky/role_account as valid, records checked_valid and retains the exact-address proof in its small in-memory result cache. A generic historical checked_valid record alone still cannot establish that special role proof. Hard bounce is checked before cache reuse. The common send boundary carries fresh role proof into its tier assessment; no message is sent by these changes. Catch-all roles retain the existing review label. No send/enrollment behavior outside the named plan changes was added.
+
+Tests first: focused tests produced 12 intended failures, then passed after implementation and the required assertion maintenance. New cases cover Microsoft/role precedence, exact source/scope/status, queue read errors and catch-all versus role_account pre-send behavior. The first broad diagnostic probe omitted the required VITE placeholders and therefore also failed `hunterLimits / limit lines words the allowance for the confirm dialog`; the actual seven-gate run used both required environment values and passed. That diagnostic error was not a baseline failure or committed over.
+
+## Existing assertion changes in this continuation
+
+1. `src/lib/recipientTier.test.ts`, `recipient tiers / accepts strong evidence saved_non_guessed`: removed this parameter case that asserted T1 solely from saving. The new named test `requires proof for unchecked saved addresses` asserts T3/saved_unproven and the exact new copy; `still accepts a checker-confirmed saved address` retains checked-valid T1 coverage. Other parameter cases and assertions are unchanged. The unused saved_non_guessed fixture entry remains inert.
+2. `src/lib/recipientContext.test.js`, `classifies own saved company email, generated provenance and hard bounces using current scoped facts`: the first saved-only assertion changes from T1 to `{tier:'T3',basis:'saved_unproven'}`. The subsequent hard-bounce assertion remains never.
+3. `src/lib/recipientContext.test.js`, `downgrades T2 during measured risk, recovers automatically, and refreshes stored sample negatives`: no expected result changed. The two manually saved supporting sample addresses now have fresh exact checked_valid outcomes, because saving alone no longer establishes T1 support. Pattern pause, recovery and subsequent hard-bounce downgrade remain asserted unchanged.
+
+No other existing assertion changed. The pre-send file gained two new tests; the existing hosted-role valid/deliverable review test is unchanged. The new TypeScript context file uses a line-scoped ts-expect-error only for the repository's existing untyped JavaScript query fixture import. No dependency or application compiler configuration changed.
+
+## Task 9 question: queued siblings are unavailable through QueueDeps
+
+R3 requires `siblingsToSkip(done, queued)` to decide whether to make the extra expire call when it returns non-empty. Task 9's exact QueueDeps interface has no queued-row reader or database client. Its rpc callback can reach only the four schema RPCs: enqueue returns an integer, claim returns rows it has already changed to running, finish returns boolean, and expire returns integer. None supplies the person's remaining queued siblings. Claiming again would change the rows being inspected; treating running rows or the completed row as queued siblings would invent state. Adding a new RPC or dependency method would alter the specified interface.
+
+**Question:** should the drain call expire unconditionally after every valid/exists result and leave siblingsToSkip independently tested, or should QueueDeps gain an explicitly scoped queued-sibling reader (with the exact signature/read contract supplied)? The first option follows R3's earlier “once more after any row finishes” sentence, but changes its helper-gated condition. Kevin was asked while the report work continued. No answer was assumed. No queued-sibling transition, new API, drain implementation, cron endpoint, enqueue integration or automation entry was guessed. R6's claim(4), concurrent per-row error isolation, fresh worker clients without RunVerifyGate and R8's checked_valid mapping remain mandatory for the eventual implementation.
+
+This question supersedes all prior blockers; the old 074 audit question and original R1–R8 questions are resolved. Resume Task 9 after an explicit ruling, without rebuilding Tasks 7/6/8/10. The existing blank-fill helper also sets include_in_sequences=false; a future drain must preserve the plan's explicit “include_in_sequences untouched” requirement rather than blindly reusing that helper's full mutation. No change to that helper was made here.
+
+## Final gates and boundaries
+
+Final tested application/schema revision: `f0b8be6`. All seven gates passed before both code commits, using `VITE_SUPABASE_URL=http://127.0.0.1:54321` and `VITE_SUPABASE_ANON_KEY=local-test-placeholder`.
+
+| Gate | Result |
+| --- | --- |
+| Root `npx tsc --noEmit` | PASS |
+| Root `npx vitest run` | **261 files / 3,292 passed / one skipped / zero failed** |
+| `npm run build` | PASS; existing chunk-size warning retained |
+| `git diff --check` | PASS |
+| `node scripts/places-edge-typecheck.mjs` | PASS; unchanged 28 entrypoints |
+| Wrapper `npx tsc --noEmit` | PASS |
+| Wrapper `npx vitest run` | **Six files / 143 passed / zero failed** |
+
+Evidence is saved locally in gitignored `.superpowers/r9task7-*` and `.superpowers/r9task6-*` gate/test JSON and logs. No pre-existing gate failure remains. Tasks 8 and 10 were not edited or rebuilt as tasks; their existing tests ran in the required full suites. New static SQL tests prove source invariants only; the database fixture behavior awaits independent review and separately authorized execution.
+
+Not run: migration 075, its audit, scoring SQL, any live SQL/database/concurrency test, Deno, live worker/VPS, Microsoft, Gemini, Hunter, any external provider, browser/mobile/theme checks. No `.env` or secret was read; no dependency was installed; no send, enrollment, vault sync, push, merge, deployment, other-worktree write or stage 2 work occurred. All commits used disabled hooks and the Codex trailer. Builder stops after the report commit. Ready for Claude's review of this partial continuation; Task 9 remains explicitly incomplete and rollout remains unauthorized.
+
+---
+
+
 # Continuation checkpoint (2026-11-12)
 
 Kevin approved Claude's R1–R8 rulings and reported acceptance of `50282bb..7ac523b`. The original report below is historical. This continuation completes the verbatim plan addendum, Task 8 and Task 10. Task 7 fixes stopped on the missing 074 audit required by R1; dependent Tasks 6 and 9 remain unbuilt. This is a partial build, not a completed verifier queue. Independent review pending.
