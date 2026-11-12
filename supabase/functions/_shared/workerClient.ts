@@ -6,13 +6,14 @@ import { refundUsage, reserveUsage, type UsageClient } from './usage.ts';
 import { refusalLine } from './usageRules.ts';
 import {
   MAX_VERIFY_PER_LEAD, SCRAPE_UNITS, WORKER_RESOURCE, WORKER_TIMEOUT_MS, failureForStatus, parseScrapeReply, parseVerifyReply,
-  scrapeLine, shouldRefund, verifyTallyLine, workerFailureLine,
+  scrapeLine, shouldRefund, verifyTallyLine, workerFailureLine, parseMsExistsReply, type MsExists,
   type ScrapeFound, type ScrapeMode, type VerifyReply, type WorkerConfig, type WorkerFailure,
 } from './workerRules.ts';
 
 export type WorkerResult<T> = ({ ok: true; value: T } | { ok: false; failure: WorkerFailure; line: string }) & { domainNoteSuppressed?: boolean; allowanceReached?:boolean };
 
 export interface WorkerClient {
+  msExists(email: string): Promise<WorkerResult<MsExists>>;
   verifyEmail(email: string, opts?: { timeoutMs?: number; timeBudgetMs?: number }): Promise<WorkerResult<VerifyReply>>;
   scrapeSite(domain: string, mode?: ScrapeMode, opts?: { timeoutMs?: number }): Promise<WorkerResult<ScrapeFound>>;
   /** Plain step lines for the Deep find result: the check tally, the scrape result, then each distinct skip reason. */
@@ -21,7 +22,7 @@ export interface WorkerClient {
 
 export interface WorkerClientOptions { usage: UsageClient; orgId: string; config: WorkerConfig | null; fetchImpl?: typeof fetch; verifyGate?: RunVerifyGate; verifyTimeLeftMs?: () => number; retryTransient?:(domain:string)=>boolean }
 
-type Kind = 'verify' | 'scrape';
+type Kind = 'verify' | 'scrape' | 'msExists';
 type Stopped = { failure: WorkerFailure; line: string };
 type RawResult = { ok: true; json: unknown } | { ok: false; failure: WorkerFailure; line: string; allowanceReached?:boolean };
 
@@ -91,6 +92,16 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
   }
 
   return {
+    async msExists(email) {
+      const raw = await call('msExists', 1, '/ms-exists', { email });
+      if (!raw.ok) return raw;
+      const result = parseMsExistsReply(raw.json, email);
+      if (result === null) {
+        const line = workerFailureLine('bad_response'); addLine(line);
+        return { ok: false, failure: 'bad_response', line };
+      }
+      return { ok: true, value: result };
+    },
     async verifyEmail(email, options) {
       const requestedAt=Date.now();let admitted=false;let firstStarted:number|null=null;let attempts=0;
       const perform = async (timeoutMs: number): Promise<WorkerResult<VerifyReply>> => {

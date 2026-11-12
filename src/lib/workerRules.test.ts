@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
-  MAX_VERIFY_PER_LEAD, SCRAPE_UNITS, WORKER_RESOURCE, failureForStatus, parseScrapeReply, parseVerifyReply, readWorkerConfig,
+  MAX_VERIFY_PER_LEAD, SCRAPE_UNITS, WORKER_RESOURCE, failureForStatus, parseScrapeReply, parseVerifyReply, parseMsExistsReply, readWorkerConfig,
   scrapeLine, scrapeTimeoutFor, shouldRefund, unconfirmedLabel, verifyAction, verifyTallyLine, workerFailureLine,
 } from '../../supabase/functions/_shared/workerRules';
+it('keeps the timeout reason from the worker',()=>{
+ expect(parseVerifyReply({email:'a@b.com',status:'unverifiable',reason:'timeout'},'a@b.com')).toEqual({status:'unverifiable',reason:'timeout'});
+});
+it('parses a Microsoft reply only for the address asked about',()=>{
+ expect(parseMsExistsReply({email:'a@b.com',result:'exists'},'A@b.com')).toBe('exists');
+ expect(parseMsExistsReply({email:'x@b.com',result:'exists'},'a@b.com')).toBeNull();
+ expect(parseMsExistsReply({email:'a@b.com',result:'maybe'},'a@b.com')).toBeNull();
+});
 
 it.each([[39_000, null], [41_000, null], [42_000, 10_000], [60_000, 25_000], [100_000, 25_000]])('scrape budget at %i ms preserves downstream time', (left, expected) => {
   expect(scrapeTimeoutFor(left!)).toBe(expected);
@@ -22,7 +30,7 @@ describe('readWorkerConfig', () => {
 describe('costs and mapping', () => {
   it('charges 3 units for a deep scrape and 1 otherwise', () => {
     expect(SCRAPE_UNITS).toEqual({ homepage: 1, key_pages: 1, deep: 3 });
-    expect(WORKER_RESOURCE).toEqual({ scrape: 'worker_scrape', verify: 'worker_verify', fetch: 'worker_fetch' });
+    expect(WORKER_RESOURCE).toEqual({ scrape: 'worker_scrape', verify: 'worker_verify', fetch: 'worker_fetch', msExists: 'worker_verify' });
     expect(MAX_VERIFY_PER_LEAD).toBe(10);
   });
   it('maps http statuses to failures', () => {

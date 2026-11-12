@@ -14,7 +14,7 @@ export const USAGE_TEXT: Record<UsageResource, { label: string; noun: string }> 
 
 export const USAGE_DEFAULTS: Record<UsageResource, { orgLimit: number; globalLimit: number }> = {
   worker_scrape: { orgLimit: 100, globalLimit: 400 },
-  worker_verify: { orgLimit: 600, globalLimit: 1200 },
+  worker_verify: { orgLimit: 1500, globalLimit: 3000 },
   worker_fetch: { orgLimit: 300, globalLimit: 1000 },
 };
 

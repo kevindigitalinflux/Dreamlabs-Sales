@@ -8,15 +8,15 @@ export type WorkerFailure = 'not_configured' | 'limit_reached' | 'busy' | 'unrea
 export interface WorkerConfig { url: string; secret: string }
 
 export const SCRAPE_UNITS: Record<ScrapeMode, number> = { homepage: 1, key_pages: 1, deep: 3 };
-export const WORKER_TIMEOUT_MS = { scrape: 25_000, verify: 33_000, fetch: 12_000 } as const;
+export const WORKER_TIMEOUT_MS = { scrape: 25_000, verify: 33_000, fetch: 12_000, msExists: 12_000 } as const;
 
 /** Keep 30 seconds for downstream checks plus 2 seconds of overhead. */
 export function scrapeTimeoutFor(leftMs: number): number | null {
   const timeout = Math.min(25_000, leftMs - 32_000);
   return timeout >= 10_000 ? timeout : null;
 }
-export const WORKER_RESOURCE: Record<'scrape' | 'verify' | 'fetch', UsageResource> = {
-  scrape: 'worker_scrape', verify: 'worker_verify', fetch: 'worker_fetch',
+export const WORKER_RESOURCE: Record<'scrape' | 'verify' | 'fetch' | 'msExists', UsageResource> = {
+  scrape: 'worker_scrape', verify: 'worker_verify', fetch: 'worker_fetch', msExists: 'worker_verify',
 };
 /** Most email checks one lead may use in one Deep find. */
 export const MAX_VERIFY_PER_LEAD = 10;
@@ -50,7 +50,7 @@ export interface VerifyReply { status: VerifyVerdict; reason: string }
 const VERDICTS = new Set<string>(['valid', 'invalid', 'risky', 'unverifiable']);
 const REASONS = new Set<string>([
   'deliverable', 'bad_syntax', 'no_mail_server', 'mailbox_missing', 'mailbox_disabled', 'catch_all', 'disposable',
-  'full_inbox', 'role_account', 'provider_blocks_checks', 'unknown', 'checker_error',
+  'full_inbox', 'role_account', 'provider_blocks_checks', 'unknown', 'checker_error', 'timeout',
 ]);
 
 /** Validates the worker's /verify-email reply for the address we asked about. A catch-all can never be "valid". */
@@ -62,6 +62,14 @@ export function parseVerifyReply(raw: unknown, expectedEmail: string): VerifyRep
   const reason = typeof r.reason === 'string' && REASONS.has(r.reason) ? r.reason : 'unknown';
   if (r.status === 'valid' && reason === 'catch_all') return { status: 'risky', reason };
   return { status: r.status as VerifyVerdict, reason };
+}
+export type MsExists = 'exists' | 'not_found' | 'unknown';
+/** Exact-address binding applies to Microsoft evidence just as it does to SMTP replies. */
+export function parseMsExistsReply(raw: unknown, expectedEmail: string): MsExists | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const reply = raw as Record<string, unknown>;
+  if (typeof reply.email !== 'string' || reply.email.trim().toLowerCase() !== expectedEmail.trim().toLowerCase()) return null;
+  return reply.result === 'exists' || reply.result === 'not_found' || reply.result === 'unknown' ? reply.result : null;
 }
 
 export type VerifyAction = 'accept' | 'drop' | 'ask_hunter' | 'suggest';

@@ -57,7 +57,7 @@ it('allows a quota-exhausted send with an explicit non-cached label and the appr
  const f=fixture();f.worker.verifyEmail.mockResolvedValue({ok:false,failure:'limit_reached',line:'limit'});
  expect(await f.check(input)).toMatchObject({status:'unverifiable',label:'Not checked: daily check allowance reached'});
  expect(f.db.service.rpc).not.toHaveBeenCalled();
- expect(USAGE_DEFAULTS.worker_verify).toEqual({orgLimit:600,globalLimit:1200});
+ expect(USAGE_DEFAULTS.worker_verify).toEqual({orgLimit:1500,globalLimit:3000});
 });
 it('does not call a usage-service failure an exhausted daily allowance',async()=>{
  const f=fixture();f.worker.verifyEmail.mockResolvedValue({ok:false,failure:'limit_reached',allowanceReached:false,line:'usage unavailable'});

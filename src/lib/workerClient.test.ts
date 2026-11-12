@@ -44,6 +44,23 @@ const make = (u: UsageClient, fetchImpl: typeof fetch, config: WorkerConfig | nu
   makeWorkerClient({ usage: u, orgId: 'org-1', config, fetchImpl });
 
 afterEach(() => { vi.useRealTimers(); });
+describe('Microsoft worker checks',()=>{
+ it('reserves one worker_verify unit before dispatch and bypasses the SMTP cap and gate',async()=>{
+  const u=usage(),f=worker(200,{email:'a@b.com',result:'exists'}),gate={run:vi.fn(),lines:()=>[]};
+  const client=makeWorkerClient({usage:u,orgId:'org-1',config:CONFIG,fetchImpl:f,verifyGate:gate as never});
+  f.mockImplementation(async()=>{expect(reserveCalls(u).length).toBeGreaterThan(0);return Response.json({email:'a@b.com',result:'exists'});});
+  for(let i=0;i<MAX_VERIFY_PER_LEAD+1;i++)expect(await client.msExists('a@b.com')).toEqual({ok:true,value:'exists'});
+  expect(reserveCalls(u)[0]![1]).toMatchObject({p_org:'org-1',p_resource:'worker_verify',p_units:1});
+  expect(f.mock.calls[0]![0]).toBe(`${CONFIG.url}/ms-exists`);expect(gate.run).not.toHaveBeenCalled();
+ });
+ it('refunds a 429 once; does not refund a wrong-address reply',async()=>{
+  const busy=usage();expect(await make(busy,worker(429,{})).msExists('a@b.com')).toMatchObject({ok:false,failure:'busy'});expect(refundCalls(busy)).toHaveLength(1);
+  const bad=usage();expect(await make(bad,worker(200,{email:'other@b.com',result:'exists'})).msExists('a@b.com')).toMatchObject({ok:false,failure:'bad_response'});expect(refundCalls(bad)).toHaveLength(0);
+ });
+ it('makes no request or reservation without config',async()=>{
+  const u=usage(),f=worker(200,{});expect(await make(u,f,null).msExists('a@b.com')).toMatchObject({ok:false,failure:'not_configured'});expect(f).not.toHaveBeenCalled();expect(u.calls).toEqual([]);
+ });
+});
 
 describe('makeWorkerClient', () => {
   it('refunds an expired local deadline once with the reserve day and allows the next check', async () => {
