@@ -3,6 +3,22 @@ import { buildApp } from './app.js'
 import { secretMatches } from './auth.js'
 
 const SECRET = 'a'.repeat(40)
+describe('POST /ms-exists', () => {
+  const fake = async (email: string) => ({ email, result: 'exists' as const })
+  const post = (app: ReturnType<typeof buildApp>, email: string) => app.request('/ms-exists', { method: 'POST', headers: { 'x-worker-secret': SECRET, 'content-type': 'application/json' }, body: JSON.stringify({ email }) })
+  it('needs the secret header and validates the exact address', async () => {
+    const app = buildApp(SECRET, { msExistsImpl: fake })
+    expect((await app.request('/ms-exists', { method: 'POST' })).status).toBe(401)
+    const bad = await post(app, 'junk')
+    expect(bad.status).toBe(400); expect(await bad.json()).toEqual({ error: 'bad_email' })
+    expect(await (await post(app, 'A@B.com')).json()).toEqual({ email: 'a@b.com', result: 'exists' })
+  })
+  it('limits Microsoft checks to twenty per minute across callers', async () => {
+    const app = buildApp(SECRET, { msExistsImpl: fake })
+    for (let i = 0; i < 20; i++) expect((await post(app, `p${i}@a.com`)).status).toBe(200)
+    expect((await post(app, 'last@b.com')).status).toBe(429)
+  })
+})
 
 describe('secretMatches', () => {
   it('accepts the exact secret', () => expect(secretMatches(SECRET, SECRET)).toBe(true))

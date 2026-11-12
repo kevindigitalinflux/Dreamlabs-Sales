@@ -4,8 +4,11 @@ import { RateLimiter } from './rateLimit.js'
 import { safeFetchText, SsrfError, type SafeFetchOptions } from './ssrf.js'
 import { makeDomainThrottle, normaliseEmail, type VerifyResult } from './verifyEmail.js'
 import { ScrapeError, toMode, toScrapeTarget, type ScrapeMode } from './scrapeSite.js'
+import { msExists } from './msExists.js'
 
 export interface AppDeps {
+  msPerMinute?: number
+  msExistsImpl?: typeof msExists
   /** Site scraper (Chrome-backed); the server wires it in, tests pass a fake. Absent = route answers 503. */
   scrape?: (url: string, mode: ScrapeMode) => Promise<Record<string, unknown>>
   /** Overridable in tests. */
@@ -50,6 +53,14 @@ export function buildApp(secret: string | undefined, deps: AppDeps = {}) {
   })
 
   const domainThrottle = makeDomainThrottle(deps.perDomainPerMinute ?? 5)
+  const msLimiter = new RateLimiter(deps.msPerMinute ?? 20, 60_000)
+  app.post('/ms-exists', async (c) => {
+    const body = await c.req.json().catch(() => null)
+    const parsed = normaliseEmail(body && typeof body === 'object' ? (body as { email?: unknown }).email : undefined)
+    if (!parsed) return c.json({ error: 'bad_email' }, 400)
+    if (!msLimiter.take('microsoft')) return c.json({ error: 'rate_limited' }, 429)
+    return c.json(await (deps.msExistsImpl ?? msExists)(parsed.email))
+  })
 
   // Mailbox check through Reacher. Answers only valid / invalid / risky / unverifiable plus a fixed reason code.
   app.post('/verify-email', async (c) => {
