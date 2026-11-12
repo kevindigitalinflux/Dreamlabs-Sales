@@ -8,6 +8,7 @@ import {cachedMailProvider,lookupMx} from './dnsLookup.ts';
 import {emailSyntaxValid,emailDomainTypo,isRoleAddress,isPlaceholderAddress,roleAddressNeedsReview,ROLE_ADDRESS_LABEL} from './emailPrecheckRules.ts';
 import {loadRecipientContext} from './recipientContext.ts';
 import {recipientTier,type RecipientEvidence,type TierResult} from './recipientTier.ts';
+import {prepareRecipientEvidence} from './recipientTierEvidence.ts';
 
 export interface EmailPrecheckResult {status:'valid'|'invalid'|'unverifiable';label:string;hardBounce?:boolean;warning?:string;overridden?:boolean;overridable?:boolean;tier?:TierResult;tierEvidence?:RecipientEvidence}
 interface Input {leadId?:string;address:string;timeLeftMs?:()=>number}
@@ -43,7 +44,7 @@ export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{wo
     if(isPlaceholderAddress(email))return {status:'invalid',label:'This is a placeholder address, not a real mailbox',overridable:false};
     const domain=email.split('@')[1]!;
     const typo=emailDomainTypo(email);
-    const roleVerdict=(value:EmailPrecheckResult):EmailPrecheckResult=>value.label!=='This address has replied before.'&&!value.label.startsWith('Not checked:')&&value.status!=='invalid'
+    const roleVerdict=(value:EmailPrecheckResult):EmailPrecheckResult=>!(value.tierEvidence?.forAddress===email&&value.tierEvidence.roleConfirmed===true)&&value.label!=='This address has replied before.'&&!value.label.startsWith('Not checked:')&&value.status!=='invalid'
       &&(roleAddressNeedsReview(email,cachedMailProvider(domain)??'unknown',false)||(isRoleAddress(email)&&value.label==='Not confirmed'))
       ?{...value,status:'unverifiable',label:ROLE_ADDRESS_LABEL}:value;
     const disclose=(raw:EmailPrecheckResult):EmailPrecheckResult=>{const value=roleVerdict(raw);return typo?{...value,label:`${value.label}. Possible domain typo: did you mean ${typo}? Address was not changed.`}:value;};
@@ -55,9 +56,10 @@ export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{wo
     const roleMx=isRoleAddress(email)?await mxLookup(domain):undefined;
     if(roleMx==='none')return disclose(await remember(input,email,{status:'invalid',label:'This email domain has no mail server'}));
     const recent=await history.recentCheck(email,now());
+    const remembered=cache.get(email);
+    if(recent?.outcome==='checked_valid'&&remembered&&remembered.at>=now()-14*86400000&&remembered.result.tierEvidence?.roleConfirmed===true)return disclose(remembered.result);
     if(recent){const base=verdict(recent.outcome==='checked_valid'?'valid':recent.outcome==='checked_invalid'?'invalid':'unverifiable');const policy=roleVerdict(base);
       if(policy.status!==base.status)await remember(input,email,policy);return disclose(policy);}
-    const remembered=cache.get(email);
     if(remembered&&remembered.at>=now()-14*86400000)return disclose(remembered.result);
     const mx=roleMx??await mxLookup(domain);
     if(mx==='none')return disclose(await remember(input,email,{status:'invalid',label:'This email domain has no mail server'}));
@@ -70,7 +72,8 @@ export function makeEmailPrechecker(service:SupabaseClient,orgId:string,deps:{wo
       checked=await worker.verifyEmail(email,{timeoutMs:33000});
     }catch{console.error('email precheck: checker unavailable');return disclose(verdict('unverifiable'));}
     if(!checked.ok)return disclose(checked.failure==='limit_reached'&&checked.allowanceReached!==false?{status:'unverifiable',label:'Not checked: daily check allowance reached'}:verdict('unverifiable'));
-    const result=checked.value.status!=='invalid'&&roleAddressNeedsReview(email,cachedMailProvider(domain)??'unknown',checked.value.reason==='catch_all')
+    const roleConfirmed=checked.value.status==='risky'&&checked.value.reason==='role_account';
+    const result:EmailPrecheckResult=roleConfirmed?{...verdict('valid'),tierEvidence:prepareRecipientEvidence(email,{roleConfirmed:true,provider:cachedMailProvider(domain)??'unknown',hasMailServer:mx==='mx'?true:null})}:checked.value.status!=='invalid'&&roleAddressNeedsReview(email,cachedMailProvider(domain)??'unknown',checked.value.reason==='catch_all')
       ?{status:'unverifiable' as const,label:ROLE_ADDRESS_LABEL}:verdict(checked.value.status==='valid'?'valid':checked.value.status==='invalid'?'invalid':'unverifiable');
     if(['waiting_for_domain','lead_time_exhausted'].includes(checked.value.reason))return disclose(result);
     return disclose(await remember(input,email,result));
@@ -82,7 +85,8 @@ export async function checkEmailBeforeSend(service:SupabaseClient,input:Input&{o
   if(!input.leadId||result.hardBounce)return result;
   const context=await loadRecipientContext(service,input.orgId,input.leadId);
   const assessed=await context.assess(input.address);
-  const evidence={...assessed.evidence,checker:result.status};
+  const evidence={...assessed.evidence,checker:result.status,
+    roleConfirmed:assessed.evidence.roleConfirmed===true||(result.tierEvidence?.forAddress===input.address.trim().toLowerCase()&&result.tierEvidence.roleConfirmed===true)};
   const tier=recipientTier(input.address,evidence);
   if(tier.tier==='never'&&tier.basis!=='checker_invalid')return {...result,status:'invalid',label:tier.reason,overridable:false,tier,tierEvidence:evidence};
   return {...result,tier,tierEvidence:evidence};

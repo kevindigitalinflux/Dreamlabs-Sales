@@ -70,3 +70,15 @@ it('does not promote hosted role SMTP acceptance to confirmation, but preserves 
  const replied=fixture([{org_id:'org',address:'info@fixture.test',outcome:'replied',seen_at:'2026-11-04'}]);
  expect(await replied.check({...input,address:'info@fixture.test'})).toMatchObject({status:'valid',label:'This address has replied before.'});
 });
+it('allows and caches only risky role_account confirmation for a shared inbox',async()=>{
+ cachedMailProvider.mockReturnValue('hosted');
+ const f=fixture();f.worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'risky',reason:'role_account'}});
+ for(let i=0;i<2;i++)expect(await f.check({...input,address:'info@fixture.test'})).toMatchObject({status:'valid',tierEvidence:{forAddress:'info@fixture.test',roleConfirmed:true}});
+ expect(f.worker.verifyEmail).toHaveBeenCalledTimes(1);
+ expect(f.db.service.rpc).toHaveBeenCalledWith('record_email_outcome',expect.objectContaining({p_address:'info@fixture.test',p_outcome:'checked_valid'}));
+});
+it('keeps a catch-all shared inbox under review',async()=>{
+ cachedMailProvider.mockReturnValue('hosted');
+ const f=fixture();f.worker.verifyEmail.mockResolvedValue({ok:true,value:{status:'unverifiable',reason:'catch_all'}});
+ expect(await f.check({...input,address:'info@fixture.test'})).toMatchObject({status:'unverifiable',label:'Role address, not confirmed'});
+});

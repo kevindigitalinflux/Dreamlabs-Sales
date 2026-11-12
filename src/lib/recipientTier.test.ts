@@ -4,6 +4,22 @@ const address='jane.smith@example.com';
 const base:RecipientEvidence={forAddress:address,syntaxValid:true,hasMailServer:true,generated:true,roleNeedsReview:false};
 const support=[{address:'alex.brown@example.com',personKey:'alex brown'},{address:'mary.jones@example.com',personKey:'mary jones'}];
 const pattern={domain:'example.com',candidateMatches:true,t1Support:support};
+describe('verifier v2 evidence',()=>{
+ const saved={...base,generated:false,savedNonGuessed:true};
+ it('trusts Microsoft exists before checker acceptance',()=>expect(recipientTier(address,{...saved,checker:'unverifiable',msExists:'exists'})).toMatchObject({tier:'T1',basis:'ms_exists',reason:'Microsoft confirms this mailbox exists.'}));
+ it('keeps Microsoft not-found saved addresses under review',()=>expect(recipientTier(address,{...saved,msExists:'not_found'})).toMatchObject({tier:'T3',basis:'ms_not_found'}));
+ it.each([{publishedByCompany:true,basis:'company_site'},{placesEmail:true,basis:'places'}])('preserves publication precedence $basis',({basis,...facts})=>expect(recipientTier(address,{...saved,...facts,msExists:'not_found'})).toMatchObject({tier:'T1',basis}));
+ it('requires proof for unchecked saved addresses',()=>expect(recipientTier(address,{...saved,checker:'unverifiable'})).toMatchObject({tier:'T3',basis:'saved_unproven',reason:'Saved address that no check has confirmed. Review it.'}));
+ it('still accepts a checker-confirmed saved address',()=>expect(recipientTier(address,{...saved,checker:'valid'}).tier).toBe('T1'));
+ const role={...saved,forAddress:'info@example.com',roleNeedsReview:true};
+ it.each(['exists','not_found'] as const)('does not use Microsoft %s to classify roles',msExists=>expect(recipientTier(role.forAddress,{...role,msExists})).toMatchObject({tier:'T3',basis:'role_review'}));
+ it('accepts exact role confirmation',()=>expect(recipientTier(role.forAddress,{...role,roleConfirmed:true})).toEqual({tier:'T1',basis:'role_confirmed',reason:'The mail server confirms this shared inbox.'}));
+ it('keeps an unconfirmed published role under review',()=>expect(recipientTier(role.forAddress,{...role,publishedByCompany:true})).toMatchObject({tier:'T3',basis:'role_review'}));
+ it('hard bounce beats Microsoft and role confirmation',()=>{
+  expect(recipientTier(address,{...saved,bouncedHard:true,msExists:'exists'}).tier).toBe('never');
+  expect(recipientTier(role.forAddress,{...role,bouncedHard:true,roleConfirmed:true}).tier).toBe('never');
+ });
+});
 describe('recipient tiers',()=>{
  it.each(['bouncedHard','optedOut','blocklisted'] as const)('%s defeats every positive signal',key=>{
   expect(recipientTier(address,{...base,[key]:true,checker:'valid',replied:true,sentOk:true,publishedByCompany:true,pattern}).tier).toBe('never');
@@ -11,7 +27,7 @@ describe('recipient tiers',()=>{
  it.each([{checker:'invalid' as const},{syntaxValid:false},{hasMailServer:false}])('hard negative %j defeats publication/history',negative=>{
   expect(recipientTier(address,{...base,...negative,replied:true,publishedByCompany:true}).tier).toBe('never');
  });
- it.each(['checker_valid','replied','sent_ok','company_site','places','saved_non_guessed'] as const)('accepts strong evidence %s',basis=>{
+ it.each(['checker_valid','replied','sent_ok','company_site','places'] as const)('accepts strong evidence %s',basis=>{
   const facts={checker_valid:{checker:'valid' as const},replied:{replied:true},sent_ok:{sentOk:true},company_site:{publishedByCompany:true},places:{placesEmail:true},saved_non_guessed:{generated:false,savedNonGuessed:true}}[basis];
   expect(recipientTier(address,{...base,...facts})).toMatchObject({tier:'T1',basis,reason:expect.any(String)});
  });

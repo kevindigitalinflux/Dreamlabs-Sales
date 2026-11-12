@@ -9,13 +9,14 @@ export interface RecipientEvidence {
  forAddress:string;syntaxValid:boolean;hasMailServer:boolean|null;generated:boolean;roleNeedsReview:boolean;
  checker?:'valid'|'invalid'|'unverifiable';bouncedHard?:boolean;optedOut?:boolean;blocklisted?:boolean;
  replied?:boolean;sentOk?:boolean;publishedByCompany?:boolean;placesEmail?:boolean;savedNonGuessed?:boolean;
+ msExists?:'exists'|'not_found';roleConfirmed?:boolean;
  pattern?:TierPattern|null;
  /** The future measured-confidence gate can downgrade guesses without weakening hard-negative precedence. */
  supportedGuessAllowed?:boolean;
 }
 export type TierBasis='bad_syntax'|'opted_out'|'blocklisted'|'bounced_hard'|'checker_invalid'|'no_mail_server'
  |'evidence_mismatch'|'replied'|'sent_ok'|'role_review'|'checker_valid'|'company_site'|'places'
- |'saved_non_guessed'|'supported_pattern'|'pattern_paused'|'weak_evidence';
+ |'saved_non_guessed'|'supported_pattern'|'pattern_paused'|'weak_evidence'|'ms_exists'|'ms_not_found'|'saved_unproven'|'role_confirmed';
 export interface TierResult {tier:RecipientTier;basis:TierBasis;reason:string}
 const clean=(address:string)=>address.trim().toLowerCase();
 /** Pure and import-free. Classification grants no permission to send or enroll anyone. */
@@ -31,12 +32,16 @@ export function recipientTier(address:string,evidence:RecipientEvidence):TierRes
  if(evidence.hasMailServer===false)return result('never','no_mail_server','This domain has no mail server.');
  if(evidence.replied)return result('T1','replied','This address has replied before.');
  if(evidence.sentOk)return result('T1','sent_ok','A previous send had no hard bounce within 72 hours.');
- // Kevin's 2026-11-11 ruling: publication/checker acceptance cannot establish a hosted role mailbox.
+ // Kevin's 2026-11-12 ruling: only exact risky/role_account proof lifts a hosted role mailbox; history still comes first.
+ if(evidence.roleNeedsReview&&evidence.roleConfirmed)return result('T1','role_confirmed','The mail server confirms this shared inbox.');
  if(evidence.roleNeedsReview)return result('T3','role_review','This role address needs review on hosted or catch-all mail.');
+ if(evidence.msExists==='exists')return result('T1','ms_exists','Microsoft confirms this mailbox exists.');
  if(evidence.checker==='valid')return result('T1','checker_valid','The checker confirmed this address.');
  if(evidence.publishedByCompany)return result('T1','company_site','Published on the company’s own site.');
  if(evidence.placesEmail)return result('T1','places','Published in the company’s Places listing.');
- if(evidence.savedNonGuessed&&!evidence.generated)return result('T1','saved_non_guessed','Saved company address with no guessed provenance.');
+ if(evidence.msExists==='not_found')return result('T3','ms_not_found','Microsoft has no mailbox with this address. Review it.');
+ // A checker-valid saved address already returned T1 above; saving alone is no proof.
+ if(evidence.savedNonGuessed&&!evidence.generated)return result('T3','saved_unproven','Saved address that no check has confirmed. Review it.');
  const pattern=evidence.pattern;
  const domain=clean(address).split('@')[1];
  if(evidence.generated&&evidence.hasMailServer===true&&pattern?.candidateMatches===true&&clean(pattern.domain)===domain) {

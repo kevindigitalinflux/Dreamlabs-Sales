@@ -4,7 +4,7 @@ import {loadRecipientContext} from '../../supabase/functions/_shared/recipientCo
 import {replyDatabase} from './replyTestDatabase';
 it('classifies own saved company email, generated provenance and hard bounces using current scoped facts',async()=>{
  const db=replyDatabase({leads:[{id:'lead',org_id:'org',email:'person@example.com'}],decision_maker_candidates:[],email_outcomes:[],deep_find_leads:[]});
- const ctx=await loadRecipientContext(db.service,'org','lead');expect((await ctx.assess('person@example.com')).result.tier).toBe('T1');
+ const ctx=await loadRecipientContext(db.service,'org','lead');expect((await ctx.assess('person@example.com')).result).toMatchObject({tier:'T3',basis:'saved_unproven'});
  db.tables.email_outcomes.push({org_id:'org',address:'person@example.com',outcome:'bounced_hard'});
  expect((await (await loadRecipientContext(db.service,'org','lead')).assess('person@example.com')).result.tier).toBe('never');
 });
@@ -17,7 +17,7 @@ it('blocks an org-wide domain even when saved company evidence is strong',async(
 });
 it('downgrades T2 during measured risk, recovers automatically, and refreshes stored sample negatives',async()=>{
  const address='alex.brown@example.com',at=new Date(Date.now()-86400000).toISOString();
- const db=replyDatabase({leads:[{id:'lead',org_id:'org',email:address}],email_outcomes:[],decision_maker_candidates:[
+ const db=replyDatabase({leads:[{id:'lead',org_id:'org',email:address}],email_outcomes:['mary.jones@example.com','john.smith@example.com'].map(address=>({org_id:'org',address,outcome:'checked_valid',seen_at:new Date().toISOString()})),decision_maker_candidates:[
   {id:'a',lead_id:'lead',first_name:'Mary',last_name:'Jones',email:'mary.jones@example.com',source:'manual'},
   {id:'b',lead_id:'lead',first_name:'John',last_name:'Smith',email:'john.smith@example.com',source:'manual'}],
  deep_find_leads:[{lead_id:'lead',org_id:'org',domains:{recipient_evidence:{[address]:{generated:true,forAddress:address,pattern:{domain:'example.com',candidateMatches:true,t1Support:[{address:'mary.jones@example.com',personKey:'mary jones'},{address:'john.smith@example.com',personKey:'john smith'}]}}}}}],

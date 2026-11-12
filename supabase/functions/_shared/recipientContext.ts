@@ -30,6 +30,21 @@ export async function loadRecipientContext(service:SupabaseClient,orgId:string,l
  }
  const known=[{email:lead.email,...parseLeadPersonName(lead.owner_name)},...contacts.map(row=>({email:row.email,first:row.first_name,last:row.last_name}))];
  const mx=new Map<string,Promise<Awaited<ReturnType<typeof lookupMx>>>>();
+ const queueEvidence=new Map<string,Promise<{msExists?:'exists'|'not_found';roleConfirmed:boolean}>>();
+ function queuedProof(email:string) {
+  if(!queueEvidence.has(email))queueEvidence.set(email,(async()=>{
+   try {
+    const results=await Promise.all(['ms_exists','smtp'].map(kind=>service.from('deep_find_check_queue')
+     .select('verdict,reason,finished_at').eq('org_id',orgId).eq('lead_id',leadId).eq('address',email)
+     .eq('kind',kind).eq('status','done').order('finished_at',{ascending:false}).order('id',{ascending:false}).limit(1).maybeSingle()));
+    const [ms,smtp]=results;
+    if(ms.error||smtp.error)console.error('Recipient queue evidence unavailable');
+    const verdict=ms.error?undefined:ms.data?.verdict;
+    return {msExists:verdict==='exists'||verdict==='not_found'?verdict:undefined,roleConfirmed:!smtp.error&&smtp.data?.reason==='role_account'};
+   } catch(error) {console.error('Recipient queue evidence read failed',error);return {roleConfirmed:false};}
+  })());
+  return queueEvidence.get(email)!;
+ }
  async function evidence(address:string):Promise<RecipientEvidence> {
   const email=address.trim().toLowerCase();const domain=email.split('@')[1]??'';
   if(!mx.has(domain))mx.set(domain,lookupMx(domain,3000,true));const mail=await mx.get(domain);
@@ -38,7 +53,7 @@ export async function loadRecipientContext(service:SupabaseClient,orgId:string,l
   const checker=checks[0]?.outcome==='checked_valid'?'valid':checks[0]?.outcome==='checked_invalid'?'invalid':undefined;
   const old=proofs[email];const generated=old?.generated===true||guesses.has(email);
   const saved=lead.email?.trim().toLowerCase()===email||contacts.some(row=>row.source==='manual'&&row.email?.trim().toLowerCase()===email);
-  return prepareRecipientEvidence(email,{...old,...history,sentOk:sentOk.has(email),checker,generated,catchAll:old?.roleNeedsReview===true,provider:cachedMailProvider(domain)??'unknown',
+  return prepareRecipientEvidence(email,{...old,...history,...await queuedProof(email),sentOk:sentOk.has(email),checker,generated,catchAll:old?.roleNeedsReview===true,provider:cachedMailProvider(domain)??'unknown',
    hasMailServer:mail==='none'?false:mail==='mx'?true:null,optedOut:lead.opted_out===true,blocklisted:isRecipientBlocked(email,blocked)||savedDomains(lead.blocked_domains).includes(domain),
    savedNonGuessed:old?.savedNonGuessed===true||(saved&&!generated&&!old),supportedGuessAllowed:confidence.t2Allowed,
   });

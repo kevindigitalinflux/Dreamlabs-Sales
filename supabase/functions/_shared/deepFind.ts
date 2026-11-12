@@ -1338,6 +1338,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     const published=[...siteEmails.values()].flat().some(address=>address.toLowerCase()===email);
     const recent=await outcomes.recentCheck(email,Date.now());
     return prepareRecipientEvidence(email,{savedNonGuessed:savedEvidenceSafe&&!previousGuesses.has(email)&&str(lead.email)?.toLowerCase()===email,generated:previousGuesses.has(email)||suggestions.some(s=>s.value?.toLowerCase()===email&&!!s.guess_rank),publishedByCompany:published,
+      roleConfirmed:checked?.ok&&checked.value.status==='risky'&&checked.value.reason==='role_account',
       checker:checked?.ok?(checked.value.status==='valid'?'valid':checked.value.status==='invalid'?'invalid':'unverifiable'):recent?.outcome==='checked_invalid'?'invalid':recent?.outcome==='checked_valid'?'valid':undefined,
       bouncedHard:outcomes.peek(email)?.reason==='bounced_hard',replied:outcomes.peek(email)?.reason==='previously_replied',sentOk:delivered.has(email),hasMailServer:mx==='none'?false:mx==='mx'?true:null,
       provider:cachedMailProvider(domain)??'unknown',catchAll:checked?.ok&&checked.value.reason==='catch_all',optedOut:lead.opted_out===true,blocklisted:isRecipientBlocked(email,blockedEmails)||savedDomains(lead.blocked_domains).includes(domain),supportedGuessAllowed});
