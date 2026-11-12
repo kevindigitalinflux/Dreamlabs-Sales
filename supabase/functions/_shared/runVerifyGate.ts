@@ -33,9 +33,9 @@ export class RunVerifyGate {
     let canaryDone = false;
     let dispatch: Promise<WorkerResult<VerifyReply>> | null = null;
     const once = () => dispatch ??= perform(33000).then(result => {
-      if (hosted && !canaryDone && ((!result.ok && result.failure === 'timeout') || (result.ok && !['valid', 'invalid'].includes(result.value.status)))) {
+      if (hosted && !canaryDone && result.ok && result.value.status === 'unverifiable' && result.value.reason === 'catch_all') {
         this.localHosted.add(domain);
-        this.notices.add(domain.replace(/[^a-z0-9.-]/g, '').slice(0, 253) + ': hosted mail could not confirm the canary address; further SMTP checks were skipped.');
+        this.notices.add(domain.replace(/[^a-z0-9.-]/g, '').slice(0, 253) + ': this mail server accepts every address, so mailbox checks were skipped.');
       }
       if ((!result.ok && result.failure === 'timeout') || (result.ok && ['timeout', 'provider_blocks_checks'].includes(result.value.reason))) this.localBlocked.add(domain);
       return result;
@@ -93,9 +93,11 @@ export class RunVerifyGate {
         const relevant = result.ok ? ['unverifiable','risky'].includes(result.value.status) : result.failure === 'timeout';
         const starts = prior?.starts ?? [];
         const finishedStarts = dispatch ? starts : starts.filter((_t,index) => index !== starts.lastIndexOf(started));
+        const finishedCanary = canaryDone || (!!dispatch && (!hosted || (result.ok && (['valid','invalid'].includes(result.value.status)
+          || (result.value.status === 'risky' && result.value.reason === 'role_account') || (result.value.status === 'unverifiable' && result.value.reason === 'catch_all')))));
         if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, starts: finishedStarts, pendingUntil: 0, blocked, blockedReason,
           timeoutRetryOwner:blockedReason==='timeout'&&!hosted&&!attemptOptions.retry?attemptOptions.retryOwner:undefined,
-          hosted, canaryDone: dispatch ? true : canaryDone, hostedUnverifiable: this.localHosted.has(domain), noted: prior?.noted || (!!dispatch && relevant) } })) return relevant && prior?.noted ? {...result,domainNoteSuppressed:true} : result;
+          hosted, canaryDone: finishedCanary, hostedUnverifiable: this.localHosted.has(domain), noted: prior?.noted || (!!dispatch && relevant) } })) return relevant && prior?.noted ? {...result,domainNoteSuppressed:true} : result;
       }
       throw new Error('Checker result could not be saved');
     } catch (error) {

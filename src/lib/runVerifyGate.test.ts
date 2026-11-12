@@ -14,6 +14,24 @@ function fixture() {
  const check = async () => { starts.push(now); return { ok: true as const, value: { status: 'invalid' as const, reason: 'mailbox_missing' as const } }; };
  return { gate, check, starts, store };
 }
+it('keeps checking a hosted domain after a deliverable role address',async()=>{
+ const f=fixture(),gate=new RunVerifyGate(f.store,()=>0,async()=>{},async()=>true);
+ const first=await gate.run('hello@a.co.uk',60_000,async()=>({ok:true,value:{status:'risky',reason:'role_account'}}));
+ const second=await gate.run('jo.bloggs@a.co.uk',60_000,async()=>({ok:true,value:{status:'valid',reason:'deliverable'}}));
+ expect(first.ok&&first.value.reason).toBe('role_account');expect(second.ok&&second.value.status).toBe('valid');expect(gate.lines()).toEqual([]);
+});
+it('stops checking a hosted catch-all domain and says why',async()=>{
+ const f=fixture(),gate=new RunVerifyGate(f.store,()=>0,async()=>{},async()=>true);
+ await gate.run('a@b.com',60_000,async()=>({ok:true,value:{status:'unverifiable',reason:'catch_all'}}));
+ let called=false;const next=await gate.run('c@b.com',60_000,async()=>{called=true;return {ok:true,value:{status:'valid',reason:'deliverable'}};});
+ expect(called).toBe(false);expect(next.ok&&next.value.reason).toBe('hosted_unverifiable');expect(gate.lines()).toEqual(['b.com: this mail server accepts every address, so mailbox checks were skipped.']);
+});
+it.each(['timeout','unknown','checker_error'])('does not write off a hosted domain after one %s',async reason=>{
+ const f=fixture(),gate=new RunVerifyGate(f.store,()=>0,async()=>{},async()=>true);
+ await gate.run('a@b.com',60_000,async()=>({ok:true,value:{status:'unverifiable',reason}}));
+ expect(gate.lines().some(line=>line.includes('accepts every address'))).toBe(false);
+ expect((await f.store.read()).state['b.com']).toMatchObject({canaryDone:false,hostedUnverifiable:false});
+});
 it('allows 33 seconds for client and guess checks', () => {
  expect(WORKER_TIMEOUT_MS.verify).toBe(33000);
  expect(GUESS_CHECK_TIMEOUT_MS).toBe(33000);
@@ -112,12 +130,23 @@ it('does not report a tried check or completed canary if admission storage consu
  expect(state['example.com']).toMatchObject({starts:[],pendingUntil:0,canaryDone:false});
 });
 
-it.each(['catch_all','provider_blocks_checks','unknown','timeout'])('uses one hosted canary across instances after %s',async reason=>{
+it('uses one hosted canary across instances after catch_all',async()=>{
  const f=fixture();let calls=0;let detections=0;
  const gate=()=>new RunVerifyGate(f.store,()=>0,async()=>{},async()=>{detections++;return true;});
- await gate().run('a@example.com',35000,async()=>{calls++;return {ok:true,value:{status:reason==='catch_all'?'risky':'unverifiable',reason}};});
+ await gate().run('a@example.com',35000,async()=>{calls++;return {ok:true,value:{status:'unverifiable',reason:'catch_all'}};});
  expect(await gate().run('b@example.com',35000,async()=>{calls++;return {ok:true,value:{status:'valid',reason:'deliverable'}};})).toMatchObject({ok:true,value:{reason:'hosted_unverifiable'}});
  expect(calls).toBe(1);expect(detections).toBe(1);
+});
+it.each(['provider_blocks_checks','timeout'])('preserves the existing breaker without declaring hosted catch-all after %s',async reason=>{
+ const f=fixture();let calls=0;const gate=()=>new RunVerifyGate(f.store,()=>0,async()=>{},async()=>true);
+ await gate().run('a@example.com',35000,async()=>({ok:true,value:{status:'unverifiable',reason}}));
+ expect(await gate().run('b@example.com',35000,async()=>{calls++;return {ok:true,value:{status:'valid',reason:'deliverable'}};})).toMatchObject({ok:false,failure:'timeout'});
+ expect(calls).toBe(0);expect((await f.store.read()).state['example.com']).toMatchObject({hostedUnverifiable:false,canaryDone:false});
+});
+it.each(['unknown','checker_error'])('allows another hosted canary after %s',async reason=>{
+ const f=fixture();const gate=()=>new RunVerifyGate(f.store,()=>0,async()=>{},async()=>true);
+ await gate().run('a@example.com',35000,async()=>({ok:true,value:{status:'unverifiable',reason}}));
+ expect(await gate().run('b@example.com',35000,async()=>({ok:true,value:{status:'valid',reason:'deliverable'}}))).toMatchObject({ok:true,value:{status:'valid'}});
 });
 it.each(['valid','invalid'] as const)('continues hosted checks after a clear %s canary',async status=>{
  const f=fixture();const gate=new RunVerifyGate(f.store,()=>0,async()=>{},async()=>true);
@@ -128,9 +157,9 @@ it.each(['valid','invalid'] as const)('continues hosted checks after a clear %s 
 
 it('records hosted_unverifiable once in durable state and one note at the canary lead',async()=>{
  const f=fixture();const gate=new RunVerifyGate(f.store,()=>0,async()=>{},async()=>true);
- await gate.run('first@example.com',35000,async()=>({ok:true,value:{status:'unverifiable',reason:'unknown'}}));
+ await gate.run('first@example.com',35000,async()=>({ok:true,value:{status:'unverifiable',reason:'catch_all'}}));
  await gate.run('next@example.com',35000,f.check);
- expect(gate.lines().filter(l=>l.includes('hosted mail'))).toHaveLength(1);
+ expect(gate.lines()).toEqual(['example.com: this mail server accepts every address, so mailbox checks were skipped.']);
  expect((await f.store.read()).state['example.com']).toMatchObject({hostedUnverifiable:true,canaryDone:true});
  const later=new RunVerifyGate(f.store,()=>0,async()=>{},async()=>true);
  await later.run('later@example.com',35000,f.check);
