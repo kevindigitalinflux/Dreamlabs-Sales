@@ -1,3 +1,5 @@
+**Review fixes (2026-11-12):** On `codex/verifier-v2`, F1 `40594f1` restricts saved-lead owner attribution to matching ranked addresses; F2 `7254fc2` excludes person_done skips from finished counts. Final tested revision `7254fc2`: all seven gates pass, 3,341 app tests plus one skipped, 143 wrapper tests, 29 edge entrypoints. Read the top Review fixes section in `docs/VERIFIER-V2-BUILD-REPORT.md`. Independent review of these fixes is pending; builder stops after the report commit. No live/publication operations occurred.
+
 ## Verifier v2 — final local build (2026-11-12) — START HERE
 
 **Branch:** `codex/verifier-v2`, worktree `C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2`, base `8374783`. **Final tested application commit:** `eb685ae`. **Final report commit:** branch HEAD carrying this checkpoint, titled `docs: verifier v2 build report`; the exact hash accompanies Kevin's handoff. **Independent review pending.** Kevin directs; Claude reviews; Codex builds. All prior plan questions are resolved by R1–R11; no builder task remains deferred. Historical partial checkpoints below are superseded.

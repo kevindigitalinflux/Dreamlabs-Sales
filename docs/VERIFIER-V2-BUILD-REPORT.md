@@ -1,3 +1,16 @@
+## Review fixes (2026-11-12)
+
+Kevin reports Claude reviewed and accepted `553ba28` apart from F1/F2. Both approved fixes are now committed on `codex/verifier-v2`; independent review of the fixes is pending.
+
+- **F1 — `40594f1`:** `savedLeadAddressPerson` in verifyQueueInput.ts assigns owner identity only when the saved lead address matches rankedEmailCandidates for that owner and address domain, case-insensitively. Unrelated, role and ownerless addresses retain null identity; contact-level saved addresses are unchanged. Five new tests failed before the helper existed, then passed (eight focused tests total). All seven gates passed before commit: 3,332 app tests and 143 wrapper tests.
+- **F2 — `7254fc2`:** QueuedChecksLine reads reason and delegates to pure queuedChecksCounts. Skipped person_done rows contribute to no bucket; every other skipped row remains unconfirmed. Nine new tests failed before the helper existed, then passed (15 focused tests total), including the exact one-confirmed/zero-unconfirmed finished line.
+
+Final tested revision: `7254fc2`. All seven gates pass: TypeScript in root/wrapper; **265 app files / 3,341 passed / one skipped / zero failed**; **six wrapper files / 143 passed**; production build; whitespace; **29-entrypoint** edge shim. Evidence is in gitignored `.superpowers/reviewF1-*` and `.superpowers/reviewF2-*`. No existing test assertion changed; 14 tests were added. Internal helper names are the only R11 wiring choices; no deviation or open question remains for these fixes.
+
+Migration 075/audit, scoring SQL, Deno, live worker/Microsoft/provider/database and browser checks remain unexecuted. No push, merge, deploy, migration/live SQL, external call, secret read, dependency installation, other-worktree edit, vault sync or stage 2 work occurred. The following full-build report remains historical context; this section supersedes its final tested revision and counts. Builder stops after the report/handoff commit.
+
+---
+
 # Final verifier v2 local build (2026-11-12)
 
 All approved builder tasks are now implemented locally on `codex/verifier-v2` in `C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2`. Kevin's R10/R11 resolve the last Task 9 interface question. Tasks 1–8 and 10 were retained; this continuation implements Task 9 and updates the report/handoff. **Final tested application revision: `eb685ae`. Independent review pending.** Kevin directs, Claude reviews, Codex builds. The historical partial reports below remain as the process and assertion-change record; their unfinished-task pointers are superseded by this section.
