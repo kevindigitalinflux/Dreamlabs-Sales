@@ -5,6 +5,27 @@ END $$;
 
 -- Written only. Claude removes the guard after independent review and Kevin's authorization.
 BEGIN;
+ALTER TABLE public.email_logs DROP CONSTRAINT email_logs_tier_snapshot_shape;
+ALTER TABLE public.email_logs
+  ADD CONSTRAINT email_logs_tier_snapshot_shape CHECK (
+    (recipient_tier_at_send IS NULL AND recipient_tier_basis IS NULL
+      AND recipient_tier_version IS NULL AND recipient_was_sent_ok IS NULL
+      AND recipient_tier_recorded_at IS NULL)
+    OR
+    (recipient_tier_at_send IS NOT NULL AND recipient_tier_at_send IN ('T1','T2','T3')
+      AND status IS NOT DISTINCT FROM 'sent' AND sent_at IS NOT NULL
+      AND recipient_tier_basis IS NOT NULL AND recipient_tier_version = 1
+      AND recipient_tier_version IS NOT NULL AND recipient_was_sent_ok IS NOT NULL
+      AND recipient_tier_recorded_at IS NOT NULL AND recipient_tier_recorded_at >= sent_at
+      AND (NOT recipient_was_sent_ok OR recipient_tier_at_send = 'T1')
+      AND ((recipient_tier_at_send = 'T1' AND recipient_tier_basis IN
+        ('checker_valid','replied','sent_ok','company_site','places','saved_non_guessed','ms_exists','role_confirmed'))
+        OR (recipient_tier_at_send = 'T2' AND recipient_tier_basis = 'supported_pattern')
+        OR (recipient_tier_at_send = 'T3' AND recipient_tier_basis IN
+          ('evidence_mismatch','role_review','pattern_paused','weak_evidence','ms_not_found','saved_unproven')))
+      AND (recipient_tier_basis <> 'sent_ok' OR recipient_was_sent_ok))
+  );
+
 CREATE TABLE public.deep_find_check_queue (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
@@ -72,7 +93,7 @@ BEGIN
     SELECT q.* FROM public.deep_find_check_queue q JOIN public.deep_find_runs r ON r.id=q.run_id AND r.org_id=q.org_id
       WHERE q.status='queued' AND q.next_at<=now() AND r.status IN ('active','completed')
         AND now()<r.started_at+interval '60 minutes'
-      ORDER BY q.rank,q.next_at,q.created_at,q.id FOR UPDATE OF q SKIP LOCKED
+      ORDER BY q.rank,q.next_at,q.created_at,q.id LIMIT 200 FOR UPDATE OF q SKIP LOCKED
   LOOP
     IF candidate.domain=ANY(domains) THEN CONTINUE; END IF;
     -- Atomic across overlapping claim calls, runs and organisations; no domain starts a fifth call in a minute.
@@ -104,9 +125,14 @@ END $$;
 
 CREATE FUNCTION public.deep_find_checks_expire() RETURNS integer
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE expired integer; siblings integer;
+DECLARE recovered integer; expired integer; siblings integer;
 BEGIN
   IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Service only' USING ERRCODE='42501'; END IF;
+  UPDATE public.deep_find_check_queue q SET status='queued',next_at=now()
+    FROM public.deep_find_runs r WHERE r.id=q.run_id AND r.org_id=q.org_id
+      AND q.status='running' AND q.claimed_at<now()-interval '5 minutes'
+      AND now()<r.started_at+interval '60 minutes' AND r.status<>'cancelled';
+  GET DIAGNOSTICS recovered = ROW_COUNT;
   UPDATE public.deep_find_check_queue q SET status='skipped',reason='run_time_limit',finished_at=now()
     FROM public.deep_find_runs r WHERE r.id=q.run_id
       AND (q.status='queued' OR (q.status='running' AND q.claimed_at<now()-interval '5 minutes'))
@@ -115,9 +141,9 @@ BEGIN
   UPDATE public.deep_find_check_queue q SET status='skipped',reason='person_done',finished_at=now()
     WHERE q.status='queued' AND q.person_key IS NOT NULL AND EXISTS (
       SELECT 1 FROM public.deep_find_check_queue proven WHERE proven.run_id=q.run_id AND proven.org_id=q.org_id
-        AND proven.person_key=q.person_key AND proven.status='done' AND proven.verdict IN ('valid','exists'));
+        AND proven.lead_id=q.lead_id AND proven.person_key=q.person_key AND proven.status='done' AND proven.verdict IN ('valid','exists'));
   GET DIAGNOSTICS siblings = ROW_COUNT;
-  RETURN expired+siblings;
+  RETURN recovered+expired+siblings;
 END $$;
 
 REVOKE ALL ON FUNCTION public.deep_find_checks_enqueue(jsonb) FROM PUBLIC,anon,authenticated;

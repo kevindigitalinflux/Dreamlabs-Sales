@@ -9,6 +9,7 @@ DECLARE
   visible_lead uuid; hidden_lead uuid; other_lead uuid; run_a uuid; run_b uuid;
   visible_row uuid; hidden_row uuid; other_row uuid; row_id uuid; n integer; distinct_domains integer; rows_json jsonb;
   function_signature text; user_role text;
+  pair record; wrong_tier text; invalid_patch jsonb; snapshot jsonb; fixture public.email_logs%rowtype;
 BEGIN
   IF EXISTS (SELECT 1 FROM public.deep_find_check_queue) THEN RAISE EXCEPTION 'Audit requires an empty disposable queue'; END IF;
   INSERT INTO auth.users(instance_id,id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -71,6 +72,56 @@ BEGIN
   EXECUTE 'RESET ROLE';
   PERFORM set_config('request.jwt.claims','{"role":"service_role"}',true);
 
+  -- R9 accepted pairs: LOCAL-ONLY send-log fixtures, derived directly from 074 plus the four approved bases.
+  FOR pair IN SELECT * FROM (VALUES
+    ('T1','checker_valid'),('T1','replied'),('T1','sent_ok'),('T1','company_site'),('T1','places'),('T1','saved_non_guessed'),
+    ('T2','supported_pattern'),('T3','evidence_mismatch'),('T3','role_review'),('T3','pattern_paused'),('T3','weak_evidence'),
+    ('T1','ms_exists'),('T1','role_confirmed'),('T3','ms_not_found'),('T3','saved_unproven')
+  ) accepted(tier,basis) LOOP
+    INSERT INTO public.email_logs(org_id,lead_id,sent_by,to_email,subject,body,status,sent_at,
+      recipient_tier_at_send,recipient_tier_basis,recipient_tier_version,recipient_was_sent_ok,recipient_tier_recorded_at)
+    VALUES(org_a,visible_lead,owner_id,'snapshot@fixture.test','Local snapshot audit','Fixture only','sent',now(),
+      pair.tier,pair.basis,1,pair.basis='sent_ok',now());
+  END LOOP;
+
+  -- R9 wrong tiers: every new basis must fail with BOTH other tiers, not just one representative.
+  FOR pair IN SELECT * FROM (VALUES ('T1','ms_exists'),('T1','role_confirmed'),('T3','ms_not_found'),('T3','saved_unproven')) accepted(tier,basis) LOOP
+    FOREACH wrong_tier IN ARRAY ARRAY['T1','T2','T3'] LOOP
+      IF wrong_tier=pair.tier THEN CONTINUE; END IF;
+      BEGIN
+        INSERT INTO public.email_logs(org_id,lead_id,sent_by,to_email,subject,body,status,sent_at,
+          recipient_tier_at_send,recipient_tier_basis,recipient_tier_version,recipient_was_sent_ok,recipient_tier_recorded_at)
+        VALUES(org_a,visible_lead,owner_id,'snapshot@fixture.test','Local wrong-tier audit','Fixture only','sent',now(),
+          wrong_tier,pair.basis,1,false,now());
+        RAISE EXCEPTION 'New basis accepted wrong tier: % / %',wrong_tier,pair.basis;
+      EXCEPTION WHEN check_violation THEN NULL; END;
+    END LOOP;
+  END LOOP;
+
+  -- R9 snapshot invariants: NULL history stays valid; each independent malformed shape must fail.
+  INSERT INTO public.email_logs(org_id,lead_id,sent_by,to_email,subject,body,status,sent_at)
+    VALUES(org_a,visible_lead,owner_id,'legacy@fixture.test','Local null snapshot audit','Fixture only','sent',now());
+  snapshot := jsonb_build_object('status','sent','sent_at',now(),'recipient_tier_at_send','T1',
+    'recipient_tier_basis','checker_valid','recipient_tier_version',1,'recipient_was_sent_ok',false,'recipient_tier_recorded_at',now());
+  FOR invalid_patch IN SELECT value FROM jsonb_array_elements(jsonb_build_array(
+    jsonb_build_object('recipient_tier_basis',NULL),
+    jsonb_build_object('status','draft'),
+    jsonb_build_object('recipient_tier_version',2),
+    jsonb_build_object('recipient_tier_at_send','T2','recipient_tier_basis','supported_pattern','recipient_was_sent_ok',true),
+    jsonb_build_object('recipient_tier_basis','sent_ok','recipient_was_sent_ok',false),
+    jsonb_build_object('recipient_tier_recorded_at',now()-interval '1 second'),
+    jsonb_build_object('recipient_tier_basis','unknown_basis')
+  )) LOOP
+    fixture := jsonb_populate_record(NULL::public.email_logs,snapshot||invalid_patch);
+    BEGIN
+      INSERT INTO public.email_logs(org_id,lead_id,sent_by,to_email,subject,body,status,sent_at,
+        recipient_tier_at_send,recipient_tier_basis,recipient_tier_version,recipient_was_sent_ok,recipient_tier_recorded_at)
+      VALUES(org_a,visible_lead,owner_id,'snapshot@fixture.test','Local shape audit','Fixture only',fixture.status,fixture.sent_at,
+        fixture.recipient_tier_at_send,fixture.recipient_tier_basis,fixture.recipient_tier_version,fixture.recipient_was_sent_ok,fixture.recipient_tier_recorded_at);
+      RAISE EXCEPTION 'Malformed snapshot accepted: %',invalid_patch;
+    EXCEPTION WHEN check_violation THEN NULL; END;
+  END LOOP;
+
   -- Enqueue cap and duplicate addressing are durable, not a per-invocation counter.
   DELETE FROM public.deep_find_check_queue WHERE org_id IN(org_a,org_b);
   SELECT jsonb_agg(jsonb_build_object('org_id',org_a,'run_id',run_a,'lead_id',visible_lead,
@@ -106,8 +157,13 @@ BEGIN
   INSERT INTO public.deep_find_check_queue(org_id,run_id,lead_id,address,domain,kind,person_key,status,verdict)
     VALUES(org_a,run_a,visible_lead,'proved@a.fixture.test','a.fixture.test','smtp','person','done','valid'),
       (org_a,run_a,visible_lead,'sibling@b.fixture.test','b.fixture.test','smtp','person','queued',NULL);
+  -- R4 same person across leads: a normalized key is only unique within its own lead.
+  INSERT INTO public.deep_find_check_queue(org_id,run_id,lead_id,address,domain,kind,person_key)
+    VALUES(org_a,run_a,hidden_lead,'same-person@b.fixture.test','b.fixture.test','smtp','person');
   PERFORM public.deep_find_checks_expire();
   IF NOT EXISTS(SELECT 1 FROM public.deep_find_check_queue WHERE reason='person_done') THEN RAISE EXCEPTION 'Sibling cleanup failed'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM public.deep_find_check_queue WHERE lead_id=hidden_lead AND person_key='person' AND status='queued')
+    THEN RAISE EXCEPTION 'Same person key skipped a different lead'; END IF;
   DELETE FROM public.deep_find_check_queue WHERE org_id=org_a;
   INSERT INTO public.deep_find_check_queue(org_id,run_id,lead_id,address,domain,kind)
     VALUES(org_a,run_a,visible_lead,'window@c.fixture.test','c.fixture.test','smtp');
@@ -117,6 +173,15 @@ BEGIN
   PERFORM public.deep_find_checks_expire();
   IF NOT EXISTS(SELECT 1 FROM public.deep_find_check_queue WHERE reason='run_time_limit') THEN RAISE EXCEPTION 'Run expiry failed'; END IF;
   UPDATE public.deep_find_runs SET status='active',started_at=now(),finished_at=NULL WHERE id=run_a;
+  -- R5 stale running recovery: active-window work is retried, preserving attempts; recent claims remain running.
+  UPDATE public.deep_find_check_queue SET status='running',claimed_at=now()-interval '6 minutes',attempts=2,next_at=now()+interval '15 minutes',reason=NULL;
+  INSERT INTO public.deep_find_check_queue(org_id,run_id,lead_id,address,domain,kind,status,claimed_at,attempts)
+    VALUES(org_a,run_a,visible_lead,'recent@c.fixture.test','c.fixture.test','smtp','running',now()-interval '2 minutes',1);
+  PERFORM public.deep_find_checks_expire();
+  IF NOT EXISTS(SELECT 1 FROM public.deep_find_check_queue WHERE address='window@c.fixture.test' AND status='queued' AND attempts=2 AND next_at=now())
+    THEN RAISE EXCEPTION 'Stale active claim did not recover without spending an attempt'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM public.deep_find_check_queue WHERE address='recent@c.fixture.test' AND status='running' AND attempts=1)
+    THEN RAISE EXCEPTION 'Recent claim recovered prematurely'; END IF;
   UPDATE public.deep_find_check_queue SET status='running',claimed_at=now()-interval '6 minutes',reason=NULL;
   UPDATE public.deep_find_runs SET status='cancelled' WHERE id=run_a;
   PERFORM public.deep_find_checks_expire();
