@@ -103,3 +103,16 @@ it('does not record or apply a result when running-only finish loses its row', a
   f.deps.rpc = vi.fn(async (...args) => args[0] === 'deep_find_checks_finish' ? { data: false, error: null } : rpc(...args))
   expect(await drainQueue(f.deps, 0, 140_000)).toEqual({ processed: 0 }); expect(f.deps.recordOutcome).not.toHaveBeenCalled(); expect(f.deps.applyProven).not.toHaveBeenCalled()
 })
+it('logs a fixed failed-step code without names, addresses or raw provider errors', async () => {
+  const f = fixture(); f.deps.applyProven.mockRejectedValue(new Error('private jo@fixture.test provider payload'))
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+  await drainQueue(f.deps, 0, 140_000)
+  expect(log).toHaveBeenCalledWith('Background check row failed', 'apply_proven')
+  expect(JSON.stringify(log.mock.calls)).not.toMatch(/jo@|private|provider payload/)
+  log.mockRestore()
+})
+it('runs later-tick recovery even when no new row can be claimed', async () => {
+  const f = fixture([]); f.deps.recoverProven = vi.fn(async () => {})
+  await drainQueue(f.deps, 0, 140_000)
+  expect(f.deps.recoverProven).toHaveBeenCalledWith(100_000)
+})

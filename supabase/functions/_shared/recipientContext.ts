@@ -41,7 +41,7 @@ export async function loadRecipientContext(service:SupabaseClient,orgId:string,l
     if(ms.error||smtp.error)console.error('Recipient queue evidence unavailable');
     const verdict=ms.error?undefined:ms.data?.verdict;
     return {msExists:verdict==='exists'||verdict==='not_found'?verdict:undefined,roleConfirmed:!smtp.error&&smtp.data?.reason==='role_account'};
-   } catch(error) {console.error('Recipient queue evidence read failed',error);return {roleConfirmed:false};}
+   } catch(error) {console.error('Recipient queue evidence read failed','queued_proof');return {roleConfirmed:false};}
   })());
   return queueEvidence.get(email)!;
  }

@@ -7,7 +7,7 @@ export async function reserveRunRegistryProof(service:SupabaseClient,orgId:strin
   const domains=read.data.domains??{};const used=domains._registry_proof;
   if(used!==undefined&&(!Array.isArray(used)||used.some(value=>typeof value!=='string')))return false;
   const ids:string[]=used??[];if(ids.includes(leadId)||ids.length>=50)return false;
-  const write=await service.from('deep_find_leads').update({domains:{...domains,_registry_proof:[...ids,leadId]}})
+  const write=await service.from('deep_find_leads').update({domains:{...domains,_registry_proof:[...ids,leadId],_queue_version:(domains._queue_version??0)+1}})
    .eq('id',read.data.id).eq('org_id',orgId).eq('run_id',runId).eq('domains',JSON.stringify(domains)).select('id');
   if(write.error)return false;if(write.data?.length)return true;
  }

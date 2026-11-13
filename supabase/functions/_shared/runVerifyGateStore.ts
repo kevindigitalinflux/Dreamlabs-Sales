@@ -16,7 +16,8 @@ export function makeRunVerifyGate(service: SupabaseClient, orgId: string, runId:
     },
     async swap(version, state) {
       if (!rowId) throw new Error('Checker state row missing');
-      const { data, error } = await service.from('deep_find_leads').update({ domains: { ...JSON.parse(version), _verify_gate: state } })
+      const current = JSON.parse(version);
+      const { data, error } = await service.from('deep_find_leads').update({ domains: { ...current, _verify_gate: state, _queue_version: (current._queue_version ?? 0) + 1 } })
         .eq('id', rowId).eq('org_id', orgId).eq('run_id', runId).eq('domains', version).select('id');
       if (error) throw new Error('Checker state could not be written');
       return !!data?.length;
@@ -43,7 +44,7 @@ export async function saveRunResult(service: SupabaseClient, id: string, patch: 
     const { data: current, error: readError } = await service.from('deep_find_leads').select('domains, status').eq('id', id).maybeSingle();
     if (readError || !current) throw new Error('Deep find result checkpoint could not be read');
     if (current.status !== 'running') return;
-    const domains = { ...(patch.domains as Record<string, unknown>), ...(current.domains?._verify_gate ? { _verify_gate: current.domains._verify_gate } : {}), ...(current.domains?._registry_proof ? {_registry_proof:current.domains._registry_proof}:{}) };
+    const domains = { ...(patch.domains as Record<string, unknown>), ...(current.domains?._verify_gate ? { _verify_gate: current.domains._verify_gate } : {}), ...(current.domains?._registry_proof ? {_registry_proof:current.domains._registry_proof}:{}), _queue_version: (current.domains?._queue_version ?? 0) + 1 };
     const { data, error } = await service.from('deep_find_leads').update({ ...patch, domains, updated_at: patch.updated_at })
       .eq('id', id).eq('status', 'running').eq('domains', JSON.stringify(current.domains)).select('id');
     if (error) throw new Error('Deep find result checkpoint could not be saved');

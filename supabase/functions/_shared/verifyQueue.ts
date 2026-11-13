@@ -1,6 +1,7 @@
 import type { WorkerClient } from './workerClient.ts';
 import { cachedMailProvider } from './dnsLookup.ts';
 import { nextStep, type QueueCandidate, type QueueOutcome } from './verifyQueueRules.ts';
+import { QueueStepError } from './verifyQueueRetry.ts';
 
 export interface QueueRow {
   id: string; org_id: string; run_id: string; lead_id: string; contact_id: string | null;
@@ -16,6 +17,7 @@ export interface QueueDeps {
   now(): number;
   /** Production callbacks capture one claimed row, avoiding shared mutable scope during Promise.all. */
   forRow?(row: QueueRow): QueueDeps;
+  recoverProven?(deadline: number): Promise<void>;
 }
 
 export async function enqueueLeadChecks(deps: Pick<QueueDeps, 'rpc'>, input: { orgId: string; runId: string; leadId: string; plan: QueueCandidate[] }): Promise<number> {
@@ -31,6 +33,10 @@ export async function enqueueLeadChecks(deps: Pick<QueueDeps, 'rpc'>, input: { o
 export async function drainQueue(deps: QueueDeps, startedAt: number, wallBudgetMs: number): Promise<{ processed: number }> {
   let processed = 0;
   let stopClaiming = false;
+  if (deps.now() - startedAt < wallBudgetMs - 40_000 && deps.recoverProven) {
+    try { await deps.recoverProven(startedAt + wallBudgetMs - 40_000); }
+    catch (error) { console.error('Background check recovery failed', error instanceof QueueStepError ? error.step : 'recovery_read'); }
+  }
   const expire = async () => {
     const result = await deps.rpc('deep_find_checks_expire', {});
     if (result.error) throw Error('Could not expire background checks');
@@ -46,9 +52,11 @@ export async function drainQueue(deps: QueueDeps, startedAt: number, wallBudgetM
     if (!rows.length) break;
     let provenPerson = false;
     await Promise.all(rows.map(async row => {
+      let step = 'access_read';
       try {
         const scope = deps.forRow?.(row) ?? deps;
         const finish = async (outcome: QueueOutcome) => {
+          step = 'finish';
           const result = await scope.rpc('deep_find_checks_finish', {
             p_id: row.id, p_status: outcome.status, p_verdict: outcome.status === 'done' ? outcome.verdict : null,
             p_reason: outcome.reason, p_provider: row.kind === 'ms_exists' ? 'microsoft' : cachedMailProvider(row.domain) ?? 'unknown',
@@ -60,8 +68,11 @@ export async function drainQueue(deps: QueueDeps, startedAt: number, wallBudgetM
           return true;
         };
         if (!await scope.canStillEdit(row.run_id, row.lead_id)) { await finish({ status: 'skipped', reason: 'no_access' }); return; }
+        step = 'worker_config';
         const worker = scope.workerFor(row.org_id);
+        step = 'worker_call';
         const answer = row.kind === 'ms_exists' ? await worker.msExists(row.address) : await worker.verifyEmail(row.address);
+        step = 'access_read';
         if (!await scope.canStillEdit(row.run_id, row.lead_id)) { await finish({ status: 'skipped', reason: 'no_access' }); return; }
         const outcome = nextStep(row, answer.ok ? row.kind === 'ms_exists'
           ? { ok: true, status: answer.value as string, reason: answer.value as string }
@@ -71,13 +82,17 @@ export async function drainQueue(deps: QueueDeps, startedAt: number, wallBudgetM
         if (!answer.ok && answer.failure === 'limit_reached') stopClaiming = true;
         if (!await finish(outcome) || outcome.status !== 'done') return;
         if (row.person_key !== null && ['valid', 'exists'].includes(outcome.verdict)) provenPerson = true;
-        if (!await scope.canStillEdit(row.run_id, row.lead_id)) return;
+        step = 'access_read';
+        if (!await scope.canStillEdit(row.run_id, row.lead_id)) { console.info('Background check result skipped', 'no_access'); return; }
+        step = 'record_outcome';
         if (row.kind === 'smtp') await scope.recordOutcome({ orgId: row.org_id, leadId: row.lead_id, address: row.address, outcome: `checked_${outcome.verdict}` });
         if (row.person_key !== null && ['valid', 'exists'].includes(outcome.verdict) && outcome.reason !== 'role_account') {
+          step = 'apply_proven';
           await scope.applyProven({ orgId: row.org_id, leadId: row.lead_id, contactId: row.contact_id, address: row.address });
         }
-        if (await scope.canStillEdit(row.run_id, row.lead_id)) await scope.refreshReadiness(row.lead_id);
-      } catch (error) { console.error('Background check row failed', row.id, error instanceof Error ? error.name : 'UnknownError'); }
+        step = 'access_read';
+        if (await scope.canStillEdit(row.run_id, row.lead_id)) { step = 'refresh_readiness'; await scope.refreshReadiness(row.lead_id); }
+      } catch (error) { console.error('Background check row failed', error instanceof QueueStepError ? error.step : step); }
     }));
     if (provenPerson) {
       try { await expire(); } catch (error) { console.error('Background check sibling expiry failed', error instanceof Error ? error.name : 'UnknownError'); break; }

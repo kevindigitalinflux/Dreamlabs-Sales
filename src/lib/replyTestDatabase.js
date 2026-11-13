@@ -2,6 +2,7 @@
 export function replyDatabase(seed = {}) {
   const tables = { email_logs: [], email_replies: [], leads: [], sequence_enrollments: [], lead_notes: [], reply_notifications: [], user_email_settings: [], ...seed };
   const writes = [], queries = [], failures = new Set();
+  const field = (row, key) => key.includes('->>') ? row[key.split('->>')[0]]?.[key.split('->>')[1]] == null ? null : String(row[key.split('->>')[0]][key.split('->>')[1]]) : row[key];
   const service = { rpc: async (name) => ({ data: name === 'reply_alert_recipients' ? [
     { user_id: 'sender', role: 'contractor', can_view: true }, { user_id: 'admin', role: 'admin', can_view: true },
   ] : 'dummy-local-password', error: null }), from(table) {
@@ -13,17 +14,18 @@ export function replyDatabase(seed = {}) {
       const total = rows.length; rows = rows.slice(offset, offset + count);
       if (operation === 'insert' || operation === 'upsert') {
         rows = (Array.isArray(patch) ? patch : [patch]).filter(row => !tables[table].some(old =>
-          table === 'email_replies' ? old.message_id === row.message_id : table === 'reply_notifications' && old.reply_id === row.reply_id && old.user_id === row.user_id))
+          operation === 'upsert' && row.id ? old.id === row.id : table === 'email_replies' ? old.message_id === row.message_id : table === 'reply_notifications' && old.reply_id === row.reply_id && old.user_id === row.user_id))
           .map(row => ({ id: `${table}-${tables[table].length + 1}`, ...row }));
         tables[table].push(...rows); writes.push({ table, patch });
       }
       if (operation === 'update') { rows.forEach(row => Object.assign(row, patch)); writes.push({ table, patch }); }
       return { data: rows.map(row => ({ ...row })), count: operation==='select'?total:rows.length, error: null };
     };
-    const q = { select: () => q, eq: (key, value) => { predicates.push(row => key === 'domains' && typeof value === 'string' && typeof row[key] === 'object' ? JSON.stringify(row[key]) === value : row[key] === value); return q; },
+    const q = { select: () => q, eq: (key, value) => { predicates.push(row => key === 'domains' && typeof value === 'string' && typeof row[key] === 'object' ? JSON.stringify(row[key]) === value : field(row,key) === value); return q; },
+      not: (key, op, value) => { predicates.push(row => op === 'is' && (field(row,key) ?? null) !== value); return q; },
       in: (key, values) => { predicates.push(row => values.includes(row[key])); return q; },
       gte: (key, value) => { predicates.push(row => row[key] >= value); return q; },
-      is: (key, value) => { predicates.push(row => (row[key] ?? null) === value); return q; },
+      is: (key, value) => { predicates.push(row => (field(row,key) ?? null) === value); return q; },
       order: () => q, limit: n => { count = n; return q; },
       range: (first,last) => { offset=first;count=last-first+1;return q; },
       update: value => { operation = 'update'; patch = value; return q; },

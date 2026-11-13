@@ -81,12 +81,12 @@ it('preserves a concurrent first-pass checker checkpoint instead of overwriting 
   f.db.service.from = table => {
     const query = from(table); const update = query.update
     query.update = patch => {
-      if (table === 'deep_find_leads' && !injected) { injected = true; f.db.tables.deep_find_leads[0].domains._verify_gate = { concurrent: true } }
+      if (table === 'deep_find_leads' && !injected) { injected = true; f.db.tables.deep_find_leads[0].domains._verify_gate = { concurrent: true }; f.db.tables.deep_find_leads[0].domains._queue_version = 1 }
       return update(patch)
     }
     return query
   }
-  await expect(f.deps.refreshReadiness('lead')).rejects.toThrow('changed concurrently')
+  await f.deps.refreshReadiness('lead')
   expect(f.db.tables.deep_find_leads[0].domains._verify_gate).toEqual({ concurrent: true })
 })
 it('keeps a concurrently typed email and leaves its enrollment flag unchanged', async () => {
@@ -100,7 +100,7 @@ it('keeps a concurrently typed email and leaves its enrollment flag unchanged', 
     }
     return query
   }
-  expect(await f.deps.applyProven(f.input)).toBe('skipped')
+  expect(await f.deps.applyProven(f.input)).toBe('suggested')
   expect(f.db.tables.decision_maker_candidates[0]).toMatchObject({ email: 'typed@fixture.test', include_in_sequences: true })
   expect(f.db.tables.lead_notes).toHaveLength(0)
 })
