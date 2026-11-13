@@ -5,9 +5,10 @@ export function queuedChecksCounts(rows: readonly { status: string; verdict?: st
     if (row.status === 'skipped' && row.reason === 'person_done') continue;
     if (row.status === 'queued') counts.queued++;
     else if (row.status === 'running') counts.running++;
-    else if (row.status === 'skipped' || row.verdict === 'unverifiable') counts.unconfirmed++;
+    // Microsoft 'not_found' is not proof of absence (2026-11-13 validation: about a third of delivered addresses returned it).
+    else if (row.status === 'skipped' || row.verdict === 'unverifiable' || row.verdict === 'not_found') counts.unconfirmed++;
     else if (row.verdict === 'valid' || row.verdict === 'exists') counts.valid++;
-    else if (row.verdict === 'invalid' || row.verdict === 'not_found') counts.invalid++;
+    else if (row.verdict === 'invalid') counts.invalid++;
   }
   return counts;
 }

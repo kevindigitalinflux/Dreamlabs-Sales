@@ -39,7 +39,7 @@ export function recipientTier(address:string,evidence:RecipientEvidence):TierRes
  if(evidence.checker==='valid')return result('T1','checker_valid','The checker confirmed this address.');
  if(evidence.publishedByCompany)return result('T1','company_site','Published on the company’s own site.');
  if(evidence.placesEmail)return result('T1','places','Published in the company’s Places listing.');
- if(evidence.msExists==='not_found')return result('T3','ms_not_found','Microsoft has no mailbox with this address. Review it.');
+ if(evidence.msExists==='not_found')return result('T3','ms_not_found','Microsoft could not confirm this mailbox. Review it.');
  // A checker-valid saved address already returned T1 above; saving alone is no proof.
  if(evidence.savedNonGuessed&&!evidence.generated)return result('T3','saved_unproven','Saved address that no check has confirmed. Review it.');
  const pattern=evidence.pattern;

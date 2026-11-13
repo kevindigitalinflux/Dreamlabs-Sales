@@ -32,5 +32,5 @@ it('F2 preserves queued, running and every terminal verdict mapping', () => {
     { status: 'done', verdict: 'valid' }, { status: 'done', verdict: 'exists' },
     { status: 'done', verdict: 'invalid' }, { status: 'done', verdict: 'not_found' },
     { status: 'done', verdict: 'unverifiable' },
-  ])).toEqual({ queued: 1, running: 1, valid: 2, invalid: 2, unconfirmed: 1 })
+  ])).toEqual({ queued: 1, running: 1, valid: 2, invalid: 1, unconfirmed: 2 })
 })

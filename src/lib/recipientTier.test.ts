@@ -62,3 +62,8 @@ describe('recipient tiers',()=>{
   expect(recipientTier(' JANE.SMITH@EXAMPLE.COM ',{...base,replied:true}).tier).toBe('T1');
  });
 });
+
+it('words a Microsoft not-found answer as unconfirmed, not as proof of absence', () => {
+  const tier = recipientTier('jo@a.com', { forAddress: 'jo@a.com', syntaxValid: true, hasMailServer: true, generated: false, roleNeedsReview: false, msExists: 'not_found' })
+  expect(tier).toEqual({ tier: 'T3', basis: 'ms_not_found', reason: 'Microsoft could not confirm this mailbox. Review it.' })
+})
