@@ -6,8 +6,9 @@ const original = read('supabase/migrations/074_email_log_tier_snapshot.sql')
 const migration = read('supabase/migrations/075_deep_find_check_queue.sql')
 const audit = read('supabase/audits/deep_find_check_queue.sql')
 
-it('preserves the approval guard as the first statement', () => {
-  expect(migration.trimStart()).toMatch(/^DO \$\$\s*BEGIN\s*RAISE EXCEPTION 'migration 075 is not approved yet'/)
+it('has had its approval guard removed only after review and authorisation', () => {
+  expect(migration).not.toMatch(/not approved yet/)
+  expect(migration.trimStart()).toMatch(/^-- Reviewed by Claude; rolled-back production dry run passed 2026-11-13; Kevin authorised applying it\.\s*BEGIN;/)
 })
 it('extends only the two basis lists in the exact 074 constraint text', () => {
   const constraint = original.slice(original.indexOf('  ADD CONSTRAINT email_logs_tier_snapshot_shape'), original.indexOf(',\n  ADD CONSTRAINT email_logs_bounce_stamp_shape'))

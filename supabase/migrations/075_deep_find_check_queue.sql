@@ -1,9 +1,4 @@
-DO $$
-BEGIN
-  RAISE EXCEPTION 'migration 075 is not approved yet';
-END $$;
-
--- Written only. Claude removes the guard after independent review and Kevin's authorization.
+-- Reviewed by Claude; rolled-back production dry run passed 2026-11-13; Kevin authorised applying it.
 BEGIN;
 ALTER TABLE public.email_logs DROP CONSTRAINT email_logs_tier_snapshot_shape;
 ALTER TABLE public.email_logs
