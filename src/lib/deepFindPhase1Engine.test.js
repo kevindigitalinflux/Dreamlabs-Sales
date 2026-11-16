@@ -9,18 +9,21 @@ vi.mock('../../supabase/functions/_shared/knownPersonLookup', () => ({ webSearch
 vi.mock('../../supabase/functions/_shared/deepFindPeople', () => ({ lookUpPeople: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/workerClient', () => ({ makeWorkerClient: () => ({ lines: () => [], verifyEmail: vi.fn(), scrapeSite: vi.fn(async () => ({ ok: false, failure: 'not_configured' })) }) }));
 vi.mock('../../supabase/functions/_shared/companiesHouse', () => ({ fetchActiveOfficers: vi.fn(async () => []), searchCompaniesByName: vi.fn(), searchOfficers: vi.fn(async () => []), fetchCompanyProfile: vi.fn() }));
-import { searchCompaniesByName } from '../../supabase/functions/_shared/companiesHouse';
+import { searchCompaniesByName, fetchActiveOfficers } from '../../supabase/functions/_shared/companiesHouse';
 import { resolveOrgApiKey, resolveOrgWorkerConfig } from '../../supabase/functions/_shared/orgApiKeys';
 import { discoverLeadDomains } from '../../supabase/functions/_shared/domainDiscoveryLookup';
 import { webSearchForPerson, readCompanyPages } from '../../supabase/functions/_shared/knownPersonLookup';
 import { lookUpPeople } from '../../supabase/functions/_shared/deepFindPeople';
 import { processDeepFindLead } from '../../supabase/functions/_shared/deepFind';
 
-let lead, contacts, writes, service, deny, aiAllowed, beforeWebsiteWrite, roleProfiles;
+let lead, contacts, writes, service, deny, aiAllowed, beforeWebsiteWrite, roleProfiles, savedReadFailure, roleReadStarted;
 const profile = 'https://www.linkedin.com/in/jane-smith';
 const run = () => processDeepFindLead(service, { id: 'run', org_id: 'org', created_by: 'user', status: 'active' }, { id: 'result', lead_id: 'lead', org_id: 'org' });
 beforeEach(() => {
   vi.clearAllMocks(); roleProfiles=[]; deny = false; aiAllowed = true; beforeWebsiteWrite = undefined;
+  savedReadFailure = null; roleReadStarted = false;
+  findRolePeople.mockResolvedValue({people:[],searches:0,via:[]});
+  fetchActiveOfficers.mockResolvedValue([]);
   vi.stubGlobal('Deno', { env: { get: () => undefined } });
   vi.stubGlobal('fetch', vi.fn(() => { throw new Error('Unexpected network'); }));
   lead = { id: 'lead', org_id: 'org', business_name: 'Acme', website: 'old.com', updated_at: 'version', company_number: null, additional_websites: null };
@@ -36,18 +39,39 @@ beforeEach(() => {
     let patch; let inserted; const filters = [];
     const records = () => table === 'deep_find_runs' ? [{ id: 'run', org_id: 'org', status: 'active' }] : table === 'ideal_customer_profiles' ? roleProfiles : table === 'leads' ? [lead] : table === 'decision_maker_candidates' ? contacts : [];
     const result = () => {
+      if (table === 'ideal_customer_profiles') roleReadStarted = true;
+      if (roleReadStarted && table === savedReadFailure && !patch && !inserted) {
+        savedReadFailure = null;
+        return {data:null,error:{message:'fixture read failure'}};
+      }
       if (table === 'leads' && patch?.website) beforeWebsiteWrite?.();
       const found = (inserted ?? records()).filter((r) => filters.every(([k,v]) => Array.isArray(r[k]) ? v === '{' + r[k].map(x => JSON.stringify(x)).join(',') + '}' : r[k] === v));
       if (patch) { writes.push({ table, patch, filters: [...filters] }); if (deny) return { data: [], error: null }; for (const row of found) { Object.assign(row, patch); if (table === 'leads') row.updated_at = 'trigger-version'; } }
       return { data: found.map((r) => ({ ...r })), count:found.length,error: null };
     };
-    const q = { range:()=>q,gte:()=>q,order:()=>q,limit:()=>q,select: () => q, eq: (k,v) => { filters.push([k,v]); return q; }, is: (k,v) => { filters.push([k,v]); return q; },
+    const q = { insert:p=>q.upsert(p),range:()=>q,gte:()=>q,order:()=>q,limit:()=>q,select: () => q, eq: (k,v) => { filters.push([k,v]); return q; }, is: (k,v) => { filters.push([k,v]); return q; },
       update: (p) => { patch = p; return q; }, upsert: (p) => { writes.push({ table, patch: p }); if(table==='decision_maker_candidates'){inserted=[];for(const row of (Array.isArray(p)?p:[p])){const saved={id:'role-'+contacts.length,dismissed_at:null,...row};contacts.push(saved);inserted.push(saved)}} return q; },
       maybeSingle: async () => { const out = result(); return { ...out, data: out.data[0] ?? null }; }, then: (resolve) => resolve(result()) };
     return q;
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it.each(['ideal_customer_profiles','decision_maker_candidates'])('continues without role/team saves when %s cannot be read',async table=>{
+ savedReadFailure=table;lead.website='https://acme.com';
+ roleProfiles=[{id:'icp',org_id:'org',target_roles:['Facilities Manager']}];
+ resolveOrgApiKey.mockImplementation(async(_s,_o,provider)=>['gemini','companies_house'].includes(provider)?'fake':null);
+ searchCompaniesByName.mockResolvedValue([{company_number:'01234567',title:'ACME LIMITED',company_status:'active'}]);
+ const officers=['Oliver Smith','Alice Jones','Ben Hall','Carol Wood'].map(name=>({first_name:name.split(' ')[0],last_name:name.split(' ')[1],title:'Director'}));
+ fetchActiveOfficers.mockResolvedValue(officers);
+ readCompanyPages.mockImplementationOnce(async(_url,_budget,_extra,onPage)=>{const html='<article><h3>Ann Lee</h3><p>Office Manager</p></article>';onPage(html,'https://acme.com/team');return [html]});
+ findRolePeople.mockResolvedValue({people:[{first:'Beth',last:'Gray',title:'Facilities Manager',linkedinUrl:'https://linkedin.com/in/beth-gray',rung:'target'}],searches:1,via:['searxng']});
+ const out=await run();
+ expect(out.status).not.toBe('failed');
+ expect(out.domains.steps).toContain('Role search: skipped, could not read saved data.');
+ expect(contacts.filter(c=>['role_search','team_page'].includes(c.source))).toEqual([]);
+ expect(contacts.filter(c=>c.source==='companies_house')).toHaveLength(4);
+ expect(out.people_found).toBe(4);
+});
 it('keeps a nonblank website under Phase 3 policy and auto-captures LinkedIn with Undo', async () => {
   const out = await run();
   expect(lead.website).toBe('old.com');

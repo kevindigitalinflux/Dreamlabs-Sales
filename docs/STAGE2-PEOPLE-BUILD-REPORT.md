@@ -184,3 +184,9 @@ Gates: 274 app files / 3,501 passed / one existing skipped; 8 wrapper files / 16
 The quoted credential and dotted-initial fixtures failed first; an undotted-initial fixture also exposed the wrong saved surname. Name parsing now drops the comma suffix and single-letter initials before the existing two-to-four-word and letter validation. All three pass. No existing assertion changed.
 
 Gates: 274 app files / 3,504 passed / one existing skipped; 8 wrapper files / 163 passed; all other five gates PASS, edge29. Logs: .superpowers/review-fix3-*.log. Fix 2 commit: 5f9feb8.
+
+### Fix 4 — saved-data read failures
+
+Both real-engine fixtures first returned failed. They now emit exactly "Role search: skipped, could not read saved data.", save neither team nor role people, and continue to add all four fixture officers without the role-hit ceiling. Saved contacts are read once before any role/team writes, avoiding a later read failure after an earlier role save. Checkpoints still guard each write and their existing ordering is preserved. The fixture database now supports officer insert and one-shot scoped read errors; default role/officer mocks are reset between tests. No existing assertion changed.
+
+The first full run caught seven checkpoint-order regressions from an unnecessary extra read checkpoint. It was removed; the focused 76 tests and all seven gates then passed. Final gates: 274 app files / 3,506 passed / one existing skipped; 8 wrapper files / 163 passed; both TypeScript, build, whitespace and edge29 PASS. Logs: .superpowers/review-fix4-final-*.log (initial failed run retained as review-fix4-tests.log). Fix 3 commit: 66d1062.

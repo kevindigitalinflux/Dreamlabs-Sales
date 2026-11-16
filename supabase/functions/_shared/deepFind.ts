@@ -642,9 +642,12 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // Role search runs once after company/domain settlement, before address planning.
   const companyForRoles = str(lead.business_name);
   if (!companyForRoles) steps.push('Role search: skipped, no usable company name.');
-  else {
+  else roleSearch: {
     const profiles = await service.from('ideal_customer_profiles').select('id,org_id,target_roles,fallback_roles').eq('org_id', run.org_id);
-    if (profiles.error) throw new Error('Role search profile read failed');
+    if (profiles.error) { steps.push('Role search: skipped, could not read saved data.'); break roleSearch; }
+    // Read all saved data before any role/team writes, so a read failure cannot leave a partial role result.
+    const current = await service.from('decision_maker_candidates').select('*').eq('lead_id', lead.id);
+    if (current.error) { steps.push('Role search: skipped, could not read saved data.'); break roleSearch; }
     const profile = chooseRoleProfile(profiles.data ?? [], run.org_id, str(lead.icp_id));
     const teamFound = teamPeopleForLead([...fetchedPhonePages, ...confirmedSites.flatMap(site => site.phonePages ?? [])], {
       company: companyForRoles, confirmedDomains: discovery.domains.filter(domain => !domain.needs_check && verified.has(domain.domain)).map(domain => domain.domain),
@@ -667,8 +670,6 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     rolePeople = combineTeamRolePeople(teamPicked, roleResult.people).filter(person => !ownerSuppressed(person.first + ' ' + person.last));
     for (const person of rolePeople) {
       await checkpoint();
-      const current = await service.from('decision_maker_candidates').select('*').eq('lead_id', lead.id);
-      if (current.error) throw new Error('Role search contacts read failed');
       const plan = roleContactPlan(person, current.data ?? [], { leadId: lead.id, creatorId: run.created_by, source: person.source });
       if (plan.kind === 'skip') continue;
       const proposed = plan.kind === 'insert' ? plan.row : { first_name: person.first, last_name: person.last, ...plan.patch };
