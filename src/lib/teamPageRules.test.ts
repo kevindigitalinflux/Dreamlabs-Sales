@@ -28,3 +28,10 @@ it('skips searches only for target team hits, keeps team picks within the combin
  const team=pickTeamPeople(teamPeopleFromPage(page(card())),roleLadder({targetRoles:['Facilities Manager']}));expect(shouldSearchAfterTeam(team)).toBe(false);expect(shouldSearchAfterTeam([{...team[0],rung:'fallback'}])).toBe(true);
  expect(combineTeamRolePeople([{...team[0],rung:'fallback'}],[{first:'Ann',last:'Lee',title:'Office Manager',linkedinUrl:'https://linkedin.com/in/ann',rung:'fallback'},{first:'Ben',last:'Smith',title:'Director',linkedinUrl:'https://linkedin.com/in/ben',rung:'final'}]).map(p=>[p.first,p.source])).toEqual([['Jane','team_page'],['Ann','role_search']]);
 });
+
+it('keeps a nested title separate from social-link text',()=>{
+ expect(teamPeopleFromPage(page('<article><h3>Jane Doe</h3><div><p>Facilities Manager</p><a href="https://linkedin.com/in/jane">LinkedIn</a></div></article>'))[0].title).toBe('Facilities Manager');
+});
+it('takes a LinkedIn link before the name when it belongs to the same card',()=>{
+ expect(teamPeopleFromPage(page('<article><a href="https://linkedin.com/in/jane">Profile</a><h3>Jane Doe</h3><p>Facilities Manager</p></article>'))[0].linkedinUrl).toBe('https://linkedin.com/in/jane');
+});

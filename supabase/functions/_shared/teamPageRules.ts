@@ -11,6 +11,8 @@ const decode = (text: string) => text.replace(/&#(x[0-9a-f]+|\d+);|&(amp|quot|ap
 });
 const text = (node: HtmlNode | string): string => typeof node === 'string' ? decode(node) : node.children.map(text).join('|');
 const flat = (node: HtmlNode | string) => text(node).replace(/\s*\|\s*/g, ' ').replace(/\s+/g, ' ').trim();
+const titleText = (node: HtmlNode | string): string => typeof node === 'string' ? decode(node)
+  : ['a', 'script', 'style'].includes(node.tag) ? '' : node.children.map(titleText).join('|');
 const blocked = (node: HtmlNode) => /testimonial|review|client|nav|footer/i.test(`${node.tag} ${node.attrs.id ?? ''} ${node.attrs.class ?? ''}`);
 const heading = (node: HtmlNode) => /^(h[1-6]|strong)$/.test(node.tag);
 const validName = (name: string) => /^[\p{L}]+(?:[-'’][\p{L}]+)*(?:\s+[\p{L}]+(?:[-'’][\p{L}]+)*){1,3}$/u.test(name);
@@ -81,11 +83,13 @@ export function teamPeopleFromPage(page: { html: string; url: string }): TeamPer
     const siblings = parent.children.slice(parent.children.indexOf(node) + 1).filter((item): item is HtmlNode => typeof item !== 'string');
     const segment: HtmlNode[] = [];
     for (const sibling of siblings) { if (heading(sibling)) break; segment.push(sibling); }
-    const title = segment.filter(item => !['a', 'script', 'style'].includes(item.tag)).map(flat).find(Boolean);
+    const title = segment.map(item => titleText(item).replace(/\s*\|\s*/g, ' ').replace(/\s+/g, ' ').trim()).find(Boolean);
     if (!title || !validTitle(title)) continue;
     const links: string[] = [];
-    const collect = (item: HtmlNode) => { if (item.attrs.href) links.push(item.attrs.href); for (const child of item.children) if (typeof child !== 'string') collect(child); };
-    for (const sibling of segment) collect(sibling);
+    const collect = (item: HtmlNode) => { if (blocked(item)) return; if (item.attrs.href) links.push(item.attrs.href); for (const child of item.children) if (typeof child !== 'string') collect(child); };
+    const namesInCard = parent.children.filter((item): item is HtmlNode => typeof item !== 'string' && heading(item) && validName(flat(item)));
+    if (namesInCard.length === 1) collect(parent);
+    else for (const sibling of segment) collect(sibling);
     add(flat(node), title, links);
   }
   return people;
