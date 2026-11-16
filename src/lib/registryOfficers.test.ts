@@ -30,7 +30,7 @@ describe('mapCompaniesHouseOfficers', () => {
       { name: 'SMITH, John', officer_role: 'director' },
       { name: 'OLD, Bob', officer_role: 'director', resigned_on: '2020-01-01' },
     ]);
-    expect(out.map((o) => o.first_name)).toEqual(['John', 'Mary']);
+    expect(out.map((o) => o.first_name)).toEqual(['John']);
     expect(out[0]).toEqual({ first_name: 'John', last_name: 'Smith', title: 'Director' });
   });
   it('returns an empty array for no officers', () => {

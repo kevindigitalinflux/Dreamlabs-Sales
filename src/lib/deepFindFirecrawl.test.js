@@ -1,3 +1,4 @@
+vi.mock('../../supabase/functions/_shared/roleSearch', async original => ({...await original(), findRolePeople: vi.fn(async()=>({people:[],searches:0,via:[]}))}));
 // Actual engine with bounded fake provider/database dependencies. No network or credentials.
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 vi.mock('../../supabase/functions/_shared/dnsLookup',()=>({cachedMailProvider:()=> 'unknown',lookupMx:vi.fn(async()=> 'mx')}));

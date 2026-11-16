@@ -33,7 +33,7 @@ export function mapCompaniesHouseOfficers(
   items: { name?: string; officer_role?: string; resigned_on?: string }[],
   max = 5,
 ): RegistryOfficer[] {
-  const people = items.filter((i) => i.name && !i.resigned_on && !CORPORATE.test(i.name) && !(i.officer_role ?? '').startsWith('corporate'));
+  const people = items.filter((i) => i.name && !i.resigned_on && i.officer_role !== 'secretary' && !CORPORATE.test(i.name) && !(i.officer_role ?? '').startsWith('corporate'));
   people.sort((a, b) => Number(b.officer_role === 'director') - Number(a.officer_role === 'director'));
   return people.slice(0, max).map((i) => ({ ...splitOfficerName(i.name!), title: officerTitle(i.officer_role) }));
 }

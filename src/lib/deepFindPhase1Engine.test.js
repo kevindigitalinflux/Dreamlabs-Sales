@@ -1,3 +1,5 @@
+import { findRolePeople } from '../../supabase/functions/_shared/roleSearch';
+vi.mock('../../supabase/functions/_shared/roleSearch', async original => ({...await original(), findRolePeople: vi.fn(async()=>({people:[],searches:0,via:[]}))}));
 // Real engine, fake providers and a filter-aware database. No network, keys or remote writes.
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 vi.mock('../../supabase/functions/_shared/orgApiKeys', () => ({ resolveOrgApiKey: vi.fn(), resolveOrgWorkerConfig: vi.fn() }));
@@ -31,16 +33,16 @@ beforeEach(() => {
   webSearchForPerson.mockResolvedValue({ ok: true, found: { linkedin_url: profile }, evidence: `Jane Smith founded Acme: ${profile}` });
   lookUpPeople.mockResolvedValue({ created: [], touched: [], emailsFound: 0, suggestions: [], problems: [], results: [] });
   service = { rpc: vi.fn(async (name) => ({ data: name === 'deep_find_reserve' ? aiAllowed : true })), from(table) {
-    let patch; const filters = [];
+    let patch; let inserted; const filters = [];
     const records = () => table === 'deep_find_runs' ? [{ id: 'run', org_id: 'org', status: 'active' }] : table === 'leads' ? [lead] : table === 'decision_maker_candidates' ? contacts : [];
     const result = () => {
       if (table === 'leads' && patch?.website) beforeWebsiteWrite?.();
-      const found = records().filter((r) => filters.every(([k,v]) => Array.isArray(r[k]) ? v === '{' + r[k].map(x => JSON.stringify(x)).join(',') + '}' : r[k] === v));
+      const found = (inserted ?? records()).filter((r) => filters.every(([k,v]) => Array.isArray(r[k]) ? v === '{' + r[k].map(x => JSON.stringify(x)).join(',') + '}' : r[k] === v));
       if (patch) { writes.push({ table, patch, filters: [...filters] }); if (deny) return { data: [], error: null }; for (const row of found) { Object.assign(row, patch); if (table === 'leads') row.updated_at = 'trigger-version'; } }
       return { data: found.map((r) => ({ ...r })), count:found.length,error: null };
     };
     const q = { range:()=>q,gte:()=>q,order:()=>q,limit:()=>q,select: () => q, eq: (k,v) => { filters.push([k,v]); return q; }, is: (k,v) => { filters.push([k,v]); return q; },
-      update: (p) => { patch = p; return q; }, upsert: (p) => { writes.push({ table, patch: p }); return q; },
+      update: (p) => { patch = p; return q; }, upsert: (p) => { writes.push({ table, patch: p }); if(table==='decision_maker_candidates'){inserted=[];for(const row of (Array.isArray(p)?p:[p])){const saved={id:'role-'+contacts.length,dismissed_at:null,...row};contacts.push(saved);inserted.push(saved)}} return q; },
       maybeSingle: async () => { const out = result(); return { ...out, data: out.data[0] ?? null }; }, then: (resolve) => resolve(result()) };
     return q;
   } };
@@ -173,4 +175,18 @@ it('does not call an unreadable saved website missing', async () => {
   expect((await run()).reason).not.toContain('This lead has no usable website.');
   lead.website = null;
   expect((await run()).reason).toContain('This lead has no usable website.');
+});
+
+it('the engine merges a role-search hit into a registry contact with blanks only',async()=>{
+ contacts[0].source='companies_house';contacts[0].title='';contacts[0].include_in_sequences=true;
+ findRolePeople.mockResolvedValueOnce({people:[{first:'Jane',last:'Smith',title:'Facilities Manager',linkedinUrl:profile,rung:'target'}],searches:1,via:['searxng']});
+ await run();expect(contacts).toHaveLength(1);expect(contacts[0]).toMatchObject({title:'Facilities Manager',linkedin_url:profile,source:'companies_house',include_in_sequences:true});
+});
+it('the engine stores a new role person as a non-enrolled contact and includes the found count',async()=>{
+ const newProfile='https://linkedin.com/in/ann-lee';findRolePeople.mockResolvedValueOnce({people:[{first:'Ann',last:'Lee',title:'Office Manager',linkedinUrl:newProfile,rung:'target'}],searches:1,via:['searxng']});
+ const out=await run();expect(contacts.find(c=>c.first_name==='Ann')).toMatchObject({source:'role_search',kind:'person',linkedin_url:newProfile,include_in_sequences:false,created_by:'user'});expect(out.people_found).toBe(1);
+});
+it('the engine does not revive a dismissed role-search match',async()=>{
+ contacts[0].dismissed_at='2026-11-01';findRolePeople.mockResolvedValueOnce({people:[{first:'Jane',last:'Smith',title:'Facilities Manager',linkedinUrl:profile,rung:'target'}],searches:1,via:['searxng']});
+ await run();expect(contacts).toHaveLength(1);expect(contacts[0].dismissed_at).toBe('2026-11-01');expect(contacts[0].linkedin_url).toBeNull();
 });

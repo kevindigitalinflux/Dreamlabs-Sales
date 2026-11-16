@@ -1,3 +1,7 @@
+import { geminiGroundedSearch } from './ai.ts';
+import { makeSearchProvider } from './searchProvider.ts';
+import { chooseRoleProfile, findRolePeople, roleContactPlan, roleSearchLine, prioritizeRolePeople, officersForRoleSearch } from './roleSearch.ts';
+import type { RoleCandidate } from './roleSearchRules.ts';
 import {recipientTier,type RecipientEvidence} from './recipientTier.ts';
 import {prepareRecipientEvidence,supportedTierPattern} from './recipientTierEvidence.ts';
 import {autoApplyRecipients,type AutoRecipient} from './recipientAutoApply.ts';
@@ -183,6 +187,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   if (contactErr) return { status: 'failed', reason: 'Could not read this lead\'s contacts.' };
   const rows = (contactData ?? []) as Contact[];
   const created: Contact[] = [];
+  let rolePeople: RoleCandidate[] = [];
+  let rolePeopleAdded = 0;
+  const roleSearchUsage = { searxng: 0, gemini: 0 };
+  const rolePriority = <T extends { first: string; last: string }>(people: T[]): T[] => prioritizeRolePeople(people, rolePeople);
+  const roleContacts = () => rolePriority(lookupContacts().map(c => ({ ...c, first: str(c.first_name) ?? '', last: str(c.last_name) ?? '' })));
   const stats: LeadStats = {
     hunterPeople: 0, officersAdded: 0, officerEmails: 0, domainsShown: [], domainsToCheck: 0, namedByWeb: 0, namedOnSite: 0,
     hunterCapHit: false, aiCapHit: false, noHunterKey: !configured.hunterKey, noWebsite: false, unverifiedPeople: 0,
@@ -489,8 +498,11 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     steps.push('CRO lookup when its key arrives; Irish register lookup is not built yet.');
   }
   let officers: Awaited<ReturnType<typeof fetchActiveOfficers>> = [];
-  const addRegistryOfficers = async () => {
+  const readRegistryOfficers = async () => {
     officers = fullestPeople(registry.number && chKey ? await fetchActiveOfficers(registry.number, chKey) : [], o => String(o.first_name ?? '') + ' ' + String(o.last_name ?? ''));
+  };
+  await readRegistryOfficers();
+  const addRegistryOfficers = async () => {
     const officerRows: Record<string, unknown>[] = [];
     for (const o of officers) {
       if (o.first_name && o.last_name && ownerSuppressed(o.first_name + ' ' + o.last_name)) continue;
@@ -498,11 +510,12 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       if (officerRows.some((r) => r.first_name === o.first_name && r.last_name === o.last_name)) continue;
       officerRows.push({ lead_id: lead.id, source: 'companies_house', first_name: o.first_name, last_name: o.last_name, title: o.title, created_by: run.created_by });
     }
-    if (officerRows.length > 0) {
+    const selectedOfficerRows = officersForRoleSearch(officerRows, rolePeople.length > 0).slice(0, Math.max(0, (rolePeople.length ? 3 : Infinity) - stats.officersAdded));
+    if (selectedOfficerRows.length > 0) {
       await checkpoint();
-      const { data, error } = await service.from('decision_maker_candidates').insert(await prepareContacts(officerRows.map((r) => ({ ...r, include_in_sequences: false })))).select('*');
+      const { data, error } = await service.from('decision_maker_candidates').insert(await prepareContacts(selectedOfficerRows.map((r) => ({ ...r, include_in_sequences: false })))).select('*');
       if (error) problems.push({ step: 'save', target: 'the Companies House officers', failure: 'network' });
-      else { created.push(...((data ?? []) as Contact[])); stats.officersAdded = (data ?? []).length; }
+      else { created.push(...((data ?? []) as Contact[])); stats.officersAdded += (data ?? []).length; }
     }
     if (!str(lead.owner_name)) {
       const officer = officers.find((o) => isOwnerRole(o.title));
@@ -529,7 +542,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (registry.number) steps.push(`Companies House officers: ${officers.length} active, ${stats.officersAdded} added as contacts.`);
 
   };
-  await addRegistryOfficers();
+  // Officers are available to domain discovery now; contact inserts wait for the role-search cap.
 
   // Everyone known to work there (contacts, officers, names on the lead): a domain where Hunter lists one of them is confirmed.
   const knownPeople: KnownPersonName[] = [
@@ -621,8 +634,54 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       cachedPeople: registry.proofPeople, priorEvidence: registry.evidence, left, checkpoint, applyNumber: number => applyLead('company_number', number) });
     registryEvidence = registry.evidence ?? {};
     steps.push(registryStep(registry));
-    if (registry.number) await addRegistryOfficers();
+    if (registry.number) await readRegistryOfficers();
   }
+  // Role search runs once after company/domain settlement, before address planning.
+  const companyForRoles = str(lead.business_name);
+  if (!companyForRoles) steps.push('Role search: skipped, no usable company name.');
+  else {
+    const profiles = await service.from('ideal_customer_profiles').select('id,org_id,target_roles,fallback_roles').eq('org_id', run.org_id);
+    if (profiles.error) throw new Error('Role search profile read failed');
+    const profile = chooseRoleProfile(profiles.data ?? [], run.org_id, str(lead.icp_id));
+    const provider = makeSearchProvider({ worker, onSearch: via => { roleSearchUsage[via]++; },
+      reserveAi: async () => {
+        await checkpoint();
+        const reserved = await service.rpc('deep_find_reserve', { run_id: run.id, hunter: 0, ai: 1 });
+        const allowed = !reserved.error && reserved.data === true;
+        if (allowed) spend.used.ai['role search'] = (spend.used.ai['role search'] ?? 0) + 1;
+        return allowed;
+      },
+      gemini: configured.geminiKey ? prompt => geminiGroundedSearch(prompt, configured.geminiKey!, Math.min(15_000, Math.max(1, left() - 5_000))) : undefined,
+    });
+    const roleResult = await findRolePeople({ company: companyForRoles, registeredName: registry.name, city: str(lead.city), profile,
+      provider: { search: async query => { if (workerConfig || configured.geminiKey) await checkpoint(); return provider.search(query); } }, timeLeftMs: left });
+    rolePeople = roleResult.people.filter(person => !ownerSuppressed(person.first + ' ' + person.last));
+    for (const person of rolePeople) {
+      await checkpoint();
+      const current = await service.from('decision_maker_candidates').select('*').eq('lead_id', lead.id);
+      if (current.error) throw new Error('Role search contacts read failed');
+      const plan = roleContactPlan(person, current.data ?? [], { leadId: lead.id, creatorId: run.created_by });
+      if (plan.kind === 'skip') continue;
+      const proposed = plan.kind === 'insert' ? plan.row : { first_name: person.first, last_name: person.last, ...plan.patch };
+      const prepared = await prepareContacts([proposed]);
+      if (!prepared.length) continue;
+      if (plan.kind === 'insert') {
+        const inserted = await insertContacts(service, prepared);
+        created.push(...inserted);
+        rolePeopleAdded += inserted.length;
+        for (const contact of inserted) touched.add(contact.id);
+      } else {
+        const contact = current.data.find((item: Contact) => item.id === plan.contactId) as Contact;
+        for (const field of ['title', 'linkedin_url']) if (str(prepared[0][field])) {
+          if (await applyDeepFindBlank(service, scope, 'decision_maker_candidates', contact, field, String(prepared[0][field]), autoApplied, checkpoint)) touched.add(contact.id);
+        }
+        const stored = all().find(item => item.id === contact.id);
+        if (stored) Object.assign(stored, contact);
+      }
+    }
+    steps.push(roleSearchLine({ ...roleResult, via: roleSearchUsage.gemini > 0 ? [...roleResult.via, 'gemini'] : roleResult.via }));
+  }
+  await addRegistryOfficers();
   for (const site of ownSites) for (const html of site.pages) {
     for (const email of domainEmailsOnPages([html], site.domain).filter((e) => !emailOnLead(all(), e))) {
       suggestions.push({ name: 'Company contact', field: 'email', value: email, label: `Found on ${site.domain}, check it` });
@@ -648,7 +707,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     ...(Array.isArray(lead.additional_owners) ? lead.additional_owners : []),
     ...extraSitePeople.map((p) => p.name), ...pages.flatMap((html) => extractTeamMembers(html).map((p) => p.name)),
     ...webPeople.map((p) => p.name),
-  ] }, lookupContacts(), officers).filter(p => !ownerSuppressed(p.first + ' ' + p.last));
+  ] }, roleContacts(), officers).filter(p => !ownerSuppressed(p.first + ' ' + p.last));
   const optionalBudget = () => optionalPeopleBudget(left(), lookupPeople().length > 0);
   const scrapeTimeout = scrapeTimeoutFor(optionalBudget());
   if (scrapeDomain && scrapeTimeout !== null) {
@@ -710,7 +769,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }
 
   const checkOwners = [lead.owner_name, ...(Array.isArray(lead.additional_owners) ? lead.additional_owners : [])];
-  const checkContacts = prioritiseCheckPeople(all().map(c => ({ ...c, first: str(c.first_name) ?? '', last: str(c.last_name) ?? '', title: str(c.title) })), checkOwners);
+  const checkContacts = rolePriority(prioritiseCheckPeople(all().map(c => ({ ...c, first: str(c.first_name) ?? '', last: str(c.last_name) ?? '', title: str(c.title) })), checkOwners));
   const emails = [...new Set([str(lead.email), ...checkContacts.filter(c => !c.dismissed_at).map(c => str(c.email))].filter((e): e is string => !!e))];
   // Re-check saved emails: an address alone, catch-all or unavailable verdict is never verified evidence.
   // Published site/scrape addresses use the same checker before built guesses, for every effort.
@@ -783,10 +842,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     // Previous order: Round-robin candidates across people. Both inferred and common formats share the same three slots.
     // Person importance now precedes inferred/common pattern rank; retain the original shared slots.
     const availablePeople = lookupPeople();
-    const guessPeople = prioritiseCheckPeople(availablePeople, checkOwners).slice(0, 5);
+    const guessPeople = rolePriority(prioritiseCheckPeople(availablePeople, checkOwners)).slice(0, 5);
     const jobs: ((timeoutMs: number) => Promise<void>)[] = [];
     const prioritised: { email: string; domain: string; name: string }[] = [];
-    for (const importance of [0, 1, 2]) for (let rank = 0; rank < 6; rank++) for (const d of checkDomains.slice(0, 4)) for (const person of guessPeople.filter(p => checkPersonPriority(p, checkOwners) === importance)) {
+    for (const importance of [-1, 0, 1, 2]) for (let rank = 0; rank < 6; rank++) for (const d of checkDomains.slice(0, 4)) for (const person of guessPeople.filter(p => (rolePeople.some(role => displayPersonKey(role.first + ' ' + role.last) === displayPersonKey(p.first + ' ' + p.last)) ? -1 : checkPersonPriority(p, checkOwners)) === importance)) {
       const guess = rankedEmailCandidates(person.first, person.last, d, patterns.get(d) ?? null)[rank];
       if (!guess) continue;
       prioritised.push({email:guess,domain:d,name:person.first + ' ' + person.last});
@@ -947,7 +1006,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     registry = await resolveRegistry(service, lead, chKey, registryPeople, { pages: registryPages, website: usableSite ? str(lead.website) : null, cached: registry.allCandidates ?? registry.candidates, cachedPeople: registry.proofPeople, priorEvidence: registry.evidence, webNumbers, left, checkpoint, applyNumber: number => applyLead('company_number', number) });
     registryEvidence = registry.evidence ?? {};
     steps.push(registryStep(registry));
-    if (registry.number) await addRegistryOfficers();
+    if (registry.number) { await readRegistryOfficers(); await addRegistryOfficers(); }
   }
 
   if (effort !== 'custom') {
@@ -1092,7 +1151,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   // (3) everyone to look up (contacts without an email, officers, names on the lead) on CONFIRMED domains only
   // Keep the existing wide-lookup trust boundary: site/web-only names get guesses for review above,
   // but do not become Hunter contacts merely because the optional team reader found them.
-  const people = peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, lookupContacts(), officers).filter(p => !ownerSuppressed(p.first + ' ' + p.last));
+  const people = peopleToLookUp({ owner_name: lead.owner_name, additional_owners: lead.additional_owners }, roleContacts(), officers).filter(p => !ownerSuppressed(p.first + ' ' + p.last));
   const verifiedDomains = domains.filter((d) => verified.has(d)).slice(0, 4);
   // Share the exact same grounded search with wide email lookups: never search twice for one person in a run.
   const personKey = (first: string, last: string) => `${first} ${last}`.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -1391,7 +1450,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   if (readinessError || !savedReadiness?.length) throw new Error('Could not save lead readiness');
   const readinessLine = readinessText(readiness.readiness, readiness.readiness_missing,sendableReadinessRecipients(readinessInput).length);
   steps.push(readinessLine);
-  const queuePeople = prioritiseCheckPeople(lookupPeople(), checkOwners).map((person, priority) => ({ ...person,
+  const queuePeople = rolePriority(prioritiseCheckPeople(lookupPeople(), checkOwners)).map((person, priority) => ({ ...person,
     name: `${person.first} ${person.last}`.trim(), personKey: `${person.first} ${person.last}`.trim().toLowerCase(),
     contactId: exactContact(person.first, person.last)?.id ?? null, priority }));
   const queueOwner = parseLeadPersonName(finalLead.data.owner_name);
@@ -1415,13 +1474,14 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   return {
     status: 'done',
     reason: readinessLine + '. ' + (apolloPeople ? `Apollo added ${apolloPeople} decision-maker contacts. ` : '') + (suspicion.suspect ? "The lead's website may belong to another company, so it was not used. " : '') + deepFindSummary(stats),
-    people_found: stats.hunterPeople + stats.officersAdded + apolloPeople,
+    people_found: stats.hunterPeople + stats.officersAdded + apolloPeople + rolePeopleAdded,
     domains: {
       ...metadata,
       recipient_evidence:recipientEvidence,
       ...readiness,
       dismissed_people: dismissedPeople,
       registry_evidence: registryEvidence,
+      role_searches_by_provider: roleSearchUsage,
       auto_applied: autoApplied.slice(0, 100),
       domains: discovery.domains,
       named_by_web: namedByWeb,
