@@ -1,3 +1,7 @@
+## Stage 2 review fixes (2026-11-16) — current checkpoint
+
+Kevin authorized seven local fixes on codex/stage2-people after Claude's review of 2a018da. Read the appended Review fixes in docs/STAGE2-PEOPLE-BUILD-REPORT.md. All seven fixes are implemented with failing fixtures first and seven gates before each commit: final 274 app files / 3,512 passed / one existing skipped; 8 wrapper files / 166 passed; both TypeScript, build, whitespace and edge29 PASS. This commit contains Fix 7 and the final ledger; resolve branch HEAD for its hash. Fixes 1–6: 759e02d, 5f9feb8, 66d1062, 90bd726, 1074f31, e33e41a. Independent re-review and all live/runtime/SQL checks remain pending. No network, installation, SQL, VPS, spending or publication occurred. Codex remains builder; Claude reviews next. Stop after the report; older next-task pointers do not authorize rollout.
+
 ## Session close verification (2026-11-16)
 
 The project and shared-vault handoff are saved. Read docs/HANDOFF.md and docs/STAGE2-POSITIVE-DIFFERENCE-CHECK.md first. Three baseline/current fixture comparisons demonstrate positive local behavior; all seven gates pass (3,494 app tests plus one skipped, 163 wrapper tests). Application code remains 50ca647; build/report commit is 2a018da. Production uplift, SQL/container/browser/provider runtime and independent review remain unverified. No deployment, SQL or spending was authorized by the closeout request. Builder work through Task 6 is finished; Claude reviews next.

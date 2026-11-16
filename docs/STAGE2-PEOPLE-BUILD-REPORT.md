@@ -202,3 +202,48 @@ Gates: 274 app files / 3,508 passed / one existing skipped; 8 wrapper files / 16
 The restored Microsoft catch-all assertion failed first, alongside the cross-provider fixture and Microsoft-state matrix. Saved role addresses now skip catch-all for all four providers; no_answer stays SMTP. Existing assertions changed: (1) the saved Microsoft role catch_all case expects [] instead of one SMTP row, retaining the no_answer assertion; (2) the Microsoft state matrix omits info@fixture.test only for catch_all, retaining saved named-person ms_exists, non-role company SMTP and four generated ms_exists formats in every state. The matrix now identifies saved rows by address rather than taking the first three rows. All other existing planQueue assertions pass unchanged.
 
 Gates: 274 app files / 3,512 passed / one existing skipped; 8 wrapper files / 163 passed; all other five gates PASS, edge29. Logs: .superpowers/review-fix6-*.log. Fix 5 commit: 1074f31.
+
+### Fix 7 — authentication before verify logging
+
+Both missing-secret and wrong-secret requests first cloned the body before rejection. Authentication now precedes verify logging/body parsing; the global limiter remains after logging so authenticated budget refusals are still logged. The two refusal fixtures now prove 401/unauthorized, zero request clone/json calls, an unused original body and no log entry. A third fixture proves one fixed-field log per authenticated request, including a 429 global-rate refusal; the existing domain-stall/refusal/privacy fixture remains passing. No existing assertion changed. No address or domain is logged.
+
+### Review-fix result and acceptance evidence
+
+All seven fixes are built locally, with one implementation commit per fix. Each changed behavior was reproduced by a failing test before its production edit. The unchanged-behavior companions (location/legal exceptions, non-Microsoft catch-all skips, throttled fallback and authenticated logging) also pass.
+
+1. MET: Amy Poe/Pro Cleaning Solutions Texas and John Smith/Deep Cleaning Experts return company_mismatch. Registered-name, legal-word, lead-location and all previously accepted fixtures pass. Title-wide company presence no longer qualifies a person.
+2. MET: Sam Lee's football-club Director role returns role_mismatch. Jane Doe saves Owner, the exact ladder role, rather than Titan Cleaning Services. Same-company at/@/comma segment fixtures pass.
+3. MET: Tom Hall, MBA saves Tom/Hall; Mary J. Blige and Mary J Blige both save Mary/Blige. Existing two-to-four-word validation follows normalization.
+4. MET: Profile and contacts read-error engine fixtures continue the lead, emit the exact skip line, save no role/team people, and add four officers as though no role person was found. All existing authorization/cancellation assertions remain intact.
+5. MET: Three empty engine rungs reserve exactly one AI unit. Later empty searches return none without a reservation. A new per-lead provider gets its own empty fallback; a throttled second rung still falls back after an empty first. Existing not_configured/unreachable fallback tests pass.
+6. MET: Saved catch-all role addresses skip all four providers. Microsoft no_answer remains SMTP; named-person guesses remain four ms_exists formats in every state.
+7. MET: Unauthenticated verify requests are rejected before clone/body parsing/domain logging. Authenticated success and refusals still log once, including the global-budget refusal.
+
+### Commits and gate ledger
+
+| Fix | Commit | App files / passed | Wrapper files / passed | Other gates |
+| --- | --- | --- | --- | --- |
+| 1 | 759e02d | 274 / 3,497 | 8 / 163 | All PASS |
+| 2 | 5f9feb8 | 274 / 3,501 | 8 / 163 | All PASS |
+| 3 | 66d1062 | 274 / 3,504 | 8 / 163 | All PASS |
+| 4 | 90bd726 | 274 / 3,506 | 8 / 163 | All PASS after the documented correction |
+| 5 | 1074f31 | 274 / 3,508 | 8 / 163 | All PASS |
+| 6 | e33e41a | 274 / 3,512 | 8 / 163 | All PASS |
+| 7 | Commit containing this final Review fixes entry, titled fix: authenticate before verify body logging | 274 / 3,512 | 8 / 166 | All PASS |
+
+Each gate run includes one existing opt-in skipped app test and no failures at the commit boundary. Required commands, run for every fix: npx tsc --noEmit; npx vitest run; npm run build; git diff --check; node scripts/places-edge-typecheck.mjs; then npx tsc --noEmit and npx vitest run in worker/wrapper. The runner uses core.safecrlf=false for the whitespace check; it does not normalize files. Edge coverage remains 29 entrypoints. VITE_SUPABASE_URL=http://127.0.0.1:54321 and VITE_SUPABASE_ANON_KEY=local-test-placeholder. Logs are local ignored .superpowers/review-fix<number>-*.log; Fix 4's passing run uses review-fix4-final. Final wrapper coverage rises by three tests, app coverage by eighteen. The existing large-chunk build warning remains.
+
+### Changed existing assertions (complete inventory)
+
+- Fix 1: Other Employer in the current title with an Acme Experience snippet changes rejection from former to company_mismatch. This implements the stricter title-company evidence rule and was reported before editing. No accepted fixture changed.
+- Fix 6: Saved Microsoft role on catch_all changes from one smtp row to []; its no_answer expectation remains smtp.
+- Fix 6: The Microsoft state matrix excludes info@fixture.test on catch_all. Other states retain it; jo@fixture.test stays ms_exists and office-mail@fixture.test stays smtp. The assertion checks saved row addresses/kinds instead of the first three kinds, because the excluded role makes the third row a generated guess. The four generated-format assertion remains unchanged.
+- No other existing assertion changed. Fix 4 adds insert/read-error support and resets new mock defaults in the existing engine harness, without weakening old expectations.
+
+### What changed, limits and handoff
+
+Production paths changed: roleSearchRules.ts (company/role/name evidence), roleSearch.ts and deepFind.ts (location propagation and nonfatal role saved-data reads), searchProvider.ts (per-lead empty-result fallback), verifyQueueRules.ts (catch-all roles) and worker/wrapper/src/app.ts (middleware order). Four existing fixture files were extended: roleSearchRules.test.ts, deepFindPhase1Engine.test.js, searchProvider.test.js and verifyQueueRules.test.ts; wrapper app.test.ts adds authentication/log coverage. No schema, migration, cap, verdict, tier or ladder value changed. The later stricter review rules supersede earlier report descriptions of catch-all role routing and broad snippet matching.
+
+NOT VERIFIED: independent re-review; real database errors/concurrency/RLS; SQL migrations/audits/scoring; Docker/Compose startup; browser/mobile/theme; real SearXNG/Gemini/LinkedIn/Microsoft/SMTP behavior, latency or production uplift. These remain outside the local-fixture scope. No network, provider request, install, spending, SQL execution, VPS change, push, merge or deployment occurred. No dependency or secret file was read. Commit hooks were disabled only per commit to preserve the accepted-main vault mirror.
+
+Deviations and open questions: no unresolved behavior question. Contacts are pre-read once before any role/team writes to guarantee that either specified saved-data read failure saves nothing from that stage. The unnecessary checkpoint initially introduced in Fix 4 was removed after regression evidence; all old checkpoint assertions pass. The exact seventh commit hash is supplied in the final handoff because a commit cannot embed its own hash. Stop here: Claude reviews these seven commits; rollout remains separately authorized work. Subscription usage is unavailable; no paid fallback was used.

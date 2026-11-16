@@ -32,7 +32,16 @@ export function buildApp(secret: string | undefined, deps: AppDeps = {}) {
   const app = new Hono()
   const limiter = new RateLimiter(deps.perMinute ?? 120, 60_000)
 
+  // Every route except the 404 fallback needs the secret header.
+  app.use('*', async (c, next) => {
+    if (!secretMatches(secret, c.req.header('x-worker-secret'))) {
+      return c.json({ error: 'unauthorized' }, 401)
+    }
+    await next()
+  })
+
   // One privacy-safe line for every verify route request, including refusals.
+  // Only authenticated requests reach body parsing and domain hashing.
   app.use('/verify-email', async (c, next) => {
     const started = Date.now()
     const body = await c.req.raw.clone().json().catch(() => null)
@@ -45,11 +54,8 @@ export function buildApp(secret: string | undefined, deps: AppDeps = {}) {
     }
   })
 
-  // Every route except the 404 fallback needs the secret header.
+  // Keep authenticated budget refusals inside the verify logging middleware.
   app.use('*', async (c, next) => {
-    if (!secretMatches(secret, c.req.header('x-worker-secret'))) {
-      return c.json({ error: 'unauthorized' }, 401)
-    }
     if (!limiter.take('global')) return c.json({ error: 'rate_limited' }, 429)
     await next()
   })

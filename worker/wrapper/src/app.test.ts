@@ -3,6 +3,31 @@ import { buildApp } from './app.js'
 import { secretMatches } from './auth.js'
 
 const SECRET = 'a'.repeat(40)
+it.each([undefined,'wrong-secret'])('refuses secret %s before reading or hashing the verify body',async secret=>{
+ const log=vi.spyOn(console,'info').mockImplementation(()=>{})
+ try {
+  const headers:Record<string,string>={'content-type':'application/json'}
+  if(secret) headers['x-worker-secret']=secret
+  const request=new Request('http://localhost/verify-email',{method:'POST',headers,body:JSON.stringify({email:'private@private.test'})})
+  const clone=vi.spyOn(request,'clone'),read=vi.spyOn(request,'json')
+  const response=await buildApp(SECRET).fetch(request)
+  expect(response.status).toBe(401);expect(await response.json()).toEqual({error:'unauthorized'})
+  expect(clone).not.toHaveBeenCalled();expect(read).not.toHaveBeenCalled();expect(request.bodyUsed).toBe(false)
+  expect(log).not.toHaveBeenCalled()
+ } finally {vi.restoreAllMocks()}
+})
+it('logs one line per authenticated verify request including global-budget refusals',async()=>{
+ const log=vi.spyOn(console,'info').mockImplementation(()=>{})
+ try {
+  const verify=vi.fn(async(email:string)=>({email,status:'valid' as const,reason:'deliverable'}))
+  const app=buildApp(SECRET,{verify,perMinute:1})
+  const post=()=>app.request('/verify-email',{method:'POST',headers:{'x-worker-secret':SECRET,'content-type':'application/json'},body:JSON.stringify({email:'private@private.test'})})
+  expect((await post()).status).toBe(200);expect((await post()).status).toBe(429)
+  expect(verify).toHaveBeenCalledTimes(1);expect(log).toHaveBeenCalledTimes(2)
+  expect(log.mock.calls.map(([line])=>JSON.parse(line).reason)).toEqual(['deliverable','rate_limited'])
+  for(const [line] of log.mock.calls){expect(JSON.parse(line).domain_hash).toMatch(/^[a-f0-9]{8}$/);expect(line).not.toContain('private');expect(line).not.toContain('@')}
+ } finally {log.mockRestore()}
+})
 describe('POST /ms-exists', () => {
   const fake = async (email: string) => ({ email, result: 'exists' as const })
   const post = (app: ReturnType<typeof buildApp>, email: string) => app.request('/ms-exists', { method: 'POST', headers: { 'x-worker-secret': SECRET, 'content-type': 'application/json' }, body: JSON.stringify({ email }) })
