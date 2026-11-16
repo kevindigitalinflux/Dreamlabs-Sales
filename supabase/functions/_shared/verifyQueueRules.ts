@@ -29,9 +29,9 @@ export function planQueue(input: QueueInput): QueueCandidate[] {
     const domain = address.split('@')[1] ?? '';
     const server = input.domains.find(item => item.domain.toLowerCase() === domain);
     const role = isRoleAddress(address);
-    if (role && server?.state === 'catch_all') continue;
-    const microsoft = server?.provider === 'microsoft' && ['catch_all', 'no_answer'].includes(server.state);
-    add({ ...saved, address, domain, kind: microsoft && !role ? 'ms_exists' : 'smtp', rank: 0 });
+    if (role && server?.state === 'catch_all' && server.provider !== 'microsoft') continue;
+    const microsoft = server?.provider === 'microsoft';
+    add({ ...saved, address, domain, kind: microsoft && !role && saved.personKey !== null ? 'ms_exists' : 'smtp', rank: 0 });
   }
   const guesses: QueueCandidate[] = [];
   for (const person of [...input.people].sort((a, b) => a.priority - b.priority)) {
@@ -40,7 +40,7 @@ export function planQueue(input: QueueInput): QueueCandidate[] {
       || formats.some(group => group.addresses.some(address => checked.get(address.trim().toLowerCase()) === 'valid'));
     if (proven) continue;
     for (const { server, addresses } of formats) {
-      const microsoft = server.provider === 'microsoft' && ['catch_all', 'no_answer'].includes(server.state);
+      const microsoft = server.provider === 'microsoft';
       if (!microsoft && !['provable', 'unchecked'].includes(server.state)) continue;
       const kind = microsoft ? 'ms_exists' : 'smtp';
       (microsoft ? addresses.slice(0, 4) : addresses).forEach((address, rank) => {
@@ -54,6 +54,7 @@ export function planQueue(input: QueueInput): QueueCandidate[] {
 
 export function nextStep(row: { kind: 'smtp' | 'ms_exists'; attempts: number }, answer: { ok: true; status: string; reason: string } | { ok: false; failure: string }, now: number): QueueOutcome {
   const reason = answer.ok ? answer.reason : answer.failure;
+  if (!answer.ok && reason === 'domain_stalled') return { status: 'queued', nextAt: now + 600_000, reason };
   if (!answer.ok && ['limit_reached', 'not_configured'].includes(reason)) return { status: 'skipped', reason };
   if (answer.ok) {
     if (row.kind === 'ms_exists' && (answer.status === 'exists' || answer.status === 'not_found')) return { status: 'done', verdict: answer.status, reason };

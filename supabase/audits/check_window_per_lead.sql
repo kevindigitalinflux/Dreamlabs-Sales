@@ -47,6 +47,12 @@ BEGIN
   UPDATE public.deep_find_check_queue SET status='running',created_at=now(),claimed_at=now(),reason=NULL WHERE id=row_id;
   PERFORM public.deep_find_checks_expire();
   IF NOT EXISTS(SELECT 1 FROM public.deep_find_check_queue WHERE id=row_id AND status='skipped' AND reason='run_time_limit') THEN RAISE EXCEPTION 'Cancellation did not expire immediately'; END IF;
+  UPDATE public.deep_find_runs SET status='active' WHERE id=run_a;
+  UPDATE public.deep_find_check_queue SET status='running',attempts=2 WHERE id=row_id;
+  IF NOT public.deep_find_checks_finish(row_id,'queued',NULL,'domain_stalled','unknown',now()+interval '10 minutes') THEN RAISE EXCEPTION 'Stall requeue failed'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM public.deep_find_check_queue WHERE id=row_id AND attempts=1 AND next_at=now()+interval '10 minutes') THEN RAISE EXCEPTION 'Stall spent an attempt'; END IF;
+  IF public.deep_find_checks_finish(row_id,'queued',NULL,'domain_stalled','unknown',now()+interval '10 minutes') THEN RAISE EXCEPTION 'Repeated finish refunded twice'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM public.deep_find_check_queue WHERE id=row_id AND attempts=1) THEN RAISE EXCEPTION 'Repeated refund changed attempts'; END IF;
   FOREACH client_role IN ARRAY ARRAY['anon','authenticated'] LOOP
     FOREACH signature IN ARRAY ARRAY['public.deep_find_checks_claim(integer)','public.deep_find_checks_expire()'] LOOP
       IF has_function_privilege(client_role,signature,'EXECUTE') THEN RAISE EXCEPTION 'Client execute grant'; END IF;

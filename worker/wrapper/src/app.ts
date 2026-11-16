@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+import { DomainStallBreaker } from './domainStall.js'
 import { Hono } from 'hono'
 import { secretMatches } from './auth.js'
 import { RateLimiter } from './rateLimit.js'
@@ -27,6 +29,19 @@ export function buildApp(secret: string | undefined, deps: AppDeps = {}) {
   const app = new Hono()
   const limiter = new RateLimiter(deps.perMinute ?? 120, 60_000)
 
+  // One privacy-safe line for every verify route request, including refusals.
+  app.use('/verify-email', async (c, next) => {
+    const started = Date.now()
+    const body = await c.req.raw.clone().json().catch(() => null)
+    const domain = normaliseEmail(body?.email)?.domain ?? ''
+    try { await next() } finally {
+      const answer = await c.res.clone().json().catch(() => null)
+      const allowed = new Set(['deliverable','bad_syntax','no_mail_server','mailbox_missing','mailbox_disabled','catch_all','disposable','full_inbox','role_account','provider_blocks_checks','unknown','checker_error','timeout','unauthorized','rate_limited','not_configured','bad_request','domain_throttled','domain_stalled'])
+      const code = answer?.reason ?? answer?.error
+      console.info(JSON.stringify({ reason: allowed.has(code) ? code : 'checker_error', duration_ms: Date.now() - started, domain_hash: createHash('sha256').update(domain).digest('hex').slice(0, 8) }))
+    }
+  })
+
   // Every route except the 404 fallback needs the secret header.
   app.use('*', async (c, next) => {
     if (!secretMatches(secret, c.req.header('x-worker-secret'))) {
@@ -52,6 +67,7 @@ export function buildApp(secret: string | undefined, deps: AppDeps = {}) {
     }
   })
 
+  const stalls = new DomainStallBreaker()
   const domainThrottle = makeDomainThrottle(deps.perDomainPerMinute ?? 5)
   const msLimiter = new RateLimiter(deps.msPerMinute ?? 20, 60_000)
   app.post('/ms-exists', async (c) => {
@@ -68,8 +84,13 @@ export function buildApp(secret: string | undefined, deps: AppDeps = {}) {
     const body = await c.req.json().catch(() => null)
     const parsed = normaliseEmail(body && typeof body === 'object' ? (body as { email?: unknown }).email : undefined)
     if (!parsed) return c.json({ error: 'bad_request' }, 400)
+    if (stalls.blocked(parsed.domain)) return c.json({ error: 'domain_stalled' }, 429)
     if (!domainThrottle.take(parsed.domain)) return c.json({ error: 'domain_throttled' }, 429)
-    return c.json(await deps.verify(parsed.email))
+    let answer: VerifyResult
+    try { answer = await deps.verify(parsed.email) }
+    catch { answer = { email: parsed.email, status: 'unverifiable', reason: 'checker_error' } }
+    stalls.record(parsed.domain, answer)
+    return c.json(answer)
   })
 
   // Contact scrape of one company website (emails, phones, socials, tech). Heavy, so it has its own tight budget.

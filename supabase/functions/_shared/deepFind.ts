@@ -46,7 +46,7 @@ import {
 } from './deepFindRules.ts';
 import { makeRunVerifyGate, saveRunResult } from './runVerifyGateStore.ts';
 import { makeWorkerClient } from './workerClient.ts';
-import { MAX_VERIFY_PER_LEAD, WORKER_TIMEOUT_MS, scrapeTimeoutFor, unconfirmedLabel, verifyAction, type WorkerFailure } from './workerRules.ts';
+import { MAX_VERIFY_PER_LEAD, WORKER_TIMEOUT_MS, failureStopsLead, scrapeTimeoutFor, unconfirmedLabel, verifyAction, type WorkerFailure } from './workerRules.ts';
 import { checkPersonPriority, prioritiseCheckPeople, rankedEmailCandidates, unverifiedEmailSuggestions, providerGuessLine, GuessBudget, GuessChecks, optionalPeopleBudget, personEmailLine, COMMON_GUESS_LABEL } from './personEmailFinding.ts';
 import { makeFirecrawlClient } from './firecrawlClient.ts';
 import { FIRECRAWL_DAILY_PAGES, firecrawlDomainFor } from './firecrawlRules.ts';
@@ -748,6 +748,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   };
   const checkerFailures: Record<WorkerFailure, string> = {
     not_configured: 'The email checker is not set up.', limit_reached: 'The email checker reached its limit.',
+    domain_stalled: 'Checks for this mail domain paused after repeated checker stalls.',
     busy: 'The email checker is busy.', unreachable: 'The email checker could not be reached.',
     bad_response: 'The email checker could not return a usable answer.',
     timeout: 'The email checker took too long to answer for this address.',
@@ -797,7 +798,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         const checked = await checkEmail(guess, { timeoutMs, timeBudgetMs: guessBudget.timeLeft() });
         checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : checked.failure);
         if (!checked.ok) {
-          if (checked.failure !== 'timeout') { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
+          if (failureStopsLead(checked.failure)) { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
           else domainDetail(d, unverifiableReasons.timeout!);
         }
         else if (checked.value.status === 'unverifiable') domainDetail(d, unverifiableReasons[checked.value.reason] ?? unverifiableReasons.unknown!);
@@ -834,7 +835,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         const checked = checkedEmails.get(guess.toLowerCase()) ?? null;
         if (checked) {
           checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : checked.failure);
-          if (!checked.ok && checked.failure !== 'timeout') { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
+          if (!checked.ok && failureStopsLead(checked.failure)) { checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; }
         }
         const action = roleNeedsReview(guess)?'suggest':verifyAction(checked && checked.ok ? checked.value.status : null, !!hunterKey && !guessBudget.exhausted && !checks.blocked.has(d) && !checks.hasUnverifiable(d) && !checks.catchAll.has(d) && verifications < 3 && left() > 45_000);
         if (action === 'drop') { invalidGuesses.add(guess); continue; }
@@ -889,7 +890,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
           if (!checked) continue;
           checks.record(guess, checked.ok ? checked.value.status : null, checked.ok ? checked.value.reason : checked.failure);
           if (!checked.ok) {
-            if (checked.failure === 'timeout') { domainDetail(d, unverifiableReasons.timeout!); continue; }
+            if (!failureStopsLead(checked.failure)) { domainDetail(d, checkerFailures[checked.failure]); continue; }
             checks.stopWorker(); checkerFailure = checkerFailures[checked.failure]; break;
           }
           if (checked.value.status === 'invalid') invalidGuesses.add(guess);

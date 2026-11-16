@@ -71,6 +71,10 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
       });
       // Redirects are refused before forwarding credentials; no work happened at the worker.
       failure = res.status >= 300 && res.status < 400 ? 'unreachable' : failureForStatus(res.status);
+      if (res.status === 429 && kind === 'verify') {
+        try { const body = await res.json(); if (body?.error === 'domain_stalled') failure = 'domain_stalled'; }
+        catch (error) { console.info('Worker refusal body unavailable', error instanceof Error ? error.name : 'unknown'); }
+      }
       if (failure === null) {
         try { json = await res.json(); } catch (error) {
           failure = timedOut || (error instanceof Error && error.name === 'AbortError') ? 'timeout' : 'bad_response';
@@ -87,7 +91,7 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
     // Our own timeout is not "the worker did no work": it may still be running, so the units stay reserved.
     if (shouldRefund(failure) && !timedOut) await refundUsage(usage, orgId, resource, units, reserve.day);
     const line = workerFailureLine(failure);
-    if (failure === 'bad_response' || failure === 'timeout') { addLine(line); return { ok: false, failure, line }; }
+    if (failure === 'bad_response' || failure === 'timeout' || failure === 'domain_stalled') { addLine(line); return { ok: false, failure, line }; }
     return stop(kind, failure, line);
   }
 
@@ -113,6 +117,7 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
         }
         if(!admitted){verifyCalls++;admitted=true;firstStarted=Date.now();}attempts++;
         const raw = await call('verify', 1, '/verify-email', { email }, options?.timeoutMs);
+        if (!raw.ok && raw.failure === 'domain_stalled') { verifyCalls--; admitted = false; }
         if (!raw.ok) return { ok: false, failure: raw.failure, line: raw.line,allowanceReached:raw.allowanceReached };
         const reply = parseVerifyReply(raw.json, email);
         if (!reply) { const line = workerFailureLine('bad_response'); addLine(line); return { ok: false, failure: 'bad_response', line }; }

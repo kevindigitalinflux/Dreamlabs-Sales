@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { buildApp } from './app.js'
 import { secretMatches } from './auth.js'
 
@@ -143,3 +143,17 @@ describe('POST /fetch-page', () => {
     expect(statuses).toEqual([200, 200, 429])
   })
 })
+
+it('refuses stalled domains without Reacher, preserves other domains, and logs only fixed fields',async()=>{
+ vi.useFakeTimers();const log=vi.spyOn(console,'info').mockImplementation(()=>{});
+ try {
+ let calls=0;const app=buildApp(SECRET,{verify:async email=>{calls++;return {email,status:'unverifiable',reason:'timeout'}},perDomainPerMinute:100});
+ const post=(email:string)=>app.request('/verify-email',{method:'POST',headers:{'x-worker-secret':SECRET,'content-type':'application/json'},body:JSON.stringify({email})});
+ expect((await post('a@private.test')).status).toBe(200);expect((await post('b@private.test')).status).toBe(200);
+ const blocked=await post('c@private.test');expect(blocked.status).toBe(429);expect(await blocked.json()).toEqual({error:'domain_stalled'});expect(calls).toBe(2);
+ expect((await post('a@other.test')).status).toBe(200);expect(calls).toBe(3);
+ await vi.advanceTimersByTimeAsync(600000);expect((await post('d@private.test')).status).toBe(200);expect(calls).toBe(4);
+ expect(log).toHaveBeenCalledTimes(5);
+ for(const [line] of log.mock.calls){const entry=JSON.parse(line);expect(Object.keys(entry).sort()).toEqual(['domain_hash','duration_ms','reason']);expect(entry.domain_hash).toMatch(/^[a-f0-9]{8}$/);expect(entry.duration_ms).toBeGreaterThanOrEqual(0);expect(line).not.toContain('private.test');expect(line).not.toContain('@');}
+ } finally {vi.useRealTimers();log.mockRestore()}
+});

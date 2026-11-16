@@ -489,3 +489,21 @@ it('waits for three same-domain checks using lead time, separately from each cal
  expect(starts).toEqual([60000,60000,60000]);
  expect(reserveCalls(u)).toHaveLength(3);expect(refundCalls(u)).toHaveLength(0);
 });
+
+it('refunds domain_stalled once and permits other domains on the same client', async()=>{
+ const u=usage();let requests=0;
+ const f=vi.fn<typeof fetch>(async (_url,init)=>{
+  requests++;const email=JSON.parse(init?.body as string).email;
+  return email.endsWith('@stalled.test')?new Response(JSON.stringify({error:'domain_stalled'}),{status:429}):new Response(JSON.stringify({email,status:'valid',reason:'deliverable'}));
+ });
+ const c=make(u,f);
+ expect(await c.verifyEmail('jo@stalled.test')).toMatchObject({ok:false,failure:'domain_stalled'});
+ expect(await c.verifyEmail('jo@other.test')).toMatchObject({ok:true,value:{status:'valid'}});
+ expect(requests).toBe(2);expect(refundCalls(u)).toHaveLength(1);expect(reserveCalls(u)).toHaveLength(2);
+});
+
+it('does not spend the per-lead check cap on stalled-domain refusals',async()=>{
+ const u=usage();const f=vi.fn<typeof fetch>(async(_url,init)=>{const email=JSON.parse(init?.body as string).email;return new Response(JSON.stringify(email.endsWith('@blocked.test')?{error:'domain_stalled'}:{email,status:'valid',reason:'deliverable'}),{status:email.endsWith('@blocked.test')?429:200})});
+ const c=make(u,f);for(let i=0;i<10;i++) await c.verifyEmail('a@blocked.test');
+ expect(await c.verifyEmail('a@working.test')).toMatchObject({ok:true});expect(refundCalls(u)).toHaveLength(10);
+});

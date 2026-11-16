@@ -11,7 +11,9 @@ if (!secret || secret.length < 32) {
 
 const reacherUrl = process.env.REACHER_URL
 const reacherSecret = process.env.REACHER_SECRET
-const verify = reacherUrl ? (email: string) => verifyEmail(email, { reacherUrl, reacherSecret }) : undefined
+const timeoutMs = process.env.VERIFY_TIMEOUT_MS === undefined ? undefined : Number(process.env.VERIFY_TIMEOUT_MS)
+if (timeoutMs !== undefined && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) throw new Error('Invalid VERIFY_TIMEOUT_MS')
+const verify = reacherUrl ? (email: string) => verifyEmail(email, { reacherUrl, reacherSecret, timeoutMs }) : undefined
 
 const scraperUrl = process.env.SCRAPER_URL
 const scraperSecret = process.env.SCRAPER_SECRET

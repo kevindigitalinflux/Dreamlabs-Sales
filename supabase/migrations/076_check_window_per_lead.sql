@@ -55,4 +55,20 @@ REVOKE ALL ON FUNCTION public.deep_find_checks_claim(integer) FROM PUBLIC,anon,a
 REVOKE ALL ON FUNCTION public.deep_find_checks_expire() FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.deep_find_checks_claim(integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.deep_find_checks_expire() TO service_role;
+CREATE OR REPLACE FUNCTION public.deep_find_checks_finish(p_id uuid,p_status text,p_verdict text,p_reason text,p_provider text,p_next_at timestamptz) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE changed uuid;
+BEGIN
+  IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Service only' USING ERRCODE='42501'; END IF;
+  IF p_status IS NULL OR p_status NOT IN ('queued','done','skipped') THEN RAISE EXCEPTION 'Invalid final status'; END IF;
+  IF p_status='queued' AND p_next_at IS NULL THEN RAISE EXCEPTION 'Retry time required'; END IF;
+  UPDATE public.deep_find_check_queue SET status=p_status,verdict=p_verdict,reason=p_reason,provider=p_provider,
+    attempts=CASE WHEN p_status='queued' AND p_reason='domain_stalled' THEN greatest(0,attempts-1) ELSE attempts END,
+    next_at=coalesce(p_next_at,next_at),finished_at=CASE WHEN p_status='queued' THEN NULL ELSE now() END
+    WHERE id=p_id AND status='running' RETURNING id INTO changed;
+  RETURN changed IS NOT NULL;
+END $$;
+
+REVOKE ALL ON FUNCTION public.deep_find_checks_finish(uuid,text,text,text,text,timestamptz) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.deep_find_checks_finish(uuid,text,text,text,text,timestamptz) TO service_role;
 COMMIT;

@@ -42,7 +42,7 @@ it('(d) skips limit_reached and makes no more claim calls this tick', async () =
   expect(f.calls('deep_find_checks_finish')[0][1]).toMatchObject({ p_status: 'skipped', p_reason: 'limit_reached' })
   expect(f.calls('deep_find_checks_claim')).toHaveLength(1)
 })
-it('(e) never claims inside the final forty-second reserve', async () => {
+it('(e) never claims inside the final fifty-five-second reserve', async () => {
   const f = fixture(); f.setClock(100_000)
   expect(await drainQueue(f.deps, 0, 140_000)).toEqual({ processed: 0 }); expect(f.deps.rpc).not.toHaveBeenCalled()
 })
@@ -114,5 +114,19 @@ it('logs a fixed failed-step code without names, addresses or raw provider error
 it('runs later-tick recovery even when no new row can be claimed', async () => {
   const f = fixture([]); f.deps.recoverProven = vi.fn(async () => {})
   await drainQueue(f.deps, 0, 140_000)
-  expect(f.deps.recoverProven).toHaveBeenCalledWith(100_000)
+  expect(f.deps.recoverProven).toHaveBeenCalledWith(85_000)
 })
+
+it('domain_stalled requeues locally and does not stop another domain or the next batch',async()=>{
+ const f=fixture([[row()], [row({id:'q2',domain:'other.test',address:'jo@other.test'})]]);
+ f.worker.verifyEmail.mockResolvedValueOnce({ok:false,failure:'domain_stalled'});
+ expect(await drainQueue(f.deps,0,140_000)).toEqual({processed:2});
+ expect(f.calls('deep_find_checks_finish')[0][1]).toMatchObject({p_status:'queued',p_reason:'domain_stalled',p_next_at:new Date(600_000).toISOString()});
+ expect(f.worker.verifyEmail).toHaveBeenCalledTimes(2);
+});
+
+it('gives only queue SMTP calls a forty-eight-second timeout and stops claiming with fifty-five seconds left',async()=>{
+ const f=fixture();await drainQueue(f.deps,0,140000);
+ expect(f.worker.verifyEmail).toHaveBeenCalledWith('jo@fixture.test',{timeoutMs:48000});
+ const g=fixture();g.setClock(85000);await drainQueue(g.deps,0,140000);expect(g.calls('deep_find_checks_claim')).toHaveLength(0);
+});

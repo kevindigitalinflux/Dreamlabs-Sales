@@ -4,7 +4,7 @@
 import type { UsageResource } from './usageRules.ts';
 
 export type ScrapeMode = 'homepage' | 'key_pages' | 'deep';
-export type WorkerFailure = 'not_configured' | 'limit_reached' | 'busy' | 'unreachable' | 'timeout' | 'bad_response';
+export type WorkerFailure = 'not_configured' | 'limit_reached' | 'busy' | 'unreachable' | 'timeout' | 'bad_response' | 'domain_stalled';
 export interface WorkerConfig { url: string; secret: string }
 
 export const SCRAPE_UNITS: Record<ScrapeMode, number> = { homepage: 1, key_pages: 1, deep: 3 };
@@ -41,7 +41,12 @@ export function failureForStatus(status: number): WorkerFailure | null {
 
 /** Give the units back only when the worker did no work. A completed call is never refunded. */
 export function shouldRefund(failure: WorkerFailure): boolean {
-  return failure === 'busy' || failure === 'unreachable' || failure === 'not_configured';
+  return failure === 'domain_stalled' || failure === 'busy' || failure === 'unreachable' || failure === 'not_configured';
+}
+
+/** A timeout or one stalled domain must not stop checks for other domains. */
+export function failureStopsLead(failure: WorkerFailure): boolean {
+  return failure !== 'timeout' && failure !== 'domain_stalled';
 }
 
 // ---------- email check ----------
@@ -141,6 +146,7 @@ export function workerFailureLine(failure: WorkerFailure): string {
   switch (failure) {
     case 'not_configured': return 'The lookup worker is not set up, so it was not used.';
     case 'limit_reached': return 'The lookup worker was skipped because a daily limit was reached.';
+    case 'domain_stalled': return 'Checks for this mail domain paused for ten minutes after repeated checker stalls.';
     case 'busy': return 'The lookup worker was busy, so it was skipped.';
     case 'timeout': return 'The email checker took too long to answer for this address.';
     case 'unreachable': return 'The lookup worker could not be reached, so it was skipped.';

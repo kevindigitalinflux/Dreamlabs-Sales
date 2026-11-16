@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  MAX_VERIFY_PER_LEAD, SCRAPE_UNITS, WORKER_RESOURCE, failureForStatus, parseScrapeReply, parseVerifyReply, parseMsExistsReply, readWorkerConfig,
+  MAX_VERIFY_PER_LEAD, SCRAPE_UNITS, WORKER_RESOURCE, failureStopsLead, failureForStatus, parseScrapeReply, parseVerifyReply, parseMsExistsReply, readWorkerConfig,
   scrapeLine, scrapeTimeoutFor, shouldRefund, unconfirmedLabel, verifyAction, verifyTallyLine, workerFailureLine,
 } from '../../supabase/functions/_shared/workerRules';
 it('keeps the timeout reason from the worker',()=>{
@@ -150,3 +150,5 @@ describe('plain-English text', () => {
       .toBe('Read loveliving.uk with the browser scraper: found 1 address and 0 phone numbers.');
   });
 });
+
+it('keeps a stalled-domain refusal local while preserving global refusals', () => { expect(failureStopsLead('domain_stalled')).toBe(false); expect(failureStopsLead('timeout')).toBe(false); expect(failureStopsLead('limit_reached')).toBe(true); expect(shouldRefund('domain_stalled')).toBe(true); });

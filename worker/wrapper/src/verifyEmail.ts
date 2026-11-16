@@ -60,7 +60,7 @@ export interface VerifyDeps {
 export async function verifyEmail(email: string, deps: VerifyDeps): Promise<VerifyResult> {
   const fetchImpl = deps.fetchImpl ?? fetch
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), deps.timeoutMs ?? 30_000)
+  const timer = setTimeout(() => controller.abort(), deps.timeoutMs ?? 45_000)
   try {
     const res = await fetchImpl(`${deps.reacherUrl}/v0/check_email`, {
       method: 'POST',
@@ -70,8 +70,8 @@ export async function verifyEmail(email: string, deps: VerifyDeps): Promise<Veri
     })
     if (!res.ok) return { email, status: 'unverifiable', reason: 'checker_error' }
     return mapReacher(email, await res.json())
-  } catch {
-    return { email, status: 'unverifiable', reason: 'checker_error' }
+  } catch (error) {
+    return { email, status: 'unverifiable', reason: controller.signal.aborted || (error instanceof Error && error.name === 'AbortError') ? 'timeout' : 'checker_error' }
   } finally {
     clearTimeout(timer)
   }

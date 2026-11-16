@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mapReacher, normaliseEmail, verifyEmail, makeDomainThrottle } from './verifyEmail.js'
 
 describe('normaliseEmail', () => {
@@ -67,10 +67,10 @@ describe('verifyEmail', () => {
     const r = await verifyEmail('a@b.com', { reacherUrl: 'http://x', fetchImpl: (async () => new Response('boom secret details', { status: 500 })) as never })
     expect(r).toEqual({ email: 'a@b.com', status: 'unverifiable', reason: 'checker_error' })
   })
-  it('maps a network failure and a timeout to checker_error', async () => {
+  it('keeps network failure as checker_error but reports an abort as timeout', async () => {
     expect((await verifyEmail('a@b.com', { reacherUrl: 'http://x', fetchImpl: (async () => { throw new Error('ECONNREFUSED') }) as never })).reason).toBe('checker_error')
     const slow = (async (_u: string, init: RequestInit) => new Promise((_res, rej) => init.signal?.addEventListener('abort', () => rej(new Error('aborted'))))) as never
-    expect((await verifyEmail('a@b.com', { reacherUrl: 'http://x', fetchImpl: slow, timeoutMs: 20 })).reason).toBe('checker_error')
+    expect((await verifyEmail('a@b.com', { reacherUrl: 'http://x', fetchImpl: slow, timeoutMs: 20 })).reason).toBe('timeout')
   })
   void ok
 })
@@ -83,3 +83,12 @@ describe('makeDomainThrottle', () => {
     expect(t.take('b.com')).toBe(true)
   })
 })
+
+it('allows a request past thirty seconds and aborts at the default forty-five seconds',async()=>{
+ vi.useFakeTimers();try {
+ let aborted=false;
+ const pending=verifyEmail('a@b.com',{reacherUrl:'http://fixture',fetchImpl:async(_url,init)=>new Promise<Response>((_resolve,reject)=>init?.signal?.addEventListener('abort',()=>{aborted=true;reject(new Error('aborted'))}))});
+ await vi.advanceTimersByTimeAsync(44_999);expect(aborted).toBe(false);
+ await vi.advanceTimersByTimeAsync(1);expect(await pending).toMatchObject({status:'unverifiable',reason:'timeout'});
+ } finally {vi.useRealTimers()}
+});

@@ -33,15 +33,15 @@ export async function enqueueLeadChecks(deps: Pick<QueueDeps, 'rpc'>, input: { o
 export async function drainQueue(deps: QueueDeps, startedAt: number, wallBudgetMs: number): Promise<{ processed: number }> {
   let processed = 0;
   let stopClaiming = false;
-  if (deps.now() - startedAt < wallBudgetMs - 40_000 && deps.recoverProven) {
-    try { await deps.recoverProven(startedAt + wallBudgetMs - 40_000); }
+  if (deps.now() - startedAt < wallBudgetMs - 55_000 && deps.recoverProven) {
+    try { await deps.recoverProven(startedAt + wallBudgetMs - 55_000); }
     catch (error) { console.error('Background check recovery failed', error instanceof QueueStepError ? error.step : 'recovery_read'); }
   }
   const expire = async () => {
     const result = await deps.rpc('deep_find_checks_expire', {});
     if (result.error) throw Error('Could not expire background checks');
   };
-  while (!stopClaiming && deps.now() - startedAt < wallBudgetMs - 40_000) {
+  while (!stopClaiming && deps.now() - startedAt < wallBudgetMs - 55_000) {
     let rows: QueueRow[];
     try {
       await expire();
@@ -71,7 +71,7 @@ export async function drainQueue(deps: QueueDeps, startedAt: number, wallBudgetM
         step = 'worker_config';
         const worker = scope.workerFor(row.org_id);
         step = 'worker_call';
-        const answer = row.kind === 'ms_exists' ? await worker.msExists(row.address) : await worker.verifyEmail(row.address);
+        const answer = row.kind === 'ms_exists' ? await worker.msExists(row.address) : await worker.verifyEmail(row.address, { timeoutMs: 48_000 });
         step = 'access_read';
         if (!await scope.canStillEdit(row.run_id, row.lead_id)) { await finish({ status: 'skipped', reason: 'no_access' }); return; }
         const outcome = nextStep(row, answer.ok ? row.kind === 'ms_exists'
