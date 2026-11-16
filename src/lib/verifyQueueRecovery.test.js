@@ -8,7 +8,7 @@ import { makeRunVerifyGate, saveRunResult } from '../../supabase/functions/_shar
 import { reserveRunRegistryProof } from '../../supabase/functions/_shared/registryProofAllowance'
 
 const address = 'jo.smith@fixture.test'
-const q = { id: '00000000-0000-4000-8000-000000000001', org_id: 'org', run_id: 'run', lead_id: 'lead', contact_id: 'contact', address, domain: 'fixture.test', kind: 'ms_exists', person_key: 'jo smith', person_name: 'Jo Smith', attempts: 1, status: 'done', verdict: 'exists', reason: 'exists', finished_at: new Date().toISOString() }
+const q = { created_at: new Date().toISOString(), id: '00000000-0000-4000-8000-000000000001', org_id: 'org', run_id: 'run', lead_id: 'lead', contact_id: 'contact', address, domain: 'fixture.test', kind: 'ms_exists', person_key: 'jo smith', person_name: 'Jo Smith', attempts: 1, status: 'done', verdict: 'exists', reason: 'exists', finished_at: new Date().toISOString() }
 const input = { orgId: 'org', leadId: 'lead', contactId: 'contact', address }
 function fixture() {
   const db = replyDatabase({ leads: [{ id: 'lead', org_id: 'org', business_name: 'Fixture', updated_at: 'lead-v1' }], decision_maker_candidates: [{ id: 'contact', lead_id: 'lead', kind: 'person', first_name: 'Jo', last_name: 'Smith', title: 'Director', email: null, dismissed_at: null, include_in_sequences: true }],
@@ -36,7 +36,14 @@ function fixture() {
   const root = createQueueDeps(db.service, undefined, { wait, random: () => 0 })
   return { db, hooks, wait, root, deps: root.forRow(q), next: () => createQueueDeps(db.service, undefined, { wait, random: () => 0 }) }
 }
-beforeEach(() => vi.restoreAllMocks())
+beforeEach(() => { vi.restoreAllMocks(); q.created_at = new Date().toISOString() })
+it('recovery keeps its finished-at window for a recent proof from an old enqueue', async () => {
+  const f = fixture()
+  f.db.tables.deep_find_runs[0].started_at = new Date(Date.now() - 120 * 60_000).toISOString()
+  f.db.tables.deep_find_check_queue[0].created_at = new Date(Date.now() - 70 * 60_000).toISOString()
+  await f.root.recoverProven(Date.now() + 100_000)
+  expect(f.db.tables.decision_maker_candidates[0].email).toBe(address)
+})
 it('real queuedProof reads the exact done Microsoft proof absent from stored JSON', async () => {
   const f = fixture(); const assessed = await (await loadRecipientContext(f.db.service, 'org', 'lead')).assess(address)
   expect(assessed.evidence.msExists).toBe('exists'); expect(assessed.result.tier).toBe('T1')
@@ -132,7 +139,7 @@ it('checker and registry checkpoint writers advance the version without changing
 it.each(['cancelled', 'expired', 'dismissed', 'opted_out', 'role', 'wrong_contact'])('recovery preserves the %s guard', async rule => {
   const f = fixture()
   if (rule === 'cancelled') f.db.tables.deep_find_runs[0].status = 'cancelled'
-  if (rule === 'expired') f.db.tables.deep_find_runs[0].started_at = new Date(Date.now() - 61 * 60_000).toISOString()
+  if (rule === 'expired') f.db.tables.deep_find_check_queue[0].finished_at = new Date(Date.now() - 61 * 60_000).toISOString()
   if (rule === 'dismissed') f.db.tables.decision_maker_candidates[0].dismissed_at = new Date().toISOString()
   if (rule === 'opted_out') f.db.tables.leads[0].opted_out = true
   if (rule === 'role') f.db.tables.deep_find_check_queue[0].address = 'info@fixture.test'

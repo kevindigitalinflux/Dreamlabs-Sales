@@ -169,12 +169,13 @@ BEGIN
     VALUES(org_a,run_a,visible_lead,'window@c.fixture.test','c.fixture.test','smtp');
   UPDATE public.deep_find_runs SET status='completed',finished_at=now(),started_at=now()-interval '61 minutes' WHERE id=run_a;
   SELECT count(*) INTO n FROM public.deep_find_checks_claim(10);
-  IF n<>0 THEN RAISE EXCEPTION 'Completed run escaped hour window'; END IF;
+  IF n<>1 THEN RAISE EXCEPTION 'Late-enqueued completed-run row was not claimable'; END IF;
+  UPDATE public.deep_find_check_queue SET status='queued',created_at=now()-interval '61 minutes';
   PERFORM public.deep_find_checks_expire();
   IF NOT EXISTS(SELECT 1 FROM public.deep_find_check_queue WHERE reason='run_time_limit') THEN RAISE EXCEPTION 'Run expiry failed'; END IF;
   UPDATE public.deep_find_runs SET status='active',started_at=now(),finished_at=NULL WHERE id=run_a;
   -- R5 stale running recovery: active-window work is retried, preserving attempts; recent claims remain running.
-  UPDATE public.deep_find_check_queue SET status='running',claimed_at=now()-interval '6 minutes',attempts=2,next_at=now()+interval '15 minutes',reason=NULL;
+  UPDATE public.deep_find_check_queue SET created_at=now(),status='running',claimed_at=now()-interval '6 minutes',attempts=2,next_at=now()+interval '15 minutes',reason=NULL;
   INSERT INTO public.deep_find_check_queue(org_id,run_id,lead_id,address,domain,kind,status,claimed_at,attempts)
     VALUES(org_a,run_a,visible_lead,'recent@c.fixture.test','c.fixture.test','smtp','running',now()-interval '2 minutes',1);
   PERFORM public.deep_find_checks_expire();

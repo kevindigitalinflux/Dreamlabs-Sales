@@ -384,3 +384,18 @@ I believe overlapping QUEUE invocations are now safe for this failure mode under
 No new schema was required. The sole numeric plan gap (three total attempts versus three conflicts then success) was resolved by Kevin's explicit answer, three retries/four total attempts. Recovery uses existing JSON and a four-candidate per-tick bound; metadata paging is 100 rows, bounded by the tick's existing final-save reserve. A continuing outage through the entire permitted 60-minute window still requires investigation rather than unbounded retries. Current access and tier refusals remain named terminal rules. The exact old production exception is still unknown because the old logs did not record the step; no specific production contention or queue-read outage is asserted as proven.
 
 Unverified: real PostgREST/database contention, production note idempotence and permission races, real EdgeRuntime lifecycle and pg_net timeout results, browser behavior and the supplied production run after redeployment. No migration, SQL/audit, production/VPS/worker/Microsoft/provider call, secret/.env read, push, merge, deploy, dependency installation or vault edit/sync occurred. The only network operation requested for setup was git fetch origin. Historical rollout notes above are supplied history, not operations performed in this task. Both fixes and this report await Claude's review; builder stops after the report commit.
+
+
+## Verifier defects (2026-11-16) — local build in progress
+
+Kevin approved Codex as builder and Claude as architect/reviewer. Base: fetched origin/main 8c1c61b. Branch: codex/verifier-v2-defects. Local fixtures only; no deployment, migration execution, provider request, spending or vault sync. Subscription usage is unavailable.
+
+### Fix A — queue window
+
+Migration 076 replaces claim/expire with the same signatures, search_path and service-only grants. The hour starts at queue.created_at; three hours after run start is the backstop. Five-minute stale recovery remains. Cancellation expires even a recent running claim immediately. QueueRow now requires created_at. Access checks use the claimed timestamp; done-proof recovery retains its finished_at hour (including old enqueues) and the run backstop.
+
+Five new behavioral tests were observed red before implementation, then green. Existing recovery-expired assertion now ages finished_at rather than run.started_at. Existing queue fixtures now include created_at. In the 075 audit: (1) a fresh row in a 61-minute-old completed run now claims one instead of zero; (2) its expiry fixture explicitly ages created_at by 61 minutes; (3) stale recovery resets created_at so it still exercises the unchanged five-minute rule. No other assertions changed. New check_window_per_lead.sql audits late enqueue, row expiry, 181-minute backstop, immediate recent-running cancellation and RPC execution refusals for anon/authenticated. SQL is written only.
+
+All seven pre-commit gates pass: root TypeScript; 267 files / 3,373 app tests passed, one skipped; production build (existing chunk warning); whitespace; 29-entrypoint edge shim; wrapper TypeScript; six files / 143 wrapper tests. Evidence: .superpowers/defects-a-tests.log and defects-a-build.log, plus command output. Commit: this Fix A commit (exact hash recorded in the next milestone).
+
+Unverified: SQL execution, real concurrency, Deno/runtime, browser and all external services. Part 1 Fix B and all Stage 2 tasks remain authorized and unfinished.

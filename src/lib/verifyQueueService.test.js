@@ -9,8 +9,16 @@ import { loadRecipientContext } from '../../supabase/functions/_shared/recipient
 import { replyDatabase } from './replyTestDatabase'
 
 const address = 'jo.smith@fixture.test'
-const queueRow = { id: 'queue', org_id: 'org', run_id: 'run', lead_id: 'lead', contact_id: 'contact', address, domain: 'fixture.test', kind: 'smtp', person_key: 'jo smith', person_name: 'Jo Smith', attempts: 1 }
+const queueRow = { created_at: new Date().toISOString(), id: 'queue', org_id: 'org', run_id: 'run', lead_id: 'lead', contact_id: 'contact', address, domain: 'fixture.test', kind: 'smtp', person_key: 'jo smith', person_name: 'Jo Smith', attempts: 1 }
 beforeEach(() => vi.clearAllMocks())
+it.each([
+  [70, 0, true], [70, 61, false], [181, 0, false], [0, 60, false],
+])('uses the queue window with run age %i and row age %i minutes', async (runAge, rowAge, allowed) => {
+  const f = fixture()
+  f.db.tables.deep_find_runs[0].started_at = new Date(Date.now() - runAge * 60_000).toISOString()
+  const deps = f.root.forRow({ ...queueRow, created_at: new Date(Date.now() - rowAge * 60_000).toISOString() })
+  expect(await deps.canStillEdit('run', 'lead')).toBe(allowed)
+})
 function fixture(contact = {}) {
   const db = replyDatabase({ leads: [{ id: 'lead', org_id: 'org', business_name: 'Fixture Ltd', updated_at: 'lead-v1' }], org_members: [{ org_id: 'org', user_id: 'creator' }],
     deep_find_runs: [{ id: 'run', org_id: 'org', created_by: 'creator', status: 'completed', started_at: new Date().toISOString() }],

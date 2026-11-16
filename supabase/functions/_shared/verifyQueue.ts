@@ -5,7 +5,7 @@ import { QueueStepError } from './verifyQueueRetry.ts';
 
 export interface QueueRow {
   id: string; org_id: string; run_id: string; lead_id: string; contact_id: string | null;
-  address: string; domain: string; kind: 'smtp' | 'ms_exists'; person_key: string | null; person_name: string | null; attempts: number;
+  address: string; domain: string; kind: 'smtp' | 'ms_exists'; person_key: string | null; person_name: string | null; attempts: number; created_at: string;
 }
 export interface QueueDeps {
   rpc(name: string, args: Record<string, unknown>): Promise<{ data: unknown; error: unknown }>;

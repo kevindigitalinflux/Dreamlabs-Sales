@@ -25,7 +25,7 @@ export function createQueueDeps(service: SupabaseClient, sharedOrgIds?: string, 
     locks.set(leadId, task);
     try { return await task; } finally { if (locks.get(leadId) === task) locks.delete(leadId); }
   }
-  function scoped(row?: QueueRow): QueueDeps {
+  function scoped(row?: QueueRow, recoveryFinishedAt?: string): QueueDeps {
     let config: WorkerConfig | null = null;
     let configured = false;
     let creator: string | null = null;
@@ -38,7 +38,9 @@ export function createQueueDeps(service: SupabaseClient, sharedOrgIds?: string, 
         service.from('leads').select('id').eq('id', leadId).eq('org_id', q.org_id).maybeSingle(),
       ]);
       if (run.error || lead.error || !run.data || !lead.data || !['active', 'completed'].includes(run.data.status)
-        || !Number.isFinite(Date.parse(run.data.started_at)) || Date.now() >= Date.parse(run.data.started_at) + QUEUE_RUN_WINDOW_MS) return false;
+        || !Number.isFinite(Date.parse(run.data.started_at)) || !Number.isFinite(Date.parse(recoveryFinishedAt ?? q.created_at))
+        || Date.now() >= Date.parse(run.data.started_at) + 3 * QUEUE_RUN_WINDOW_MS
+        || Date.now() >= Date.parse(recoveryFinishedAt ?? q.created_at) + QUEUE_RUN_WINDOW_MS) return false;
       const [member, access] = await Promise.all([
         service.from('org_members').select('user_id').eq('org_id', q.org_id).eq('user_id', run.data.created_by).maybeSingle(),
         service.rpc('deep_find_creator_can_edit', { target_user: run.data.created_by, target_lead: leadId }),
@@ -195,10 +197,10 @@ export function createQueueDeps(service: SupabaseClient, sharedOrgIds?: string, 
         .not('person_key', 'is', null).gte('finished_at', new Date(Date.now() - QUEUE_RUN_WINDOW_MS).toISOString())
         .order('finished_at').order('id').range(offset, offset + 99);
       if (page.error || !Array.isArray(page.data)) { console.error('Background check step failed', 'recovery_read'); return; }
-      for (const row of page.data as QueueRow[]) {
+      for (const row of page.data as (QueueRow & { finished_at: string })[]) {
         if (Date.now() >= deadline || attempted >= 4) return;
         if (isRoleAddress(row.address)) continue;
-        const scope = scoped(row);
+        const scope = scoped(row, row.finished_at);
         try {
           const key = `${row.org_id}:${row.run_id}:${row.lead_id}`;
           if (!snapshots.has(key)) {
