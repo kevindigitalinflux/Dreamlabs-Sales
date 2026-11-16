@@ -26,7 +26,7 @@ export function MobileNav() {
           end={end}
           className={({ isActive }) =>
             `flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-semibold ${
-              isActive ? 'text-cyan' : 'text-nav-muted'
+              isActive ? 'text-nav-active' : 'text-nav-muted'
             }`
           }
         >
