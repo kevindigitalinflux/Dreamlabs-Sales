@@ -87,7 +87,7 @@ async function run(ctx: PipelineContext, progress: Progress): Promise<PipelineOu
 
   // 4. Research (best effort). Only real content is saved as a note.
   const noteTexts = await loadNotes(service, lead.id);
-  const research = await raceDeadline(researchLead({ service, lead, notes: noteTexts, orgId: ctx.run.org_id, geminiKey: org.keys.gemini }), ctx.deadlineMs)
+  const research = await raceDeadline(researchLead({ service, lead, notes: noteTexts, orgId: ctx.run.org_id, geminiKey: org.keys.gemini, searchMeter: org.keys.geminiMeter }), ctx.deadlineMs)
     .catch(() => ({ summary: '', sources: [] as string[], costCents: org.keys.gemini ? RESEARCH_COST_CENTS : 0 }));
   progress.costCents += research.costCents;
   if (!isEmptyResearch(research)) {

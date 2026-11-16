@@ -1,3 +1,4 @@
+import type { GeminiSearchContext } from './geminiSearchMeter.ts';
 // supabase/functions/_shared/deepFindPeople.ts
 // Deep find: looks up every person to look up (contacts without an email, registry officers, names already on the
 // lead) against the company's CONFIRMED domains with the existing wide lookup (Hunter finder, company list, pattern
@@ -30,6 +31,7 @@ function watchHunter<T extends { ok: boolean; failure?: unknown }>(gate: SpendGa
 
 /** What the people step needs. */
 export interface PeopleContext {
+  searchMeter?: GeminiSearchContext;
   service: SupabaseClient;
   run: { created_by: string };
   lead: { id: string; website: string | null; business_name: string | null };
@@ -144,7 +146,7 @@ export async function lookUpPeople(ctx: PeopleContext): Promise<PeopleOutcome> {
       webSearch: async (t) => ctx.searchPerson
         ? ctx.searchPerson({ first: person.first, last: person.last, title: person.title, company: ctx.lead.business_name, domains: ctx.domains }, t)
         : (await gate(ctx.spend.ai())
-        ? webSearchForPerson({ first: person.first, last: person.last, title: person.title, company: ctx.lead.business_name, domains: ctx.domains }, geminiKey ?? '', t)
+        ? webSearchForPerson({ first: person.first, last: person.last, title: person.title, company: ctx.lead.business_name, domains: ctx.domains }, geminiKey ?? '', t, ctx.searchMeter)
         : { ok: false, failure: 429 }),
       apolloMatch: async () => ({ ok: false, failure: 403 }),
       absorb: (f, step) => {

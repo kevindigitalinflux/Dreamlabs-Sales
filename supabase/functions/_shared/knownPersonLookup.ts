@@ -1,3 +1,4 @@
+import type { GeminiSearchContext } from './geminiSearchMeter.ts';
 // supabase/functions/_shared/knownPersonLookup.ts
 // Provider calls for the known-person lookup. Keys are only ever sent to the provider: never logged, returned, or put in an error.
 import { cancelBody, readCapped } from './cappedBody.ts';
@@ -315,9 +316,9 @@ export function webSearchPrompt(p: WebSearchPerson): string {
  * company's domain. The answer is untrusted: only what parseWebFindings accepts, re-checked by cleanFoundField, is
  * returned. Gemini errors are reduced to a status code (never the error text, which could echo the key URL).
  */
-export async function webSearchForPerson(p: WebSearchPerson, geminiKey: string, timeoutMs = 10_000): Promise<LookupResult> {
+export async function webSearchForPerson(p: WebSearchPerson, geminiKey: string, timeoutMs = 10_000, meter?: GeminiSearchContext): Promise<LookupResult> {
   try {
-    const { text, sources, sourceEvidence } = await geminiGroundedSearch(webSearchPrompt(p), geminiKey, timeoutMs);
+    const { text, sources, sourceEvidence } = await geminiGroundedSearch(webSearchPrompt(p), geminiKey, timeoutMs, meter);
     const parsed = parseWebFindings(text, p.domains, p.first, p.last);
     const found: FoundFields = {};
     const email = cleanFoundField('email', parsed.email);
@@ -444,9 +445,9 @@ export function companyDomainsPrompt(c: CompanySearchInput): string {
 }
 
 /** Gemini grounded search for the company's domains and named people. Returns the raw answer, or a safe failure. */
-export async function webSearchCompanyDomains(c: CompanySearchInput, geminiKey: string, timeoutMs = 15_000): Promise<{ ok: true; text: string } | { ok: false; failure: LookupFailure }> {
+export async function webSearchCompanyDomains(c: CompanySearchInput, geminiKey: string, timeoutMs = 15_000, meter?: GeminiSearchContext): Promise<{ ok: true; text: string } | { ok: false; failure: LookupFailure }> {
   try {
-    const { text } = await geminiGroundedSearch(companyDomainsPrompt(c), geminiKey, timeoutMs);
+    const { text } = await geminiGroundedSearch(companyDomainsPrompt(c), geminiKey, timeoutMs, meter);
     return { ok: true, text: typeof text === 'string' ? text : '' };
   } catch (err) {
     return { ok: false, failure: geminiFailure(err) };
@@ -496,10 +497,10 @@ export async function apolloOrgSearch(name: string, apiKey: string, timeoutMs = 
 }
 
 /** One grounded search for public addresses on a confirmed domain. No private data or model-only addresses. */
-export async function webSearchDomainFormat(domain: string, key: string, timeoutMs: number) {
+export async function webSearchDomainFormat(domain: string, key: string, timeoutMs: number, meter?: GeminiSearchContext) {
   const { groundedFormatSamples } = await import('./personEmailFinding.ts');
   try {
-    const result = await geminiGroundedSearch('Search public company pages for email addresses containing "@' + domain + '". Quote only public addresses with source citations. Do not invent addresses or access private data.', key, timeoutMs);
+    const result = await geminiGroundedSearch('Search public company pages for email addresses containing "@' + domain + '". Quote only public addresses with source citations. Do not invent addresses or access private data.', key, timeoutMs, meter);
     return groundedFormatSamples(domain, result.text, result.sourceEvidence ?? []);
   } catch (error) {
     console.error('deep find: public format search failed', geminiFailure(error));

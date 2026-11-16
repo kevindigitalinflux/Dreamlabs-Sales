@@ -4,6 +4,7 @@ DECLARE
  owner_id uuid:=gen_random_uuid(); member_id uuid:=gen_random_uuid(); outsider_id uuid:=gen_random_uuid();
  org_a uuid; org_b uuid; visible_pipeline uuid; hidden_pipeline uuid; other_pipeline uuid;
  visible_lead uuid; hidden_lead uuid; other_lead uuid; run_a uuid; run_b uuid;
+ month_key date:=date_trunc('month',now() AT TIME ZONE 'Europe/London')::date; shared_before bigint; snapshot jsonb;
  profile_id uuid; contact_id uuid; changed integer; role_values text[]; answer jsonb; client_role text; today date:=(now() AT TIME ZONE 'Europe/London')::date;
 BEGIN
   INSERT INTO auth.users(instance_id,id,aud,role,email,encrypted_password,email_confirmed_at,
@@ -80,5 +81,41 @@ BEGIN
  BEGIN INSERT INTO public.decision_maker_candidates(lead_id,source,first_name,last_name,created_by) VALUES(visible_lead,'team_page','Client','Person',owner_id); RAISE EXCEPTION 'Client inserted team-page contact'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  RESET ROLE;
  BEGIN UPDATE public.decision_maker_candidates SET source='manual' WHERE id=contact_id; RAISE EXCEPTION 'Team provider guard failed'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+
+ -- Task5c monthly informational meter, source scope and client isolation.
+ PERFORM set_config('request.jwt.claims','{"role":"service_role"}',true);
+ SELECT coalesce(sum(searches),0) INTO shared_before FROM public.gemini_search_usage WHERE shared_key AND month=month_key;
+ UPDATE public.organizations SET use_global_api_fallback=true WHERE id=org_a;
+ PERFORM public.gemini_search_count(org_a,false,10);
+ PERFORM public.gemini_search_count(org_a,true,5);
+ PERFORM public.gemini_search_count(org_b,true,7);
+ BEGIN PERFORM public.gemini_search_count(org_a,false,0); RAISE EXCEPTION 'Zero count accepted'; EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+ BEGIN PERFORM public.gemini_search_count(org_a,false,21); RAISE EXCEPTION '21 count accepted'; EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+ FOREACH client_role IN ARRAY ARRAY['anon','authenticated'] LOOP
+  IF has_function_privilege(client_role,'public.gemini_search_count(uuid,boolean,integer)','EXECUTE') THEN RAISE EXCEPTION 'Client count execute grant'; END IF;
+  PERFORM set_config('request.jwt.claims',json_build_object('sub',member_id,'role',client_role)::text,true);
+  EXECUTE format('SET LOCAL ROLE %I',client_role);
+  BEGIN UPDATE public.gemini_search_usage SET searches=0 WHERE org_id=org_a; RAISE EXCEPTION 'Client wrote Gemini counter'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  BEGIN PERFORM public.gemini_search_count(org_a,false,1); RAISE EXCEPTION 'Client count RPC executed'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+  RESET ROLE;
+ END LOOP;
+ PERFORM set_config('request.jwt.claims',json_build_object('sub',member_id,'role','authenticated')::text,true);
+ SET LOCAL ROLE authenticated;
+ SELECT count(*) INTO changed FROM public.gemini_search_usage WHERE org_id=org_b;
+ IF changed<>0 THEN RAISE EXCEPTION 'Foreign Gemini usage rows leaked'; END IF;
+ BEGIN PERFORM public.gemini_search_snapshot(org_b); RAISE EXCEPTION 'Foreign snapshot allowed'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ snapshot:=public.gemini_search_snapshot(org_a);
+ IF snapshot->>'org_searches'<>'15' OR snapshot->>'shared_key'<>'true' OR (snapshot->>'shared_searches')::bigint<>shared_before+12 THEN RAISE EXCEPTION 'Shared Gemini snapshot wrong'; END IF;
+ SELECT count(*) INTO changed FROM jsonb_object_keys(snapshot);
+ IF changed<>3 OR jsonb_typeof(snapshot->'shared_searches')<>'number' THEN RAISE EXCEPTION 'Shared snapshot disclosed non-count data'; END IF;
+ RESET ROLE;
+ PERFORM set_config('request.jwt.claims','{"role":"service_role"}',true);
+ INSERT INTO public.org_api_settings(org_id,provider,is_configured) VALUES(org_a,'gemini',true)
+ ON CONFLICT(org_id,provider) DO UPDATE SET is_configured=true;
+ PERFORM set_config('request.jwt.claims',json_build_object('sub',member_id,'role','authenticated')::text,true);
+ SET LOCAL ROLE authenticated;
+ snapshot:=public.gemini_search_snapshot(org_a);
+ IF snapshot->>'shared_key'<>'false' OR snapshot->'shared_searches'<>'null'::jsonb OR snapshot->>'org_searches'<>'15' THEN RAISE EXCEPTION 'Own-key snapshot wrong'; END IF;
+ RESET ROLE;
  RAISE EXCEPTION 'AUDIT PASSED; rollback all fixtures';
 END $$;

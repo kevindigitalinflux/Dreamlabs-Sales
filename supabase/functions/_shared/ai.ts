@@ -1,3 +1,4 @@
+import { countGeminiSearch, type GeminiSearchContext } from './geminiSearchMeter.ts';
 import { stripAiPunctuation } from './textGuardrails.ts';
 import { EMAIL_FORMAT_PROMPT_LINE } from './emailFormatPrompt.ts';
 import { formatPainPointNote, painPointPrompt, parseLeadNotesOutput, type ChosenPainPoint } from './painPointPick.ts';
@@ -70,55 +71,62 @@ export async function geminiJson(prompt: string, apiKey: string, timeoutMs?: num
  * candidate's text and the de-duplicated source URIs. No key means an empty result without
  * calling out. Throws on an HTTP error (callers that must not fail wrap it).
  */
-export async function geminiGroundedSearch(prompt: string, apiKey: string, timeoutMs = 25000): Promise<{ text: string; sources: string[]; sourceEvidence?: string[] }> {
+export async function geminiGroundedSearch(prompt: string, apiKey: string, timeoutMs = 25000, meter?: GeminiSearchContext): Promise<{ text: string; sources: string[]; sourceEvidence?: string[] }> {
   if (!apiKey) return { text: '', sources: [] };
-  // The key goes in the x-goog-api-key header (not the URL), so it can never appear in a logged request address.
-  const res = await geminiFetch(`${GEMINI_URL}/${AI_MODEL}:generateContent`, {
-    method: 'POST',
-    signal: AbortSignal.timeout(timeoutMs),
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      tools: [{ google_search: {} }],
-      generationConfig: { temperature: 0.3 },
-    }),
-  });
-  if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text().catch(() => '')).slice(0, 300)}`);
-  let data: {
-    candidates?: {
-      content?: { parts?: { text?: string }[] };
-      groundingMetadata?: {
-        groundingChunks?: { web?: { uri?: string; title?: string } }[];
-        groundingSupports?: { segment?: { text?: string }; groundingChunkIndices?: number[] }[];
-      };
-    }[];
-  } | null;
-  try { data = await res.json(); } catch (err) {
-    const name = err instanceof Error ? err.name : '';
-    if (name === 'AbortError' || name === 'TimeoutError') throw new Error('Gemini request timed out');
-    throw new Error('Gemini reply could not be read');
-  }
-  if (typeof data !== 'object' || data === null) throw new Error('Gemini reply could not be read');
-  const candidate = Array.isArray(data.candidates) ? data.candidates[0] : undefined;
-  const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
-  const text = parts.map((p) => (typeof p?.text === 'string' ? p.text : '')).join('');
-  const chunks = Array.isArray(candidate?.groundingMetadata?.groundingChunks) ? candidate.groundingMetadata.groundingChunks : [];
-  const uris = chunks
-    .map((c) => c?.web?.uri)
-    .filter((u): u is string => typeof u === 'string' && u.length > 0);
-  // Source titles and supported snippets remain untrusted data, never instructions.
-  const oneLine = (s: string) => s.replace(/[\r\n]+/g, ' ').slice(0, 2_000);
-  const sourceEvidence = chunks.flatMap((c) => typeof c?.web?.uri === 'string'
-    ? [`${oneLine(c.web.uri)} ${typeof c.web.title === 'string' ? oneLine(c.web.title) : ''}`] : []);
-  const supports = candidate?.groundingMetadata?.groundingSupports;
-  if (Array.isArray(supports)) for (const support of supports.slice(0, 50)) {
-    if (typeof support?.segment?.text !== 'string' || !Array.isArray(support.groundingChunkIndices)) continue;
-    for (const index of support.groundingChunkIndices.slice(0, 10)) {
-      const uri = Number.isInteger(index) && index >= 0 ? chunks[index]?.web?.uri : undefined;
-      if (typeof uri === 'string') sourceEvidence.push(`${oneLine(uri)} ${oneLine(support.segment.text)}`);
+  let dispatched = false;
+  try {
+    if (timeoutMs <= 0) throw new Error('Gemini request timed out');
+    const signal = AbortSignal.timeout(timeoutMs);
+    if (signal.aborted) throw new Error('Gemini request timed out');
+    dispatched = true;
+    // The key goes in the x-goog-api-key header (not the URL), so it can never appear in a logged request address.
+    const res = await geminiFetch(`${GEMINI_URL}/${AI_MODEL}:generateContent`, {
+      method: 'POST',
+      signal,
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        tools: [{ google_search: {} }],
+        generationConfig: { temperature: 0.3 },
+      }),
+    });
+    if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text().catch(() => '')).slice(0, 300)}`);
+    let data: {
+      candidates?: {
+        content?: { parts?: { text?: string }[] };
+        groundingMetadata?: {
+          groundingChunks?: { web?: { uri?: string; title?: string } }[];
+          groundingSupports?: { segment?: { text?: string }; groundingChunkIndices?: number[] }[];
+        };
+      }[];
+    } | null;
+    try { data = await res.json(); } catch (err) {
+      const name = err instanceof Error ? err.name : '';
+      if (name === 'AbortError' || name === 'TimeoutError') throw new Error('Gemini request timed out');
+      throw new Error('Gemini reply could not be read');
     }
-  }
-  return { text, sources: [...new Set(uris)], sourceEvidence: sourceEvidence.slice(0, 100) };
+    if (typeof data !== 'object' || data === null) throw new Error('Gemini reply could not be read');
+    const candidate = Array.isArray(data.candidates) ? data.candidates[0] : undefined;
+    const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : [];
+    const text = parts.map((p) => (typeof p?.text === 'string' ? p.text : '')).join('');
+    const chunks = Array.isArray(candidate?.groundingMetadata?.groundingChunks) ? candidate.groundingMetadata.groundingChunks : [];
+    const uris = chunks
+      .map((c) => c?.web?.uri)
+      .filter((u): u is string => typeof u === 'string' && u.length > 0);
+    // Source titles and supported snippets remain untrusted data, never instructions.
+    const oneLine = (s: string) => s.replace(/[\r\n]+/g, ' ').slice(0, 2_000);
+    const sourceEvidence = chunks.flatMap((c) => typeof c?.web?.uri === 'string'
+      ? [`${oneLine(c.web.uri)} ${typeof c.web.title === 'string' ? oneLine(c.web.title) : ''}`] : []);
+    const supports = candidate?.groundingMetadata?.groundingSupports;
+    if (Array.isArray(supports)) for (const support of supports.slice(0, 50)) {
+      if (typeof support?.segment?.text !== 'string' || !Array.isArray(support.groundingChunkIndices)) continue;
+      for (const index of support.groundingChunkIndices.slice(0, 10)) {
+        const uri = Number.isInteger(index) && index >= 0 ? chunks[index]?.web?.uri : undefined;
+        if (typeof uri === 'string') sourceEvidence.push(`${oneLine(uri)} ${oneLine(support.segment.text)}`);
+      }
+    }
+    return { text, sources: [...new Set(uris)], sourceEvidence: sourceEvidence.slice(0, 100) };
+  } finally { if (dispatched && meter) await countGeminiSearch(meter.service, meter.orgId, meter.sharedKey); }
 }
 
 /** Calls Claude once; returns the text and why it stopped ('max_tokens' means the reply was cut off). */

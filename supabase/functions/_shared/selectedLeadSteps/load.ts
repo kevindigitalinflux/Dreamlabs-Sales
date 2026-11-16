@@ -11,10 +11,11 @@ export interface OrgContext { orgName: string; companyContext: string | null; se
 
 /** Org name and context, the creator's first name (null when the profile has no name), and the org's API keys. */
 export async function loadOrgContext(service: SupabaseClient, run: PipelineRun, placesContext = createPlacesContext(service, run.org_id)): Promise<OrgContext> {
+  const geminiMeter = { service, orgId: run.org_id, sharedKey: false };
   const [{ data: org }, { data: profile }, anthropic, gemini, hunter, apollo, companiesHouse, openCorporates, googlePlaces] = await Promise.all([
     service.from('organizations').select('name, company_context').eq('id', run.org_id).maybeSingle(),
     service.from('profiles').select('full_name').eq('id', run.created_by).maybeSingle(),
-    resolveOrgApiKey(service, run.org_id, 'anthropic'), resolveOrgApiKey(service, run.org_id, 'gemini'),
+    resolveOrgApiKey(service, run.org_id, 'anthropic'), resolveOrgApiKey(service, run.org_id, 'gemini', source => { geminiMeter.sharedKey = source === 'global'; }),
     resolveOrgApiKey(service, run.org_id, 'hunter'), resolveOrgApiKey(service, run.org_id, 'apollo'),
     resolveOrgApiKey(service, run.org_id, 'companies_house'), resolveOrgApiKey(service, run.org_id, 'opencorporates'),
     resolveOrgApiKey(service, run.org_id, 'google_places', source => { placesContext.shared = source === 'global'; }),
@@ -23,7 +24,7 @@ export async function loadOrgContext(service: SupabaseClient, run: PipelineRun, 
     orgName: (org as { name?: string } | null)?.name ?? 'our team',
     companyContext: (org as { company_context?: string | null } | null)?.company_context ?? null,
     senderName: senderFirstName((profile as { full_name?: string | null } | null)?.full_name),
-    keys: { anthropic, gemini, hunter, apollo, companiesHouse, openCorporates, googlePlaces, placesContext },
+    keys: { geminiMeter, anthropic, gemini, hunter, apollo, companiesHouse, openCorporates, googlePlaces, placesContext },
   };
 }
 

@@ -1,3 +1,4 @@
+import type { GeminiSearchContext } from '../geminiSearchMeter.ts';
 import type { PlacesContext } from '../placesClient.ts';
 // Shared types and tiny helpers for the selected-leads autopilot pipeline steps.
 import type { PipelineContext, PipelineOutcome } from '../selectedLeadPipeline.ts';
@@ -8,6 +9,7 @@ export interface Stop { stop: PipelineOutcome }
 export type Lead = PipelineContext['lead'];
 
 export interface OrgKeys {
+  geminiMeter?: GeminiSearchContext;
   placesContext?: PlacesContext;
   anthropic: string | null; gemini: string | null; hunter: string | null; apollo: string | null;
   companiesHouse: string | null; openCorporates: string | null; googlePlaces: string | null;

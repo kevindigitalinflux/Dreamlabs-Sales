@@ -1,3 +1,4 @@
+import type { GeminiSearchContext } from './geminiSearchMeter.ts';
 // supabase/functions/_shared/leadResearch.ts
 import { DASH_GUARDRAIL_LINE, geminiGroundedSearch, geminiJson } from './ai.ts';
 import { cancelBody, readCapped } from './cappedBody.ts';
@@ -123,6 +124,7 @@ export async function researchLead(input: {
   notes: string[];
   orgId: string;
   geminiKey: string | null;
+  searchMeter?: GeminiSearchContext;
 }): Promise<ResearchResult> {
   const none: ResearchResult = { summary: '', sources: [], costCents: 0 };
   try {
@@ -145,6 +147,7 @@ export async function researchLead(input: {
           `Recent news, LinkedIn presence, reviews and what ${name}${place ? ` (${place})` : ''} does. UK English. Be brief and factual, only state what you can find, and cite sources. ${DASH_GUARDRAIL_LINE}`,
           key,
           Math.min(AI_TIMEOUT_MS, remaining()),
+          input.searchMeter,
         ).catch((e) => { logGeminiFailure('grounded search', e); return NO_WEB; })
         : Promise.resolve(NO_WEB),
     ]);

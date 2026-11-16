@@ -1,3 +1,4 @@
+import type { GeminiSearchContext } from './geminiSearchMeter.ts';
 // supabase/functions/_shared/domainDiscoveryLookup.ts
 // Wires domain discovery to the real providers and saves what it finds on leads.email_domains (service client only).
 // Keys are only sent to the providers in headers: never logged, returned, or put in an error.
@@ -32,6 +33,7 @@ export async function discoverLeadDomains(
   service: SupabaseClient,
   lead: DiscoveryLead,
   opts: {
+    searchMeter?: GeminiSearchContext;
     registeredName?: string | null;
     /** The Companies House registered office, for the web search. */
     registeredAddress?: string | null;
@@ -90,7 +92,7 @@ export async function discoverLeadDomains(
       names, town: lead.city ?? null, postcode: lead.postcode ?? null, website: lead.website,
       registeredAddress: opts.registeredAddress ?? null, websiteSuspect: !!opts.websiteSuspect, variants,
       knownDomains: known.filter((k) => k.source !== 'website_suspect' && !blocked.includes(k.domain)).map((k) => k.domain),
-    }, geminiKey ?? '', t),
+    }, geminiKey ?? '', t, opts.searchMeter),
     apolloOrg: (n, t) => apolloOrgSearch(n, apolloKey ?? '', t),
     // Free: the discovered domain's own pages, through the SSRF-guarded page reader (home + up to 5 team pages).
     readDomainSite: (d, t) => readCompanyPages(`https://${d}`, t, 5, capturePhonePage(d)),

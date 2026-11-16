@@ -1,3 +1,4 @@
+import type { GeminiSearchContext } from './geminiSearchMeter.ts';
 import { geminiGroundedSearch } from './ai.ts';
 import { makeSearchProvider } from './searchProvider.ts';
 import { chooseRoleProfile, findRolePeople, roleContactPlan, roleSearchLine, prioritizeRolePeople, officersForRoleSearch } from './roleSearch.ts';
@@ -151,9 +152,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     return { status: 'skipped', reason: 'This organisation reached its daily Deep find limit. Try again tomorrow.' };
   }
 
+  const geminiMeter: GeminiSearchContext = { service, orgId: run.org_id, sharedKey: false };
   let [hunterKey, geminiKey, chKey, apolloKey, firecrawlKey, placesKey, ocKey] = await Promise.all([
     resolveOrgApiKey(service, run.org_id, 'hunter'),
-    resolveOrgApiKey(service, run.org_id, 'gemini'),
+    resolveOrgApiKey(service, run.org_id, 'gemini', source => { geminiMeter.sharedKey = source === 'global'; }),
     resolveOrgApiKey(service, run.org_id, 'companies_house'),
     resolveOrgApiKey(service, run.org_id, 'apollo'),
     resolveOrgApiKey(service, run.org_id, 'firecrawl'),
@@ -563,7 +565,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }, {
     registeredName: registry.name, registeredAddress: registry.address, people: knownPeople, websiteSuspect: suspicion.suspect,
     extraKnown: contactDomains.map((domain) => ({ domain, source: 'contact_email' as const })),
-    keys: { hunterKey, geminiKey, apolloKey }, allow: { hunter: deepEnabled, site: pages.length > 0, web: deepEnabled, apollo: deepEnabled },
+    searchMeter: geminiMeter, keys: { hunterKey, geminiKey, apolloKey }, allow: { hunter: deepEnabled, site: pages.length > 0, web: deepEnabled, apollo: deepEnabled },
     budgetMs: Math.min(10_000, Math.max(0, left() - 30_000)), pages, hunterCap: discoveryCap,
     guard: { hunter: () => spend.hunter('company domains'), ai: () => spend.ai('web search') },
   });
@@ -658,7 +660,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         if (allowed) spend.used.ai['role search'] = (spend.used.ai['role search'] ?? 0) + 1;
         return allowed;
       },
-      gemini: configured.geminiKey ? prompt => geminiGroundedSearch(prompt, configured.geminiKey!, Math.min(15_000, Math.max(1, left() - 5_000))) : undefined,
+      gemini: configured.geminiKey ? prompt => geminiGroundedSearch(prompt, configured.geminiKey!, Math.min(15_000, Math.max(1, left() - 5_000)), geminiMeter) : undefined,
     });
     const roleResult = shouldSearchAfterTeam(teamPicked) ? await findRolePeople({ company: companyForRoles, registeredName: registry.name, city: str(lead.city), profile,
       provider: { search: async query => { if (workerConfig || configured.geminiKey) await checkpoint(); return provider.search(query); } }, timeLeftMs: left }) : { people: [], searches: 0, via: [] };
@@ -993,7 +995,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         if (domain && !patterns.get(domain) && left() > 40_000 && await spend.ai('public email format')) {
           publicFormatSearchUsed = true;
           await checkpoint();
-          const samples = await webSearchDomainFormat(domain, geminiKey, Math.min(8_000, left() - 30_000));
+          const samples = await webSearchDomainFormat(domain, geminiKey, Math.min(8_000, left() - 30_000), geminiMeter);
           publishedEvidence.push(...samples.map(s => ({...s,published:true})));
           const names = lookupPeople().map(p => ({ first: p.first, last: p.last }));
           const pattern = inferDomainPattern(domain, samples, names);
@@ -1009,7 +1011,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     return allowed;
   }, line => steps.push(line), !!str(lead.business_name))) {
     await checkpoint();
-    const webNumbers = await registryWebNumbers(str(lead.business_name) ?? '', configured.geminiKey!, Math.min(10_000, left() - 5_000));
+    const webNumbers = await registryWebNumbers(str(lead.business_name) ?? '', configured.geminiKey!, Math.min(10_000, left() - 5_000), geminiMeter);
     registry = await resolveRegistry(service, lead, chKey, registryPeople, { pages: registryPages, website: usableSite ? str(lead.website) : null, cached: registry.allCandidates ?? registry.candidates, cachedPeople: registry.proofPeople, priorEvidence: registry.evidence, webNumbers, left, checkpoint, applyNumber: number => applyLead('company_number', number) });
     registryEvidence = registry.evidence ?? {};
     steps.push(registryStep(registry));
@@ -1046,7 +1048,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       }, {
         registeredName: registry.name, registeredAddress: registry.address, people: knownPeople, websiteSuspect: suspicion.suspect,
         extraKnown: contactDomains.map(domain => ({ domain, source: 'contact_email' as const })),
-        keys: { hunterKey, geminiKey, apolloKey }, allow: { hunter: true, site: pages.length > 0, web: true, apollo: !!apolloKey },
+        searchMeter: geminiMeter, keys: { hunterKey, geminiKey, apolloKey }, allow: { hunter: true, site: pages.length > 0, web: true, apollo: !!apolloKey },
         pages, budgetMs: Math.min(10_000, Math.max(0, left() - 30_000)), hunterCap: Math.max(0, discoveryCap - (spend.used.hunter['company domains'] ?? 0)),
         guard: { hunter: () => spend.hunter('company domains'), ai: () => spend.ai('web search') },
       });
@@ -1174,13 +1176,13 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (cached) return cached;
     const result = (async (): Promise<LookupResult> => {
       if (!geminiKey || !await spend.ai('people')) return { ok: false, failure: 429 };
-      return webSearchForPerson({ ...p, includeEvidence: effort === 'extra_high' || ownerLike(p) }, geminiKey, Math.min(timeout, Math.max(1, left() - 2_000)));
+      return webSearchForPerson({ ...p, includeEvidence: effort === 'extra_high' || ownerLike(p) }, geminiKey, Math.min(timeout, Math.max(1, left() - 2_000)), geminiMeter);
     })();
     searches.set(key, result);
     return result;
   };
   const peopleOut = await lookUpPeople({
-    service, run, lead: { id: lead.id, website: str(lead.website), business_name: str(lead.business_name) }, people,
+    service, run, searchMeter: geminiMeter, lead: { id: lead.id, website: str(lead.website), business_name: str(lead.business_name) }, people,
     contacts: all, emailFormatEvidence: contactFormatEvidence, domains: verifiedDomains, website: usableSite ? str(lead.website) : null,
     websiteDirectory: !!siteDomain && isDirectoryDomain(siteDomain), lists, keys: { hunterKey, geminiKey },
     spend: { hunter: () => spend.hunter('people'), ai: () => spend.ai('people'), stopHunter: () => spend.stopHunter() }, left,

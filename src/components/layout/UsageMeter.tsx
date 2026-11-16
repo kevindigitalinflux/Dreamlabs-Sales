@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Zap } from 'lucide-react';
 import { useOrg } from '../../hooks/useOrg';
 import { useUsage } from '../../hooks/useUsage';
+import { useGeminiSearchUsage } from '../../hooks/useGeminiSearchUsage';
+import { GeminiSearchUsageLine } from './GeminiSearchUsageLine';
 import { fetchHunterAllowance, hunterAllowanceText, type HunterAllowance } from '../../lib/deepFind';
 import {
   chipText, formatRenewalDate, formatResetLine, shortChipText, stateLine, tightestAllowance, usageState, USAGE_TEXT, type UsageState,
@@ -37,6 +39,7 @@ export function UsageMeter() {
   const [now, setNow] = useState(() => new Date());
   const [hunter, setHunter] = useState<HunterState>({ status: 'idle' });
   const open = hovered || focused || pinned;
+  const geminiUsage = useGeminiSearchUsage(orgId, open);
 
   // Which organisation Hunter was already asked about. A ref (not state) so starting the request does not re-run the
   // effect below and throw the answer away; changing organisation resets it.
@@ -119,6 +122,7 @@ export function UsageMeter() {
             </ul>
           )}
           {resetsAt && !error && <p className="mt-1 border-t border-line pt-2 text-xs text-muted">{formatResetLine(now, resetsAt)}</p>}
+          <GeminiSearchUsageLine state={geminiUsage} />
           {hunter.status === 'loading' && <p className="mt-2 text-xs text-muted">Checking Hunter…</p>}
           {hunter.status === 'done' && hunter.value?.configured && (
             <p className={`mt-2 text-xs ${hunter.value.usedUp ? 'text-danger' : 'text-muted'}`}>

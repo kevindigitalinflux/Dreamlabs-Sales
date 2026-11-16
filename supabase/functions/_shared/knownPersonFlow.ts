@@ -1,3 +1,4 @@
+import type { GeminiSearchContext } from './geminiSearchMeter.ts';
 // supabase/functions/_shared/knownPersonFlow.ts
 // "I know this person" flow for find-decision-makers: save the typed person first, then fill blank fields with the
 // wider lookup (Hunter finder, Hunter company list, email pattern, the company website, web search, Apollo).
@@ -68,7 +69,7 @@ export async function runKnownPerson(
     city?: string | null; postcode?: string | null; email_domains?: unknown; blocked_domains?: unknown;
   },
   typed: ContactEditValue, userId: string,
-  keys: { hunterKey: string | null; apolloKey: string | null; geminiKey: string | null },
+  keys: { hunterKey: string | null; apolloKey: string | null; geminiKey: string | null; searchMeter?: GeminiSearchContext },
   usePaid: boolean,
   /** A company domain the user typed (already cleaned with cleanCompanyDomain); searched first. */
   companyDomain: string | null = null,
@@ -201,7 +202,7 @@ export async function runKnownPerson(
     scanWebsite: (w, d, f, l, t) => scanWebsiteForPerson(w, d, f, l, t),
     webSearch: (t) => webSearchForPerson({
       first, last, title: work.title, company: str(lead.business_name), domains,
-    }, geminiKey ?? '', t),
+    }, geminiKey ?? '', t, keys.searchMeter),
     apolloMatch: (d, f, l, t) => apolloMatchPerson(d, f, l, apolloKey ?? '', t),
     // Once per run, only when the known domains did not give the email: find the company's other domains (Hunter
     // company-name search, the website's own links and emails, web search) and save them on the lead.
@@ -209,7 +210,7 @@ export async function runKnownPerson(
       const extraKnown: DomainCandidate[] = domains.map((d, i) => ({ domain: d, source: i === 0 && companyDomain ? 'typed' : 'contact_email' }));
       const out = await discoverLeadDomains(service, lead, {
         extraKnown, people: first && last ? [{ first, last }] : [],
-        keys: { hunterKey, geminiKey }, allow: { hunter: true, site: !directory, web: true }, budgetMs: t,
+        searchMeter: keys.searchMeter, keys: { hunterKey, geminiKey }, allow: { hunter: true, site: !directory, web: true }, budgetMs: t,
       });
       return { domains: out.discovered.map((d) => d.domain), detail: discoveryDetail(out.discovered) };
     },

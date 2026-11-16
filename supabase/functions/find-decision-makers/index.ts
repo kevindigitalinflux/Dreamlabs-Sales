@@ -96,8 +96,9 @@ Deno.serve(async (req) => {
   if (knownPerson && knownPerson.ok) {
     // Targeted lookups for one named person (the generic decision-maker search is skipped). The org's Gemini key
     // powers the web-search step; it is resolved the same way as every other Gemini caller.
-    const geminiKey = await resolveOrgApiKey(service, orgId, 'gemini');
-    const outcome = await runKnownPerson(client, service, resolvedLeads[0]!, knownPerson.value, userData.user.id, { hunterKey, apolloKey, geminiKey }, usePaidLookups, companyDomain);
+    const searchMeter = { service, orgId, sharedKey: false };
+    const geminiKey = await resolveOrgApiKey(service, orgId, 'gemini', source => { searchMeter.sharedKey = source === 'global'; });
+    const outcome = await runKnownPerson(client, service, resolvedLeads[0]!, knownPerson.value, userData.user.id, { hunterKey, apolloKey, geminiKey, searchMeter }, usePaidLookups, companyDomain);
     if (outcome.error) return json({ error: outcome.error }, outcome.status, headers);
     return json({
       results: [{ lead_id: resolvedLeads[0]!.id, candidates: outcome.candidates }],
