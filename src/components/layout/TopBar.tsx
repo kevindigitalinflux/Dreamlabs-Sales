@@ -1,50 +1,29 @@
-import { Focus, LogOut } from 'lucide-react';
-import { useAuth } from '../../hooks/useAuth';
+import { Focus } from 'lucide-react';
 import { useFocusMode } from '../../hooks/useFocusMode';
-import { initials } from '../../lib/utils';
+import { NeedsYouPill } from '../jobs/NeedsYouPill';
 import { OrgSwitcher } from './OrgSwitcher';
-import { ThemeToggle } from './ThemeToggle';
 import { UsageMeter } from './UsageMeter';
+import { UserMenu } from './UserMenu';
 
-/** Top bar: focus-mode toggle + user identity + sign out. */
+/** Top bar: focus-mode toggle, the background-jobs pill, usage, organisation switcher and the account menu. */
 export function TopBar() {
-  const { profile, signOut } = useAuth();
   const { focusMode, toggle } = useFocusMode();
   return (
-    // flex-wrap: on a phone the usage chip no longer fits beside Focus, the theme toggle, avatar and Sign out in one row
-    // (it pushed Focus off the left edge), so the bar wraps onto a second row instead of clipping.
-    <header className="flex min-h-14 flex-wrap items-center justify-end gap-x-3 gap-y-2 border-b border-line px-4 py-2 sm:py-0">
+    // flex-wrap: on a phone the chips do not fit in one row, so the bar wraps onto a second row instead of clipping.
+    <header className="flex min-h-14 flex-wrap items-center justify-end gap-x-3 gap-y-2 border-b border-line px-4 py-2 md:px-7">
       <button
         type="button"
         onClick={toggle}
         aria-pressed={focusMode}
-        className={`mr-auto flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-semibold ${focusMode ? 'bg-cyan/20 text-cyan' : 'text-muted hover:bg-surface hover:text-offwhite'}`}
+        className={`mr-auto flex min-h-11 cursor-pointer items-center gap-2 rounded-control px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus md:min-h-10 ${focusMode ? 'bg-violet/20 text-link' : 'text-muted hover:bg-surface hover:text-offwhite'}`}
       >
         <Focus className="h-4 w-4" aria-hidden />
         {focusMode ? 'Exit focus' : 'Focus'}
       </button>
-      <ThemeToggle />
+      {!focusMode && <NeedsYouPill />}
       <UsageMeter />
       <OrgSwitcher />
-      {profile?.avatar_url ? (
-        <img src={profile.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover" />
-      ) : (
-        <span
-          aria-hidden
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-purple text-xs font-bold text-on-accent"
-        >
-          {initials(profile?.full_name)}
-        </span>
-      )}
-      <span className="hidden text-sm font-semibold sm:block">{profile?.full_name ?? profile?.email}</span>
-      <button
-        type="button"
-        onClick={() => void signOut()}
-        className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-semibold text-muted hover:bg-surface hover:text-offwhite"
-      >
-        <LogOut className="h-4 w-4" aria-hidden />
-        Sign out
-      </button>
+      <UserMenu />
     </header>
   );
 }
