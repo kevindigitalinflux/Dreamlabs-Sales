@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  MAX_VERIFY_PER_LEAD, SCRAPE_UNITS, WORKER_RESOURCE, failureStopsLead, failureForStatus, parseScrapeReply, parseVerifyReply, parseMsExistsReply, readWorkerConfig,
+  MAX_VERIFY_PER_LEAD, SCRAPE_UNITS, WORKER_RESOURCE, parseSearchReply, failureStopsLead, failureForStatus, parseScrapeReply, parseVerifyReply, parseMsExistsReply, readWorkerConfig,
   scrapeLine, scrapeTimeoutFor, shouldRefund, unconfirmedLabel, verifyAction, verifyTallyLine, workerFailureLine,
 } from '../../supabase/functions/_shared/workerRules';
 it('keeps the timeout reason from the worker',()=>{
@@ -30,7 +30,7 @@ describe('readWorkerConfig', () => {
 describe('costs and mapping', () => {
   it('charges 3 units for a deep scrape and 1 otherwise', () => {
     expect(SCRAPE_UNITS).toEqual({ homepage: 1, key_pages: 1, deep: 3 });
-    expect(WORKER_RESOURCE).toEqual({ scrape: 'worker_scrape', verify: 'worker_verify', fetch: 'worker_fetch', msExists: 'worker_verify' });
+    expect(WORKER_RESOURCE).toEqual({ search: 'worker_search', scrape: 'worker_scrape', verify: 'worker_verify', fetch: 'worker_fetch', msExists: 'worker_verify' });
     expect(MAX_VERIFY_PER_LEAD).toBe(10);
   });
   it('maps http statuses to failures', () => {
@@ -152,3 +152,8 @@ describe('plain-English text', () => {
 });
 
 it('keeps a stalled-domain refusal local while preserving global refusals', () => { expect(failureStopsLead('domain_stalled')).toBe(false); expect(failureStopsLead('timeout')).toBe(false); expect(failureStopsLead('limit_reached')).toBe(true); expect(shouldRefund('domain_stalled')).toBe(true); });
+
+it('reads only eight safe search hits with bounded fields',()=>{
+ const hits=parseSearchReply({results:Array.from({length:20},()=>({title:'t'.repeat(300),url:'https://fixture.test/in/person',snippet:'s'.repeat(500)}))});expect(hits).toHaveLength(8);expect(hits?.[0]).toEqual({title:'t'.repeat(200),url:'https://fixture.test/in/person',snippet:'s'.repeat(400)});
+ expect(parseSearchReply({results:'bad'})).toBeNull();expect(parseSearchReply({results:[{title:'x',url:'javascript:bad',snippet:'x'}]})).toEqual([]);
+});

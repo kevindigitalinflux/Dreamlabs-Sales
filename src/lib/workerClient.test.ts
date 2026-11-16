@@ -507,3 +507,18 @@ it('does not spend the per-lead check cap on stalled-domain refusals',async()=>{
  const c=make(u,f);for(let i=0;i<10;i++) await c.verifyEmail('a@blocked.test');
  expect(await c.verifyEmail('a@working.test')).toMatchObject({ok:true});expect(refundCalls(u)).toHaveLength(10);
 });
+
+describe('worker web search',()=>{
+ it('reserves one search before dispatch and returns bounded hits',async()=>{
+  const u=usage();const c=make(u,async(_url,init)=>{expect(reserveCalls(u)[0][1]).toMatchObject({p_resource:'worker_search',p_units:1});expect(JSON.parse(init?.body as string)).toEqual({query:'query'});return new Response(JSON.stringify({results:[{title:'Jane',url:'https://fixture.test/in/jane',snippet:'Manager'}]}))});
+  expect(await c.search('query')).toEqual({ok:true,value:[{title:'Jane',url:'https://fixture.test/in/jane',snippet:'Manager'}]});expect(refundCalls(u)).toHaveLength(0);
+ });
+ it.each(['503','network','throttled'])('refunds %s once and stops searches for that lead',async mode=>{
+  const u=usage();const f=vi.fn<typeof fetch>(async()=>{if(mode==='network')throw new Error('network');return new Response(JSON.stringify({error:mode==='throttled'?'throttled':'not_configured'}),{status:mode==='throttled'?429:503})});const c=make(u,f);
+  expect(await c.search('query')).toMatchObject({ok:false,failure:mode==='throttled'?'busy':'unreachable'});await c.search('again');expect(refundCalls(u)).toHaveLength(1);expect(f).toHaveBeenCalledTimes(1);
+ });
+ it('refuses the usage cap without dispatch',async()=>{const u=usage({data:REFUSED,error:null}),f=worker(200,{});expect(await make(u,f).search('query')).toMatchObject({ok:false,failure:'limit_reached',line:refusalLine('org_limit','worker_search',150)});expect(f).not.toHaveBeenCalled()});
+ it('does not refund a fifteen-second client timeout',async()=>{
+  vi.useFakeTimers();const u=usage();const pending=make(u,async(_url,init)=>new Promise<Response>((_r,reject)=>init?.signal?.addEventListener('abort',()=>reject(new DOMException('abort','AbortError'))))).search('query');await vi.advanceTimersByTimeAsync(15000);expect(await pending).toMatchObject({ok:false,failure:'timeout'});expect(refundCalls(u)).toHaveLength(0);
+ });
+});

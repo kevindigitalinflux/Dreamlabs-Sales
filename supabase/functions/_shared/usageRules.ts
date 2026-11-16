@@ -2,19 +2,21 @@
 // Rules for the shared lookup worker's usage limits. Import-free on purpose: used by edge functions (Deno) and by
 // the browser app, and tested from src/lib. Defaults here MUST match the seed rows in migration 059_usage_quotas.sql.
 
-export type UsageResource = 'worker_scrape' | 'worker_verify' | 'worker_fetch';
+export type UsageResource = 'worker_scrape' | 'worker_verify' | 'worker_fetch' | 'worker_search';
 
-export const USAGE_RESOURCES: readonly UsageResource[] = ['worker_scrape', 'worker_verify', 'worker_fetch'];
+export const USAGE_RESOURCES: readonly UsageResource[] = ['worker_scrape', 'worker_verify', 'worker_fetch', 'worker_search'];
 
 export const USAGE_TEXT: Record<UsageResource, { label: string; noun: string }> = {
   worker_scrape: { label: 'Site scrapes', noun: 'site scrapes' },
   worker_verify: { label: 'Email checks', noun: 'email checks' },
+  worker_search: { label: 'Web searches', noun: 'web searches' },
   worker_fetch: { label: 'Page fetches', noun: 'page fetches' },
 };
 
 export const USAGE_DEFAULTS: Record<UsageResource, { orgLimit: number; globalLimit: number }> = {
   worker_scrape: { orgLimit: 100, globalLimit: 400 },
   worker_verify: { orgLimit: 1500, globalLimit: 3000 },
+  worker_search: { orgLimit: 400, globalLimit: 1200 },
   worker_fetch: { orgLimit: 300, globalLimit: 1000 },
 };
 

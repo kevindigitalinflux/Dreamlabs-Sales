@@ -14,9 +14,10 @@ describe('defaults', () => {
     expect(USAGE_DEFAULTS).toEqual({
       worker_scrape: { orgLimit: 100, globalLimit: 400 },
       worker_verify: { orgLimit: 1500, globalLimit: 3000 },
+      worker_search: { orgLimit: 400, globalLimit: 1200 },
       worker_fetch: { orgLimit: 300, globalLimit: 1000 },
     });
-    expect(USAGE_RESOURCES).toEqual(['worker_scrape', 'worker_verify', 'worker_fetch']);
+    expect(USAGE_RESOURCES).toEqual(['worker_scrape', 'worker_verify', 'worker_fetch', 'worker_search']);
   });
 });
 
@@ -157,4 +158,9 @@ describe('parseLimitInput', () => {
     expect(parseLimitInput('5000')).toBe(5000);
     for (const bad of ['', '5001', '-1', '1.5', '12a', '1e3', 'abc', '99999']) expect(parseLimitInput(bad)).toBeNull();
   });
+});
+
+it('shows web search usage in the existing snapshot and wording',()=>{
+ const rows=parseSnapshot([{resource:'worker_search',used:320,limit:400,global_used:900,global_limit:1200,resets_at:'2026-11-17T00:00:00Z'}]);
+ expect(rows).toHaveLength(1);expect(chipText(rows[0])).toContain('Web searches');expect(usageState(rows[0])).toBe('warning');
 });

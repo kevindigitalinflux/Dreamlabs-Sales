@@ -8,15 +8,15 @@ export type WorkerFailure = 'not_configured' | 'limit_reached' | 'busy' | 'unrea
 export interface WorkerConfig { url: string; secret: string }
 
 export const SCRAPE_UNITS: Record<ScrapeMode, number> = { homepage: 1, key_pages: 1, deep: 3 };
-export const WORKER_TIMEOUT_MS = { scrape: 25_000, verify: 33_000, fetch: 12_000, msExists: 12_000 } as const;
+export const WORKER_TIMEOUT_MS = { scrape: 25_000, verify: 33_000, fetch: 12_000, msExists: 12_000, search: 15_000 } as const;
 
 /** Keep 30 seconds for downstream checks plus 2 seconds of overhead. */
 export function scrapeTimeoutFor(leftMs: number): number | null {
   const timeout = Math.min(25_000, leftMs - 32_000);
   return timeout >= 10_000 ? timeout : null;
 }
-export const WORKER_RESOURCE: Record<'scrape' | 'verify' | 'fetch' | 'msExists', UsageResource> = {
-  scrape: 'worker_scrape', verify: 'worker_verify', fetch: 'worker_fetch', msExists: 'worker_verify',
+export const WORKER_RESOURCE: Record<'scrape' | 'verify' | 'fetch' | 'msExists' | 'search', UsageResource> = {
+  search: 'worker_search', scrape: 'worker_scrape', verify: 'worker_verify', fetch: 'worker_fetch', msExists: 'worker_verify',
 };
 /** Most email checks one lead may use in one Deep find. */
 export const MAX_VERIFY_PER_LEAD = 10;
@@ -165,4 +165,19 @@ export function scrapeLine(domain: string, found: ScrapeFound): string {
   const e = found.emails.length;
   const p = found.phones.length;
   return `Read ${domain} with the browser scraper: found ${e} address${e === 1 ? '' : 'es'} and ${p} phone number${p === 1 ? '' : 's'}.`;
+}
+
+export interface SearchHit { title: string; url: string; snippet: string }
+/** Validate the wrapper boundary; never follow the result URLs. */
+export function parseSearchReply(json: unknown): SearchHit[] | null {
+ if (!json || typeof json !== 'object' || !('results' in json) || !Array.isArray(json.results)) return null;
+ const hits: SearchHit[] = [];
+ for (const hit of json.results) {
+  if (!hit || typeof hit !== 'object' || typeof hit.title !== 'string' || typeof hit.url !== 'string' || typeof hit.snippet !== 'string') return null;
+  let url: URL; try { url = new URL(hit.url); } catch { continue; }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) continue;
+  hits.push({title:hit.title.trim().slice(0,200),url:url.href,snippet:hit.snippet.trim().slice(0,400)});
+  if (hits.length === 8) break;
+ }
+ return hits;
 }
