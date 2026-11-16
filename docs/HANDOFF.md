@@ -1,3 +1,11 @@
+## UI refresh Stage 1 (2026-11-16) - separate task, START HERE for UI work
+
+Worktree `C:/Users/kevin/Projects/dreamlabs-sales-uirefresh`, branch `claude/ui-refresh-stage1` (from `claude/ui-refresh-design`, which holds the approved design and the brief). **Role change, directed by Kevin on 2026-11-16: Claude builds this stage directly (Fable first, then Opus or Sonnet may continue); Codex is not the builder for it.** Kevin approved the design and told Claude to proceed with the build.
+
+Read in this order: `docs/superpowers/specs/2026-11-16-ui-refresh-design.md`, then `docs/superpowers/plans/2026-11-16-ui-refresh-stage1.md` (eight tasks with checkboxes). To continue: run `git log --oneline claude/ui-refresh-design..HEAD` to see which tasks are committed (one commit per task, named after it), then carry on with the next task in the brief. `node_modules` here is a junction to the main checkout's folder (never delete its contents). Gates: `npx tsc --noEmit`, `npx vitest run`, `npm run build`, `git diff --check`, `node scripts/places-edge-typecheck.mjs`, with `VITE_SUPABASE_URL=http://127.0.0.1:54321 VITE_SUPABASE_ANON_KEY=local-test-placeholder`. Commit with `git -c core.hooksPath=NUL commit`, explicit paths. Nothing is pushed, merged or deployed; going live needs Kevin's separate yes after he has seen it running.
+
+Parked by Kevin (see `docs/TODO.md`): the sign-in redirect bug.
+
 ## Stage 2 review fixes (2026-11-16) — START HERE
 
 Worktree C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2, branch codex/stage2-people. Kevin directs, Codex builds, Claude reviews. All seven review fixes are built locally, starting at 4c648e8. Read the appended Review fixes in docs/STAGE2-PEOPLE-BUILD-REPORT.md for fixtures, changed assertions, per-fix commits and gate counts. Fixes 1–6 are 759e02d, 5f9feb8, 66d1062, 90bd726, 1074f31 and e33e41a; this commit contains Fix 7 and the final ledger. Resolve git rev-parse HEAD for the exact final tip. No other writer or branch was used.
