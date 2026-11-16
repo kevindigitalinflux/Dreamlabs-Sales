@@ -16,7 +16,8 @@ export function AppShell() {
     <ThemeProvider>
       <JobsProvider>
         <ReplyAlertsProvider>
-        <div className="flex min-h-screen">
+        <div aria-hidden className="app-backdrop pointer-events-none fixed inset-0" />
+        <div className="relative flex min-h-screen">
           {!focusMode && <Sidebar />}
           <div className="flex min-w-0 flex-1 flex-col">
             <TopBar />
