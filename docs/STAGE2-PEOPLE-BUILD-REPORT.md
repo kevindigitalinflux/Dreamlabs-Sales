@@ -162,3 +162,13 @@ Task5c commit:3039cc5. Two additional fixtures exposed social-link text inside a
 ## Session-close verification (2026-11-16)
 
 Kevin requested a positive-difference check and project/shared-context updates after build/report commit 2a018da. See docs/STAGE2-POSITIVE-DIFFERENCE-CHECK.md for three fresh side-by-side fixture comparisons against 8c1c61b and the closing verification. Application code is unchanged. Local improvements are established; live scores remain unchanged/unmeasured, and independent review and runtime validation remain pending. Vault updates are now authorized and stored as a labelled branch checkpoint, preserving the accepted-main mirror.
+
+## Review fixes
+
+2026-11-16. Kevin authorized seven local review fixes on codex/stage2-people, starting at 4c648e8 (Claude reviewed 2a018da; later closeout changes were documentation only). Codex builds; Claude reviews. No network, provider, SQL, VPS, installation, spending, push, merge or deployment is authorized. Each fix uses a failing fixture before production edits and all seven gates before its explicit-path commit. Independent review of these fixes remains pending.
+
+### Fix 1 — company evidence
+
+Both quoted longer-company fixtures failed first (accepted instead of company_mismatch), then passed. Company matching now inspects the title company part or individual Experience/at snippet evidence and refuses extra distinctive words. Legal and lead city/country words are excluded; city/country reach the judge through the engine. The existing accepted fixtures remain accepted. Changed existing assertion: the Other Employer title with an Acme Experience snippet now returns company_mismatch instead of former, because current-title company evidence takes precedence. Historical date ranges still return former.
+
+Gates: 274 app files / 3,497 passed / one existing skipped; 8 wrapper files / 163 passed; root and wrapper TypeScript, build, whitespace and 29-entrypoint edge typecheck PASS. Logs: .superpowers/review-fix1-*.log. Commit: the fix commit containing this entry (exact hash recorded in the final review-fix ledger).

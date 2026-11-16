@@ -5,7 +5,7 @@ import type { SearchProvider } from './searchProvider.ts';
 export interface RoleSearchResult { people: RoleCandidate[]; searches: number; via: ('searxng' | 'gemini')[]; stopped?: 'time' | 'limit' | 'cap' | 'failed' }
 
 /** Stop at the first successful rung, before a fourth search or a third person. */
-export async function findRolePeople(input: { company: string; registeredName?: string | null; city?: string | null; profile: { targetRoles?: unknown; fallbackRoles?: unknown } | null; provider: SearchProvider; timeLeftMs: () => number }): Promise<RoleSearchResult> {
+export async function findRolePeople(input: { company: string; registeredName?: string | null; city?: string | null; country?: string | null; profile: { targetRoles?: unknown; fallbackRoles?: unknown } | null; provider: SearchProvider; timeLeftMs: () => number }): Promise<RoleSearchResult> {
   const out: RoleSearchResult = { people: [], searches: 0, via: [] };
   if (!input.company.trim()) return out;
   for (const rung of roleLadder(input.profile)) {

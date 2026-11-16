@@ -39,7 +39,7 @@ export function roleQuery(input: { company: string; city?: string | null; roles:
 }
 
 /** Accept only current people with whole-word company and role evidence from search results. */
-export function judgeRoleHit(hit: { title: string; url: string; snippet: string }, lead: { company: string; registeredName?: string | null }, rung: Rung): { ok: true; person: RoleCandidate } | { ok: false; why: RoleRejection } {
+export function judgeRoleHit(hit: { title: string; url: string; snippet: string }, lead: { company: string; registeredName?: string | null; city?: string | null; country?: string | null }, rung: Rung): { ok: true; person: RoleCandidate } | { ok: false; why: RoleRejection } {
   const refuse = (why: RoleRejection) => ({ ok: false as const, why });
   let url: URL;
   try { url = new URL(/^[a-z]+:\/\//i.test(hit.url) ? hit.url : `https://${hit.url}`); } catch { return refuse('not_profile_url'); }
@@ -51,9 +51,18 @@ export function judgeRoleHit(hit: { title: string; url: string; snippet: string 
   if (name.length < 2 || name.length > 4 || !name.every(word => /^[\p{L}]+(?:[-'’][\p{L}]+)*$/u.test(word))) return refuse('no_name');
   const companies = [lead.company, lead.registeredName ?? ''].filter(Boolean);
   const companyWords = companies.map(distinctive).filter(list => list.length);
-  const snippetEvidence = [...hit.snippet.matchAll(/(?:Experience\s*:|\bat\s+)([^\n.;|]+)/gi)].map(match => match[1]).join(' ');
-  const titleMatches = companyWords.some(list => contains(hit.title, list));
-  if (!titleMatches && !companyWords.some(list => contains(snippetEvidence, list))) return refuse('company_mismatch');
+  const location = new Set(words(`${lead.city ?? ''} ${lead.country ?? ''}`));
+  const matchesCompany = (evidence: string) => {
+    const evidenceWords = distinctive(evidence.replace(/\b\d{4}\s*[-–]\s*(?:\d{4}|present)\b/gi, '')).filter(word => !location.has(word));
+    return companyWords.some(list => {
+      const expected = list.filter(word => !location.has(word));
+      return expected.length > 0 && expected.every(word => evidenceWords.includes(word)) && evidenceWords.every(word => list.includes(word));
+    });
+  };
+  const snippetEvidence = [...hit.snippet.matchAll(/(?:Experience\s*:|\bat\s+)([^\n.;|·]+)/gi)].map(match => match[1]);
+  const companyPart = parts.length >= 3 ? parts.slice(2).join(' ') : /\bat\s+(.+)$/i.exec(parts[1] ?? '')?.[1]
+    ?? (rung.roles.some(role => contains(parts[1] ?? '', words(role))) ? undefined : parts[1]);
+  if (companyPart ? !matchesCompany(companyPart) : !snippetEvidence.some(matchesCompany)) return refuse('company_mismatch');
   const combined = `${hit.title} ${hit.snippet}`;
   if (/\b(?:former|formerly|previously|retired)\b|\bex-|\bwas a\b/i.test(combined)) return refuse('former');
   for (const company of companies) {
@@ -61,8 +70,6 @@ export function judgeRoleHit(hit: { title: string; url: string; snippet: string 
     const adjacent = new RegExp(`${escaped}\\s*[,:(-]?\\s*(\\d{4})\\s*[-–]\\s*(\\d{4})|(?:\\d{4})\\s*[-–]\\s*(\\d{4})\\s*[,):-]?\\s*${escaped}`, 'gi');
     for (const match of combined.matchAll(adjacent)) if (Number(match[2] ?? match[3]) < new Date().getFullYear()) return refuse('former');
   }
-  const companyPart = parts.length >= 3 ? parts.slice(2).join(' ') : /\bat\s+(.+)$/i.exec(parts[1] ?? '')?.[1];
-  if (!titleMatches && companyPart && !companyWords.some(list => contains(companyPart, list))) return refuse('former');
   const title = (parts[1] ?? '').replace(/\s+at\s+.*$/i, '').trim();
   if (!rung.roles.some(role => contains(title, words(role)) || contains(hit.snippet.slice(0, 160), words(role)))) return refuse('role_mismatch');
   return { ok: true, person: { first: name[0], last: name.slice(1).join(' '), title, linkedinUrl: url.href, rung: rung.rung } };
