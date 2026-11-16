@@ -157,3 +157,18 @@ it('refuses stalled domains without Reacher, preserves other domains, and logs o
  for(const [line] of log.mock.calls){const entry=JSON.parse(line);expect(Object.keys(entry).sort()).toEqual(['domain_hash','duration_ms','reason']);expect(entry.domain_hash).toMatch(/^[a-f0-9]{8}$/);expect(entry.duration_ms).toBeGreaterThanOrEqual(0);expect(line).not.toContain('private.test');expect(line).not.toContain('@');}
  } finally {vi.useRealTimers();log.mockRestore()}
 });
+
+describe('POST /search',()=>{
+ const post=(app:ReturnType<typeof buildApp>,body:unknown)=>app.request('/search',{method:'POST',headers:{'x-worker-secret':SECRET,'content-type':'application/json'},body:JSON.stringify(body)});
+ it('validates query and guards config and secret',async()=>{
+  const app=buildApp(SECRET,{search:async()=>({ok:true,results:[]})});
+  expect((await app.request('/search',{method:'POST'})).status).toBe(401);
+  for(const query of [null,42,'ab','x'.repeat(301)])expect((await post(app,{query})).status).toBe(400);
+  expect((await post(buildApp(SECRET),{query:'valid query'})).status).toBe(503);
+  expect(await (await post(app,{query:'valid query'})).json()).toEqual({results:[]});
+ });
+ it.each([['timeout',504],['upstream',502],['bad_response',502],['throttled',429]] as const)('maps %s to %i',async(error,status)=>{const result=await post(buildApp(SECRET,{search:async()=>({ok:false,error})}),{query:'query'});expect(result.status).toBe(status);expect(await result.json()).toEqual({error})});
+ it('limits searches to twenty per minute shared across queries',async()=>{
+  const app=buildApp(SECRET,{search:async()=>({ok:true,results:[]})});for(let i=0;i<20;i++)expect((await post(app,{query:'query '+i})).status).toBe(200);expect((await post(app,{query:'last query'})).status).toBe(429);
+ });
+});

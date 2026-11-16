@@ -7,8 +7,11 @@ import { safeFetchText, SsrfError, type SafeFetchOptions } from './ssrf.js'
 import { makeDomainThrottle, normaliseEmail, type VerifyResult } from './verifyEmail.js'
 import { ScrapeError, toMode, toScrapeTarget, type ScrapeMode } from './scrapeSite.js'
 import { msExists } from './msExists.js'
+import type { searchWeb } from './search.js'
 
 export interface AppDeps {
+  search?: (query: string) => ReturnType<typeof searchWeb>
+  searchPerMinute?: number
   msPerMinute?: number
   msExistsImpl?: typeof msExists
   /** Site scraper (Chrome-backed); the server wires it in, tests pass a fake. Absent = route answers 503. */
@@ -52,6 +55,20 @@ export function buildApp(secret: string | undefined, deps: AppDeps = {}) {
   })
 
   app.get('/health', (c) => c.json({ ok: true }))
+
+  const searchLimiter = new RateLimiter(deps.searchPerMinute ?? 20, 60_000)
+  app.post('/search', async c => {
+    const body = await c.req.json().catch(() => null)
+    const query = body?.query
+    if (typeof query !== 'string' || query.trim().length < 3 || query.length > 300) return c.json({ error: 'bad_request' }, 400)
+    if (!deps.search) return c.json({ error: 'not_configured' }, 503)
+    if (!searchLimiter.take('search')) return c.json({ error: 'rate_limited' }, 429)
+    try {
+      const result = await deps.search(query.trim())
+      if (result.ok) return c.json({ results: result.results })
+      return c.json({ error: result.error }, result.error === 'timeout' ? 504 : result.error === 'throttled' ? 429 : 502)
+    } catch { return c.json({ error: 'upstream' }, 502) }
+  })
 
   // Guarded page fetch: public http(s) only, size/time/redirect capped. Returns text, never raw errors.
   app.post('/fetch-page', async (c) => {

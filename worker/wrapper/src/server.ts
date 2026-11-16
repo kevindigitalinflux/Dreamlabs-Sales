@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server'
 import { buildApp } from './app.js'
 import { scrapeSite } from './scrapeSite.js'
 import { verifyEmail } from './verifyEmail.js'
+import { searchWeb } from './search.js'
 
 const secret = process.env.WRAPPER_SECRET
 if (!secret || secret.length < 32) {
@@ -22,5 +23,7 @@ const scrape =
     ? (url: string, mode: Parameters<typeof scrapeSite>[1]) => scrapeSite(url, mode, { scraperUrl, scraperSecret })
     : undefined
 
-serve({ fetch: buildApp(secret, { verify, scrape }).fetch, port: Number(process.env.PORT ?? 8080) })
+const searxUrl = process.env.SEARX_URL
+const search = searxUrl ? (query: string) => searchWeb(query, { searxUrl }) : undefined
+serve({ fetch: buildApp(secret, { verify, scrape, search }).fetch, port: Number(process.env.PORT ?? 8080) })
 console.log('lookup wrapper listening')
