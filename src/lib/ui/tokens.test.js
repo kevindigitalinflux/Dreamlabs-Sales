@@ -1,8 +1,9 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 const css = readFileSync('src/index.css', 'utf8');
-const block = (start: string): string => {
+
+const block = (start) => {
   const from = css.indexOf(start);
   return css.slice(from, css.indexOf('\n}', from));
 };

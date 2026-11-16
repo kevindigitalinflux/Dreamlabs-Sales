@@ -45,7 +45,7 @@ it.each(['member', 'admin'])('offers a real setup zip download for an organisati
   const imports = html.match(/<button\b[^>]*>Import setup files<\/button>/g) ?? [];
   expect(imports).toHaveLength(role === 'admin' ? 1 : 0);
   if (role === 'admin') {
-    expect(imports[0]).toContain('border-line bg-surface text-offwhite');
+    expect(imports[0]).toContain('border-line bg-transparent text-offwhite');
     expect(html.indexOf('Download setup skill')).toBeLessThan(html.indexOf('>Import setup files'));
   }
   const steps = setupSteps(html);
