@@ -46,7 +46,9 @@
 
 **Claude's call, differing from spec item 5:** registry directors are still added (they proved 19 mailboxes in the UK scoring run) but rank after role-search people, and at most 3 are added when role search accepted someone. Secretaries are dropped as the spec says.
 
-**Deferred, not in this plan:** team-page name and title extraction (spec item 4), the monthly Gemini search meter (moves to stage 5 notices), CRO changes.
+**Kevin, 2026-11-16:** directors stay as written here (the stricter fallback-only rule is not wanted). Team-page people (Task 5b) and the monthly Gemini search meter (Task 5c) are in this plan.
+
+**Deferred, not in this plan:** CRO changes.
 
 ## Review Focus
 
@@ -174,13 +176,66 @@
 - [ ] **Step 4: Run** all gates. Expected: PASS. No existing assertion changes except the secretary and officer-count cases; list every changed assertion in the report.
 - [ ] **Step 5: Commit** `feat: role search ladder in Deep find`.
 
+### Task 5b: People named on the company's own team pages
+
+**Files:**
+- Create: `supabase/functions/_shared/teamPageRules.ts`, `src/lib/teamPageRules.test.ts`
+- Modify: `supabase/functions/_shared/deepFind.ts`, `supabase/migrations/077_role_search.sql`, `supabase/audits/role_search.sql`, the contact source label map
+
+**Interfaces (pure, import-free):**
+- `export interface TeamPerson { first: string; last: string; title: string; linkedinUrl: string | null; sourceUrl: string }`
+- `export function teamPeopleFromPage(page: { html: string; url: string }): TeamPerson[]` — at most 12 per page.
+- `export function pickTeamPeople(people: TeamPerson[], ladder: ReturnType<typeof roleLadder>): (TeamPerson & { rung: 'target' | 'fallback' | 'final' })[]` — keeps only people whose title matches a ladder role (same whole-word rule as `judgeRoleHit` rule 5), best rung first, at most 2.
+
+**Extraction rules (the tests pin these):**
+1. Only pages already fetched for the lead on a confirmed, not-suspect company domain whose path contains `team`, `about`, `people`, `staff`, `leadership`, `management`, `who-we-are` or `our-story`. No new page fetches beyond what Deep find already does.
+2. JSON-LD first: every `Person` object with `name` and `jobTitle`; `sameAs` or `url` on linkedin.com `/in/` becomes `linkedinUrl`.
+3. Then HTML blocks: a heading or strong element holding a two-to-four-word name (letters, hyphens, apostrophes) followed within the same card or the next sibling element by a title of 2 to 80 characters. A LinkedIn `/in/` link inside the same card is taken. Text is tag-stripped with a `|` separator.
+4. Rejected: names matching the company name, navigation or testimonial sections (ancestor id or class containing `testimonial`, `review`, `client`, `nav`, `footer`), titles that are sentences (more than 8 words or ending in a full stop).
+
+**Wiring:** runs before the search ladder. A picked team person is saved exactly like a role-search person (same merge and dismissal rules, `include_in_sequences: false`) with `source: 'team_page'`. Each picked person counts toward the 2-people limit, and a `target` rung team person means the search ladder is skipped for that lead (saves the searches). Step line: `Team page: found <n> (<Name, Title>; ...).` Nothing is logged when none are found.
+
+**Schema:** add `'team_page'` to the same CHECK and provider-source lists as `role_search` in migration 077. UI label: "From the company's team page".
+
+- [ ] **Step 1: Write failing tests:** JSON-LD person; card with h3 name and p title; LinkedIn link picked from the card; testimonial block ignored; sentence title ignored; company-name heading ignored; 12 cap; `pickTeamPeople` orders by rung and caps at 2; a suspect or unconfirmed domain yields nothing; target-rung hit skips the search ladder; fallback-rung hit does not.
+- [ ] **Step 2: Run** the tests. Expected: FAIL.
+- [ ] **Step 3: Implement** rules, wiring, migration line, audit case (client INSERT of a `team_page` contact refused), label.
+- [ ] **Step 4: Run** all gates. Expected: PASS.
+- [ ] **Step 5: Commit** `feat: people from company team pages`.
+
+### Task 5c: Monthly Gemini search meter
+
+**Files:**
+- Modify: `supabase/migrations/077_role_search.sql`, `supabase/audits/role_search.sql`
+- Create: `supabase/functions/_shared/geminiSearchMeter.ts`, `src/lib/geminiSearchMeter.test.js`
+- Modify: every caller of `geminiGroundedSearch` (list them with a search; today: `knownPersonLookup.ts`, `leadResearch.ts`, the company web proof, and Task 5's provider), the usage meter panel under `src/components` and its hook
+
+**Schema (exact):**
+- Table `gemini_search_usage (org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE, month DATE NOT NULL, shared_key BOOLEAN NOT NULL, searches INTEGER NOT NULL DEFAULT 0 CHECK (searches >= 0), PRIMARY KEY (org_id, month, shared_key))`. RLS on; no client write; SELECT for org members only.
+- `gemini_search_count(p_org UUID, p_shared BOOLEAN, p_n INTEGER)` SECURITY DEFINER, service role only, fixed search_path: atomic upsert adding `p_n` (1 to 20) to the current London-month row.
+- `gemini_search_snapshot(p_org UUID)` for members: this month's org count, and when the org uses the shared key, the total across all shared-key orgs (a number only, no other org's rows).
+
+**Rules:**
+- `export const GEMINI_FREE_SEARCHES_PER_MONTH = 5000`.
+- `export async function countGeminiSearch(service, orgId: string, sharedKey: boolean): Promise<void>` — called once after each `geminiGroundedSearch` call that reached Google (success or provider error; not on a local timeout before dispatch). A counting failure is logged with a fixed code and never fails the lookup.
+- Counting is per call, not per search query Gemini issues internally; the panel says "about".
+- The meter never blocks a search. It is information only; the run's AI cap stays the control.
+
+**UI:** one line in the existing usage panel: `Web searches by Gemini this month: about <n> of 5,000 free.` Amber from 4,000, red from 5,000 with `Searches beyond this are billed by Google.` For shared-key orgs the number is the shared total. Loaded on first open like the Hunter line.
+
+- [ ] **Step 1: Write failing tests:** count called once per dispatched search and not on a pre-dispatch timeout; count failure does not fail the lookup; snapshot text and the amber and red thresholds; audit cases (client cannot write; member of another org cannot read; shared total returns a number only; `p_n` of 0 or 21 refused).
+- [ ] **Step 2: Run** the tests. Expected: FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** all gates. Expected: PASS.
+- [ ] **Step 5: Commit** `feat: monthly Gemini search meter`.
+
 ### Task 6: Scoring script and report
 
 **Files:**
 - Modify: `scripts/deepfind-score.sql`
 - Create: `docs/STAGE2-PEOPLE-BUILD-REPORT.md`; modify the top of `docs/HANDOFF.md`
 
-- [ ] **Step 1:** The script takes a list of run ids instead of one pipeline, and prints per run: leads, ready, leads with a `role_search` person, leads with any titled person, leads with a LinkedIn URL, leads with two or more channels, company-match flags, queue totals by verdict and reason, searches used by provider (from step lines or a counter the builder adds to the lead result JSON; say which).
+- [ ] **Step 1:** The script takes a list of run ids instead of one pipeline, and prints per run: leads, ready, leads with a `role_search` or `team_page` person, leads with any titled person, leads with a LinkedIn URL, leads with two or more channels, company-match flags, queue totals by verdict and reason, searches used by provider (from step lines or a counter the builder adds to the lead result JSON; say which).
 - [ ] **Step 2:** Report: what was built per task, commits, gate counts, every changed existing assertion, the redeploy list (edge functions by import graph, wrapper, compose), the exact VPS steps for rollout, anything unverified, and plan gaps.
 - [ ] **Step 3: Commit** `docs: stage 2 people build report`.
 
