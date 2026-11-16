@@ -13,7 +13,7 @@ export function ActionAmbiguousCard({action,resolution,leadsById,pipelines,scope
     const newPipelineId = resolution.status === 'confirmed_ambiguous_as_new' ? resolution.pipeline_id : (scopedPipelineId ?? '');
     return (
       <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4">
-        <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-cyan" aria-hidden />New lead: {action.mentioned_text}</p>
+        <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-link" aria-hidden />New lead: {action.mentioned_text}</p>
         <p className="text-xs text-muted">{action.excerpt}</p>
         {needsPipelinePicker && (
           <SelectField label="Pipeline" value={newPipelineId} onChange={(e) => onResolve({ status: 'confirmed_ambiguous_as_new', business_name: action.mentioned_text, pipeline_id: e.target.value })}>
@@ -37,7 +37,7 @@ export function ActionAmbiguousCard({action,resolution,leadsById,pipelines,scope
 
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4">
-      <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-cyan" aria-hidden />Not sure who "{action.mentioned_text}" is</p>
+      <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-link" aria-hidden />Not sure who "{action.mentioned_text}" is</p>
       <p className="text-xs text-muted">{action.excerpt}</p>
       <SelectField
         label="Which lead did you mean?"

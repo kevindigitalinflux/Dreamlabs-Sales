@@ -15,7 +15,7 @@ interface StatsBarProps {
 function Stat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: number | null }) {
   return (
     <Card className="flex flex-1 items-center gap-3">
-      <Icon className="h-6 w-6 shrink-0 text-cyan" aria-hidden />
+      <Icon className="h-6 w-6 shrink-0 text-link" aria-hidden />
       <div>
         {value === null ? <Skeleton className="h-7 w-10" /> : <p className="font-heading text-[22px] font-bold">{value}</p>}
         <p className="text-xs font-semibold text-muted">{label}</p>

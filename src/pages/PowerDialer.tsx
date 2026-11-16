@@ -83,7 +83,7 @@ export function PowerDialer() {
 
       <Card>
         <div className="flex flex-col items-center gap-2 py-6 text-center">
-          <span className="text-5xl font-extrabold text-cyan">{matching.length}</span>
+          <span className="text-5xl font-extrabold text-link">{matching.length}</span>
           <span className="text-muted">{matching.length === 1 ? 'lead has' : 'leads have'} a phone number and match these filters</span>
         </div>
       </Card>

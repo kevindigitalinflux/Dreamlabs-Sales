@@ -45,7 +45,7 @@ export function PipelineSection({ data, isAdmin }: { data: AnalyticsData; isAdmi
         <Card>
           <h3 className="mb-2 text-sm font-semibold text-muted">Won deals</h3>
           <div className="flex flex-col items-center justify-center gap-1 py-8 text-center">
-            <span className="text-4xl font-extrabold text-cyan">{data.wonDeals.count}</span>
+            <span className="text-4xl font-extrabold text-link">{data.wonDeals.count}</span>
             <span className="text-sm text-muted">deals — {formatCurrency(data.wonDeals.totalValue)}</span>
           </div>
         </Card>

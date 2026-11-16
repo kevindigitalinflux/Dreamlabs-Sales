@@ -88,7 +88,7 @@ export function ContactInfo({ lead, onSave }: EditableSectionProps) {
   const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
-  const action = 'flex h-11 w-11 shrink-0 items-center justify-center self-end rounded-lg text-cyan hover:bg-surface';
+  const action = 'flex h-11 w-11 shrink-0 items-center justify-center self-end rounded-lg text-link hover:bg-surface';
   const website = websiteHref(lead.website);
   return (
     <div className="flex flex-col gap-3">
@@ -222,7 +222,7 @@ export function NotesPreview({ notes, loading, onEditNote, onDeleteNote }: {
         ))}
       </ul>
       {notes.length > 2 && (
-        <button type="button" onClick={() => setShowAll((s) => !s)} className="min-h-8 cursor-pointer self-start text-xs font-semibold text-cyan hover:underline">
+        <button type="button" onClick={() => setShowAll((s) => !s)} className="min-h-8 cursor-pointer self-start text-xs font-semibold text-link hover:underline">
           {showAll ? 'Show fewer notes' : `Show all ${notes.length} notes`}
         </button>
       )}

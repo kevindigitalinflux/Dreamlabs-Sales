@@ -100,13 +100,13 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose, o
         <div className="flex flex-wrap gap-1">
           {TEMPLATE_VARIABLES.map((v) => (
             <button key={v.key} type="button" onClick={() => insertVar(v.key)}
-              className="min-h-11 cursor-pointer rounded-md border border-line px-3 text-xs text-muted hover:border-cyan hover:text-cyan">
+              className="min-h-11 cursor-pointer rounded-md border border-line px-3 text-xs text-muted hover:border-cyan hover:text-link">
               {v.label}
             </button>
           ))}
           {customKeys.map((key) => (
             <button key={key} type="button" onClick={() => insertVar(key)} title={`Your value: ${customValues[key] ?? ''}`}
-              className="min-h-11 cursor-pointer rounded-md border border-violet/50 px-3 text-xs text-offwhite hover:border-cyan hover:text-cyan">
+              className="min-h-11 cursor-pointer rounded-md border border-violet/50 px-3 text-xs text-offwhite hover:border-cyan hover:text-link">
               {`{{${key}}}`}
             </button>
           ))}

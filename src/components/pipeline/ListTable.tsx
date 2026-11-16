@@ -77,7 +77,7 @@ export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen, s
               <td className="px-3 py-3 font-semibold">
                 {lead.business_name}
                 {deepFindRunning?.has(lead.id) && (
-                  <span className="ml-2 rounded-full bg-cyan/15 px-2 py-0.5 text-[11px] font-semibold text-cyan">Deep find running</span>
+                  <span className="ml-2 rounded-full bg-violet/15 px-2 py-0.5 text-[11px] font-semibold text-link">Deep find running</span>
                 )}
               </td>
               <td className="px-3 py-3 text-muted">{lead.owner_name ?? '—'}</td>

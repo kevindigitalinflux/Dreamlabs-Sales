@@ -111,7 +111,7 @@ export function LinkedinOutreach() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <header className="flex items-center gap-3">
-        <LinkedinIcon className="h-6 w-6 text-cyan" aria-hidden />
+        <LinkedinIcon className="h-6 w-6 text-link" aria-hidden />
         <h1 className="text-[28px] font-extrabold">LinkedIn outreach</h1>
       </header>
       <div className="flex flex-wrap items-end gap-3">
@@ -187,7 +187,7 @@ export function LinkedinOutreach() {
                   <LeadSource contact={d.contact} />
                 </div>
                 {d.contact.linkedin_url && (
-                  <a href={d.contact.linkedin_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-sm text-cyan">
+                  <a href={d.contact.linkedin_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-sm text-link">
                     Open profile <ExternalLink className="h-3.5 w-3.5" aria-hidden />
                   </a>
                 )}

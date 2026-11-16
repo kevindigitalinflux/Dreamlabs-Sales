@@ -59,7 +59,7 @@ export function ContactRow({ contact, lead, isMain, busy, apolloConfigured, erro
         {contact.email && <a href={`mailto:${contact.email}`} className="text-success">{contact.email}</a>}
         {contact.phone && <PhoneChip value={contact.phone} country={lead.country} metadata={{ ...lead.phone_meta?.[parsePhone(contact.phone, lead.country)?.value ?? ''], kind: contact.phone_kind ?? 'unknown', source: contact.phone_source ?? 'manual', source_url: contact.phone_source_url ?? null, found_at: contact.phone_found_at ?? null }} />}
         {contact.linkedin_url && (safeLinkedinHref(contact.linkedin_url) ? (
-          <a href={safeLinkedinHref(contact.linkedin_url)!} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-cyan">
+          <a href={safeLinkedinHref(contact.linkedin_url)!} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-link">
             <ExternalLink className="h-3.5 w-3.5" aria-hidden /> LinkedIn
           </a>
         ) : <span className="text-muted">{contact.linkedin_url}</span>)}

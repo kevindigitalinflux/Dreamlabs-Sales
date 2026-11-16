@@ -28,7 +28,7 @@ export function FilterBar({ filters, onChange, profiles, icps = [] }: FilterBarP
           placeholder="Search company, owner, email…"
           value={filters.search}
           onChange={(e) => onChange({ ...filters, search: e.target.value })}
-          className="min-h-11 w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-base outline-none placeholder:text-muted focus:border-cyan"
+          className="min-h-11 w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-base outline-none placeholder:text-muted focus:border-focus"
         />
       </div>
       <MultiSelect

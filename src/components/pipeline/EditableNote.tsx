@@ -55,7 +55,7 @@ export function EditableNote({ note, onSave, onDelete, clamp = false }: Editable
             <button
               type="button"
               onClick={startEditing}
-              className="flex min-h-8 cursor-pointer items-center gap-1 text-xs font-semibold text-cyan hover:underline"
+              className="flex min-h-8 cursor-pointer items-center gap-1 text-xs font-semibold text-link hover:underline"
             >
               <Pencil className="h-3 w-3" aria-hidden /> Edit note
             </button>

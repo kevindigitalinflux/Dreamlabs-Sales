@@ -118,7 +118,7 @@ export function EmailConfig() {
           {steps.length > 0 && (
             <ol className="flex flex-col gap-2 rounded-lg bg-surface/60 p-4 text-sm">
               {steps.map((s, i) => (
-                <li key={s} className="flex gap-2"><span className="font-bold text-cyan">{i + 1}.</span>{s}</li>
+                <li key={s} className="flex gap-2"><span className="font-bold text-link">{i + 1}.</span>{s}</li>
               ))}
             </ol>
           )}

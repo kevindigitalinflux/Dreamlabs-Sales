@@ -34,7 +34,7 @@ export function AdditionalDetails({ lead, onSave }: { lead: Lead; onSave: (patch
             {g.values.map((value) => (
               <li key={value} className="flex items-center gap-1 rounded-full border border-line bg-card py-0.5 pl-2.5 pr-1 text-sm">
                 {g.column === 'additional_phones' ? <PhoneChip value={value} country={lead.country} metadata={lead.phone_meta?.[parsePhone(value, lead.country)?.value ?? '']} /> : g.href?.(value)
-                  ? <a href={g.href(value)!} target={g.column === 'additional_websites' ? '_blank' : undefined} rel="noreferrer noopener" className="text-cyan hover:underline">{value}</a>
+                  ? <a href={g.href(value)!} target={g.column === 'additional_websites' ? '_blank' : undefined} rel="noreferrer noopener" className="text-link hover:underline">{value}</a>
                   : <span>{value}</span>}
                 <button
                   type="button"

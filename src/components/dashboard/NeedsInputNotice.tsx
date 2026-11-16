@@ -8,9 +8,9 @@ export function NeedsInputNotice() {
   if (!count) return null;
   return (
     <Link to="/outreach/autopilot" className="flex items-center gap-3 rounded-xl border border-line bg-card p-4 text-sm font-semibold hover:border-cyan">
-      <Rocket className="h-5 w-5 shrink-0 text-cyan" aria-hidden />
+      <Rocket className="h-5 w-5 shrink-0 text-link" aria-hidden />
       <span>{count} autopilot {count === 1 ? 'lead needs' : 'leads need'} your input</span>
-      <span className="ml-auto text-cyan">Review</span>
+      <span className="ml-auto text-link">Review</span>
     </Link>
   );
 }

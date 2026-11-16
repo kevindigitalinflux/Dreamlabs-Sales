@@ -75,14 +75,14 @@ export function SuggestedSequence({ leadId, onEnroll }: SuggestedSequenceProps) 
             <Button onClick={() => void enrol(suggestion.sequence_id!)} disabled={enrolling} loading={enrolling}>
               {enrolling ? 'Enrolling…' : `Enrol in ${suggestion.sequence_name}`}
             </Button>
-            <button type="button" onClick={() => setState({ kind: 'idle' })} className="flex min-h-11 cursor-pointer items-center text-xs text-cyan">Dismiss</button>
+            <button type="button" onClick={() => setState({ kind: 'idle' })} className="flex min-h-11 cursor-pointer items-center text-xs text-link">Dismiss</button>
           </div>
         </>
       )}
       {suggestion && !suggestion.sequence_id && (
         <>
           <p className="text-sm text-muted">{suggestion.reason || 'No sequence is a clear fit for this lead'}</p>
-          <button type="button" onClick={() => setState({ kind: 'idle' })} className="flex min-h-11 cursor-pointer items-center self-start text-xs text-cyan">Try again</button>
+          <button type="button" onClick={() => setState({ kind: 'idle' })} className="flex min-h-11 cursor-pointer items-center self-start text-xs text-link">Try again</button>
         </>
       )}
       {enrollError && <p role="alert" className="text-sm text-danger">{enrollError}</p>}

@@ -10,7 +10,7 @@ export function ActionContextCard({action,resolution,isOrgAdmin,onResolve,onBulk
     const confirmed = resolution.status === 'confirmed_update_company_context';
     return (
       <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4">
-        <p className="flex items-center gap-2 text-sm font-semibold"><Building2 className="h-4 w-4 text-cyan" aria-hidden />Update company context</p>
+        <p className="flex items-center gap-2 text-sm font-semibold"><Building2 className="h-4 w-4 text-link" aria-hidden />Update company context</p>
         <p className="text-xs text-muted">{action.rationale}</p>
         <Textarea
           label="Updated company context"

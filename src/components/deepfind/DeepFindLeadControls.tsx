@@ -25,7 +25,7 @@ export function DeepFindLeadControls({ lead }: { lead: Lead }) {
         <Button variant="secondary" onClick={() => setOpen(true)} disabled={working}>
           <Telescope className="h-4 w-4" aria-hidden /> Deep find this lead
         </Button>
-        {working && <span role="status" className="rounded-full bg-cyan/15 px-2 py-0.5 text-xs font-semibold text-cyan">Deep find running</span>}
+        {working && <span role="status" className="rounded-full bg-violet/15 px-2 py-0.5 text-xs font-semibold text-link">Deep find running</span>}
         {latest && (
           <Link to={`/pipeline/deep-find/${latest.run_id}`} className="text-xs text-muted underline hover:text-offwhite">
             Deep find results

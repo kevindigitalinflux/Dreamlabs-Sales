@@ -98,7 +98,7 @@ export function SuggestionDiff({ lead, suggestion, onApply, onDismiss, icps = []
   }
   return (
     <div className="flex flex-col gap-3">
-      <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-cyan" aria-hidden />Suggested updates from your note</p>
+      <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-link" aria-hidden />Suggested updates from your note</p>
       <ul className="flex flex-col gap-1">
         {rows.map((r) => (
           <li key={r.label} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface/60 p-2 text-sm">

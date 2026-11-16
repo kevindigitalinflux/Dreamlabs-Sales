@@ -50,7 +50,7 @@ export function SequenceList() {
               </div>
               {s.description && <p className="mt-1 truncate text-sm text-muted">{s.description}</p>}
               <p className="mt-2 text-xs text-muted">{s.steps.length} {s.steps.length === 1 ? 'step' : 'steps'}</p>
-              <p className="mt-1 text-xs text-cyan">{timelineLabel(s.steps)}</p>
+              <p className="mt-1 text-xs text-link">{timelineLabel(s.steps)}</p>
             </button>
           </li>
         ))}

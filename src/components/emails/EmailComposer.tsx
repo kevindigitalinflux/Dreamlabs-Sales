@@ -310,7 +310,7 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
                 {diff.map((l, i) => (
                   <p key={i} className={`whitespace-pre-wrap ${l.kind === 'added' ? 'text-success' : l.kind === 'removed' ? 'text-danger/70 line-through' : 'text-muted/60'}`}>{l.text || ' '}</p>
                 ))}
-                <button type="button" onClick={() => update(shownKey, { showDiff: false })} className="mt-1 flex min-h-11 cursor-pointer items-center text-cyan">Hide diff</button>
+                <button type="button" onClick={() => update(shownKey, { showDiff: false })} className="mt-1 flex min-h-11 cursor-pointer items-center text-link">Hide diff</button>
               </div>
             )}
             <EmailTextEditor label="Body" rows={10} value={current.body} onChange={(body) => update(shownKey, { body })} />

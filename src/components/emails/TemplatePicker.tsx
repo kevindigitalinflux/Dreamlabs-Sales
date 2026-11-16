@@ -63,7 +63,7 @@ export function TemplatePicker({ templates, sequences, enrollment, orgId, loadin
         ] : categorisedOptions(templates, (t) => ({ value: t.id }))}
       </SelectField>
       {inSequence && (
-        <button type="button" onClick={() => setShowAll((v) => !v)} className="flex min-h-11 cursor-pointer items-center self-start text-xs text-cyan">
+        <button type="button" onClick={() => setShowAll((v) => !v)} className="flex min-h-11 cursor-pointer items-center self-start text-xs text-link">
           {showAll ? 'Show only this sequence' : 'Show all templates'}
         </button>
       )}

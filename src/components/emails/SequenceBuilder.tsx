@@ -153,7 +153,7 @@ export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }
           </SortableContext>
         </DndContext>
         <Button variant="secondary" onClick={addStep}><Plus className="h-4 w-4" aria-hidden />Add step</Button>
-        <p className="rounded-lg bg-surface/60 p-3 text-sm font-semibold text-cyan">{timelineLabel(form.steps)}</p>
+        <p className="rounded-lg bg-surface/60 p-3 text-sm font-semibold text-link">{timelineLabel(form.steps)}</p>
         {isAdmin && (
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.is_default} onChange={(e) => setForm((f) => ({ ...f, is_default: e.target.checked }))} className="h-4 w-4 accent-violet-500" />

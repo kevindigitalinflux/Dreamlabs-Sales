@@ -33,12 +33,12 @@ export function TodaysFocus({ leads, onOpen }: TodaysFocusProps) {
             >
               <span className="font-heading text-sm font-bold">{lead.business_name}</span>
               <StageBadge stage={lead.stage} />
-              <span className={`text-xs font-semibold ${overdue ? 'text-danger' : 'text-cyan'}`}>
+              <span className={`text-xs font-semibold ${overdue ? 'text-danger' : 'text-link'}`}>
                 {dueLabel(lead.next_action_date!)}
               </span>
               {lead.next_action_note && <span className="w-full text-sm text-muted sm:w-auto sm:flex-1">{lead.next_action_note}</span>}
               {lead.phone && (
-                <a href={`tel:${lead.phone}`} onClick={(e) => e.stopPropagation()} className="ml-auto flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-cyan hover:bg-surface">
+                <a href={`tel:${lead.phone}`} onClick={(e) => e.stopPropagation()} className="ml-auto flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-link hover:bg-surface">
                   <Phone className="h-4 w-4" aria-hidden />
                   Call
                 </a>

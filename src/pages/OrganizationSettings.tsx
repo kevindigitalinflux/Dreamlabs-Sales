@@ -197,7 +197,7 @@ export function OrganizationSettings() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <header className="flex items-center gap-3">
-        <KeyRound className="h-6 w-6 text-cyan" aria-hidden />
+        <KeyRound className="h-6 w-6 text-link" aria-hidden />
         <h1 className="text-[28px] font-extrabold">{currentOrg?.name} — API keys</h1>
       </header>
       <p className="text-muted">

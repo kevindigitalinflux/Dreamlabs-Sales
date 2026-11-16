@@ -43,7 +43,7 @@ export function PipelineSwitcher() {
           )}
         </Listbox>
       )}
-      <Link to="/pipeline/manage" className="text-xs font-semibold text-cyan hover:underline">Manage</Link>
+      <Link to="/pipeline/manage" className="text-xs font-semibold text-link hover:underline">Manage</Link>
     </div>
   );
 }

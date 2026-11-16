@@ -56,7 +56,7 @@ export function LeadDetailPage() {
             {initials(assignedProfile.full_name ?? assignedProfile.email)}
           </span>
         )}
-        {lead.deal_value !== null && <span className="ml-auto font-heading text-[22px] font-bold text-cyan">{formatCurrency(lead.deal_value)}</span>}
+        {lead.deal_value !== null && <span className="ml-auto font-heading text-[22px] font-bold text-link">{formatCurrency(lead.deal_value)}</span>}
         <Button variant="secondary" onClick={() => setEmailOpen(true)}>Draft email</Button>
       </header>
 

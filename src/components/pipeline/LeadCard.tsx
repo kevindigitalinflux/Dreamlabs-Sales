@@ -52,13 +52,13 @@ export function LeadCard({ lead, assigneeName, onOpen }: LeadCardProps) {
         <PhoneChip value={lead.phone} country={lead.country} metadata={lead.phone_meta?.[parsePhone(lead.phone, lead.country)?.value ?? '']} />
       )}
       {lead.email && (
-        <button type="button" onClick={copyEmail} title="Copy email" className="flex min-h-6 cursor-pointer items-center gap-1.5 text-sm text-muted hover:text-cyan">
+        <button type="button" onClick={copyEmail} title="Copy email" className="flex min-h-6 cursor-pointer items-center gap-1.5 text-sm text-muted hover:text-link">
           <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden />
           <span className="truncate">{copied ? 'Copied ✓' : lead.email}</span>
         </button>
       )}
       {due && lead.next_action_date && (
-        <p className={`flex items-center gap-1.5 text-xs font-semibold ${isOverdue(lead.next_action_date) ? 'text-danger' : 'text-cyan'}`}>
+        <p className={`flex items-center gap-1.5 text-xs font-semibold ${isOverdue(lead.next_action_date) ? 'text-danger' : 'text-link'}`}>
           <AlertCircle className="h-3.5 w-3.5" aria-hidden />
           {dueLabel(lead.next_action_date)}
         </p>

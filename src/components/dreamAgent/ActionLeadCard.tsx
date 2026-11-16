@@ -10,7 +10,7 @@ export function ActionLeadCard({action,resolution,leadsById,scopedPipelineId,nee
     const confirmed = resolution.status === 'confirmed_update';
     return (
       <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4">
-        <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-cyan" aria-hidden />{action.business_name}</p>
+        <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-link" aria-hidden />{action.business_name}</p>
         <ul className="flex flex-col gap-1">
           {rows.map((r) => (
             <li key={r.label} className="flex flex-wrap items-center gap-2 rounded-lg bg-surface/60 p-2 text-sm">
@@ -37,7 +37,7 @@ export function ActionLeadCard({action,resolution,leadsById,scopedPipelineId,nee
     const pipelineId = resolution.status === 'confirmed_create' ? resolution.pipeline_id : (scopedPipelineId ?? '');
     return (
       <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4">
-        <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-cyan" aria-hidden />New lead: {action.extracted.business_name}</p>
+        <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-link" aria-hidden />New lead: {action.extracted.business_name}</p>
         <p className="text-xs text-muted">{[action.extracted.owner_name, action.extracted.address, action.extracted.city, action.extracted.postcode, action.extracted.phone, action.extracted.email, action.extracted.website, action.extracted.vertical].filter(Boolean).join(' · ') || 'No extra details found'}</p>
         <ul className="flex flex-col gap-1">
           {patchRows(action.patch, undefined, false, icpNames).map((r) => (

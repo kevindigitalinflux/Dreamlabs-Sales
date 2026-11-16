@@ -59,7 +59,7 @@ function FilterRow({ filters, onChange, contractors, isAdmin, onExport }: Filter
         placeholder="Search company, subject…"
         value={filters.search}
         onChange={(e) => onChange({ ...filters, search: e.target.value })}
-        className="min-h-11 min-w-56 flex-1 rounded-lg border border-line bg-surface px-3 text-base outline-none placeholder:text-muted focus:border-cyan"
+        className="min-h-11 min-w-56 flex-1 rounded-lg border border-line bg-surface px-3 text-base outline-none placeholder:text-muted focus:border-focus"
       />
       {isAdmin && (
         <SelectField
@@ -76,12 +76,12 @@ function FilterRow({ filters, onChange, contractors, isAdmin, onExport }: Filter
       <div className="flex flex-col gap-1.5">
         <label className="text-xs font-semibold text-muted" htmlFor="log-from">From</label>
         <input id="log-from" type="date" value={filters.from} onChange={(e) => onChange({ ...filters, from: e.target.value })}
-          className="min-h-11 rounded-lg border border-line bg-surface px-3 text-base outline-none focus:border-cyan" />
+          className="min-h-11 rounded-lg border border-line bg-surface px-3 text-base outline-none focus:border-focus" />
       </div>
       <div className="flex flex-col gap-1.5">
         <label className="text-xs font-semibold text-muted" htmlFor="log-to">To</label>
         <input id="log-to" type="date" value={filters.to} onChange={(e) => onChange({ ...filters, to: e.target.value })}
-          className="min-h-11 rounded-lg border border-line bg-surface px-3 text-base outline-none focus:border-cyan" />
+          className="min-h-11 rounded-lg border border-line bg-surface px-3 text-base outline-none focus:border-focus" />
       </div>
       <Button variant="secondary" onClick={onExport}>Export CSV</Button>
     </div>

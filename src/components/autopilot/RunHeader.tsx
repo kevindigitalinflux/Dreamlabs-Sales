@@ -25,7 +25,7 @@ export function RunHeader({ run, rows, onControl, canControl }: RunHeaderProps) 
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <p className="font-semibold">Selected leads run</p>
-          <Badge className={active ? 'bg-cyan/15 text-cyan' : 'bg-surface text-muted'}>{runStatusLabel(run.status)}</Badge>
+          <Badge className={active ? 'bg-violet/15 text-link' : 'bg-surface text-muted'}>{runStatusLabel(run.status)}</Badge>
         </div>
         {run.window_start && run.window_end && (
           <p className="text-sm text-muted">

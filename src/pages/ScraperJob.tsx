@@ -25,7 +25,7 @@ function statusBadge(job: { status: string } | null) {
   if (!job) return null;
   const classes: Record<string, string> = {
     pending: 'bg-slate-500/15 text-muted',
-    running: 'bg-cyan/15 text-cyan',
+    running: 'bg-violet/15 text-link',
     completed: 'bg-emerald-500/15 text-success',
     failed: 'bg-red-500/15 text-danger',
   };

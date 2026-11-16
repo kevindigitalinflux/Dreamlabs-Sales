@@ -39,7 +39,7 @@ export function SelectedRunSection({ run, refresh, stopRun, controlRun }: Select
     <div className="flex flex-col gap-4">
       <RunHeader run={run} rows={rows} onStop={stopRun} onControl={controlRun} canControl={session?.user.id === run.created_by || currentOrg?.role === 'admin'} />
       {run.status !== 'active' && run.status !== 'paused' && (
-        <Link to="/outreach/autopilot/new" className="text-sm font-semibold text-cyan hover:underline">Start a new run</Link>
+        <Link to="/outreach/autopilot/new" className="text-sm font-semibold text-link hover:underline">Start a new run</Link>
       )}
       {drafts.error && <p role="alert" className="text-sm text-danger">Could not check which parked drafts were sent: {drafts.error}</p>}
       {followUpError && <p role="alert" className="text-sm text-danger">{followUpError}</p>}

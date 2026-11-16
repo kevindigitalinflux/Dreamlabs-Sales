@@ -11,7 +11,7 @@ export function NoteText({ content, compact = false }: { content: string; compac
       <p id={id} className={`whitespace-pre-wrap break-words text-sm ${long && !open ? (compact ? 'line-clamp-3' : 'line-clamp-6') : ''}`}>{content}</p>
       {long && (
         <button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}
-          className="mt-1 flex min-h-8 cursor-pointer items-center text-xs font-semibold text-cyan hover:underline">
+          className="mt-1 flex min-h-8 cursor-pointer items-center text-xs font-semibold text-link hover:underline">
           {open ? 'Show less' : 'Show full note'}
         </button>
       )}
