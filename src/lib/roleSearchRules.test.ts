@@ -2,6 +2,13 @@ import {expect,it} from 'vitest'
 import {cleanRoles,roleLadder,roleQuery,judgeRoleHit} from '../../supabase/functions/_shared/roleSearchRules'
 const lead={company:'Acme Offices'},rung={rung:'target' as const,roles:['Facilities Manager']};
 const hit={title:'Jane Doe - Facilities Manager - Acme Offices Ltd | LinkedIn',url:'https://uk.linkedin.com/in/jane-doe-1a2b3c/?trk=x',snippet:'Facilities Manager at Acme Offices'};
+it.each([
+ ['Tom Hall, MBA - Owner - Acme Offices','Tom','Hall'],
+ ['Mary J. Blige - CEO - Acme Offices','Mary','Blige'],
+ ['Mary J Blige - CEO - Acme Offices','Mary','Blige'],
+])('normalizes credentials and initials: %s',(title,first,last)=>{
+ expect(judgeRoleHit({...hit,title},lead,{rung:'final',roles:['Owner','CEO']})).toMatchObject({ok:true,person:{first,last}});
+});
 it('rejects a snippet role attached to a different organization',()=>{
  expect(judgeRoleHit({...hit,title:'Sam Lee - Acme Offices | LinkedIn',snippet:'Cleaner at Acme Offices. Director of his local football club.'},lead,{rung:'final',roles:['Director']})).toEqual({ok:false,why:'role_mismatch'});
 });

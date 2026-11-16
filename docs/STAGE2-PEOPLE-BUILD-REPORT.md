@@ -178,3 +178,9 @@ Gates: 274 app files / 3,497 passed / one existing skipped; 8 wrapper files / 16
 The quoted Sam Lee fixture and Jane Doe fixture failed first. Snippet-only roles now require same-segment role-at/@/comma-company evidence; sentence, semicolon, pipe and middle-dot boundaries prevent unrelated roles from qualifying. A matching title role keeps its title part; otherwise the exact matched ladder role is saved. The company name never supplies the saved title. All four new fixtures pass, including all three separators. No existing assertion changed.
 
 Gates: 274 app files / 3,501 passed / one existing skipped; 8 wrapper files / 163 passed; all other five gates PASS, edge29. Logs: .superpowers/review-fix2-*.log. Fix 1 commit: 759e02d.
+
+### Fix 3 — name parsing
+
+The quoted credential and dotted-initial fixtures failed first; an undotted-initial fixture also exposed the wrong saved surname. Name parsing now drops the comma suffix and single-letter initials before the existing two-to-four-word and letter validation. All three pass. No existing assertion changed.
+
+Gates: 274 app files / 3,504 passed / one existing skipped; 8 wrapper files / 163 passed; all other five gates PASS, edge29. Logs: .superpowers/review-fix3-*.log. Fix 2 commit: 5f9feb8.

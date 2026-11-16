@@ -47,7 +47,7 @@ export function judgeRoleHit(hit: { title: string; url: string; snippet: string 
     || !/^(?:(?:www|[a-z]{2}(?:-[a-z]{2})?)\.)?linkedin\.com$/i.test(url.hostname) || !/^\/in\/[^/]+/.test(url.pathname)) return refuse('not_profile_url');
   url.protocol = 'https:'; url.search = ''; url.hash = ''; url.pathname = url.pathname.replace(/\/+$/, '');
   const parts = hit.title.replace(/(?:\s*[-–|]\s*)?LinkedIn\s*$/i, '').split(/\s(?:-|–|\|)\s/).map(part => part.trim()).filter(Boolean);
-  const name = parts[0]?.split(/\s+/) ?? [];
+  const name = (parts[0]?.split(',')[0].trim().split(/\s+/) ?? []).filter(word => !/^\p{L}\.?$/u.test(word));
   if (name.length < 2 || name.length > 4 || !name.every(word => /^[\p{L}]+(?:[-'’][\p{L}]+)*$/u.test(word))) return refuse('no_name');
   const companies = [lead.company, lead.registeredName ?? ''].filter(Boolean);
   const companyWords = companies.map(distinctive).filter(list => list.length);
