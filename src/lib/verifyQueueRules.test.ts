@@ -48,12 +48,12 @@ describe('planQueue', () => {
     const data = input(); data.savedAddresses = []; data.domains[0].state = 'catch_all'
     expect(planQueue(data)).toEqual([])
   })
-  it('keeps saved Microsoft roles SMTP on no-answer and catch-all', () => {
+  it('keeps saved Microsoft roles SMTP on no-answer and skips catch-all', () => {
     const data = input(0); data.savedAddresses = [{ ...saved[0], address: 'info@fixture.test' }]
     data.domains = [{ domain: 'fixture.test', provider: 'microsoft', state: 'no_answer' }]
     expect(planQueue(data)).toMatchObject([{ kind: 'smtp' }])
     data.domains[0].state = 'catch_all'
-    expect(planQueue(data)).toMatchObject([{ kind: 'smtp' }])
+    expect(planQueue(data)).toEqual([])
   })
   it('omits checked saved rows and plans unchecked-domain formats', () => {
     const data = input(1); data.domains[0].state = 'unchecked'; data.alreadyChecked = { [saved[0].address]: 'invalid', [saved[1].address]: 'valid' }
@@ -93,12 +93,18 @@ it('skips only a proven person’s siblings and never anonymous or unproven rows
   expect(siblingsToSkip({ personKey: null, verdict: 'valid' }, rows)).toEqual([])
 })
 
-it.each(['provable','unchecked','catch_all','no_answer'] as const)('Microsoft %s sends four person formats to exists and company/role addresses to SMTP', state => {
+it.each(['provable','unchecked','catch_all','no_answer'] as const)('Microsoft %s sends four person formats to exists and eligible company/role addresses to SMTP', state => {
  const data=input(1); data.domains=[{domain:'fixture.test',provider:'microsoft',state}];
  data.savedAddresses=[{...saved[0],address:'jo@fixture.test',personKey:'jo smith'}, {...saved[1],address:'info@fixture.test'}, {...saved[1],address:'office-mail@fixture.test'}];
  const rows=planQueue(data);
- expect(rows.slice(0,3).map(r=>r.kind)).toEqual(['ms_exists','smtp','smtp']);
+ expect(rows.filter(r=>r.rank===0 && r.personKey!==people[0].personKey).map(r=>[r.address,r.kind])).toEqual(state==='catch_all'
+  ? [['jo@fixture.test','ms_exists'],['office-mail@fixture.test','smtp']]
+  : [['jo@fixture.test','ms_exists'],['info@fixture.test','smtp'],['office-mail@fixture.test','smtp']]);
  expect(rows.filter(r=>r.personKey===people[0].personKey).map(r=>[r.kind,r.rank])).toEqual([['ms_exists',0],['ms_exists',1],['ms_exists',2],['ms_exists',3]]);
+});
+it.each(['google','microsoft','hosted','unknown'] as const)('skips saved role addresses on %s catch-all',provider=>{
+ const data=input(0);data.domains=[{domain:'fixture.test',provider,state:'catch_all'}];
+ data.savedAddresses=[{...saved[0],address:'info@fixture.test'}];expect(planQueue(data)).toEqual([]);
 });
 it('requeues a stalled domain for ten minutes even at the attempt ceiling',()=>{
  expect(nextStep({kind:'smtp',attempts:4},{ok:false,failure:'domain_stalled'},1000)).toEqual({status:'queued',nextAt:601000,reason:'domain_stalled'});

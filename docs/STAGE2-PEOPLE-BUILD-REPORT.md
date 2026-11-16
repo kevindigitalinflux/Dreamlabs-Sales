@@ -196,3 +196,9 @@ The first full run caught seven checkpoint-order regressions from an unnecessary
 The three-empty-rung fixture first reserved three AI units instead of one. The per-lead provider now tracks only empty-result fallback use and returns none on later empty rungs before reserving AI. Busy/throttled, not_configured and unreachable fallback paths remain independent. New tests prove three engine rungs reserve once, later empty calls return none, a new lead gets its own allowance, and a throttled second rung after an empty first still reserves and falls back. No existing assertion changed.
 
 Gates: 274 app files / 3,508 passed / one existing skipped; 8 wrapper files / 163 passed; all other five gates PASS, edge29. Logs: .superpowers/review-fix5-*.log. Fix 4 commit: 90bd726.
+
+### Fix 6 — catch-all role queue exclusion
+
+The restored Microsoft catch-all assertion failed first, alongside the cross-provider fixture and Microsoft-state matrix. Saved role addresses now skip catch-all for all four providers; no_answer stays SMTP. Existing assertions changed: (1) the saved Microsoft role catch_all case expects [] instead of one SMTP row, retaining the no_answer assertion; (2) the Microsoft state matrix omits info@fixture.test only for catch_all, retaining saved named-person ms_exists, non-role company SMTP and four generated ms_exists formats in every state. The matrix now identifies saved rows by address rather than taking the first three rows. All other existing planQueue assertions pass unchanged.
+
+Gates: 274 app files / 3,512 passed / one existing skipped; 8 wrapper files / 163 passed; all other five gates PASS, edge29. Logs: .superpowers/review-fix6-*.log. Fix 5 commit: 1074f31.

@@ -29,7 +29,7 @@ export function planQueue(input: QueueInput): QueueCandidate[] {
     const domain = address.split('@')[1] ?? '';
     const server = input.domains.find(item => item.domain.toLowerCase() === domain);
     const role = isRoleAddress(address);
-    if (role && server?.state === 'catch_all' && server.provider !== 'microsoft') continue;
+    if (role && server?.state === 'catch_all') continue;
     const microsoft = server?.provider === 'microsoft';
     add({ ...saved, address, domain, kind: microsoft && !role && saved.personKey !== null ? 'ms_exists' : 'smtp', rank: 0 });
   }
