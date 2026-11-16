@@ -8,6 +8,20 @@ const legal = new Set(['ltd', 'limited', 'llc', 'inc', 'plc', 'co', 'company', '
 const distinctive = (name: string) => words(name).filter(word => word.length >= 3 && !legal.has(word));
 const contains = (text: string, needed: string[]) => needed.length > 0 && needed.every(word => words(text).includes(word));
 
+/** Keep a distinctive leading brand, then remove only the lead's trailing city. */
+export function brandName(company: string, city?: string | null): string {
+  const whole = company.trim();
+  const prefix = whole.split(/ - | \| | : | \(/, 1)[0].trim();
+  const generic = new Set(['cleaning', 'cleaner', 'cleaners', 'commercial', 'service', 'services']);
+  const locations = new Set(words(city ?? ''));
+  const hasBrand = distinctive(prefix).some(word => !generic.has(word) && !locations.has(word));
+  const name = hasBrand ? prefix : whole;
+  const place = city?.trim();
+  if (!place) return name;
+  const escaped = place.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return name.replace(new RegExp(`\\s+${escaped}$`, 'i'), '').trim() || name;
+}
+
 /** Preserve the first twelve usable roles, in customer order. */
 export function cleanRoles(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -30,7 +44,7 @@ export function roleLadder(profile: { targetRoles?: unknown; fallbackRoles?: unk
 
 /** Search snippets only; remove embedded quote operators and drop trailing roles to fit. */
 export function roleQuery(input: { company: string; city?: string | null; roles: string[] }): string {
-  const company = input.company.replace(/["\r\n]/g, '').trim();
+  const company = brandName(input.company, input.city).replace(/["\r\n]/g, '').trim();
   const city = (input.city ?? '').replace(/["\r\n]/g, '').trim();
   const roles = cleanRoles(input.roles).slice(0, 5).map(role => role.replace(/"/g, ''));
   const build = () => `site:linkedin.com/in "${company}" (${roles.map(role => `"${role}"`).join(' OR ')})${city ? ` ${city}` : ''}`;
@@ -49,7 +63,7 @@ export function judgeRoleHit(hit: { title: string; url: string; snippet: string 
   const parts = hit.title.replace(/(?:\s*[-–|]\s*)?LinkedIn\s*$/i, '').split(/\s(?:-|–|\|)\s/).map(part => part.trim()).filter(Boolean);
   const name = (parts[0]?.split(',')[0].trim().split(/\s+/) ?? []).filter(word => !/^\p{L}\.?$/u.test(word));
   if (name.length < 2 || name.length > 4 || !name.every(word => /^[\p{L}]+(?:[-'’][\p{L}]+)*$/u.test(word))) return refuse('no_name');
-  const companies = [lead.company, lead.registeredName ?? ''].filter(Boolean);
+  const companies = [lead.company, lead.registeredName ?? '', brandName(lead.company, lead.city)].filter(Boolean);
   const companyWords = companies.map(distinctive).filter(list => list.length);
   const location = new Set(words(`${lead.city ?? ''} ${lead.country ?? ''}`));
   const matchesCompany = (evidence: string) => {

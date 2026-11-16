@@ -4,6 +4,12 @@ import {mapCompaniesHouseOfficers} from '../../supabase/functions/_shared/regist
 const person={first:'Jane',last:'Doe',title:'Facilities Manager',linkedinUrl:'https://linkedin.com/in/jane',rung:'target'};
 const hit=(name='Jane Doe')=>({title:name+' - Facilities Manager - Acme Offices',url:'https://linkedin.com/in/'+name.replaceAll(' ','-'),snippet:'Facilities Manager at Acme Offices'});
 const input=provider=>({company:'Acme Offices',profile:{targetRoles:['Facilities Manager'],fallbackRoles:['Office Manager']},provider,timeLeftMs:()=>100000});
+it('the ladder queries and judges the brand while retaining full lead context',async()=>{
+ const search=vi.fn(async()=>({ok:true,hits:[{title:'Ann Roe - Founder - Cleancat',url:'https://linkedin.com/in/ann-roe',snippet:'Founder at Cleancat'}],via:'searxng'}));
+ const result=await findRolePeople({...input({search}),company:'Cleancat - Commercial Cleaning Services Dublin',city:'Dublin',profile:{targetRoles:['Founder']}});
+ expect(result.people).toMatchObject([{first:'Ann',last:'Roe',title:'Founder'}]);
+ expect(search.mock.calls[0][0]).toBe('site:linkedin.com/in "Cleancat" ("Founder") Dublin');
+});
 it('stops on the first rung with a hit and saves at most two distinct people',async()=>{
  const search=vi.fn(async()=>({ok:true,hits:[hit(),hit(),hit('Ann Lee'),hit('Ben Smith')],via:'searxng'}));const result=await findRolePeople(input({search}));expect(result.people.map(p=>p.first)).toEqual(['Jane','Ann']);expect(result.searches).toBe(1);expect(search).toHaveBeenCalledTimes(1);
 });
