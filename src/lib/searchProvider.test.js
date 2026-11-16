@@ -1,6 +1,23 @@
 import {expect,it,vi} from 'vitest'
 import {makeSearchProvider} from '../../supabase/functions/_shared/searchProvider'
+import {findRolePeople} from '../../supabase/functions/_shared/roleSearch'
 const hit={title:'Jane Doe - Facilities Manager - Acme Offices',url:'https://linkedin.com/in/jane',snippet:'Facilities Manager at Acme Offices'};
+it('three empty rungs reserve exactly one AI unit per lead',async()=>{
+ const reserveAi=vi.fn(async()=>true),gemini=vi.fn(async()=>({text:'',sources:[]}));
+ const worker={search:vi.fn(async()=>({ok:true,value:[]}))};
+ const provider=makeSearchProvider({worker,reserveAi,gemini});
+ expect(await findRolePeople({company:'Acme Offices',profile:{targetRoles:['Facilities Manager']},provider,timeLeftMs:()=>100000})).toMatchObject({people:[],searches:3});
+ expect(worker.search).toHaveBeenCalledTimes(3);expect(reserveAi).toHaveBeenCalledTimes(1);expect(gemini).toHaveBeenCalledTimes(1);
+ expect(await provider.search('another empty rung')).toEqual({ok:false,why:'none'});
+ const nextLead=makeSearchProvider({worker,reserveAi,gemini});await nextLead.search('new lead');expect(reserveAi).toHaveBeenCalledTimes(2);
+});
+it('a throttled second rung still falls back after the first empty rung',async()=>{
+ const reserveAi=vi.fn(async()=>true),gemini=vi.fn().mockResolvedValueOnce({text:'',sources:[]}).mockResolvedValueOnce({text:JSON.stringify({...hit,title:'Jane Doe - Office Manager - Acme Offices',snippet:'Office Manager at Acme Offices'}),sources:[hit.url]});
+ const worker={search:vi.fn().mockResolvedValueOnce({ok:true,value:[]}).mockResolvedValueOnce({ok:false,failure:'busy'})};
+ const provider=makeSearchProvider({worker,reserveAi,gemini});
+ expect(await findRolePeople({company:'Acme Offices',profile:{targetRoles:['Facilities Manager']},provider,timeLeftMs:()=>100000})).toMatchObject({people:[{first:'Jane',title:'Office Manager'}],searches:2});
+ expect(reserveAi).toHaveBeenCalledTimes(2);expect(gemini).toHaveBeenCalledTimes(2);
+});
 it.each(['zero','busy','not_configured','unreachable'])('falls back only on %s and reserves one AI call',async failure=>{
  const reserveAi=vi.fn(async()=>true),gemini=vi.fn(async()=>({text:JSON.stringify(hit),sources:[hit.url]}));const worker={search:vi.fn(async()=>failure==='zero'?{ok:true,value:[]}:{ok:false,failure})};
  expect(await makeSearchProvider({worker,reserveAi,gemini}).search('query')).toEqual({ok:true,hits:[hit],via:'gemini'});expect(reserveAi).toHaveBeenCalledTimes(1);expect(gemini).toHaveBeenCalledTimes(1);

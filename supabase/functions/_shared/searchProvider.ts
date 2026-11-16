@@ -7,6 +7,8 @@ export interface SearchProvider {
 
 /** Prefer worker snippets; spend one run AI unit only for the approved fallback cases. */
 export function makeSearchProvider(deps: { worker: WorkerClient; gemini?: (prompt: string) => Promise<{ text: string; sources: string[] }>; reserveAi: () => Promise<boolean>; onSearch?: (via: 'searxng' | 'gemini') => void }): SearchProvider {
+  // The engine creates one provider per lead; only empty-result fallback is limited across its rungs.
+  let emptyFallbackUsed = false;
   return { async search(query) {
     try {
       deps.onSearch?.('searxng');
@@ -15,6 +17,10 @@ export function makeSearchProvider(deps: { worker: WorkerClient; gemini?: (promp
       if (!result.ok && result.failure === 'limit_reached') return { ok: false, why: 'limit' };
       if (!result.ok && !['busy', 'not_configured', 'unreachable'].includes(result.failure)) return { ok: false, why: 'failed' };
       if (!deps.gemini) return { ok: false, why: 'none' };
+      if (result.ok) {
+        if (emptyFallbackUsed) return { ok: false, why: 'none' };
+        emptyFallbackUsed = true;
+      }
       if (!await deps.reserveAi()) return { ok: false, why: 'cap' };
       deps.onSearch?.('gemini');
       const grounded = await deps.gemini([
