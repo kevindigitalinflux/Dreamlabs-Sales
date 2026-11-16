@@ -1,3 +1,13 @@
+## Role search hits and brand names (2026-11-16) — START HERE for the local build
+
+Worktree C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2, branch codex/role-search-hits, fetched base b23a5912698687a164e40fe3809a959aebc76d51. Kevin directs, Claude architects/reviews, Codex builds. Read docs/ROLE-SEARCH-HITS-BUILD-REPORT.md. Fix 2 (brands) is 7dadcc2; this commit contains Fix 1 (grounded hits/diagnostic), the final report and this handoff. Resolve git rev-parse HEAD for the final exact tip. Two implementation commits only; explicit paths staged. No other writer, worktree write or task-owned server.
+
+The first quoted Cleancat fixtures failed, then passed. Direct grounded URL matches remain supported; redirect chunks can qualify a valid LinkedIn profile only through their LinkedIn domain title or LinkedIn source host plus same-source first/last name evidence. Existing company/current-role/former-person judgment follows unchanged except for the approved strict brand alternative. role_search_fallback_shape stores only lines_parsed, profile_urls, sources, redirect_sources and linkedin_titled_sources from the latest zero-kept-hit fallback, including interrupted lead summaries. No URLs, names or queries enter that object. Tests prove provider evidence reaches a real engine role contact and diagnostics reach normal/error JSON. No old assertion changed.
+
+Kevin withdrew the one real grounded call before any call and instructed that no local key path be created. Both reply-shape fixtures are synthetic. Real shape is NOT VERIFIED; this task made no provider request. Final seven gates: 274 app files / 3,540 passed / one existing opt-in skip; 8 wrapper files / 166 passed; root/wrapper TypeScript, build, whitespace and edge29 PASS. Fix 2 gates: 3,520 app / 166 wrapper. No install, spending, SQL, migration, VPS, merge, push or deployment occurred. Independent review, real reply shape/live improvement, database/container/browser runtime remain unverified. Subscription usage is unavailable; no paid continuation.
+
+Stop here. Claude reviews both fixes. Static import graph finds only run-deep-find for separately authorized redeployment; no frontend/wrapper/secret/migration change is needed. Keep SearXNG's inherited live state untouched. Do not treat historical rollout permissions below as authorization for this branch. Earlier shared-vault branch snapshots are historical; the new task checkpoint records this branch separately and preserves the accepted-main mirror.
+
 ## Status (2026-11-16 23:15 UTC, Claude) - START HERE, supersedes every block below
 
 Roles unchanged: Kevin directs, Claude architect/reviewer/deployer, Codex builder. Every merge, push, deploy, migration and role change needs Kevin's explicit yes for that action.

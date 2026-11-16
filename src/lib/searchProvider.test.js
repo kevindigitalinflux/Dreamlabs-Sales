@@ -2,6 +2,47 @@ import {expect,it,vi} from 'vitest'
 import {makeSearchProvider} from '../../supabase/functions/_shared/searchProvider'
 import {findRolePeople} from '../../supabase/functions/_shared/roleSearch'
 const hit={title:'Jane Doe - Facilities Manager - Acme Offices',url:'https://linkedin.com/in/jane',snippet:'Facilities Manager at Acme Offices'};
+// Synthetic contract fixture, not a captured Gemini reply. Real-call Step 1 was withdrawn.
+const redirect='https://vertexaisearch.cloud.google.com/grounding-api-redirect/REDACTED';
+const redirectReply={text:JSON.stringify(hit),sources:[redirect],sourceEvidence:[`${redirect} linkedin.com`,`${redirect} Jane Doe is Facilities Manager at Acme Offices.`]};
+const fallback=(reply,onFallbackShape)=>makeSearchProvider({worker:{search:async()=>({ok:false,failure:'not_configured'})},reserveAi:async()=>true,gemini:async()=>reply,onFallbackShape});
+it('keeps Shape A direct URL matches without requiring sourceEvidence',async()=>{
+ expect(await fallback({text:JSON.stringify(hit),sources:[hit.url]}).search('query')).toMatchObject({ok:true,hits:[hit]});
+});
+it('keeps Shape B redirect hits supported by a LinkedIn chunk',async()=>{
+ expect(await fallback(redirectReply).search('query')).toMatchObject({ok:true,hits:[hit]});
+});
+it.each(['uk.linkedin.com','en-gb.linkedin.com'])('accepts regional LinkedIn chunk title %s',domain=>{
+ return expect(fallback({...redirectReply,sourceEvidence:[`${redirect} ${domain}`,redirectReply.sourceEvidence[1]]}).search('query')).resolves.toMatchObject({ok:true,hits:[hit]});
+});
+it.each([
+ {sourceEvidence:[`${redirect} linkedin.com`,`${redirect} Someone Else is Facilities Manager.`]},
+ {sourceEvidence:[`${redirect} example.com`,redirectReply.sourceEvidence[1]]},
+ {sourceEvidence:[`${redirect} linkedin.com.attacker.test`,redirectReply.sourceEvidence[1]]},
+ {sourceEvidence:[`${redirect} linkedin.com`,`${redirect}-other Jane Doe at Acme Offices.`]},
+ {sourceEvidence:[`${redirect} linkedin.com`,`${redirect} Janette Doerr at Acme Offices.`]},
+ {sourceEvidence:[`${redirect} linkedin.com`,`${redirect} Jane Doe at Acme Offices.`],sources:['https://attacker.test/grounding-api-redirect/REDACTED']},
+])('drops missing, unrelated or spoofed redirect grounding %#',async patch=>{
+ expect(await fallback({...redirectReply,...patch}).search('query')).toMatchObject({ok:true,hits:[]});
+});
+it('accepts a LinkedIn source host with same-chunk supported name evidence',async()=>{
+ const source='https://uk.linkedin.com/in/grounded-person';
+ expect(await fallback({...redirectReply,sources:[source],sourceEvidence:[`${source} Profile`,`${source} Jane Doe at Acme Offices`]}).search('query')).toMatchObject({ok:true,hits:[hit]});
+});
+it('does not borrow a name supported only by another non-LinkedIn chunk',async()=>{
+ const other='https://example.com/source';
+ expect(await fallback({...redirectReply,sources:[redirect,other],sourceEvidence:[`${redirect} linkedin.com`,`${other} Jane Doe at Acme Offices`]}).search('query')).toMatchObject({ok:true,hits:[]});
+});
+it.each(['https://linkedin.com/company/acme','https://linkedin.com.attacker.test/in/jane','https://attacker.linkedin.com/in/jane','https://user@linkedin.com/in/jane'])('drops invented or invalid profile URL %s',url=>{
+ return expect(fallback({...redirectReply,text:JSON.stringify({...hit,url})}).search('query')).resolves.toMatchObject({ok:true,hits:[]});
+});
+it('emits only fixed numeric fallback shape counts when no hit is kept',async()=>{
+ const onFallbackShape=vi.fn();const reply={...redirectReply,text:['prose','{bad}',JSON.stringify({...hit,title:'Someone Else - Director - Acme Offices'}),JSON.stringify({...hit,url:'https://linkedin.com/company/acme'})].join('\n')};
+ expect(await fallback(reply,onFallbackShape).search('private query')).toMatchObject({ok:true,hits:[]});
+ expect(onFallbackShape).toHaveBeenCalledExactlyOnceWith({lines_parsed:2,profile_urls:1,sources:1,redirect_sources:1,linkedin_titled_sources:1});
+ expect(JSON.stringify(onFallbackShape.mock.calls)).not.toMatch(/Jane|Doe|query|https|Acme/);
+ const kept=vi.fn();await fallback(redirectReply,kept).search('query');expect(kept).not.toHaveBeenCalled();
+});
 it('three empty rungs reserve exactly one AI unit per lead',async()=>{
  const reserveAi=vi.fn(async()=>true),gemini=vi.fn(async()=>({text:'',sources:[]}));
  const worker={search:vi.fn(async()=>({ok:true,value:[]}))};

@@ -1,3 +1,7 @@
+## Role search hits and brand names (2026-11-16) — current local checkpoint
+
+Kevin authorized two local fixes on codex/role-search-hits from fetched origin/main b23a591. Read docs/ROLE-SEARCH-HITS-BUILD-REPORT.md. Fix 2 is 7dadcc2; this commit contains Fix 1 and the final report. Both use TDD and all seven gates before each commit; final counts: 274 app files / 3,540 passed / one existing skip, 8 wrapper files / 166 passed, both TypeScript/build/whitespace/edge29 PASS. Direct URL matches remain supported; redirect evidence requires a valid LinkedIn profile and same-source first/last name evidence. Zero-kept-hit fallbacks store only the five approved counts in role_search_fallback_shape. Brand names are an additional strict company match. No existing assertion changed. Kevin withdrew the one real-call diagnostic before any call; real reply shape and production uplift are NOT VERIFIED. No key file, provider call, spending, SQL, VPS change or publication occurred. Codex remains builder; Claude re-reviews next. Only run-deep-find needs redeployment after separate authorization. Stop after the report. The following Claude block describes the inherited live state, not deployment of these local fixes.
+
 ## Status (2026-11-16 23:15 UTC, Claude) - START HERE, supersedes every block below
 
 Roles unchanged: Kevin directs, Claude architect/reviewer/deployer, Codex builder. Every merge, push, deploy, migration and role change needs Kevin's explicit yes for that action.

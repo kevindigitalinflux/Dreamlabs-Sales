@@ -3,14 +3,16 @@ vi.mock('../../supabase/functions/_shared/roleSearch', async original => ({...aw
 // Real engine, fake providers and a filter-aware database. No network, keys or remote writes.
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 vi.mock('../../supabase/functions/_shared/orgApiKeys', () => ({ resolveOrgApiKey: vi.fn(), resolveOrgWorkerConfig: vi.fn() }));
+vi.mock('../../supabase/functions/_shared/ai', async original => ({...await original(),geminiGroundedSearch:vi.fn()}));
 vi.mock('../../supabase/functions/_shared/rateLimit', () => ({ checkRateLimit: vi.fn(async () => true) }));
 vi.mock('../../supabase/functions/_shared/domainDiscoveryLookup', () => ({ discoverLeadDomains: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/knownPersonLookup', () => ({ webSearchDomainFormat: vi.fn(async () => []), readCompanyPages: vi.fn(async () => []), webSearchForPerson: vi.fn(), hunterAccount: vi.fn(), hunterDomainList: vi.fn(), hunterVerifyEmail: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/deepFindPeople', () => ({ lookUpPeople: vi.fn() }));
-vi.mock('../../supabase/functions/_shared/workerClient', () => ({ makeWorkerClient: () => ({ lines: () => [], verifyEmail: vi.fn(), scrapeSite: vi.fn(async () => ({ ok: false, failure: 'not_configured' })) }) }));
+vi.mock('../../supabase/functions/_shared/workerClient', () => ({ makeWorkerClient: () => ({ search:vi.fn(async()=>({ok:false,failure:'not_configured'})),lines: () => [], verifyEmail: vi.fn(), scrapeSite: vi.fn(async () => ({ ok: false, failure: 'not_configured' })) }) }));
 vi.mock('../../supabase/functions/_shared/companiesHouse', () => ({ fetchActiveOfficers: vi.fn(async () => []), searchCompaniesByName: vi.fn(), searchOfficers: vi.fn(async () => []), fetchCompanyProfile: vi.fn() }));
 import { searchCompaniesByName, fetchActiveOfficers } from '../../supabase/functions/_shared/companiesHouse';
 import { resolveOrgApiKey, resolveOrgWorkerConfig } from '../../supabase/functions/_shared/orgApiKeys';
+import {geminiGroundedSearch} from '../../supabase/functions/_shared/ai';
 import { discoverLeadDomains } from '../../supabase/functions/_shared/domainDiscoveryLookup';
 import { webSearchForPerson, readCompanyPages } from '../../supabase/functions/_shared/knownPersonLookup';
 import { lookUpPeople } from '../../supabase/functions/_shared/deepFindPeople';
@@ -23,6 +25,7 @@ beforeEach(() => {
   vi.clearAllMocks(); roleProfiles=[]; deny = false; aiAllowed = true; beforeWebsiteWrite = undefined;
   savedReadFailure = null; roleReadStarted = false;
   findRolePeople.mockResolvedValue({people:[],searches:0,via:[]});
+  geminiGroundedSearch.mockResolvedValue({text:'',sources:[],sourceEvidence:[]});
   fetchActiveOfficers.mockResolvedValue([]);
   vi.stubGlobal('Deno', { env: { get: () => undefined } });
   vi.stubGlobal('fetch', vi.fn(() => { throw new Error('Unexpected network'); }));
@@ -56,6 +59,24 @@ beforeEach(() => {
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it.each([false,true])('stores only fallback shape counts in the engine result, including interrupted=%s',async interrupted=>{
+ const redirect='https://vertexaisearch.cloud.google.com/grounding-api-redirect/REDACTED';
+ geminiGroundedSearch.mockResolvedValue({text:JSON.stringify({title:'Some Person - Director - Acme',url:'https://linkedin.com/in/some-person',snippet:'Director at Acme'}),sources:[redirect],sourceEvidence:[`${redirect} linkedin.com`,`${redirect} Different Person at Acme`]});
+ findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
+ if(interrupted)lookUpPeople.mockRejectedValueOnce(new Error('fixture interrupted'));
+ const out=await run();
+ expect(out.status).toBe(interrupted?'failed':'done');
+ expect(out.domains.role_search_fallback_shape).toEqual({lines_parsed:1,profile_urls:1,sources:1,redirect_sources:1,linkedin_titled_sources:1});
+ expect(Object.values(out.domains.role_search_fallback_shape).every(value=>typeof value==='number')).toBe(true);
+ expect(JSON.stringify(out.domains.role_search_fallback_shape)).not.toMatch(/Some|Person|Acme|https/);
+});
+it('passes grounded redirect evidence through the engine to an accepted role contact',async()=>{
+ const redirect='https://vertexaisearch.cloud.google.com/grounding-api-redirect/REDACTED';
+ geminiGroundedSearch.mockResolvedValue({text:JSON.stringify({title:'Ann Lee - Office Manager - Acme',url:'https://linkedin.com/in/ann-lee',snippet:'Office Manager at Acme'}),sources:[redirect],sourceEvidence:[`${redirect} linkedin.com`,`${redirect} Ann Lee is Office Manager at Acme`]});
+ findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
+ const out=await run();expect(contacts.find(c=>c.first_name==='Ann')).toMatchObject({source:'role_search',title:'Office Manager',include_in_sequences:false});
+ expect(out.domains).not.toHaveProperty('role_search_fallback_shape');
+});
 it.each(['ideal_customer_profiles','decision_maker_candidates'])('continues without role/team saves when %s cannot be read',async table=>{
  savedReadFailure=table;lead.website='https://acme.com';
  roleProfiles=[{id:'icp',org_id:'org',target_roles:['Facilities Manager']}];

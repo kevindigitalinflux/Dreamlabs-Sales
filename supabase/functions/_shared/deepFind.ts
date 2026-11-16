@@ -1,6 +1,6 @@
 import type { GeminiSearchContext } from './geminiSearchMeter.ts';
 import { geminiGroundedSearch } from './ai.ts';
-import { makeSearchProvider } from './searchProvider.ts';
+import { makeSearchProvider, type RoleSearchFallbackShape } from './searchProvider.ts';
 import { chooseRoleProfile, findRolePeople, roleContactPlan, roleSearchLine, prioritizeRolePeople, officersForRoleSearch } from './roleSearch.ts';
 import { roleLadder } from './roleSearchRules.ts';
 import { teamPeopleForLead, pickTeamPeople, shouldSearchAfterTeam, combineTeamRolePeople, type DiscoveredRolePerson } from './teamPageRules.ts';
@@ -193,6 +193,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   let rolePeople: DiscoveredRolePerson[] = [];
   let rolePeopleAdded = 0;
   const roleSearchUsage = { searxng: 0, gemini: 0 };
+  let roleSearchFallbackShape: RoleSearchFallbackShape | undefined;
   const rolePriority = <T extends { first: string; last: string }>(people: T[]): T[] => prioritizeRolePeople(people, rolePeople);
   const roleContacts = () => rolePriority(lookupContacts().map(c => ({ ...c, first: str(c.first_name) ?? '', last: str(c.last_name) ?? '' })));
   const stats: LeadStats = {
@@ -656,6 +657,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     const teamPicked = pickTeamPeople(teamFound, roleLadder(profile));
     if (teamPicked.length) steps.push(`Team page: found ${teamPicked.length} (${teamPicked.map(person => `${person.first} ${person.last}, ${person.title}`).join('; ')}).`);
     const provider = makeSearchProvider({ worker, onSearch: via => { roleSearchUsage[via]++; },
+      onFallbackShape: shape => { roleSearchFallbackShape = shape; },
       reserveAi: async () => {
         await checkpoint();
         const reserved = await service.rpc('deep_find_reserve', { run_id: run.id, hunter: 0, ai: 1 });
@@ -1492,6 +1494,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       dismissed_people: dismissedPeople,
       registry_evidence: registryEvidence,
       role_searches_by_provider: roleSearchUsage,
+      ...(roleSearchFallbackShape ? { role_search_fallback_shape: roleSearchFallbackShape } : {}),
       auto_applied: autoApplied.slice(0, 100),
       domains: discovery.domains,
       named_by_web: namedByWeb,
@@ -1518,7 +1521,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     steps.push(...dismissedStepLines());
     return { status: error instanceof DeepFindAuthorisationLost ? 'skipped' : 'failed',
       reason: error instanceof DeepFindAuthorisationLost ? error.message : 'Deep find could not finish. Saved changes are listed below with Undo.',
-      people_found: created.length, domains: { ...metadata, dismissed_people: dismissedPeople, registry_evidence: registryEvidence, auto_applied: autoApplied.slice(0, 100), suggestions: finalSuggestions, steps } };
+      people_found: created.length, domains: { ...metadata, ...(roleSearchFallbackShape ? { role_search_fallback_shape: roleSearchFallbackShape } : {}), dismissed_people: dismissedPeople, registry_evidence: registryEvidence, auto_applied: autoApplied.slice(0, 100), suggestions: finalSuggestions, steps } };
   }
 }
 
