@@ -31,7 +31,7 @@ export async function findRolePeople(input: { company: string; registeredName?: 
 
 type Contact = { id: string; first_name?: unknown; last_name?: unknown; title?: unknown; linkedin_url?: unknown; dismissed_at?: unknown };
 /** One person key yields one live contact; existing values and dismissed people always win. */
-export function roleContactPlan(person: Pick<RoleCandidate, 'first' | 'last' | 'title' | 'linkedinUrl'>, contacts: Contact[], scope: { leadId: string; creatorId: string }): { kind: 'skip' } | { kind: 'merge'; contactId: string; patch: Record<string, string> } | { kind: 'insert'; row: Record<string, unknown> } {
+export function roleContactPlan(person: { first: string; last: string; title: string; linkedinUrl: string | null }, contacts: Contact[], scope: { leadId: string; creatorId: string; source?: 'role_search' | 'team_page' }): { kind: 'skip' } | { kind: 'merge'; contactId: string; patch: Record<string, string> } | { kind: 'insert'; row: Record<string, unknown> } {
   const key = displayPersonKey(`${person.first} ${person.last}`);
   const matches = contacts.filter(contact => displayPersonKey(`${contact.first_name ?? ''} ${contact.last_name ?? ''}`) === key);
   if (matches.length > 1 || matches[0]?.dismissed_at) return { kind: 'skip' };
@@ -41,7 +41,7 @@ export function roleContactPlan(person: Pick<RoleCandidate, 'first' | 'last' | '
     if (!String(matches[0].linkedin_url ?? '').trim() && person.linkedinUrl) patch.linkedin_url = person.linkedinUrl;
     return { kind: 'merge', contactId: matches[0].id, patch };
   }
-  return { kind: 'insert', row: { lead_id: scope.leadId, created_by: scope.creatorId, source: 'role_search', kind: 'person', first_name: person.first, last_name: person.last, title: person.title, linkedin_url: person.linkedinUrl, include_in_sequences: false } };
+  return { kind: 'insert', row: { lead_id: scope.leadId, created_by: scope.creatorId, source: scope.source ?? 'role_search', kind: 'person', first_name: person.first, last_name: person.last, title: person.title, linkedin_url: person.linkedinUrl, include_in_sequences: false } };
 }
 
 /** A foreign profile never supplies roles; the only-profile fallback is org-scoped. */

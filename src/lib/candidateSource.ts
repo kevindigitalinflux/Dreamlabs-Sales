@@ -1,6 +1,7 @@
 import type { DecisionMakerCandidate } from '../types';
 
 const LABELS: Record<DecisionMakerCandidate['source'], string> = {
+  team_page: "From the company's team page",
   role_search: 'Found by role search',
   hunter: 'Hunter',
   apollo: 'Apollo',
@@ -27,5 +28,5 @@ export function isRegistrySource(source: string): boolean {
 
 /** True for contacts found automatically by a provider search or registry (never typed by the user). */
 export function isProviderSource(source: string): boolean {
-  return source === 'role_search' || source === 'hunter' || source === 'apollo' || isRegistrySource(source);
+  return source === 'team_page' || source === 'role_search' || source === 'hunter' || source === 'apollo' || isRegistrySource(source);
 }

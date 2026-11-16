@@ -18,7 +18,7 @@ ALTER TABLE public.ideal_customer_profiles
  ADD CONSTRAINT icp_fallback_roles_size CHECK(cardinality(fallback_roles)<=12 AND public.role_list_valid(fallback_roles));
 ALTER TABLE public.decision_maker_candidates DROP CONSTRAINT decision_maker_candidates_source_check;
 ALTER TABLE public.decision_maker_candidates ADD CONSTRAINT decision_maker_candidates_source_check
- CHECK(source IN ('hunter','apollo','companies_house','cro','manual','dream_agent','role_search'));
+ CHECK(source IN ('hunter','apollo','companies_house','cro','manual','dream_agent','role_search','team_page'));
 -- 050 client INSERT allows only manual/dream_agent; its generic guard covers every source.
 -- 053 already defaults include_in_sequences to false for every new contact.
 COMMIT;

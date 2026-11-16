@@ -110,7 +110,7 @@ export interface EnrichmentResult {
 export interface DecisionMakerCandidate {
   id: string;
   lead_id: string;
-  source: 'hunter' | 'apollo' | 'companies_house' | 'cro' | 'role_search' | 'manual' | 'dream_agent';
+  source: 'hunter' | 'apollo' | 'companies_house' | 'cro' | 'role_search' | 'team_page' | 'manual' | 'dream_agent';
   /** 'person' (a named individual) or 'general' (a shared inbox such as reception). */
   kind: 'person' | 'general';
   /** Free-text name for a general contact, e.g. 'General reception'. */

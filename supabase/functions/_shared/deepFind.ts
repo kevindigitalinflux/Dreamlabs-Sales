@@ -1,7 +1,8 @@
 import { geminiGroundedSearch } from './ai.ts';
 import { makeSearchProvider } from './searchProvider.ts';
 import { chooseRoleProfile, findRolePeople, roleContactPlan, roleSearchLine, prioritizeRolePeople, officersForRoleSearch } from './roleSearch.ts';
-import type { RoleCandidate } from './roleSearchRules.ts';
+import { roleLadder } from './roleSearchRules.ts';
+import { teamPeopleForLead, pickTeamPeople, shouldSearchAfterTeam, combineTeamRolePeople, type DiscoveredRolePerson } from './teamPageRules.ts';
 import {recipientTier,type RecipientEvidence} from './recipientTier.ts';
 import {prepareRecipientEvidence,supportedTierPattern} from './recipientTierEvidence.ts';
 import {autoApplyRecipients,type AutoRecipient} from './recipientAutoApply.ts';
@@ -187,7 +188,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   if (contactErr) return { status: 'failed', reason: 'Could not read this lead\'s contacts.' };
   const rows = (contactData ?? []) as Contact[];
   const created: Contact[] = [];
-  let rolePeople: RoleCandidate[] = [];
+  let rolePeople: DiscoveredRolePerson[] = [];
   let rolePeopleAdded = 0;
   const roleSearchUsage = { searxng: 0, gemini: 0 };
   const rolePriority = <T extends { first: string; last: string }>(people: T[]): T[] => prioritizeRolePeople(people, rolePeople);
@@ -211,7 +212,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (!name.trim()) return;
     const key = displayPersonKey(name);
     const contact = contactId ? rows.find(c => c.id === contactId) : null;
-    const automatic = !!contact?.dismissed_at && ['companies_house', 'cro', 'hunter', 'apollo', 'role_search'].includes(typeof contact.source === 'string' ? contact.source : '');
+    const automatic = !!contact?.dismissed_at && ['companies_house', 'cro', 'hunter', 'apollo', 'role_search', 'team_page'].includes(typeof contact.source === 'string' ? contact.source : '');
     const existing = dismissedNames.get(key);
     if (existing) { existing.automatic ||= automatic; return; }
     dismissedNames.set(key, { name, automatic });
@@ -643,6 +644,12 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     const profiles = await service.from('ideal_customer_profiles').select('id,org_id,target_roles,fallback_roles').eq('org_id', run.org_id);
     if (profiles.error) throw new Error('Role search profile read failed');
     const profile = chooseRoleProfile(profiles.data ?? [], run.org_id, str(lead.icp_id));
+    const teamFound = teamPeopleForLead([...fetchedPhonePages, ...confirmedSites.flatMap(site => site.phonePages ?? [])], {
+      company: companyForRoles, confirmedDomains: discovery.domains.filter(domain => !domain.needs_check && verified.has(domain.domain)).map(domain => domain.domain),
+      suspectDomains: suspicion.suspect && siteDomain ? [siteDomain] : [],
+    }).filter(person => !ownerSuppressed(person.first + ' ' + person.last));
+    const teamPicked = pickTeamPeople(teamFound, roleLadder(profile));
+    if (teamPicked.length) steps.push(`Team page: found ${teamPicked.length} (${teamPicked.map(person => `${person.first} ${person.last}, ${person.title}`).join('; ')}).`);
     const provider = makeSearchProvider({ worker, onSearch: via => { roleSearchUsage[via]++; },
       reserveAi: async () => {
         await checkpoint();
@@ -653,14 +660,14 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       },
       gemini: configured.geminiKey ? prompt => geminiGroundedSearch(prompt, configured.geminiKey!, Math.min(15_000, Math.max(1, left() - 5_000))) : undefined,
     });
-    const roleResult = await findRolePeople({ company: companyForRoles, registeredName: registry.name, city: str(lead.city), profile,
-      provider: { search: async query => { if (workerConfig || configured.geminiKey) await checkpoint(); return provider.search(query); } }, timeLeftMs: left });
-    rolePeople = roleResult.people.filter(person => !ownerSuppressed(person.first + ' ' + person.last));
+    const roleResult = shouldSearchAfterTeam(teamPicked) ? await findRolePeople({ company: companyForRoles, registeredName: registry.name, city: str(lead.city), profile,
+      provider: { search: async query => { if (workerConfig || configured.geminiKey) await checkpoint(); return provider.search(query); } }, timeLeftMs: left }) : { people: [], searches: 0, via: [] };
+    rolePeople = combineTeamRolePeople(teamPicked, roleResult.people).filter(person => !ownerSuppressed(person.first + ' ' + person.last));
     for (const person of rolePeople) {
       await checkpoint();
       const current = await service.from('decision_maker_candidates').select('*').eq('lead_id', lead.id);
       if (current.error) throw new Error('Role search contacts read failed');
-      const plan = roleContactPlan(person, current.data ?? [], { leadId: lead.id, creatorId: run.created_by });
+      const plan = roleContactPlan(person, current.data ?? [], { leadId: lead.id, creatorId: run.created_by, source: person.source });
       if (plan.kind === 'skip') continue;
       const proposed = plan.kind === 'insert' ? plan.row : { first_name: person.first, last_name: person.last, ...plan.patch };
       const prepared = await prepareContacts([proposed]);
@@ -679,7 +686,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         if (stored) Object.assign(stored, contact);
       }
     }
-    steps.push(roleSearchLine({ ...roleResult, via: roleSearchUsage.gemini > 0 ? [...roleResult.via, 'gemini'] : roleResult.via }));
+    if (shouldSearchAfterTeam(teamPicked)) steps.push(roleSearchLine({ ...roleResult, via: roleSearchUsage.gemini > 0 ? [...roleResult.via, 'gemini'] : roleResult.via }));
   }
   await addRegistryOfficers();
   for (const site of ownSites) for (const html of site.pages) {

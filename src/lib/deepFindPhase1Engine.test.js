@@ -16,11 +16,11 @@ import { webSearchForPerson, readCompanyPages } from '../../supabase/functions/_
 import { lookUpPeople } from '../../supabase/functions/_shared/deepFindPeople';
 import { processDeepFindLead } from '../../supabase/functions/_shared/deepFind';
 
-let lead, contacts, writes, service, deny, aiAllowed, beforeWebsiteWrite;
+let lead, contacts, writes, service, deny, aiAllowed, beforeWebsiteWrite, roleProfiles;
 const profile = 'https://www.linkedin.com/in/jane-smith';
 const run = () => processDeepFindLead(service, { id: 'run', org_id: 'org', created_by: 'user', status: 'active' }, { id: 'result', lead_id: 'lead', org_id: 'org' });
 beforeEach(() => {
-  vi.clearAllMocks(); deny = false; aiAllowed = true; beforeWebsiteWrite = undefined;
+  vi.clearAllMocks(); roleProfiles=[]; deny = false; aiAllowed = true; beforeWebsiteWrite = undefined;
   vi.stubGlobal('Deno', { env: { get: () => undefined } });
   vi.stubGlobal('fetch', vi.fn(() => { throw new Error('Unexpected network'); }));
   lead = { id: 'lead', org_id: 'org', business_name: 'Acme', website: 'old.com', updated_at: 'version', company_number: null, additional_websites: null };
@@ -34,7 +34,7 @@ beforeEach(() => {
   lookUpPeople.mockResolvedValue({ created: [], touched: [], emailsFound: 0, suggestions: [], problems: [], results: [] });
   service = { rpc: vi.fn(async (name) => ({ data: name === 'deep_find_reserve' ? aiAllowed : true })), from(table) {
     let patch; let inserted; const filters = [];
-    const records = () => table === 'deep_find_runs' ? [{ id: 'run', org_id: 'org', status: 'active' }] : table === 'leads' ? [lead] : table === 'decision_maker_candidates' ? contacts : [];
+    const records = () => table === 'deep_find_runs' ? [{ id: 'run', org_id: 'org', status: 'active' }] : table === 'ideal_customer_profiles' ? roleProfiles : table === 'leads' ? [lead] : table === 'decision_maker_candidates' ? contacts : [];
     const result = () => {
       if (table === 'leads' && patch?.website) beforeWebsiteWrite?.();
       const found = (inserted ?? records()).filter((r) => filters.every(([k,v]) => Array.isArray(r[k]) ? v === '{' + r[k].map(x => JSON.stringify(x)).join(',') + '}' : r[k] === v));
@@ -189,4 +189,15 @@ it('the engine stores a new role person as a non-enrolled contact and includes t
 it('the engine does not revive a dismissed role-search match',async()=>{
  contacts[0].dismissed_at='2026-11-01';findRolePeople.mockResolvedValueOnce({people:[{first:'Jane',last:'Smith',title:'Facilities Manager',linkedinUrl:profile,rung:'target'}],searches:1,via:['searxng']});
  await run();expect(contacts).toHaveLength(1);expect(contacts[0].dismissed_at).toBe('2026-11-01');expect(contacts[0].linkedin_url).toBeNull();
+});
+
+it('a target team-page person saves without running the search ladder',async()=>{
+ lead.website='https://acme.com';roleProfiles=[{id:'icp',org_id:'org',target_roles:['Facilities Manager']}];
+ readCompanyPages.mockImplementationOnce(async(_url,_budget,_extra,onPage)=>{const html='<article><h3>Ann Lee</h3><p>Facilities Manager</p></article>';onPage(html,'https://acme.com/team');return [html]});
+ const out=await run();expect(findRolePeople).not.toHaveBeenCalled();expect(contacts.find(c=>c.first_name==='Ann')).toMatchObject({source:'team_page',include_in_sequences:false,title:'Facilities Manager'});expect(out.domains.steps).toContain('Team page: found 1 (Ann Lee, Facilities Manager).');
+});
+it('a fallback team-page person still allows the search ladder',async()=>{
+ lead.website='https://acme.com';roleProfiles=[{id:'icp',org_id:'org',target_roles:['Facilities Manager']}];
+ readCompanyPages.mockImplementationOnce(async(_url,_budget,_extra,onPage)=>{const html='<article><h3>Ann Lee</h3><p>Office Manager</p></article>';onPage(html,'https://acme.com/team');return [html]});
+ await run();expect(findRolePeople).toHaveBeenCalledTimes(1);expect(contacts.find(c=>c.first_name==='Ann')).toMatchObject({source:'team_page',include_in_sequences:false});
 });

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 // The database source allow-list (050) distinguishes provider contacts from manual/dream_agent edits.
-const RESTORABLE_SOURCES = ['companies_house', 'cro', 'hunter', 'apollo', 'role_search'];
+const RESTORABLE_SOURCES = ['companies_house', 'cro', 'hunter', 'apollo', 'role_search', 'team_page'];
 type Access = { ok: true; orgId: string; restored: Record<string, number> }
   | { ok: false; result: { status: number; body: { error: string } } };
 

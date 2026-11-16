@@ -72,5 +72,13 @@ BEGIN
  GET DIAGNOSTICS changed=ROW_COUNT;
  IF changed<>1 THEN RAISE EXCEPTION 'Admin role save refused'; END IF;
  RESET ROLE;
+ PERFORM set_config('request.jwt.claims','{"role":"service_role"}',true);
+ INSERT INTO public.decision_maker_candidates(lead_id,source,first_name,last_name,created_by) VALUES(visible_lead,'team_page','Team','Person',owner_id) RETURNING id INTO contact_id;
+ IF NOT EXISTS(SELECT 1 FROM public.decision_maker_candidates WHERE id=contact_id AND include_in_sequences=false) THEN RAISE EXCEPTION 'Team default enrolled'; END IF;
+ PERFORM set_config('request.jwt.claims',json_build_object('sub',owner_id,'role','authenticated')::text,true);
+ SET LOCAL ROLE authenticated;
+ BEGIN INSERT INTO public.decision_maker_candidates(lead_id,source,first_name,last_name,created_by) VALUES(visible_lead,'team_page','Client','Person',owner_id); RAISE EXCEPTION 'Client inserted team-page contact'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ RESET ROLE;
+ BEGIN UPDATE public.decision_maker_candidates SET source='manual' WHERE id=contact_id; RAISE EXCEPTION 'Team provider guard failed'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  RAISE EXCEPTION 'AUDIT PASSED; rollback all fixtures';
 END $$;
