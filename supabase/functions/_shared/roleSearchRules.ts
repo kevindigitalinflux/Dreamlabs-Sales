@@ -1,0 +1,69 @@
+export const ROLE_RUNG_FINAL: readonly string[] = ['Owner', 'Founder', 'Managing Director', 'CEO', 'Director', 'President', 'General Manager'];
+export const ROLE_RUNG_FALLBACK_DEFAULT: readonly string[] = ['Operations Manager', 'Office Manager', 'Head of Operations', 'Executive Assistant', 'HR Manager'];
+export interface RoleCandidate { first: string; last: string; title: string; linkedinUrl: string; rung: 'target' | 'fallback' | 'final' }
+export type RoleRejection = 'not_profile_url' | 'no_name' | 'company_mismatch' | 'former' | 'role_mismatch';
+type Rung = { rung: RoleCandidate['rung']; roles: string[] };
+const words = (text: string): string[] => text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+const legal = new Set(['ltd', 'limited', 'llc', 'inc', 'plc', 'co', 'company', 'group', 'the', 'and']);
+const distinctive = (name: string) => words(name).filter(word => word.length >= 3 && !legal.has(word));
+const contains = (text: string, needed: string[]) => needed.length > 0 && needed.every(word => words(text).includes(word));
+
+/** Preserve the first twelve usable roles, in customer order. */
+export function cleanRoles(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap(item => {
+    if (typeof item !== 'string') return [];
+    const role = item.trim(), key = role.toLowerCase();
+    if (role.length < 2 || role.length > 60 || seen.has(key)) return [];
+    seen.add(key); return [role];
+  }).slice(0, 12);
+}
+
+/** Empty profiles still use the default fallback and final rungs. */
+export function roleLadder(profile: { targetRoles?: unknown; fallbackRoles?: unknown } | null): Rung[] {
+  const target = cleanRoles(profile?.targetRoles), fallback = cleanRoles(profile?.fallbackRoles);
+  return [...(target.length ? [{ rung: 'target' as const, roles: target }] : []),
+    { rung: 'fallback', roles: fallback.length ? fallback : [...ROLE_RUNG_FALLBACK_DEFAULT] },
+    { rung: 'final', roles: [...ROLE_RUNG_FINAL] }];
+}
+
+/** Search snippets only; remove embedded quote operators and drop trailing roles to fit. */
+export function roleQuery(input: { company: string; city?: string | null; roles: string[] }): string {
+  const company = input.company.replace(/["\r\n]/g, '').trim();
+  const city = (input.city ?? '').replace(/["\r\n]/g, '').trim();
+  const roles = cleanRoles(input.roles).slice(0, 5).map(role => role.replace(/"/g, ''));
+  const build = () => `site:linkedin.com/in "${company}" (${roles.map(role => `"${role}"`).join(' OR ')})${city ? ` ${city}` : ''}`;
+  while (roles.length && build().length > 300) roles.pop();
+  return build().slice(0, 300);
+}
+
+/** Accept only current people with whole-word company and role evidence from search results. */
+export function judgeRoleHit(hit: { title: string; url: string; snippet: string }, lead: { company: string; registeredName?: string | null }, rung: Rung): { ok: true; person: RoleCandidate } | { ok: false; why: RoleRejection } {
+  const refuse = (why: RoleRejection) => ({ ok: false as const, why });
+  let url: URL;
+  try { url = new URL(/^[a-z]+:\/\//i.test(hit.url) ? hit.url : `https://${hit.url}`); } catch { return refuse('not_profile_url'); }
+  if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password
+    || !/^(?:(?:www|[a-z]{2}(?:-[a-z]{2})?)\.)?linkedin\.com$/i.test(url.hostname) || !/^\/in\/[^/]+/.test(url.pathname)) return refuse('not_profile_url');
+  url.protocol = 'https:'; url.search = ''; url.hash = ''; url.pathname = url.pathname.replace(/\/+$/, '');
+  const parts = hit.title.replace(/(?:\s*[-–|]\s*)?LinkedIn\s*$/i, '').split(/\s(?:-|–|\|)\s/).map(part => part.trim()).filter(Boolean);
+  const name = parts[0]?.split(/\s+/) ?? [];
+  if (name.length < 2 || name.length > 4 || !name.every(word => /^[\p{L}]+(?:[-'’][\p{L}]+)*$/u.test(word))) return refuse('no_name');
+  const companies = [lead.company, lead.registeredName ?? ''].filter(Boolean);
+  const companyWords = companies.map(distinctive).filter(list => list.length);
+  const snippetEvidence = [...hit.snippet.matchAll(/(?:Experience\s*:|\bat\s+)([^\n.;|]+)/gi)].map(match => match[1]).join(' ');
+  const titleMatches = companyWords.some(list => contains(hit.title, list));
+  if (!titleMatches && !companyWords.some(list => contains(snippetEvidence, list))) return refuse('company_mismatch');
+  const combined = `${hit.title} ${hit.snippet}`;
+  if (/\b(?:former|formerly|previously|retired)\b|\bex-|\bwas a\b/i.test(combined)) return refuse('former');
+  for (const company of companies) {
+    const escaped = company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const adjacent = new RegExp(`${escaped}\\s*[,:(-]?\\s*(\\d{4})\\s*[-–]\\s*(\\d{4})|(?:\\d{4})\\s*[-–]\\s*(\\d{4})\\s*[,):-]?\\s*${escaped}`, 'gi');
+    for (const match of combined.matchAll(adjacent)) if (Number(match[2] ?? match[3]) < new Date().getFullYear()) return refuse('former');
+  }
+  const companyPart = parts.length >= 3 ? parts.slice(2).join(' ') : /\bat\s+(.+)$/i.exec(parts[1] ?? '')?.[1];
+  if (!titleMatches && companyPart && !companyWords.some(list => contains(companyPart, list))) return refuse('former');
+  const title = (parts[1] ?? '').replace(/\s+at\s+.*$/i, '').trim();
+  if (!rung.roles.some(role => contains(title, words(role)) || contains(hit.snippet.slice(0, 160), words(role)))) return refuse('role_mismatch');
+  return { ok: true, person: { first: name[0], last: name.slice(1).join(' '), title, linkedinUrl: url.href, rung: rung.rung } };
+}
