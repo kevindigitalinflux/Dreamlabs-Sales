@@ -3,7 +3,7 @@ import type { ImportedTemplate, Issue } from './types';
 import { TEMPLATE_VARIABLES } from '../templateVars';
 
 export interface SourceLine { text: string; line: number }
-const headings: Record<string, keyof Omit<IcpInput, 'name'>> = {
+const headings: Record<string, keyof Omit<IcpInput, 'name' | 'target_roles' | 'fallback_roles'>> = {
   Summary: 'summary', 'Pain points': 'pain_points', Goals: 'goals', Objections: 'objections',
   'Messaging notes': 'messaging_notes', 'Extra context': 'extra_context',
 };
@@ -23,7 +23,7 @@ export function records(lines: SourceLine[], errors: Issue[]): SourceLine[][] {
 /** Parses the fixed profile sections; list markers become editor-compatible lines. */
 export function profile(block: SourceLine[], errors: Issue[]): IcpInput {
   const out: IcpInput = { name: block[0].text.slice(2).trim(), summary: '', pain_points: '', goals: '', objections: '', messaging_notes: '', extra_context: '' };
-  let key: keyof Omit<IcpInput, 'name'> | undefined;
+  let key: keyof Omit<IcpInput, 'name' | 'target_roles' | 'fallback_roles'> | undefined;
   let section: SourceLine[] = [];
   const seen = new Set<string>();
   function flush() {

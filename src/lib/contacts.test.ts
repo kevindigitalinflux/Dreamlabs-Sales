@@ -459,3 +459,8 @@ describe('validateContactEdit', () => {
     expect(r.ok && [r.value.first_name, r.value.label]).toEqual(['Jane', 'Front desk']);
   });
 });
+
+it('a switched-off role-search row neither receives follow-ups nor vetoes the lead address',()=>{
+ const c=person({source:'role_search',email:'lead@fixture.test',include_in_sequences:false});
+ expect(sequenceRecipients([c],'lead@fixture.test',false)).toEqual([{contactId:null,email:'lead@fixture.test',name:null}]);
+});

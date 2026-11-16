@@ -4,7 +4,7 @@ DECLARE
  owner_id uuid:=gen_random_uuid(); member_id uuid:=gen_random_uuid(); outsider_id uuid:=gen_random_uuid();
  org_a uuid; org_b uuid; visible_pipeline uuid; hidden_pipeline uuid; other_pipeline uuid;
  visible_lead uuid; hidden_lead uuid; other_lead uuid; run_a uuid; run_b uuid;
- answer jsonb; client_role text; today date:=(now() AT TIME ZONE 'Europe/London')::date;
+ profile_id uuid; contact_id uuid; changed integer; role_values text[]; answer jsonb; client_role text; today date:=(now() AT TIME ZONE 'Europe/London')::date;
 BEGIN
   INSERT INTO auth.users(instance_id,id,aud,role,email,encrypted_password,email_confirmed_at,
     raw_app_meta_data,raw_user_meta_data,created_at,updated_at,confirmation_token,recovery_token,
@@ -45,5 +45,32 @@ BEGIN
   BEGIN UPDATE public.usage_global_counters SET used=0; RAISE EXCEPTION 'Client wrote global counter'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   RESET ROLE;
  END LOOP;
+
+ -- Task 4 profile and provider-source contract. No policy/grant changes.
+ PERFORM set_config('request.jwt.claims','{"role":"service_role"}',true);
+ INSERT INTO public.ideal_customer_profiles(org_id,name,created_by) VALUES(org_a,'Role audit',owner_id) RETURNING id INTO profile_id;
+ SELECT array_agg('Role '||n) INTO role_values FROM generate_series(1,13) n;
+ BEGIN UPDATE public.ideal_customer_profiles SET target_roles=role_values WHERE id=profile_id; RAISE EXCEPTION '13 target roles accepted'; EXCEPTION WHEN check_violation THEN NULL; END;
+ BEGIN UPDATE public.ideal_customer_profiles SET fallback_roles=ARRAY[repeat('x',61)] WHERE id=profile_id; RAISE EXCEPTION '61-character fallback accepted'; EXCEPTION WHEN check_violation THEN NULL; END;
+ BEGIN UPDATE public.ideal_customer_profiles SET target_roles=ARRAY[NULL::text] WHERE id=profile_id; RAISE EXCEPTION 'Null role accepted'; EXCEPTION WHEN check_violation THEN NULL; END;
+ INSERT INTO public.decision_maker_candidates(lead_id,source,first_name,last_name,title,created_by)
+ VALUES(visible_lead,'role_search','Jane','Doe','Facilities Manager',owner_id) RETURNING id INTO contact_id;
+ IF NOT EXISTS(SELECT 1 FROM public.decision_maker_candidates WHERE id=contact_id AND include_in_sequences=false) THEN RAISE EXCEPTION 'Provider default enrolled'; END IF;
+ PERFORM set_config('request.jwt.claims',json_build_object('sub',member_id,'role','authenticated')::text,true);
+ SET LOCAL ROLE authenticated;
+ UPDATE public.ideal_customer_profiles SET target_roles=ARRAY['Director'] WHERE id=profile_id;
+ GET DIAGNOSTICS changed=ROW_COUNT;
+ IF changed<>0 THEN RAISE EXCEPTION 'Member edited roles'; END IF;
+ BEGIN INSERT INTO public.decision_maker_candidates(lead_id,source,first_name,last_name,created_by)
+ VALUES(visible_lead,'role_search','Other','Person',member_id); RAISE EXCEPTION 'Client inserted role-search contact'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ RESET ROLE;
+ -- Privileged execution with a client auth.uid tests the generic trigger independently of column grants.
+ BEGIN UPDATE public.decision_maker_candidates SET source='manual' WHERE id=contact_id; RAISE EXCEPTION 'Provider guard allowed source edit'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ PERFORM set_config('request.jwt.claims',json_build_object('sub',owner_id,'role','authenticated')::text,true);
+ SET LOCAL ROLE authenticated;
+ UPDATE public.ideal_customer_profiles SET target_roles=ARRAY['Facilities Manager'],fallback_roles=ARRAY['Office Manager'] WHERE id=profile_id;
+ GET DIAGNOSTICS changed=ROW_COUNT;
+ IF changed<>1 THEN RAISE EXCEPTION 'Admin role save refused'; END IF;
+ RESET ROLE;
  RAISE EXCEPTION 'AUDIT PASSED; rollback all fixtures';
 END $$;

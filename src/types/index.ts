@@ -110,7 +110,7 @@ export interface EnrichmentResult {
 export interface DecisionMakerCandidate {
   id: string;
   lead_id: string;
-  source: 'hunter' | 'apollo' | 'companies_house' | 'cro' | 'manual' | 'dream_agent';
+  source: 'hunter' | 'apollo' | 'companies_house' | 'cro' | 'role_search' | 'manual' | 'dream_agent';
   /** 'person' (a named individual) or 'general' (a shared inbox such as reception). */
   kind: 'person' | 'general';
   /** Free-text name for a general contact, e.g. 'General reception'. */
@@ -605,6 +605,8 @@ export interface OutreachBlocklistEntry {
 
 /** An org's ideal customer profile: who it sells to, and what resonates with them (migration 044). */
 export interface IdealCustomerProfile {
+  target_roles?: string[];
+  fallback_roles?: string[];
   id: string;
   org_id: string;
   name: string;

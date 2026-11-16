@@ -202,7 +202,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (!name.trim()) return;
     const key = displayPersonKey(name);
     const contact = contactId ? rows.find(c => c.id === contactId) : null;
-    const automatic = !!contact?.dismissed_at && ['companies_house', 'cro', 'hunter', 'apollo'].includes(typeof contact.source === 'string' ? contact.source : '');
+    const automatic = !!contact?.dismissed_at && ['companies_house', 'cro', 'hunter', 'apollo', 'role_search'].includes(typeof contact.source === 'string' ? contact.source : '');
     const existing = dismissedNames.get(key);
     if (existing) { existing.automatic ||= automatic; return; }
     dismissedNames.set(key, { name, automatic });

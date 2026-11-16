@@ -1,3 +1,4 @@
+import { cleanRoles } from '../../supabase/functions/_shared/roleSearchRules';
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
@@ -6,6 +7,8 @@ import type { IdealCustomerProfile } from '../types';
 
 /** The editable text fields of a profile (empty strings are stored as NULL). */
 export interface IcpInput {
+  target_roles?: string[];
+  fallback_roles?: string[];
   name: string;
   summary: string;
   pain_points: string;
@@ -45,6 +48,7 @@ export function useIcps() {
     const name = input.name.trim();
     if (!name) return 'Give the profile a name.';
     const row = {
+      target_roles: cleanRoles(input.target_roles), fallback_roles: cleanRoles(input.fallback_roles),
       name,
       summary: blankToNull(input.summary), pain_points: blankToNull(input.pain_points), goals: blankToNull(input.goals),
       objections: blankToNull(input.objections), messaging_notes: blankToNull(input.messaging_notes), extra_context: blankToNull(input.extra_context),

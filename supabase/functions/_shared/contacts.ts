@@ -102,7 +102,7 @@ export function contactDisplayName(c: Contact): string {
   return full || clean(c.label) || 'Unknown name';
 }
 
-const PROVIDER_SOURCES = ['hunter', 'apollo', 'companies_house', 'cro'];
+const PROVIDER_SOURCES = ['hunter', 'apollo', 'companies_house', 'cro', 'role_search'];
 
 /**
  * A contact a provider search found that has not been switched on for sequences (migration 053 defaults

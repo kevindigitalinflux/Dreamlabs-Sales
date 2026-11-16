@@ -1,3 +1,4 @@
+import { cleanRoles } from '../../../supabase/functions/_shared/roleSearchRules';
 import { useState } from 'react';
 import type { IcpInput } from '../../hooks/useIcps';
 import type { IdealCustomerProfile } from '../../types';
@@ -6,7 +7,7 @@ import { ConfirmDeleteButton } from '../ui/ConfirmDeleteButton';
 import { Input, Textarea } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 
-type TextField = Exclude<keyof IcpInput, 'name'>;
+type TextField = Exclude<keyof IcpInput, 'name' | 'target_roles' | 'fallback_roles'>;
 
 /** The profile's text fields, in the order they read best, each with guidance on what to write. */
 const FIELDS: { key: TextField; label: string; hint: string; rows: number; placeholder: string }[] = [
@@ -30,17 +31,19 @@ interface IcpEditorProps {
 
 /** Modal to read or edit one ideal customer profile. Fields are disabled for non-admins. */
 export function IcpEditor({ profile, canEdit, onSave, onDelete, onClose }: IcpEditorProps) {
-  const [form, setForm] = useState<IcpInput>({
+  const [form, setForm] = useState<Omit<IcpInput, 'target_roles' | 'fallback_roles'>>({
     name: profile?.name ?? '', summary: profile?.summary ?? '', pain_points: profile?.pain_points ?? '',
     goals: profile?.goals ?? '', objections: profile?.objections ?? '', messaging_notes: profile?.messaging_notes ?? '',
     extra_context: profile?.extra_context ?? '',
   });
+  const [targetRoles, setTargetRoles] = useState((profile?.target_roles ?? []).join('\n'));
+  const [fallbackRoles, setFallbackRoles] = useState((profile?.fallback_roles ?? []).join('\n'));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function handleSave() {
     setBusy(true);
-    const err = await onSave(form, profile?.id);
+    const err = await onSave({ ...form, target_roles: cleanRoles(targetRoles.split('\n')), fallback_roles: cleanRoles(fallbackRoles.split('\n')) }, profile?.id);
     setBusy(false);
     if (err) { setError(err); return; }
     onClose();
@@ -58,6 +61,14 @@ export function IcpEditor({ profile, canEdit, onSave, onDelete, onClose }: IcpEd
             <p className="text-xs text-muted">{f.hint}</p>
           </div>
         ))}
+        <div className="flex flex-col gap-1">
+          <Textarea label="Target roles" rows={4} value={targetRoles} disabled={!canEdit} onChange={e => setTargetRoles(e.target.value)} />
+          <p className="text-xs text-muted">Deep find looks for these job titles first.</p>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Textarea label="Fallback roles" rows={4} value={fallbackRoles} disabled={!canEdit} onChange={e => setFallbackRoles(e.target.value)} />
+          <p className="text-xs text-muted">Used when nobody in the target roles is found.</p>
+        </div>
         {!canEdit && <p className="text-xs text-muted">Only an org admin can edit this.</p>}
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         {canEdit && (
