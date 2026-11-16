@@ -1,3 +1,13 @@
+## Session close and positive-difference check (2026-11-16) — START HERE
+
+Kevin requested final verification and shared-context updates before closing this tab. Codex remains builder; Claude remains architect/reviewer. Completed build/report commit: 2a018da5045d183e8b96eace2585edd1f04b0462; unchanged application code: 50ca647b40f7b2fe345e9c35d4ddc6c173a0a93b; verifier branch: cf6006e635f15660f8f846a0877f3039daf4ee92. The current branch is codex/stage2-people; the documentation-close commit contains this block. Independent review remains pending.
+
+Read docs/STAGE2-POSITIVE-DIFFERENCE-CHECK.md, then docs/STAGE2-PEOPLE-BUILD-REPORT.md. Three fresh side-by-side fixtures against baseline 8c1c61b confirm: Microsoft/provable guesses switch from eight SMTP calls to four ms_exists checks; domain_stalled at attempt four requeues for ten minutes instead of becoming terminal; the wrapper waits 45 seconds instead of 30 and labels an abort timeout rather than checker_error. No live provider call was used. All seven closing gates pass: 274 app files / 3,494 passed / one existing skipped; eight wrapper files / 163 passed; TypeScript/build/whitespace/edge29.
+
+This proves positive local behavior, not production uplift. The historical 50-lead score (ready 25/50, right-role 18/50, LinkedIn 1/50) has not been improved or remeasured live. Migrations/audits/scorer, real RLS/concurrency, Docker startup, browser/mobile/theme, real providers and Claude's independent review remain unverified. No rollout or SQL is authorized by this closeout. Project/shared-vault context is saved under the branch checkpoint stage2-people-2026-11-16; the accepted-main Repo mirror is preserved. No task-owned dev server remains. Subscription usage is unavailable.
+
+Safe to close the tab. Resume by opening this worktree and the shared vault Handoff/Status. Claude reviews the exact saved branch first. Any SQL, VPS change, real search/provider test, merge/push/deploy or role seeding still requires Kevin's separate authorization. Historical blocks below are preserved.
+
 ## Verifier defects and Deep find Stage 2 — final local build (2026-11-16) — START HERE
 
 Codex remains builder; Claude remains architect/reviewer. Kevin approved this local task. Worktree: C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2. Verifier branch tip: codex/verifier-v2-defects at cf6006e635f15660f8f846a0877f3039daf4ee92 (Fix A 661da25; Fix B cf6006e). Stage 2 tested code tip: codex/stage2-people at 50ca647b40f7b2fe345e9c35d4ddc6c173a0a93b. Its final documentation/scoring commit is the commit containing this checkpoint; resolve git rev-parse codex/stage2-people for the current tip. The final chat handoff records the exact report commit. Independent review pending.

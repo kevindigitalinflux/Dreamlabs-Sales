@@ -1,3 +1,9 @@
+## Session-close evidence (2026-11-16)
+
+- [x] Three fresh baseline/current fixture comparisons demonstrate positive local behavior; see docs/STAGE2-POSITIVE-DIFFERENCE-CHECK.md.
+- [x] Project and shared-vault context saved for safe tab closure; application code remains 50ca647.
+- [ ] Claude's independent review, then separately authorized rollout/runtime validation and re-scoring. Do not treat passing local fixtures as live improvement.
+
 ## Verifier defects and Stage 2 people — local completion (2026-11-16)
 
 - [x] Fix A 661da25 and Fix B cf6006e, on codex/verifier-v2-defects.
