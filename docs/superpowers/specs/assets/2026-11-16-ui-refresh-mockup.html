@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dreamlabs Sales: three directions</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0}
+html{font-family:"DM Sans",system-ui,sans-serif;font-size:15px;background:#02072b;color:#F4F4F8}
+body{padding:20px 24px 48px}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+:focus-visible{outline:2px solid #00DFDF;outline-offset:2px}
+
+/* ---------- chooser bar (not part of the design) ---------- */
+.chooser{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;max-width:1400px;margin:0 auto 14px}
+.chooser h1{font:700 20px Montserrat,sans-serif;margin-right:auto}
+.seg{display:flex;background:rgba(244,244,248,.08);border-radius:10px;padding:3px}
+.seg button{padding:8px 16px;border-radius:8px;font-weight:500;color:rgba(244,244,248,.7)}
+.seg button[aria-pressed=true]{background:#8B32FF;color:#F4F4F8}
+.blurb{max-width:1400px;margin:14px auto 0;display:grid;grid-template-columns:1fr auto;gap:20px;align-items:start}
+.blurb h2{font:700 17px Montserrat,sans-serif;margin-bottom:6px}
+.blurb p{color:rgba(244,244,248,.78);line-height:1.55;max-width:78ch}
+.blurb ul{margin:8px 0 0 18px;color:rgba(244,244,248,.78);line-height:1.6}
+.pick{background:#8B32FF;color:#F4F4F8;font:600 14px Montserrat,sans-serif;padding:12px 20px;border-radius:10px;white-space:nowrap}
+.pick.selected{background:#00DFDF;color:#040F49}
+.shared{max-width:1400px;margin:22px auto 0;padding-top:16px;border-top:1px solid rgba(244,244,248,.14);color:rgba(244,244,248,.78);line-height:1.6}
+.shared b{color:#F4F4F8}
+
+/* ---------- the mock app ---------- */
+.app{
+  --bg:#040F49;--side:#030A36;--card:rgba(244,244,248,.06);--card2:rgba(244,244,248,.10);
+  --text:#F4F4F8;--muted:rgba(244,244,248,.66);--line:rgba(244,244,248,.12);
+  --violet:#8B32FF;--violet-soft:rgba(139,50,255,.22);--violet-text:#C9A6FF;
+  --alert:#FF7A9D;--alert-soft:rgba(240,56,107,.16);--amber:#F5B74A;--amber-soft:rgba(245,183,74,.16);
+  --r:10px;--pad:28px;
+  position:relative;display:grid;grid-template-columns:216px 1fr;height:760px;max-width:1400px;margin:0 auto;
+  background:var(--bg);color:var(--text);border-radius:14px;overflow:hidden;border:1px solid rgba(244,244,248,.14);
+}
+.app[data-theme=light]{
+  --bg:#F4F4F8;--card:#FFFFFF;--card2:rgba(4,15,73,.05);
+  --text:#040F49;--muted:rgba(4,15,73,.70);--line:rgba(4,15,73,.12);
+  --violet-soft:rgba(139,50,255,.12);--violet-text:#6A1FD6;
+  --alert:#C21850;--alert-soft:rgba(240,56,107,.10);--amber:#8A5906;--amber-soft:rgba(138,89,6,.12);
+}
+h1,h2,h3,.brand{font-family:Montserrat,sans-serif}
+
+/* sidebar: always dark */
+.side{background:var(--side);color:#F4F4F8;padding:20px 12px;display:flex;flex-direction:column;gap:2px;overflow:hidden}
+.brand{font-weight:800;font-size:17px;padding:4px 10px 20px;white-space:nowrap}
+.brand span{color:#00DFDF}
+.nav{display:flex;align-items:center;gap:12px;padding:9px 10px;border-radius:8px;color:rgba(244,244,248,.66);font-weight:500;white-space:nowrap}
+.nav.on{background:rgba(139,50,255,.26);color:#F4F4F8}
+.nav .n{margin-left:auto;background:#8B32FF;color:#F4F4F8;font-size:12px;font-weight:600;border-radius:99px;padding:1px 8px}
+
+.main{display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.top{display:flex;align-items:center;gap:12px;padding:12px var(--pad);border-bottom:1px solid var(--line)}
+.top .sp{margin-left:auto}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:99px;border:1px solid var(--line);font-weight:500;font-size:14px}
+.chip.need{background:var(--violet-soft);border-color:transparent;color:var(--violet-text)}
+.chip.need i{width:8px;height:8px;border-radius:50%;background:var(--violet)}
+.avatar{width:32px;height:32px;border-radius:50%;background:#64378B;color:#F4F4F8;display:grid;place-items:center;font-weight:600;font-size:13px}
+
+.page{padding:24px var(--pad);overflow:auto;flex:1;min-width:0}
+.head{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+.head h1{font-weight:700;font-size:28px;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:14px}
+.btn{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 14px;border-radius:var(--r);font-weight:500;font-size:14px;border:1px solid var(--line);white-space:nowrap}
+.btn.primary{background:var(--violet);color:#F4F4F8;border-color:transparent;font-weight:600}
+.btn.quiet{border-color:transparent;color:var(--muted)}
+.toggle{display:flex;border:1px solid var(--line);border-radius:var(--r);padding:3px;gap:2px}
+.toggle span{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:calc(var(--r) - 3px);font-size:14px;color:var(--muted);font-weight:500}
+.toggle .on{background:var(--violet-soft);color:var(--violet-text)}
+.tools{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.search{display:flex;align-items:center;gap:8px;height:38px;padding:0 12px;border:1px solid var(--line);border-radius:var(--r);color:var(--muted);width:280px;background:var(--card)}
+.tag{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:99px;background:var(--card2);font-size:13px;font-weight:500}
+.tag svg{width:13px;height:13px}
+.stats{display:none;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+.stat{padding:16px 18px;border-radius:var(--r);background:var(--card)}
+.stat b{display:block;font:700 24px Montserrat,sans-serif}
+.stat span{color:var(--muted);font-size:13px}
+
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-weight:500;color:var(--muted);font-size:13px;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:13px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+td.co{font-weight:600}
+td.co small{display:block;font-weight:400;color:var(--muted);font-size:13px}
+tr.sel td{background:var(--violet-soft)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:99px;font-size:13px;font-weight:500;background:var(--card2)}
+.pill i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill.contacted{background:var(--violet-soft);color:var(--violet-text)}
+.pill.proposal{background:var(--amber-soft);color:var(--amber)}
+.over{color:var(--alert);font-weight:500}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+
+/* lead record */
+.panel{position:absolute;top:0;right:0;bottom:0;width:430px;background:var(--bg);border-left:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
+.app[data-theme=light] .panel{background:#FFFFFF}
+.phead{padding:22px 24px 16px}
+.phead .row{display:flex;align-items:flex-start;gap:12px}
+.phead h2{font-weight:700;font-size:22px}
+.phead .x{margin-left:auto;color:var(--muted)}
+.meta{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.meta .val{font:700 16px Montserrat,sans-serif}
+.acts{display:flex;gap:8px;margin-top:16px}
+.acts .btn{flex:1;justify-content:center}
+.tabs{display:none;gap:4px;padding:0 24px;border-bottom:1px solid var(--line)}
+.tabs span{padding:10px 12px;font-weight:500;font-size:14px;color:var(--muted);border-bottom:2px solid transparent}
+.tabs .on{color:var(--text);border-color:var(--violet)}
+.pbody{padding:6px 24px 24px;overflow:auto;flex:1}
+.next{margin:10px 0 6px;padding:14px 16px;border-radius:var(--r);background:var(--alert-soft)}
+.next b{display:block;margin-bottom:2px}
+.next .over{font-size:13px}
+details{border-bottom:1px solid var(--line)}
+summary{list-style:none;display:flex;align-items:center;gap:10px;padding:15px 0;cursor:pointer;font-weight:600}
+summary::-webkit-details-marker{display:none}
+summary .hint{margin-left:auto;color:var(--muted);font-weight:400;font-size:13px}
+summary svg{color:var(--muted);transition:transform .15s}
+details[open] summary svg{transform:rotate(180deg)}
+.fields{display:grid;grid-template-columns:110px 1fr;gap:10px 12px;padding:0 0 16px;font-size:14px}
+.fields dt{color:var(--muted)}
+.fields dd{font-weight:500}
+.note{padding:0 0 14px;font-size:14px;line-height:1.5}
+.note small{display:block;color:var(--muted);margin-bottom:2px}
+.activity{display:none}
+@media (prefers-reduced-motion:reduce){summary svg{transition:none}}
+
+/* ===== A: Calm. Flat, hairlines, almost no boxes ===== */
+.app[data-dir=a] .search{background:transparent}
+
+/* ===== B: Aurora. Depth, glow, floating surfaces ===== */
+.app[data-dir=b]{--r:14px;
+  background:radial-gradient(900px 500px at 78% -10%,rgba(139,50,255,.42),transparent 62%),radial-gradient(700px 480px at 8% 108%,rgba(100,55,139,.55),transparent 60%),var(--bg)}
+.app[data-dir=b][data-theme=light]{background:radial-gradient(900px 500px at 78% -10%,rgba(139,50,255,.16),transparent 62%),radial-gradient(700px 480px at 8% 108%,rgba(100,55,139,.14),transparent 60%),var(--bg)}
+.app[data-dir=b] .side{background:rgba(3,10,54,.72);margin:12px 0 12px 12px;border-radius:16px}
+.app[data-dir=b][data-theme=light] .side{background:#040F49}
+.app[data-dir=b] .top{border-bottom:0;padding-top:18px}
+.app[data-dir=b] .stats{display:grid}
+.app[data-dir=b] .stat,.app[data-dir=b] .tablewrap,.app[data-dir=b] .panel{
+  background:var(--card);border:1px solid var(--line);box-shadow:0 18px 40px -18px rgba(2,6,40,.55);backdrop-filter:blur(14px)}
+.app[data-dir=b] .tablewrap{border-radius:16px;padding:4px 8px 8px}
+.app[data-dir=b] tr:last-child td{border-bottom:0}
+.app[data-dir=b] .btn.primary{background:linear-gradient(135deg,#8B32FF,#64378B);box-shadow:0 8px 22px -6px rgba(139,50,255,.75)}
+.app[data-dir=b] .panel{top:14px;right:14px;bottom:14px;border-radius:18px;background:rgba(10,20,90,.86)}
+.app[data-dir=b][data-theme=light] .panel{background:rgba(255,255,255,.94)}
+.app[data-dir=b] .tabs{display:flex}
+.app[data-dir=b] .sec-contacts,.app[data-dir=b] .sec-notes{display:none}
+.app[data-dir=b] details{border:0;background:var(--card2);border-radius:12px;padding:0 14px;margin-top:10px}
+.app[data-dir=b] .next{border-radius:12px}
+
+/* ===== C: Workbench. Icon rail, list beside a full record ===== */
+.app[data-dir=c]{--r:7px;--pad:22px;grid-template-columns:60px 380px 1fr}
+.app[data-dir=c] .side{padding:16px 9px;align-items:center}
+.app[data-dir=c] .brand{font-size:0;padding:0 0 18px}
+.app[data-dir=c] .brand::before{content:"d";font-size:22px;color:#F4F4F8}
+.app[data-dir=c] .nav{font-size:0;gap:0;padding:11px;position:relative}
+.app[data-dir=c] .nav .n{position:absolute;top:2px;right:0;font-size:10px;padding:0 5px;margin:0}
+.app[data-dir=c] .main{border-right:1px solid var(--line)}
+.app[data-dir=c] .top .hide-c,.app[data-dir=c] .head .hide-c,.app[data-dir=c] th,.app[data-dir=c] td.hide-c{display:none}
+.app[data-dir=c] .head h1{font-size:22px}
+.app[data-dir=c] .search{width:100%}
+.app[data-dir=c] td{padding:11px 10px}
+.app[data-dir=c] td.co{border-left:3px solid transparent;max-width:170px;overflow:hidden;text-overflow:ellipsis}
+.app[data-dir=c] tr.sel td.co{border-left-color:var(--violet)}
+.app[data-dir=c] .panel{position:static;width:auto;border-left:0;background:transparent}
+.app[data-dir=c][data-theme=light] .panel{background:#FFFFFF}
+.app[data-dir=c] .phead{padding:24px 30px 18px;border-bottom:1px solid var(--line)}
+.app[data-dir=c] .phead h2{font-size:28px}
+.app[data-dir=c] .phead .x{display:none}
+.app[data-dir=c] .acts{max-width:420px}
+.app[data-dir=c] .pbody{display:grid;grid-template-columns:1fr 1fr;gap:0 34px;padding:10px 30px 24px;align-content:start}
+.app[data-dir=c] .sec-notes{display:none}
+.app[data-dir=c] .activity{display:block;grid-column:2;grid-row:1 / span 6;padding-top:10px}
+.activity h3{font-weight:600;font-size:15px;margin-bottom:12px}
+.activity .note{border-left:2px solid var(--line);padding:0 0 16px 14px}
+.app[data-dir=c] .next,.app[data-dir=c] details{grid-column:1}
+
+/* ===== combined: B look, fixed menu and record, collapsible menu ===== */
+.app{transition:grid-template-columns .2s ease}
+.app[data-dir=b] .side{margin:0;border-radius:0;background:var(--side)}
+.app[data-dir=b] .panel{top:0;right:0;bottom:0;border-radius:0;border-width:0 0 0 1px;box-shadow:-24px 0 48px -24px rgba(2,6,40,.6)}
+.collapse{margin-top:auto;width:100%}
+.collapse svg{transition:transform .2s}
+.app[data-nav=rail]{grid-template-columns:60px 1fr}
+.app[data-nav=rail] .side{padding:20px 9px;align-items:center}
+.app[data-nav=rail] .brand{font-size:0;padding:0 0 18px}
+.app[data-nav=rail] .brand::before{content:"d";font-size:22px;color:#F4F4F8}
+.app[data-nav=rail] .nav{font-size:0;gap:0;padding:11px;position:relative;width:auto}
+.app[data-nav=rail] .nav .n{position:absolute;top:2px;right:0;font-size:10px;padding:0 5px;margin:0}
+.app[data-nav=rail] .collapse svg{transform:rotate(180deg)}
+@media (prefers-reduced-motion:reduce){.app,.collapse svg{transition:none}}
+</style>
+</head>
+<body>
+<svg style="display:none">
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2z"/></symbol>
+  <symbol id="i-cols" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+  <symbol id="i-set" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 5h18M6 12h12M10 19h4"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-find" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="M20 20l-5.5-5.5M10 7v6M7 10h6"/></symbol>
+</svg>
+
+<div class="chooser">
+  <h1>Combined: Aurora look, fixed menu and lead record, menu you can collapse</h1>
+  <div class="seg" role="group" aria-label="Direction" style="display:none">
+    <button onclick="setDir('a')" id="d-a" aria-pressed="true">A · Calm</button>
+    <button onclick="setDir('b')" id="d-b" aria-pressed="false">B · Aurora</button>
+    <button onclick="setDir('c')" id="d-c" aria-pressed="false">C · Workbench</button>
+  </div>
+  <div class="seg" role="group" aria-label="Theme">
+    <button onclick="setTheme('dark')" id="t-dark" aria-pressed="true">Dark</button>
+    <button onclick="setTheme('light')" id="t-light" aria-pressed="false">Light</button>
+  </div>
+</div>
+
+<div class="app" id="app" data-dir="a" data-theme="dark">
+  <aside class="side">
+    <div class="brand">Dreamlabs<span>Sales</span></div>
+    <div class="nav"><svg><use href="#i-grid"/></svg>Dashboard</div>
+    <div class="nav"><svg><use href="#i-spark"/></svg>Dream Agent</div>
+    <div class="nav on"><svg><use href="#i-cols"/></svg>Pipeline</div>
+    <div class="nav"><svg><use href="#i-list"/></svg>Jobs<span class="n">5</span></div>
+    <div class="nav"><svg><use href="#i-target"/></svg>Scraper</div>
+    <div class="nav"><svg><use href="#i-user"/></svg>LinkedIn</div>
+    <div class="nav"><svg><use href="#i-send"/></svg>Autopilot</div>
+    <div class="nav"><svg><use href="#i-phone"/></svg>Power Dialer</div>
+    <div class="nav"><svg><use href="#i-mail"/></svg>Emails</div>
+    <div class="nav"><svg><use href="#i-chart"/></svg>Analytics</div>
+    <div class="nav"><svg><use href="#i-set"/></svg>Settings</div>
+    <button class="nav collapse" onclick="toggleNav()" aria-label="Collapse or expand the menu"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>Collapse menu</button>
+  </aside>
+
+  <div class="main">
+    <header class="top">
+      <span class="chip need"><i></i>5 jobs need you</span>
+      <span class="sp"></span>
+      <span class="chip hide-c">Site scrapes: 60 left</span>
+      <span class="avatar">KZ</span>
+    </header>
+    <section class="page">
+      <div class="head">
+        <h1>Pipeline</h1>
+        <span class="btn quiet hide-c">Default Pipeline <svg><use href="#i-down"/></svg></span>
+        <span class="sp" style="margin-left:auto"></span>
+        <span class="toggle hide-c"><span>Board</span><span class="on">List</span></span>
+        <span class="btn primary"><svg><use href="#i-plus"/></svg>Add lead</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><b>141</b><span>Leads in this pipeline</span></div>
+        <div class="stat"><b>2</b><span>Follow-ups overdue</span></div>
+        <div class="stat"><b>20</b><span>Emails waiting for your review</span></div>
+      </div>
+      <div class="tools">
+        <span class="search"><svg><use href="#i-search"/></svg>Search company, owner, email</span>
+        <span class="btn hide-c"><svg><use href="#i-filter"/></svg>Filters</span>
+        <span class="tag hide-c">Overdue only <svg><use href="#i-x"/></svg></span>
+        <span class="tag hide-c">Has phone <svg><use href="#i-x"/></svg></span>
+        <span class="sub hide-c" style="margin-left:auto">7 of 141 leads</span>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Company</th><th>Stage</th><th>Readiness</th><th>Package</th><th class="num">Value</th><th>Next action</th></tr></thead>
+          <tbody>
+            <tr class="sel"><td class="co">Apex Plumbing<small>Marco Reyes</small></td><td><span class="pill contacted"><i></i>Contacted</span></td><td class="hide-c"><span class="pill">Not checked</span></td><td class="hide-c">AI Foundation</td><td class="num">£1,200</td><td class="over hide-c">124 days overdue</td></tr>
+            <tr><td class="co">Brightside Dental<small>Sarah Mitchell</small></td><td><span class="pill proposal"><i></i>Proposal sent</span></td><td class="hide-c"><span class="pill">Not checked</span></td><td class="hide-c">Automation Sprint</td><td class="num">£4,500</td><td class="over hide-c">127 days overdue</td></tr>
+            <tr><td class="co">Facilitec Southwest<small>No owner yet</small></td><td><span class="pill"><i></i>New lead</span></td><td class="hide-c"><span class="pill">Not checked</span></td><td class="hide-c sub">None</td><td class="num sub">None</td><td class="sub hide-c">None set</td></tr>
+            <tr><td class="co">Prestige Janitorial Services<small>No owner yet</small></td><td><span class="pill"><i></i>New lead</span></td><td class="hide-c"><span class="pill">Not checked</span></td><td class="hide-c sub">None</td><td class="num sub">None</td><td class="sub hide-c">None set</td></tr>
+            <tr><td class="co">About Time Limited<small>No owner yet</small></td><td><span class="pill"><i></i>New lead</span></td><td class="hide-c"><span class="pill">Needs a look</span></td><td class="hide-c sub">None</td><td class="num sub">None</td><td class="sub hide-c">Choose a company</td></tr>
+            <tr><td class="co">Advantage Facility Services<small>No owner yet</small></td><td><span class="pill"><i></i>New lead</span></td><td class="hide-c"><span class="pill">Needs a look</span></td><td class="hide-c sub">None</td><td class="num sub">None</td><td class="sub hide-c">Check people</td></tr>
+            <tr><td class="co">BusyBees Dubai<small>No owner yet</small></td><td><span class="pill"><i></i>New lead</span></td><td class="hide-c"><span class="pill">Needs a look</span></td><td class="hide-c sub">None</td><td class="num sub">None</td><td class="sub hide-c">Choose a company</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <aside class="panel">
+    <div class="phead">
+      <div class="row"><div><h2>Apex Plumbing</h2><div class="sub">Marco Reyes · Plumbing services</div></div><button class="x" aria-label="Close"><svg><use href="#i-x"/></svg></button></div>
+      <div class="meta"><span class="pill contacted"><i></i>Contacted</span><span class="pill">Not checked</span><span class="val">£1,200</span><span class="sub">AI Foundation</span></div>
+      <div class="acts">
+        <span class="btn primary"><svg><use href="#i-phone"/></svg>Call</span>
+        <span class="btn"><svg><use href="#i-mail"/></svg>Email</span>
+        <span class="btn"><svg><use href="#i-find"/></svg>Deep find</span>
+      </div>
+    </div>
+    <div class="tabs"><span class="on">Overview</span><span>Contacts</span><span>Notes and emails</span></div>
+    <div class="pbody">
+      <div class="next"><b>Call back to book the audit</b><span class="over">Due 15 July, 124 days overdue</span></div>
+      <details><summary>Contact details<span class="hint">Phone, email</span><svg><use href="#i-down"/></svg></summary>
+        <dl class="fields"><dt>Phone</dt><dd>+44 20 1234 5678</dd><dt>Email</dt><dd>marco@apexplumbing.co.uk</dd><dt>Website</dt><dd class="sub">Add a website</dd></dl></details>
+      <details class="sec-contacts"><summary>People<span class="hint">None yet</span><svg><use href="#i-down"/></svg></summary>
+        <p class="note sub">No contacts yet. Add a person, or run Deep find to look for them.</p></details>
+      <details><summary>Deal<span class="hint">AI Foundation, £1,200</span><svg><use href="#i-down"/></svg></summary>
+        <dl class="fields"><dt>Package</dt><dd>AI Foundation</dd><dt>Value</dt><dd>£1,200</dd><dt>Customer profile</dt><dd class="sub">None</dd><dt>Assigned to</dt><dd class="sub">Unassigned</dd></dl></details>
+      <details><summary>Follow-up emails<span class="hint">Not enrolled</span><svg><use href="#i-down"/></svg></summary>
+        <dl class="fields"><dt>Sequence</dt><dd class="sub">Not enrolled</dd><dt>Pain point</dt><dd>No online booking, loses after-hours calls</dd></dl></details>
+      <details class="sec-notes"><summary>Notes<span class="hint">2</span><svg><use href="#i-down"/></svg></summary>
+        <p class="note"><small>14 July, call</small>Spoke to Marco. Interested, asked for a call back to book the audit.</p>
+        <p class="note"><small>10 July</small>Stage changed: New lead to Contacted.</p></details>
+      <div class="activity"><h3>Notes and emails</h3>
+        <p class="note"><small>14 July, call</small>Spoke to Marco. Interested, asked for a call back to book the audit.</p>
+        <p class="note"><small>14 July, email sent</small>Cold outreach 1: "quick one for Apex Plumbing"</p>
+        <p class="note"><small>10 July</small>Stage changed: New lead to Contacted.</p></div>
+    </div>
+  </aside>
+</div>
+
+<div class="blurb">
+  <div><h2 id="b-title"></h2><p id="b-text"></p><ul id="b-list"></ul></div>
+  <button class="pick" id="pick" data-choice="a" onclick="pick(this)">Pick this direction</button>
+</div>
+
+<div class="shared">
+  <b>The same in all three</b> (these are the fixes for "too much on screen", separate from the look):
+  the "Needs you" strip becomes one small pill in the top bar · the eight filters fold into one Filters button, with the ones you switched on shown as removable tags · every lead sits on one line ·
+  a lead opens as a short summary with the next action on top, three main buttons, and everything else folded away until you open it · fields read as plain text and become editable when you click them · overdue items use the brand magenta instead of plain red.
+  Click any folded section in the lead record to open it.
+</div>
+
+<script>
+const copy={
+ a:{t:"A · Calm",p:"The quietest of the three. Almost no boxes: thin lines separate things, and violet is saved for the one main action on each screen. Closest to the layout you have now, so it is the least disruptive to learn.",
+    l:["Looks: clean and understated, like a well-kept document","Best for: long working days, lowest visual noise","Risk: the least eye-catching on camera"]},
+ b:{t:"What changed from B",p:"The violet glow, the depth, the glowing main button, the headline numbers and the three tabs in the lead record all stay. The menu and the lead record are now fixed to the edges of the screen as in A, so nothing floats loose. Try the Collapse menu button at the bottom left: the menu is open by default and shrinks to icons when you want more room.",
+    l:["The app would remember whether you left the menu open or collapsed","Collapsed icons would show their name when you hover over them","The list of leads still sits on a soft raised surface; say if you want that flat like A too"]},
+ c:{t:"C · Workbench",p:"The biggest change to how the screen works. The menu shrinks to icons, your leads become a slim list on the left, and the chosen lead fills the rest of the screen with details on one side and notes and emails on the other. No side panel covering the list.",
+    l:["Looks: sharp and purposeful, like a professional tool","Best for: working through many leads quickly without opening and closing a panel","Risk: icon-only menu is harder for new users; the board view needs its own design"]}
+};
+const app=document.getElementById('app');
+function setDir(d){
+  app.dataset.dir=d;
+  ['a','b','c'].forEach(k=>document.getElementById('d-'+k).setAttribute('aria-pressed',k===d));
+  document.getElementById('b-title').textContent=copy[d].t;
+  document.getElementById('b-text').textContent=copy[d].p;
+  document.getElementById('b-list').innerHTML=copy[d].l.map(x=>'<li>'+x+'</li>').join('');
+  const p=document.getElementById('pick');p.dataset.choice=d;p.classList.remove('selected');p.textContent='Pick this direction';
+  app.querySelectorAll('details').forEach(el=>{el.open=(d==='b')||(d==='c'&&!el.classList.contains('sec-notes'))});
+}
+function setTheme(t){app.dataset.theme=t;document.getElementById('t-dark').setAttribute('aria-pressed',t==='dark');document.getElementById('t-light').setAttribute('aria-pressed',t==='light')}
+function pick(el){el.classList.add('selected');el.textContent='Picked: '+copy[el.dataset.choice].t}
+function toggleNav(){app.dataset.nav=app.dataset.nav==='rail'?'':'rail'}
+setDir('b');
+</script>
+</body>
+</html>
