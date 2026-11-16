@@ -1,3 +1,12 @@
+## Verifier defects and Stage 2 people — local completion (2026-11-16)
+
+- [x] Fix A 661da25 and Fix B cf6006e, on codex/verifier-v2-defects.
+- [x] Stage 2 Tasks 1,2,3,4,5,5b,5c and 6 on codex/stage2-people; final tested code 50ca647.
+- [x] All seven local gates pass: 274 files / 3,494 app tests plus one skipped, eight files / 163 wrapper tests, both TypeScript checks, build, whitespace and 29-entrypoint edge shim.
+- [x] Reports, run-ID scorer and proposed import-graph/VPS rollout are recorded in docs/STAGE2-PEOPLE-BUILD-REPORT.md and docs/HANDOFF.md.
+- [ ] Claude independently reviews both branch tips and migrations/audits 076/077.
+- [ ] Kevin separately authorizes any SQL, VPS/provider/runtime validation, role seeding, merge/push or deployment. Browser/mobile and Docker runtime remain unverified. Do not begin rollout from historical instructions below.
+
 ## Verifier v2 final local checkpoint (2026-11-12)
 
 - [x] All approved builder tasks 1–11, including 5b, are implemented locally; migration/audit are written only.

@@ -1,4 +1,115 @@
-# Deep find Stage 2 people — local build report
+# Deep find Stage 2 people — final local build report
+
+## Result and branch tips (2026-11-16)
+
+Verifier defects and Stage 2 Tasks 1, 2, 3, 4, 5, 5b, 5c and 6 are built locally. The final code revision is 50ca647b40f7b2fe345e9c35d4ddc6c173a0a93b. Codex stops after the Task 6 report commit. Claude remains architect/reviewer; independent review is pending.
+
+- Worktree: C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2.
+- Verifier branch tip: codex/verifier-v2-defects at cf6006e635f15660f8f846a0877f3039daf4ee92.
+- Stage 2 tested application tip: codex/stage2-people at 50ca647b40f7b2fe345e9c35d4ddc6c173a0a93b, followed by the final Task 6 documentation/scoring commit containing this report. Resolve its final tip with git rev-parse codex/stage2-people; the final handoff message supplies that exact hash. A commit cannot embed its own hash.
+- Base: git fetch origin returned origin/main 8c1c61b, matching the brief. Only the named worktree was edited. Explicit paths were staged. Commit hooks were disabled per invocation to prevent an unapproved task-branch vault sync.
+
+## Acceptance evidence
+
+1. **MET (local): verifier Fix A.** Migration 076 uses each queue row's created_at for its hour and retains the three-hour run backstop and five-minute stale recovery. Cancellation expires recent running rows immediately. Queue access checks use the claimed timestamp; done-proof recovery keeps its finished_at hour. Five new tests passed after reproducing failures. Both audits are written only; database behavior is **NOT VERIFIED**.
+2. **MET (local): verifier Fix B.** The wrapper uses 45,000 ms, reports aborts as timeout, isolates stalled domains after two failures for ten minutes and emits fixed-field hashed-domain logs. Edge refusals refund usage, restore the local lead cap, requeue without spending an attempt and preserve other domains. Microsoft person plans use ms_exists in every state with four formats; company/role addresses remain SMTP. Kevin approved queue-only 48,000 ms calls and a 55,000 ms reserve. Part 1 ends with 267 files / 3,383 passed, one skipped; wrapper seven files / 149 passed.
+3. **MET (local): Stage 2.** SearXNG route/container configuration, worker_search limits, role rules, profile arrays/editor, role ladder, team pages and monthly Gemini meter are implemented. Tests cover the specified caps, provider refusals, exact step lines, company/role/former-person guards, blank-only merges, dismissals, no enrollment, team trust/extraction and meter failures/thresholds. The extra team-card correction is 50ca647. All seven gates pass at the final code revision: 274 app files / 3,494 passed / one skipped, eight wrapper files / 163 passed, root and wrapper TypeScript, production build, whitespace and 29-entrypoint edge typecheck.
+4. **MET (artifact); NOT VERIFIED (runtime): Task 6 scoring.** scripts/deepfind-score.sql now accepts :run_ids as uuid[] and prints one row per run, including empty runs, with every requested metric. It reads role_searches_by_provider from result JSON. These counters are provider-interface attempts, including refusals/errors; they are distinct from the monthly dispatched-call meter. Contact/phone facts are current when scored; run readiness comes from saved result JSON with a legacy lead fallback. The existing scorer's two-channel meaning is retained: ready email, phone and person LinkedIn. SQL was not executed.
+5. **MET: limits.** No push, merge, deployment, migration/audit execution, VPS change, real search-engine/LinkedIn/Microsoft/SMTP/Gemini request, image/package download, install, spending or secret read. Kevin separately approved official SearXNG documentation/public registry metadata reads; those verified the pinned image. No vault edit/sync occurred.
+
+## Commits and gates
+
+| Item | Commit | App files / passed tests | Wrapper files / passed tests |
+| --- | --- | --- | --- |
+| Fix A | 661da25 | 267 / 3,373 | 6 / 143 |
+| Fix B | cf6006e | 267 / 3,383 | 7 / 149 |
+| Plan cherry-picks | 52064dc, 9d2fe4f | Docs only, inherited passing code | Inherited passing code |
+| Task 1 | 83961da | 267 / 3,383 | 8 / 163 |
+| Task 2 | 10adcd2 | 267 / 3,391 | 8 / 163 |
+| Task 3 | 4a6642a | 268 / 3,422 | 8 / 163 |
+| Task 4 | ce24176 | 269 / 3,425 | 8 / 163 |
+| Task 5 | 8597833 | 271 / 3,460 | 8 / 163 |
+| Task 5b | 9741704 | 272 / 3,478 | 8 / 163 |
+| Task 5c | 3039cc5 | 274 / 3,492 | 8 / 163 |
+| Team-card fix | 50ca647 | 274 / 3,494 | 8 / 163 |
+| Task 6 | Commit containing this report | 274 / 3,494 | 8 / 163 |
+
+Every application run above also has one skipped test and zero failures at the commit gate. All seven required gates passed before each implementation commit. TypeScript, build, whitespace and the 29-entrypoint edge shim passed; the build retains its existing large-chunk warning. Environment: VITE_SUPABASE_URL=http://127.0.0.1:54321 and VITE_SUPABASE_ANON_KEY=local-test-placeholder. Final logs: .superpowers/stage2-final-*.log; prior phase logs and the ledger are also retained locally. These are ignored scratch artifacts, not portable report attachments.
+
+## Changed existing assertions and fixture maintenance
+
+Part 1 assertion changes are fully listed in the appended verifier report: the 075 audit's late-enqueue/expiry/recovery fixtures; recovery expiry now ages finished_at; saved Microsoft company rows expect SMTP; Microsoft catch-all role rows expect SMTP; wrapper abort expects timeout; the approved queue reserve changes the recovery deadline to 85,000 ms. Queue fixtures include created_at. All other existing planQueue cases pass unchanged.
+
+Stage 2 existing assertion changes are limited to: Task 2 adds worker_search to exact resource/default/mapping expectations; Task 5 drops secretary Mary from the registry list while retaining director John. No existing assertion changed for Tasks 1, 3, 4, 5b, 5c or the final card fix. Typed email precheck fixtures gain the new search method. Existing Firecrawl/phase-one suites default only the new role ladder to an empty fixture, preserving their original checkpoint assertions; new engine fixtures verify actual merge, dismissal, insertion and team wiring. The insert fixture now models PostgREST returning only inserted rows. Pure rules and transport tests were observed failing before their implementations; the engine count and final card defects also had failing reproductions before their fixes. SQL audits were authored, not run, so no database TDD claim is made.
+
+## Wiring decisions and remaining limits
+
+- Kevin resolved the fallback conflict: unreachable is included as Task 5 specifies. The fixed table and Task 5 originally disagreed.
+- Kevin approved 48-second queue SMTP calls and a 55-second final reserve; the existing 33-second edge timeout would otherwise abort before the wrapper's new 45-second timeout. First-pass timing remains unchanged.
+- 076 also replaces finish with the same signature/access rules to atomically restore the claimed attempt on domain_stalled. Repeating finish cannot refund twice. No table schema was added for this.
+- Registry records are fetched early for domain evidence, but contact insertion waits for the role result. The three-officer ceiling is cumulative across later registry evidence passes. The exact step-line formatter lives in roleSearch.ts, avoiding a duplicate in deepFindRules.ts.
+- Team-page URL provenance reuses existing phone-page captures. The extractor performs no fetches. Team picks consume the two slots first; fallback picks still permit the ladder even if they fill both slots, following the explicit fallback rule. Normal discovery never restores dismissed contacts; existing explicit Start fresh does.
+- Profile role fields are optional in frontend compatibility types, while database columns have the exact NOT NULL/default schema. Markdown imports retain their existing text format and do not erase roles. Generic 050 guards and 053 defaults already cover both new provider sources; existing grants/policies were not rewritten.
+- The monthly meter uses the key resolver's actual source for counts. Snapshot display mode follows current org configuration: shared fallback enabled and no configured org Gemini key. Counts are approximate application-call counts, including network failures after dispatch, not Google's billable query count. Meter failures never block work; the existing run AI cap still does.
+- SearXNG needs its separate outbound network alongside internal search-link; an internal-only container cannot reach engines. No port is published. The documented non-root startup uses UID/GID 977, no added capabilities, readonly config and a cache tmpfs. The wrapper breaker is process-local and resets on restart.
+- Browser setup and discovery returned no available browser. UI event-handler and lazy-hook fixtures pass, but visual/mobile/theme checks remain unverified. Docker and a local YAML parser are unavailable. No container or Compose runtime check ran. Source/metadata inspection is not a startup proof.
+
+## Redeploy surface (proposal only)
+
+Static recursive relative-import graph from cf6006e through the final code, including dynamic relative imports and conservatively retaining type-only paths, gives this Stage 2 union:
+
+- check-replies
+- check-sequences
+- draft-linkedin-message
+- draft-reply
+- email-settings
+- enrich-apollo
+- enrich-hunter
+- enrich-leads-bulk
+- find-decision-makers
+- generate-email
+- org-api-settings
+- parse-csv-leads
+- parse-icp
+- parse-notes
+- parse-session-notes
+- run-deep-find
+- run-lookup-jobs
+- run-selected-autopilot
+- run-verify-queue
+- scrape-companies-house
+- scrape-cro
+- scrape-google-places
+- send-email
+- suggest-sequence
+
+Also required after review/authorization: frontend, wrapper image, worker/docker-compose.yml and worker/searxng/settings.yml; apply reviewed migration 076 before 077 if 076 is not already applied. This 24-function list also covers the Part 1 union. It is a conservative source import graph, not a claim that every function's runtime behavior changed. No deploy was performed. Local graph evidence is .superpowers/stage2-redeploy-graph.json.
+
+## Exact rollout sequence for Claude (not executed)
+
+Each live step needs Kevin's separate authorization after review. Keep operations in Dreamlabs' own accounts. Never restart or modify n8n, Postiz or unrelated services.
+
+1. Take a fresh Hostinger snapshot of VPS 1726663. Snapshots expire after 24 hours and a new snapshot replaces the old one. Record its ID and time before changing anything.
+2. Read-only on the VPS: in /opt/lookup-worker run docker compose ps, docker compose config --services and docker stats --no-stream. Confirm the active stack, wrapper image and headroom. Do not print docker compose config or .env: they can expose secrets.
+3. Preserve the current compose file, wrapper/src and wrapper image ID in a timestamped backup outside the build context. Prepare the reviewed release payload under /opt/lookup-worker-release. Only replace docker-compose.yml, wrapper/src and the new searxng/settings.yml from the reviewed worker tree; preserve the live .env and every unrelated file. Keep worker/searxng/NOTICE.md with the release record. Both manifests and source must come from the same reviewed revision.
+4. Add SEARXNG_SECRET through the existing VPS secret workflow, without printing it or storing it in Git/vault. Keep .env mode 600. VERIFY_TIMEOUT_MS may be absent for the 45,000 ms default, or explicitly 45000. Preserve Reacher RCH__SMTP_TIMEOUT=30 and existing secrets.
+5. In /opt/lookup-worker run, in order: docker compose config --quiet; docker compose pull searxng; docker compose build wrapper; docker compose up -d --no-deps searxng wrapper. Do not use compose down or recreate the whole stack. Check docker compose ps searxng wrapper and inspect their logs without dumping environment/configuration values.
+6. Verify searxng has no host bindings with docker inspect of the container returned by docker compose ps -q searxng, formatting only .HostConfig.PortBindings. Inspect lookup-worker_search-link membership: only wrapper and searxng should be present. Confirm the wrapper can reach SearXNG internally. Check /health and guarded refusal behavior first. Real search queries or SMTP/Microsoft validation require Kevin's explicit authorization; never fetch LinkedIn profiles. Verify hash-only wrapper logs and image startup as separate runtime checks. No promise of engine throughput is made from fixture tests.
+7. Claude reviews 076/077 and the audits, performs separately authorized rolled-back dry runs, confirms rollback, then applies each reviewed migration on Kevin's authorization. Audits are disposable-fixture scripts; do not run them in a database with active queue work. Grant/RLS/month-boundary/concurrency checks remain pending until this review. 077 is one accumulated file, not four migrations.
+8. Deploy the function union above from the same reviewed revision. Merge/push/frontend publication require Kevin's explicit authorization; main auto-deploys the frontend. Do not seed guessed role values. Kevin supplies/approves profile roles described by the spec.
+9. On separately authorized fixture/live test scope, re-run the same 50 leads, wait for queue completion, and execute scripts/deepfind-score.sql with the approved run UUID list. Compare by run, not by pipeline. Inspect the real engine throttle rate, result-title shapes, timeout/stall recovery, meter sharing and the previously unverified UI on phone width.
+10. Roll back application/container changes by restoring the saved wrapper source/image and compose file, recreating only wrapper, and stopping only the added SearXNG container if required. Preserve additive database rows and counters; do not drop 077 tables or contacts as an automatic rollback. Any database rollback needs its own reviewed plan and Kevin's authorization.
+
+## Not verified and handoff
+
+No SQL migration, audit or scorer ran. Real RLS/grants, London month boundaries, PostgREST contention and EdgeRuntime lifecycle are unverified. No browser/mobile/theme or Docker runtime check ran. No real engine, Gemini, LinkedIn, Microsoft, Reacher/SMTP or production scoring ran. Provider throttling, free-allowance billing and startup compatibility remain runtime questions. Independent Claude review is pending. Subscription usage is unavailable; no paid fallback was used.
+
+Open docs/HANDOFF.md, this report and the appended verifier report at the exact final branch tip. Review both branches and migrations 076/077 before proposing rollout. The authorized builder work ends at Task 6; deployment, SQL, provider tests, merge/push and role seeding remain unauthorized.
+
+---
+
+## Historical build milestones (superseded by the final result above)
+
 
 ## Milestone (2026-11-16)
 

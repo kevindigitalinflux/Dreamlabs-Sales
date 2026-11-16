@@ -1,5 +1,19 @@
 # Automations Register
 
+## Verifier defects and Stage 2 people (2026-11-16, local only)
+
+This section supersedes older local-build status statements below for these changes. Migrations 076/077 are written, not executed; independent review is pending.
+
+| Automation | Trigger | Changes | Owner |
+| --- | --- | --- | --- |
+| Remaining-address queue, defect corrections | Existing Deep find enqueue/cron tick | Per-row one-hour window, three-hour run backstop, immediate cancellation, atomic no-attempt stall requeue, Microsoft person checks through ms_exists; no sends or enrollment | Deep find verifier |
+| Role/team discovery | Each Deep find lead after company/domain settlement | Reads already-fetched trusted team pages, then up to three role searches; saves at most two people with blank-only merges and no enrollment; registry additions capped at three after a role/team hit | Deep find |
+| Shared web-search worker | Secret-guarded wrapper /search | SearXNG snippets, 20 calls/minute and worker_search daily reservations, eight bounded results; no LinkedIn profile fetches | Lookup worker |
+| Gemini monthly meter | Each dispatched grounded application call | Atomic informational London-month count; member-only numeric snapshot loaded on first usage-panel open; never blocks a search | Gemini search callers |
+
+See docs/STAGE2-PEOPLE-BUILD-REPORT.md for exact commits, gates, proposed rollout and unverified runtime checks. No new schedule or message-sending flow was added by Stage 2.
+
+
 ## Verifier v2 background checks (local build, independent review pending)
 
 | Automation | Trigger | Changes | Owner |

@@ -1,3 +1,7 @@
+## Deep find Stage 2 final local checkpoint (2026-11-16)
+
+This task uses C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2, branch codex/stage2-people. Kevin directs, Claude reviews, Codex builds. Part 1 tip cf6006e; final tested application 50ca647; the final report commit contains this note. Read docs/HANDOFF.md and docs/STAGE2-PEOPLE-BUILD-REPORT.md first. Verifier defects and Stage 2 Tasks 1–6, including 5b/5c, are locally built. All seven gates pass: 274 files / 3,494 app tests plus one skipped; eight files / 163 wrapper tests; TypeScript/build/29-entrypoint edge shim/whitespace. Migrations 076/077 and both audits/scoring SQL are written, not executed. Independent review, SQL/runtime/provider/container and visual/mobile checks remain pending. No publication, production/VPS/provider work, installation, spending or vault sync occurred. Stop after Task 6; rollout requires separate authorization.
+
 ## Status (2026-11-12, Claude) - START HERE
 
 This block supersedes the 2026-11-10 block below. Roles unchanged: Kevin directs, Claude architect/reviewer/deployer, Codex builder. Every merge, push, deploy, migration and role change needs Kevin's explicit yes for that action. Kevin is restarting the session on a different Claude model to push the platform further; resume from here.
