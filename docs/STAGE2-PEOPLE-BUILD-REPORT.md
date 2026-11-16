@@ -172,3 +172,9 @@ Kevin requested a positive-difference check and project/shared-context updates a
 Both quoted longer-company fixtures failed first (accepted instead of company_mismatch), then passed. Company matching now inspects the title company part or individual Experience/at snippet evidence and refuses extra distinctive words. Legal and lead city/country words are excluded; city/country reach the judge through the engine. The existing accepted fixtures remain accepted. Changed existing assertion: the Other Employer title with an Acme Experience snippet now returns company_mismatch instead of former, because current-title company evidence takes precedence. Historical date ranges still return former.
 
 Gates: 274 app files / 3,497 passed / one existing skipped; 8 wrapper files / 163 passed; root and wrapper TypeScript, build, whitespace and 29-entrypoint edge typecheck PASS. Logs: .superpowers/review-fix1-*.log. Commit: the fix commit containing this entry (exact hash recorded in the final review-fix ledger).
+
+### Fix 2 — role evidence and saved title
+
+The quoted Sam Lee fixture and Jane Doe fixture failed first. Snippet-only roles now require same-segment role-at/@/comma-company evidence; sentence, semicolon, pipe and middle-dot boundaries prevent unrelated roles from qualifying. A matching title role keeps its title part; otherwise the exact matched ladder role is saved. The company name never supplies the saved title. All four new fixtures pass, including all three separators. No existing assertion changed.
+
+Gates: 274 app files / 3,501 passed / one existing skipped; 8 wrapper files / 163 passed; all other five gates PASS, edge29. Logs: .superpowers/review-fix2-*.log. Fix 1 commit: 759e02d.

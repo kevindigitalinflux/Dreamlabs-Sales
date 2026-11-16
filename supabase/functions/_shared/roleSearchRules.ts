@@ -71,6 +71,11 @@ export function judgeRoleHit(hit: { title: string; url: string; snippet: string 
     for (const match of combined.matchAll(adjacent)) if (Number(match[2] ?? match[3]) < new Date().getFullYear()) return refuse('former');
   }
   const title = (parts[1] ?? '').replace(/\s+at\s+.*$/i, '').trim();
-  if (!rung.roles.some(role => contains(title, words(role)) || contains(hit.snippet.slice(0, 160), words(role)))) return refuse('role_mismatch');
-  return { ok: true, person: { first: name[0], last: name.slice(1).join(' '), title, linkedinUrl: url.href, rung: rung.rung } };
+  const titleRole = !matchesCompany(title) && rung.roles.find(role => contains(title, words(role)));
+  const snippetRole = rung.roles.find(role => hit.snippet.slice(0, 160).split(/[.;|·]/).some(segment => {
+    const evidence = /^\s*(.+?)\s*(?:\bat\b|@|,)\s*(.+)$/i.exec(segment);
+    return evidence !== null && contains(evidence[1], words(role)) && matchesCompany(evidence[2]);
+  }));
+  if (!titleRole && !snippetRole) return refuse('role_mismatch');
+  return { ok: true, person: { first: name[0], last: name.slice(1).join(' '), title: titleRole ? title : snippetRole!, linkedinUrl: url.href, rung: rung.rung } };
 }

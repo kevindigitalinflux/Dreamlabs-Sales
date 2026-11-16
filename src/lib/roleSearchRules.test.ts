@@ -2,6 +2,12 @@ import {expect,it} from 'vitest'
 import {cleanRoles,roleLadder,roleQuery,judgeRoleHit} from '../../supabase/functions/_shared/roleSearchRules'
 const lead={company:'Acme Offices'},rung={rung:'target' as const,roles:['Facilities Manager']};
 const hit={title:'Jane Doe - Facilities Manager - Acme Offices Ltd | LinkedIn',url:'https://uk.linkedin.com/in/jane-doe-1a2b3c/?trk=x',snippet:'Facilities Manager at Acme Offices'};
+it('rejects a snippet role attached to a different organization',()=>{
+ expect(judgeRoleHit({...hit,title:'Sam Lee - Acme Offices | LinkedIn',snippet:'Cleaner at Acme Offices. Director of his local football club.'},lead,{rung:'final',roles:['Director']})).toEqual({ok:false,why:'role_mismatch'});
+});
+it.each(['at','@',','])('saves the ladder role from same-segment snippet evidence with %s',separator=>{
+ expect(judgeRoleHit({...hit,title:'Jane Doe - Titan Cleaning Services | LinkedIn',snippet:`Owner ${separator} Titan Cleaning Services · Location: Amsterdam`},{company:'Titan Cleaning Services'},{rung:'final',roles:['Owner']})).toMatchObject({ok:true,person:{title:'Owner'}});
+});
 it.each([
  ['Amy Poe - Managing Director - Pro Cleaning Solutions Texas | LinkedIn','Managing Director at Pro Cleaning Solutions Texas','Pro Cleaning'],
  ['John Smith - Director - Deep Cleaning Experts Ltd','','Deep Cleaning'],
