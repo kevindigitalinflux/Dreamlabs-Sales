@@ -1,5 +1,4 @@
 -- Local draft only. Review and rolled-back fixture audit before applying.
-BEGIN;
 CREATE OR REPLACE FUNCTION public.deep_find_complete(p_run uuid) RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE changed uuid;
@@ -33,4 +32,21 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.deep_find_complete(uuid), public.deep_find_housekeeping() FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.deep_find_complete(uuid), public.deep_find_housekeeping() TO service_role;
-COMMIT;
+
+-- Task 2: database-owned tuning; no browser write/read grant.
+CREATE TABLE public.deep_find_runtime_config (
+ singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton),
+ deep_find_parallel integer NOT NULL DEFAULT 3 CHECK(deep_find_parallel BETWEEN 1 AND 5)
+);
+ALTER TABLE public.deep_find_runtime_config ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.deep_find_runtime_config FROM PUBLIC,anon,authenticated;
+GRANT ALL ON public.deep_find_runtime_config TO service_role;
+INSERT INTO public.deep_find_runtime_config(singleton) VALUES(true) ON CONFLICT DO NOTHING;
+SELECT cron.schedule('run-deep-find-tick','*/2 * * * *',$cron$
+ SELECT net.http_post(
+  url:='https://wgomksxelyfkzepbnkdd.supabase.co/functions/v1/run-deep-find',
+  headers:=jsonb_build_object('Content-Type','application/json','x-cron-secret',
+   (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name='cron_secret')),
+  body:='{"action":"tick"}'::jsonb)
+ FROM generate_series(1,(SELECT deep_find_parallel FROM public.deep_find_runtime_config WHERE singleton));
+$cron$);

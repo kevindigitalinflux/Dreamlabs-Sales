@@ -34,3 +34,26 @@ Tasks 2–10 follow. Migration dry-run SQL, fairness and sized-backstop fixtures
 ## Not verified
 
 Real database concurrency/RLS/cron/pg_net, container/provider calls, production quality and independent review. All live observations in the brief were supplied by Kevin/Claude, not read in this session. No live operation occurred. Subscription usage is unavailable; milestones are saved per task.
+
+## Task 2 — parallel cron invocations
+
+078 now creates a service-only/RLS runtime config row, deep_find_parallel default 3 bounded 1..5. The existing cron name is replaced in place at the unchanged */2 schedule; generate_series produces one net.http_post per configured invocation. Headers and the Vault lookup for cron_secret remain identical, with no inline secret. Each engine invocation still claims max_leads=1 serially. No cron or SQL ran. A defensive parallelism reader is tested for default/bounds and will also be used by the edge backstop. Migration has no outer transaction so it can be included safely inside the report's rolled-back dry run.
+
+Gates: 278 app files / 3,622 passed / one existing skip; wrapper 8 /166; both TypeScript/build/whitespace/edge29 PASS. Logs parallel-task2-*.log. Task 1 commit d301d94; Task 2 is this entry's commit. SQL runtime is NOT VERIFIED.
+
+Dry-run entry point (psql, disposable migrated database only, never executed by Codex):
+
+```sql
+BEGIN;
+-- psql: \ir ../supabase/migrations/078_deep_find_parallel.sql
+-- In SQL Editor, paste the entire 078 body here instead of the psql include.
+DO $$ BEGIN
+ ASSERT (SELECT deep_find_parallel=3 FROM public.deep_find_runtime_config WHERE singleton);
+ BEGIN UPDATE public.deep_find_runtime_config SET deep_find_parallel=0; RAISE EXCEPTION 'missing lower bound';
+ EXCEPTION WHEN check_violation THEN NULL; END;
+ BEGIN UPDATE public.deep_find_runtime_config SET deep_find_parallel=6; RAISE EXCEPTION 'missing upper bound';
+ EXCEPTION WHEN check_violation THEN NULL; END;
+ ASSERT NOT has_table_privilege('authenticated','public.deep_find_runtime_config','UPDATE');
+END $$;
+ROLLBACK;
+```
