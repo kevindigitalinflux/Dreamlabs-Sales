@@ -24,3 +24,13 @@ Real latency, production uplift, live provider/worker behavior, credit accountin
 ## Deviations and open questions
 
 The code's prior saved-company rule allows a profile fetch on a non-UK lead. Kevin's new no-Companies-House rule takes precedence; Fix 2 will update and list that conflicting assertion. Unknown leads will retain prior behavior. No unresolved behavior question so far. Subscription usage is unavailable; local evidence is saved per milestone.
+
+### Fix 2 — non-UK registry eligibility
+
+MET: new pure likelyCountry uses explicit saved country first, then the shared parsePhone module without a default country, then address/postcode, then a UK website suffix, then unknown. National-format phone numbers alone do not manufacture GB evidence. It supports the primary phone and string-array additional_phones; +44 is GB and another parsed international prefix is non_GB. UK postcodes, US state names/abbreviations with ZIP/ZIP+4, .co.uk/.uk and precedence are tested. Fifteen pure fixtures and four engine fixtures pass. Engine fixtures first lacked the required skip line before implementation; the export was initially absent. +1, Texas and +353 cases make no Companies House call, have no company registry proof credit, and leave country unchanged. Saved GB with a .com site still searches.
+
+The shared registrySkipReason now uses this inference, covering both discovery and blank-fill/review guards. The resolver checks non_GB before any saved-number profile lookup. The existing registry proof gate already excludes not_uk, so no new AI reservation path is needed. Unknown saved-number/rejected choices retain their old behavior. Exact step: Companies House: skipped, this company does not look UK-based.
+
+Changed existing assertions: the three IE/US/OTHER registry step strings change to the required sentence; the prior saved-company-wins matrix now keeps only undefined/null/GB and separately expects not_uk/no fetch for IE/US/OTHER. No saved country or company number is changed or erased. All other assertions pass unchanged.
+
+Gates: 275 app files / 3,565 passed / one existing skipped; 8 wrapper files / 166 passed; both TypeScript, build, whitespace and edge29 PASS. Logs: .superpowers/deepfind-budget-fix2-*.log. Fix 1 commit: f6733ed. Fix 2 is the commit containing this entry.

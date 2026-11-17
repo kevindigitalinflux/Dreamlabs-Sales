@@ -35,7 +35,7 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !=
 export function registryStep(r: RegistryResult): string {
   const name = (r.name ?? '').replace(/[^\p{L}\p{N} &'.,()-]/gu, '').slice(0, 120);
   switch (r.how) {
-    case 'not_uk': return 'Companies House skipped: this is not a UK company.';
+    case 'not_uk': return 'Companies House: skipped, this company does not look UK-based.';
     case 'rejected': return 'Companies House skipped: you rejected the company matches for this lead.';
     case 'saved': return `Companies House: using the company saved on this lead (${name || r.number}).`;
     case 'raw_lead': return `Companies House: using the company this lead was found from (${name || r.number}).`;
@@ -56,12 +56,13 @@ export async function resolveRegistry(
   proof: { pages?: string[]; website?: string | null; left?: () => number; checkpoint?: () => Promise<void>; cached?: CompanyCandidate[]; cachedPeople?: Record<string, string[]>; priorEvidence?: Record<string, RegistryEvidence>; webNumbers?: string[]; applyNumber?: (number: string) => Promise<boolean> } = {},
 ): Promise<RegistryResult> {
   const empty = { address: null, locality: null, candidates: [] as CompanyCandidate[] };
+  const skip = registrySkipReason(lead);
+  if (skip === 'not_uk') return { ...empty, number: null, name: null, how: skip };
   const saved = cleanCompanyNumber(lead.company_number);
   if (saved) {
     const profile = chKey ? await fetchCompanyProfile(saved, chKey) : null;
     return { ...empty, number: saved, name: profile?.name ?? null, address: profile?.address ?? null, locality: profile?.locality ?? null, how: 'saved' };
   }
-  const skip = registrySkipReason(lead);
   if (skip) return { ...empty, number: null, name: null, how: skip };
   const rawId = str(lead.raw_lead_id);
   if (rawId) {

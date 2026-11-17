@@ -10,7 +10,7 @@ vi.mock('../../supabase/functions/_shared/knownPersonLookup', () => ({ webSearch
 vi.mock('../../supabase/functions/_shared/deepFindPeople', () => ({ lookUpPeople: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/workerClient', () => ({ makeWorkerClient: () => ({ search:vi.fn(async()=>({ok:false,failure:'not_configured'})),lines: () => [], verifyEmail: vi.fn(), scrapeSite: vi.fn(async () => ({ ok: false, failure: 'not_configured' })) }) }));
 vi.mock('../../supabase/functions/_shared/companiesHouse', () => ({ fetchActiveOfficers: vi.fn(async () => []), searchCompaniesByName: vi.fn(), searchOfficers: vi.fn(async () => []), fetchCompanyProfile: vi.fn() }));
-import { searchCompaniesByName, fetchActiveOfficers } from '../../supabase/functions/_shared/companiesHouse';
+import { searchCompaniesByName, fetchActiveOfficers, fetchCompanyProfile } from '../../supabase/functions/_shared/companiesHouse';
 import { resolveOrgApiKey, resolveOrgWorkerConfig } from '../../supabase/functions/_shared/orgApiKeys';
 import {geminiGroundedSearch} from '../../supabase/functions/_shared/ai';
 import { discoverLeadDomains } from '../../supabase/functions/_shared/domainDiscoveryLookup';
@@ -59,6 +59,20 @@ beforeEach(() => {
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it.each([{phone:'+1 (512) 555-0100'},{address:'Austin, Texas 78701'},{phone:'+353 1 234 5678'}])('skips all registry work and proof credit for inferred non-UK leads %#',async saved=>{
+ Object.assign(lead,saved);const before=lead.country;
+ resolveOrgApiKey.mockImplementation(async(_s,_o,provider)=>['gemini','companies_house'].includes(provider)?'fake':null);
+ searchCompaniesByName.mockResolvedValue([{company_number:'01234567',title:'ACME LIMITED',company_status:'active'}]);
+ const out=await run();
+ expect(out.status).toBe('done');expect(out.domains.steps).toContain('Companies House: skipped, this company does not look UK-based.');
+ expect(searchCompaniesByName).not.toHaveBeenCalled();expect(fetchCompanyProfile).not.toHaveBeenCalled();expect(fetchActiveOfficers).not.toHaveBeenCalled();
+ expect(out.domains.credits.ai).not.toHaveProperty('company registry proof');expect(lead.country).toBe(before);
+});
+it('still searches a saved GB lead with a .com website',async()=>{
+ lead.country='GB';lead.website='https://acme.com';
+ resolveOrgApiKey.mockImplementation(async(_s,_o,provider)=>provider==='companies_house'?'fake':null);
+ searchCompaniesByName.mockResolvedValue([]);await run();expect(searchCompaniesByName).toHaveBeenCalled();expect(lead.country).toBe('GB');
+});
 it.each([[120_000,25_000],[40_000,10_000],[33_999,3_999]])('passes separate discovery budgets with %i ms left',async(left,webBudgetMs)=>{
  const start=Date.now();vi.spyOn(Date,'now').mockReturnValueOnce(start).mockReturnValue(start+120_000-left);
  await run();
