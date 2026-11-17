@@ -1,3 +1,35 @@
+## HANDOVER 2026-11-17 (Claude) - START HERE, supersedes every block below
+
+Written for the next Claude session (Opus or Sonnet). Roles unchanged: Kevin directs, Claude plans/reviews/deploys, Codex builds. Every merge, push, deploy, migration, VPS change and role change needs Kevin's explicit yes for that action. Codex briefs start with `# Build brief: <task>`.
+
+### Live now
+- `origin/main` = `b23a591` (docs) on top of `af22083` (verifier defects + stage 2 people). Migrations 076 and 077 applied. 24 edge functions deployed from `af22083`.
+- VPS: wrapper rebuilt from `af22083`; SearXNG container STOPPED and `/opt/lookup-worker/docker-compose.override.yml` blanks the wrapper's `SEARX_URL`, so `/search` answers 503 and role search always uses the Gemini backup. Reason: from the VPS IP Google, Brave and DuckDuckGo block it and Bing ignores `site:linkedin.com/in`. Undo: delete the override, `docker compose up -d --no-deps searxng wrapper`. Snapshot `461084` taken 2026-11-16 22:58 UTC (expires 2026-11-17 22:58).
+- Rollback tags: `checkpoint-2026-11-16-before-verifier-defects` (= `8c1c61b`), `checkpoint-2026-11-16-before-stage2` (= `cf6006e`).
+
+### Score of the full build (runs `dc75adb8`, `0f1f24ea`, `0a44237d`, 86 leads, all done, 0 failed, Hunter 0, nothing enrolled or sent)
+| Set | Ready email | Right-role person (role search/team page) | Titled person | LinkedIn | 2+ contact points |
+|---|---|---|---|---|---|
+| UK/US 50 (baseline before) | 27 (25) | 4 (none existed) | 21 (18) | 1 (1) | 26 (24) |
+| Mr Brush UK 30 | 22 | 4 | 21 | 1 | 21 |
+| DI US 20 | 5 | 0 | 0 | 0 | 5 |
+| Ireland 12 | 6 (5) | 1 | 1 | 0 | 6 |
+| EU 12 | 5 (6) | 0 | 0 | 0 | 5 |
+| Gulf 12 | 7 (7) | 1 | 1 | 1 | 7 |
+Pass marks per 50 (at least 40 proven emails, 40 right-role people, 30 LinkedIn, 40 with 2+ points) are far off. Company-match flags: 10 of 86. Checks: 73 not_found, 71 mailbox_missing, 15 deliverable, 14 exists, 8 catch_all, 6 timeout, **41 skipped by `run_time_limit`** (the three runs took 2 h 50 min, so the 3-hour run backstop cut late checks; worth a look). The 6 role people were not yet checked by hand for wrong company.
+
+### Waiting for Kevin's yes
+Codex branch `codex/role-search-hits` (worktree `dreamlabs-sales-verifier-v2`, tip `104921c`, 2 commits on `b23a591`): Gemini role hits are now kept when Gemini's sources are redirect links (name must appear in a linkedin.com-titled source's text), lead names are cut to their brand part ("Cleancat - Commercial Cleaning Services Dublin" -> "Cleancat"), and a count-only `role_search_fallback_shape` is saved when no hit is kept. Claude reviewed it 2026-11-17: logic matches the brief and the real evidence format in `ai.ts` (`"<uri> <title>"` lines, then `"<uri> <supported segment>"`); gates re-run by Claude: tsc clean, 274 files / 3,540 tests (1 skipped), build, edge typecheck, whitespace all pass. APPROVED. Note: the supported segment is Gemini's own sentence tied to that source, not page text, so a wrong name is still possible; `judgeRoleHit` still checks company and role afterwards.
+Rollout once Kevin says yes: fast-forward push `104921c` to `main`, deploy `run-deep-find` only (no migration, no VPS change), re-run the same 86 leads (copy the insert from Log.md 2026-11-16 23:03 with these three run ids as sources; caps 200/72/180), then read `role_search_fallback_shape` on leads with no hits to learn the real Gemini reply shape.
+
+### Open after that, in order
+1. Why US leads score so low (5 of 20 ready, 0 people).
+2. The 41 checks cut by the run time limit.
+3. Search source decision for Kevin: Gemini only (5,000 free grounded searches a month, about 2 per lead) or a paid search API.
+4. Customer profiles have no target roles (built-in ladder in use); Kevin to supply.
+5. Front end not confirmed live (profile role fields, Gemini usage line), phone width unchecked.
+6. Non-English job titles; stages 3 to 5 not planned; repo `worker/docker-compose.yml` still enables SearXNG.
+
 ## Role search hits and brand names (2026-11-16) — START HERE for the local build
 
 Worktree C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2, branch codex/role-search-hits, fetched base b23a5912698687a164e40fe3809a959aebc76d51. Kevin directs, Claude architects/reviews, Codex builds. Read docs/ROLE-SEARCH-HITS-BUILD-REPORT.md. Fix 2 (brands) is 7dadcc2; this commit contains Fix 1 (grounded hits/diagnostic), the final report and this handoff. Resolve git rev-parse HEAD for the final exact tip. Two implementation commits only; explicit paths staged. No other writer, worktree write or task-owned server.
