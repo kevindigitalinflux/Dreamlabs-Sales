@@ -72,3 +72,35 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.deep_find_claim(integer) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.deep_find_claim(integer) TO service_role;
+
+ALTER TABLE public.deep_find_runtime_config ADD COLUMN gemini_per_minute integer NOT NULL DEFAULT 12 CHECK (gemini_per_minute > 0);
+CREATE TABLE public.gemini_minute_usage (minute timestamptz PRIMARY KEY, used integer NOT NULL CHECK (used >= 0));
+ALTER TABLE public.gemini_minute_usage ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.gemini_minute_usage FROM PUBLIC,anon,authenticated;
+GRANT ALL ON public.gemini_minute_usage TO service_role;
+CREATE OR REPLACE FUNCTION public.gemini_admit() RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE admitted integer; maximum integer;
+BEGIN
+ IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Service only' USING ERRCODE='42501'; END IF;
+ SELECT gemini_per_minute INTO maximum FROM public.deep_find_runtime_config WHERE singleton;
+ INSERT INTO public.gemini_minute_usage AS u(minute,used) VALUES(date_trunc('minute',now()),1)
+ ON CONFLICT(minute) DO UPDATE SET used=u.used+1 WHERE u.used<maximum RETURNING used INTO admitted;
+ DELETE FROM public.gemini_minute_usage WHERE minute < now()-interval '1 day';
+ RETURN admitted IS NOT NULL;
+END $$;
+REVOKE ALL ON FUNCTION public.gemini_admit() FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gemini_admit() TO service_role;
+ALTER TABLE public.deep_find_runs ADD COLUMN notices text[] NOT NULL DEFAULT '{}';
+CREATE OR REPLACE FUNCTION public.deep_find_notice_once(p_run uuid,p_code text) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE changed uuid;
+BEGIN
+ IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Service only' USING ERRCODE='42501'; END IF;
+ IF p_code NOT IN ('worker_search','worker_verify','worker_scrape') THEN RAISE EXCEPTION 'Invalid notice'; END IF;
+ UPDATE public.deep_find_runs SET notices=array_append(notices,p_code)
+ WHERE id=p_run AND NOT(p_code=ANY(notices)) RETURNING id INTO changed;
+ RETURN changed IS NOT NULL;
+END $$;
+REVOKE ALL ON FUNCTION public.deep_find_notice_once(uuid,text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.deep_find_notice_once(uuid,text) TO service_role;

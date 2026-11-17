@@ -3,7 +3,7 @@ import type { WorkerClient } from './workerClient.ts';
 import { judgeRolePerson, rolePeoplePrompt, type RoleCandidate, type RolePeopleInput } from './roleSearchRules.ts';
 
 export interface SearchProvider {
-  search(query: string, input?: RolePeopleInput): Promise<{ ok: true; hits: SearchHit[]; via: 'searxng' } | { ok: true; people: RoleCandidate[]; via: 'gemini' } | { ok: false; why: 'none' | 'limit' | 'cap' | 'failed' }>;
+  search(query: string, input?: RolePeopleInput): Promise<{ ok: true; hits: SearchHit[]; via: 'searxng' } | { ok: true; people: RoleCandidate[]; via: 'gemini' } | { ok: false; why: 'none' | 'limit' | 'cap' | 'failed' | 'busy' }>;
 }
 
 export interface RoleSearchFallbackShape {
@@ -102,6 +102,6 @@ export function makeSearchProvider(deps: { worker: WorkerClient; gemini?: (promp
         sources: grounded.sources.length, redirect_sources: chunks.filter(chunk => chunk.redirect).length,
         linkedin_titled_sources: chunks.filter(chunk => chunk.titled).length, people_lines: peopleLines, people_kept: people.length });
       return { ok: true, people, via: 'gemini' };
-    } catch (error) { console.error('Role search unavailable', roleSearchFailureCode(error)); return { ok: false, why: 'failed' }; }
+    } catch (error) { const code = roleSearchFailureCode(error); console.error('Role search unavailable', code); return { ok: false, why: code === 'http_429' ? 'busy' : 'failed' }; }
   } };
 }

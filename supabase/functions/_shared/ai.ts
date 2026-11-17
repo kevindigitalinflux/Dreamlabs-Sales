@@ -1,3 +1,4 @@
+import { admitGemini } from './geminiAdmission.ts';
 import { countGeminiSearch, type GeminiSearchContext } from './geminiSearchMeter.ts';
 import { stripAiPunctuation } from './textGuardrails.ts';
 import { EMAIL_FORMAT_PROMPT_LINE } from './emailFormatPrompt.ts';
@@ -48,7 +49,8 @@ async function geminiFetch(url: string, init: RequestInit): Promise<Response> {
 }
 
 /** `timeoutMs` is optional; when set, the whole call (including reading the reply) is aborted after it. */
-export async function geminiJson(prompt: string, apiKey: string, timeoutMs?: number): Promise<unknown> {
+export async function geminiJson(prompt: string, apiKey: string, timeoutMs?: number, context?: GeminiSearchContext): Promise<unknown> {
+  await admitGemini(context);
   const res = await geminiFetch(`${GEMINI_URL}/${AI_MODEL}:generateContent?key=${apiKey}`, {
     method: 'POST',
     signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
@@ -78,6 +80,7 @@ export async function geminiGroundedSearch(prompt: string, apiKey: string, timeo
     if (timeoutMs <= 0) throw new Error('Gemini request timed out');
     const signal = AbortSignal.timeout(timeoutMs);
     if (signal.aborted) throw new Error('Gemini request timed out');
+    await admitGemini(meter);
     dispatched = true;
     // The key goes in the x-goog-api-key header (not the URL), so it can never appear in a logged request address.
     const res = await geminiFetch(`${GEMINI_URL}/${AI_MODEL}:generateContent`, {

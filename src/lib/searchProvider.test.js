@@ -20,7 +20,7 @@ it.each([
  const log=vi.spyOn(console,'error').mockImplementation(()=>{});
  try {
   const provider=makeSearchProvider({worker:{search:async()=>({ok:false,failure:'not_configured'})},reserveAi:async()=>true,gemini:async()=>{throw error}});
-  expect(await provider.search('private query')).toEqual({ok:false,why:'failed'});
+  expect(await provider.search('private query')).toEqual({ok:false,why:code==='http_429'?'busy':'failed'});
   expect(log).toHaveBeenCalledExactlyOnceWith('Role search unavailable',code);
   expect(JSON.stringify(log.mock.calls)).not.toMatch(/private|key|prompt|reply|query/);
  }finally{log.mockRestore()}

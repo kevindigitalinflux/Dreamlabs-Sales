@@ -92,8 +92,9 @@ export class RunVerifyGate {
         if (prior?.pendingUntil !== token) throw new Error('Checker lease changed');
         const relevant = result.ok ? ['unverifiable','risky'].includes(result.value.status) : result.failure === 'timeout';
         const starts = prior?.starts ?? [];
-        const finishedStarts = dispatch ? starts : starts.filter((_t,index) => index !== starts.lastIndexOf(started));
-        const finishedCanary = canaryDone || (!!dispatch && (!hosted || (result.ok && (['valid','invalid'].includes(result.value.status)
+        const worked = !!dispatch && (result.ok || !['busy','limit_reached','domain_stalled'].includes(result.failure));
+        const finishedStarts = worked ? starts : starts.filter((_t,index) => index !== starts.lastIndexOf(started));
+        const finishedCanary = canaryDone || (worked && (!hosted || (result.ok && (['valid','invalid'].includes(result.value.status)
           || (result.value.status === 'risky' && result.value.reason === 'role_account') || (result.value.status === 'unverifiable' && result.value.reason === 'catch_all')))));
         if (await this.store.swap(snapshot.version, { ...snapshot.state, [domain]: { ...prior, starts: finishedStarts, pendingUntil: 0, blocked, blockedReason,
           timeoutRetryOwner:blockedReason==='timeout'&&!hosted&&!attemptOptions.retry?attemptOptions.retryOwner:undefined,
