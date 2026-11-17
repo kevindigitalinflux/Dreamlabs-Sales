@@ -13,6 +13,8 @@ export function likelyCountry(lead: SavedLocation): 'GB' | 'non_GB' | 'unknown' 
     // No default country: a national-format number must not manufacture UK evidence.
     const phone = parsePhone(raw, 'OTHER');
     if (phone) return phone.value.startsWith('+44') ? 'GB' : 'non_GB';
+    const national = text(raw).replace(/[\s.()\[\]-]/g, '');
+    if (!text(raw).startsWith('0') && /^1?[2-9]\d{2}[2-9]\d{6}$/.test(national)) return 'non_GB';
   }
   const address = `${text(lead.address)} ${text(lead.postcode)}`;
   if (/\b(?:GIR\s?0AA|[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2})\b/i.test(address)) return 'GB';

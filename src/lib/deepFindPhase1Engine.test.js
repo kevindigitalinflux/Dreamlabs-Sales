@@ -64,7 +64,7 @@ it('does not count a not-configured worker as SearXNG in saved role usage',async
  const out=await run();expect(out.domains.role_searches_by_provider).toEqual({searxng:0,gemini:2});
  expect(out.domains.steps).not.toContain('The lookup worker could not be reached.');
 });
-it.each([{phone:'+1 (512) 555-0100'},{address:'Austin, Texas 78701'},{phone:'+353 1 234 5678'}])('skips all registry work and proof credit for inferred non-UK leads %#',async saved=>{
+it.each([{phone:'+1 (512) 555-0100'},{address:'Austin, Texas 78701'},{phone:'+353 1 234 5678'},{phone:'214-555-0182'}])('skips all registry work and proof credit for inferred non-UK leads %#',async saved=>{
  Object.assign(lead,saved);const before=lead.country;
  resolveOrgApiKey.mockImplementation(async(_s,_o,provider)=>['gemini','companies_house'].includes(provider)?'fake':null);
  searchCompaniesByName.mockResolvedValue([{company_number:'01234567',title:'ACME LIMITED',company_status:'active'}]);
@@ -72,6 +72,15 @@ it.each([{phone:'+1 (512) 555-0100'},{address:'Austin, Texas 78701'},{phone:'+35
  expect(out.status).toBe('done');expect(out.domains.steps).toContain('Companies House: skipped, this company does not look UK-based.');
  expect(searchCompaniesByName).not.toHaveBeenCalled();expect(fetchCompanyProfile).not.toHaveBeenCalled();expect(fetchActiveOfficers).not.toHaveBeenCalled();
  expect(out.domains.credits.ai).not.toHaveProperty('company registry proof');expect(lead.country).toBe(before);
+});
+it('uses a saved company number with a US phone without changing country or spending proof credit',async()=>{
+ lead.phone='+1 (214) 555-0182';lead.company_number='12345678';const country=lead.country;
+ resolveOrgApiKey.mockImplementation(async(_s,_o,provider)=>provider==='companies_house'?'fake':null);
+ fetchCompanyProfile.mockResolvedValue({name:'Acme Limited',status:'active',address:null,locality:null});
+ const out=await run();expect(out.status).toBe('done');
+ expect(fetchCompanyProfile).toHaveBeenCalledExactlyOnceWith('12345678','fake');
+ expect(out.domains.credits.ai).not.toHaveProperty('company registry proof');
+ expect(lead.country).toBe(country);expect(lead.company_number).toBe('12345678');
 });
 it('still searches a saved GB lead with a .com website',async()=>{
  lead.country='GB';lead.website='https://acme.com';

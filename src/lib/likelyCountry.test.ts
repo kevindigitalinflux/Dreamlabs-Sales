@@ -3,6 +3,15 @@ import {likelyCountry} from '../../supabase/functions/_shared/likelyCountry';
 
 it.each([
  [{phone:'+1 (512) 555-0100'},'non_GB'],
+ [{phone:'(214) 555-0182'},'non_GB'],
+ [{phone:'214-555-0182'},'non_GB'],
+ [{phone:'1 214 555 0182'},'non_GB'],
+ [{phone:'020 7946 0958'},'unknown'],
+ [{phone:'01 234 5678'},'unknown'],
+ [{additional_phones:['214.555.0182']},'non_GB'],
+ [{phone:'114-555-0182'},'unknown'],
+ [{phone:'214-155-0182'},'unknown'],
+ [{country:'GB',phone:'214-555-0182'},'GB'],
  [{address:'123 Main St, Austin, Texas 78701'},'non_GB'],
  [{address:'Austin, TX 78701-1234'},'non_GB'],
  [{additional_phones:['invalid','+353 1 234 5678']},'non_GB'],

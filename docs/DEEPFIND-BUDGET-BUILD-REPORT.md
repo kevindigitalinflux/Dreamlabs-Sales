@@ -2,14 +2,16 @@
 
 ## Result
 
-All four fixes are built and tested locally on codex/deepfind-budget from fetched origin/main 3e0f2a310a95bb06480b4232d239c7814b0d8a25. Kevin directs; Claude architects/reviews; Codex builds. Independent review and live improvement remain unverified. No push, merge, deployment, migration execution, VPS change, installation, paid fallback or real provider request is authorized or occurred.
+All six local fixes (original Fixes 1–4 plus the appended Fix 5 and Fix 2b) are built and tested on codex/deepfind-budget from fetched origin/main 3e0f2a310a95bb06480b4232d239c7814b0d8a25. The latest continuation starts at 02b33b6 and supersedes the earlier direct-URL Gemini acceptance and non-UK saved-number exclusion. Kevin directs; Claude architects/reviews; Codex builds. Independent review and live improvement remain unverified. No push, merge, deployment, migration execution, VPS change, installation, paid fallback or real provider request is authorized or occurred.
 
 ## Acceptance evidence
 
 1. MET (Fix 1): three engine fixtures prove both budgets reach discovery; three discovery fixtures prove webSearch receives 25,000 ms with 120 seconds left, 10,000 ms with 40 seconds left and is not started below 34 seconds. Web starts before the site read. Other discovery work retains budgetMs capped at 10,000 ms. The optional webBudgetMs defaults to the prior budget for existing callers.
-2. MET (Fix 2): fifteen pure saved-location fixtures and four engine fixtures pass. +1, Texas and +353 lead fixtures make no Companies House call and use no company registry proof credit. GB with a .com site still searches; UK postcode and unknown fixtures preserve eligibility. Saved country is never assigned or changed. The exact required skip line is emitted.
+2. MET (Fix 2, amended by Fix 2b): without a saved company number, +1, Texas and +353 lead fixtures make no Companies House call and use no company registry proof credit. GB with a .com site still searches; UK postcode and unknown fixtures preserve eligibility. Saved country is never assigned or changed. The exact required skip line is emitted. A saved company number again takes precedence under Fix 2b below.
 3. MET (Fix 3): seven new fixtures prove explicit 503/not_configured status, quiet refusal, one refund, no later worker dispatch for this lead, other 503s remaining unreachable, unchanged Gemini rung reservations and saved searxng=0/gemini=2. A new lead can retry the worker.
 4. MET (Fix 4): eight error fixtures first logged search_failed, then emitted only timeout, http_429, http_503, bad_json or network as applicable. Assertions prove no key/prompt/query/reply/error text is logged. All existing fallback, grounding and cap cases still pass.
+5. MET (Fix 5): natural-language Gemini role prompt, grounded structured people, shared URL-free judge, optional independently proven LinkedIn and two added numeric people counters pass the appended contract/engine fixtures. SearXNG policy and its 48 judge fixtures remain unchanged.
+6. MET (Fix 2b): quoted ten/eleven-digit North American formats infer non_GB; quoted UK/Irish national formats remain unknown. Saved company numbers again fetch registry profiles even for explicit/inferred non-UK leads. Country and saved number remain unchanged. Latest gates: 276 app files / 3,603 passed / one existing skip; 8 wrapper files / 166 passed; all seven PASS.
 
 ## What changed
 
@@ -105,7 +107,7 @@ MET: the redirect-contract fixture is kept with LinkedIn; the same supported per
 
 Diagnostics retain the zero-kept-person emission rule. people_lines counts decoded objects with all four correctly typed person fields; people_kept records the number passing grounding and the judge (zero in an emitted zero-person diagnostic). Existing lines_parsed counts all decoded JSON lines; profile_urls now counts valid linkedin_url values from person objects. The other source counters retain their meaning. The result object contains only seven numeric counts; it stores no new name, URL, query, prompt, reply or evidence text. Successful person replies do not emit a fallback-shape diagnostic, preserving the existing rule.
 
-TDD: ten new fixtures failed before implementation at the missing prompt/judge exports, absent people return, missing accepted contact and missing counters. They now pass; one extra engine matrix case checks the no-LinkedIn contact. The existing cap, rung, cancellation, role/title/name, company, blank-fill, no-enrollment and fixed-log tests all pass. The earlier prompt export's missing function and the old empty-hit behavior were observed before production edits. An intermediate TypeScript run caught zero-argument fixture-spy inference and an unused import; both were corrected before the full gates.
+TDD: ten new fixtures failed before implementation at the missing prompt/judge exports, absent people return, missing ladder person and missing counters. They now pass; one extra engine matrix case checks the no-LinkedIn contact. The existing cap, rung, cancellation, role/title/name, company, blank-fill, no-enrollment and fixed-log tests all pass. The earlier prompt export's missing function and the old empty-hit behavior were observed before production edits. An intermediate TypeScript run caught zero-argument fixture-spy inference and an unused import; both were corrected before the full gates.
 
 All seven gates before Fix 5: 276 app files / 3,591 passed / one existing opt-in skip; 8 wrapper files / 166 passed; both TypeScript, build, whitespace and edge29 PASS. Logs: .superpowers/deepfind-role-people-fix5-*.log. Fix 5 is the commit containing this continuation entry.
 
@@ -123,3 +125,32 @@ Changed existing assertions/fixtures for Fix 5 (complete inventory):
 - The engine's supported-profile fixture retains all old assertions and additionally checks the saved link; its new unsupported-link companion expects null. Test transport helpers supply the structured company/rung context the real ladder now passes. No SearXNG judge assertion changed or was weakened.
 
 No schema, migration, usage cap, retry delay, role ladder, two-person limit or enrollment rule changed. judgeRoleHit was refactored onto a shared evidence core, with its profile admission/normalization and acceptance policy preserved by its unchanged fixtures. The new per-provider return shape prevents Gemini people from being forced through an invented profile URL.
+
+### Fix 2b — North American national phones and saved-number precedence
+
+MET: after the existing international shared-parser path, likelyCountry removes only spaces, dots, dashes and brackets from national phone text. Exactly ten digits with area-code and exchange leading digits 2–9, or eleven digits with a leading 1, infer non_GB; a raw leading zero never qualifies through this national heuristic. This applies to primary and additional phones. Explicit saved country retains its first priority. No lead.country or company_number is written by inference.
+
+The quoted (214) 555-0182, 214-555-0182 and 1 214 555 0182 fixtures were unknown before the fix and now return non_GB. 020 7946 0958 and 01 234 5678 remain unknown. Extra fixtures cover dotted additional phones, invalid area/exchange leading digits and explicit GB precedence. The real engine skips registry work/proof credits for an unsaved national US phone. No new country is assigned.
+
+As Kevin now explicitly directs, clean saved company_number is resolved before registrySkipReason. Saved numbers therefore reuse Companies House even when likelyCountry says non_GB. This restores the earlier saved-number exception and supersedes this report's original Fix 2 paragraphs where they conflict. Leads without a saved number still use the non-UK skip rule. A saved-number + US phone resolver and engine fixture prove the profile call, unchanged country/number and no separate registry proof credit.
+
+TDD: the three quoted US formats, three explicit-country saved-number cases and the saved-number/+1-phone case failed before production edits. Added engine and dotted-additional-phone fixtures also failed before implementation. The final focused 75 tests pass. New tests: nine country matrix rows, one resolver fixture and two engine cases. Changed existing assertions: the IE/US/OTHER saved-number matrix now expects saved/12345678 and exactly one profile fetch instead of not_uk/null/no fetch. Unknown/null/GB saved-number cases and no-saved-number skips are unchanged. No other old assertion changed in Fix 2b.
+
+All seven gates before Fix 2b: 276 app files / 3,603 passed / one existing opt-in skip; 8 wrapper files / 166 passed; both TypeScript, build, whitespace and edge29 PASS. Logs: .superpowers/deepfind-national-phone-fix2b-*.log. No new wrapper, schema, migration, dependency, environment, secret or cap change.
+
+### Continuation commits and gate counts
+
+| Fix | Commit | App files / passed | Wrapper files / passed | Other gates |
+| --- | --- | --- | --- | --- |
+| 5 — natural-language grounded people | 3b99783 | 276 / 3,591 | 8 / 166 | All PASS |
+| 2b — national phones / saved number | Commit containing this final continuation report, titled fix: recognize national US phones and prefer saved registry numbers | 276 / 3,603 | 8 / 166 | All PASS |
+
+Both commits run the same seven required gates and local placeholder environment documented above, with explicit staging and one commit per fix. Existing opt-in skip and large-chunk build warning remain. The continuation adds 23 passing tests against 3,580 (11 in Fix 5 and 12 in Fix 2b). No provider request, key access, installation, spending, production read/write, SQL/audit, migration, VPS change, push, merge or deployment occurred. Subscription usage is unavailable. The exact final hash is supplied in the final handoff; a commit cannot include its own hash.
+
+### Continuation redeploy surface and limits
+
+A fresh relative-import traversal from every edge index.ts (including dynamic and type-only imports) gives the same conservative ten-function union: enrich-leads-bulk, find-decision-makers, generate-email, org-api-settings, run-deep-find, run-lookup-jobs, run-selected-autopilot, run-verify-queue, scrape-companies-house and send-email. The changed targets for this continuation are deepFind, deepFindRegistry, likelyCountry, roleSearch, roleSearchRules, searchProvider and teamPageRules. Frontend also consumes likelyCountry through the shared registry helper. Graph evidence is ignored .superpowers/deepfind-continuation-redeploy.json. This is a proposed publication surface only. No wrapper/container, schema/migration, secret or environment-variable rollout is needed.
+
+NOT VERIFIED: whether the revised prompt grounds in the deployed model, real grounding metadata, real current-person/company accuracy, live timing/credits/pass marks, database/RLS/concurrency, visual/mobile, container/provider runtime and independent re-review. Source/fixture evidence does not prove production uplift. The supplied source-zero production evidence was not independently fetched. These fixtures are synthetic and privacy-safe; no real personal response was captured. The earlier one-call authorization remains withdrawn.
+
+No unresolved build question. SearXNG still uses its existing query and judge policy; Gemini uses grounded person records and a shared evidence core without needing a profile URL. A valid person can be saved without LinkedIn, never enrolled automatically. Diagnostic emission remains restricted to zero-kept-person results, so people_kept is zero in those saved diagnostic objects. The current full local branch contains six implementation commits; the newest two supersede the specific earlier policies listed above. Codex stops here. Claude reviews the continuation, then Kevin separately authorizes any rollout/live checks. Read the top of docs/HANDOFF.md to resume.

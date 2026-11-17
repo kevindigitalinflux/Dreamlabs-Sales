@@ -56,13 +56,12 @@ export async function resolveRegistry(
   proof: { pages?: string[]; website?: string | null; left?: () => number; checkpoint?: () => Promise<void>; cached?: CompanyCandidate[]; cachedPeople?: Record<string, string[]>; priorEvidence?: Record<string, RegistryEvidence>; webNumbers?: string[]; applyNumber?: (number: string) => Promise<boolean> } = {},
 ): Promise<RegistryResult> {
   const empty = { address: null, locality: null, candidates: [] as CompanyCandidate[] };
-  const skip = registrySkipReason(lead);
-  if (skip === 'not_uk') return { ...empty, number: null, name: null, how: skip };
   const saved = cleanCompanyNumber(lead.company_number);
   if (saved) {
     const profile = chKey ? await fetchCompanyProfile(saved, chKey) : null;
     return { ...empty, number: saved, name: profile?.name ?? null, address: profile?.address ?? null, locality: profile?.locality ?? null, how: 'saved' };
   }
+  const skip = registrySkipReason(lead);
   if (skip) return { ...empty, number: null, name: null, how: skip };
   const rawId = str(lead.raw_lead_id);
   if (rawId) {
