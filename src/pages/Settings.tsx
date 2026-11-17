@@ -68,14 +68,13 @@ function CompanyContextCard({ orgId, orgName, isOrgAdmin }: { orgId: string; org
 
   if (loading) return <Skeleton className="h-48 w-full max-w-xl" />;
 
+  const firstLine = value.trim().split(/\r?\n/)[0] ?? '';
   return (
-    <Card>
+    <Collapsible icon={Building2} title="Company context" summary={firstLine ? firstLine.slice(0, 80) : 'Not written yet'}>
       <div className="flex flex-col gap-3">
-        <h2 className="text-[18px] font-bold">Company context</h2>
         <p className="text-sm text-muted">
-          What does {orgName} actually do, who do you sell to, what tone should outreach use? This gets
-          included in every AI-drafted email and LinkedIn message for this org — without it, drafts won't
-          make any claim about what {orgName} does at all, since the AI never invents facts it wasn't given.
+          Tell the AI what {orgName} does, who you sell to and what tone to use. It goes into every AI-drafted email and
+          LinkedIn message. Without it, drafts make no claim about what {orgName} does, because the AI never invents facts.
         </p>
         <Textarea
           label="About your company"
@@ -96,7 +95,7 @@ function CompanyContextCard({ orgId, orgName, isOrgAdmin }: { orgId: string; org
           </div>
         )}
       </div>
-    </Card>
+    </Collapsible>
   );
 }
 
@@ -209,14 +208,10 @@ export function Settings() {
           <SetupSkillCard isAdmin={currentOrg.role === 'admin'} onApplied={() => setImportRevision((v) => v + 1)} />
         </Collapsible>
       )}
-      <Collapsible icon={Building2} title="Company and AI" summary="Company context, customer profiles, placeholders">
-      <div className="flex flex-col gap-4">
       {currentOrg && <CompanyContextCard key={`context-${importRevision}`} orgId={currentOrg.id} orgName={currentOrg.name} isOrgAdmin={currentOrg.role === 'admin'} />}
       {currentOrg && <IdealCustomerProfilesCard key={`icps-${importRevision}`} isOrgAdmin={currentOrg.role === 'admin'} />}
       <CompanyProfileCard />
       {currentOrg && <CustomPlaceholdersCard isOrgAdmin={currentOrg.role === 'admin'} />}
-      </div>
-      </Collapsible>
       {currentOrg && (
         <Collapsible icon={Gauge} title="Usage limits" summary="Daily allowances for the lookup worker">
           <UsageLimitsCard orgId={currentOrg.id} isOrgAdmin={currentOrg.role === 'admin'} />

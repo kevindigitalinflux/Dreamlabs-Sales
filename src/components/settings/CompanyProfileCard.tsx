@@ -3,7 +3,8 @@ import { supabase } from '../../lib/supabase';
 import { PACKAGE_TIERS } from '../../lib/utils';
 import { useOrg } from '../../hooks/useOrg';
 import { Button } from '../ui/Button';
-import { Card } from '../ui/Card';
+import { Collapsible } from '../ui/Collapsible';
+import { Package } from 'lucide-react';
 import { Textarea } from '../ui/Input';
 
 const MAX_PACKAGES = 30;
@@ -57,9 +58,8 @@ export function CompanyProfileCard() {
   }
 
   return (
-    <Card>
+    <Collapsible icon={Package} title="Company profile customization" summary={text.trim() ? `${text.trim().split(/\r?\n/).filter(Boolean).length} packages` : 'Using the default packages'}>
       <div className="flex flex-col gap-3">
-        <h2 className="text-[18px] font-bold">Company profile customization</h2>
         <p className="text-sm text-muted">
           Packages: the offers {currentOrg.name} can tag a lead with on the Pipeline. Add one per line.
           Leave it empty to use the default list ({PACKAGE_TIERS.slice(0, 3).map((t) => t.label).join(', ')}…).
@@ -83,6 +83,6 @@ export function CompanyProfileCard() {
           </div>
         )}
       </div>
-    </Card>
+    </Collapsible>
   );
 }

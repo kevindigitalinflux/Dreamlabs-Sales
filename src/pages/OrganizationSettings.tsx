@@ -1,15 +1,22 @@
 import { PlacesUsageMeter } from '../components/settings/PlacesUsageMeter';
 import { useState } from 'react';
-import { CheckCircle2, KeyRound } from 'lucide-react';
+import { Bot, CheckCircle2, Flame, Globe, KeyRound, Landmark, MapPin, Search, Sparkles, Users } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useOrgApiSettings } from '../hooks/useOrgApiSettings';
 import type { OrgApiSetting } from '../hooks/useOrgApiSettings';
-import { Card } from '../components/ui/Card';
+import { Collapsible } from '../components/ui/Collapsible';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { ProviderGuide } from '../components/settings/ProviderGuide';
 import { useOrg } from '../hooks/useOrg';
 import { LookupWorkerCard } from '../components/settings/LookupWorkerCard';
+
+/** One accent icon per provider, so the list can be scanned without reading every name. */
+const PROVIDER_ICONS: Partial<Record<OrgApiSetting['provider'], LucideIcon>> = {
+  gemini: Sparkles, anthropic: Bot, google_places: MapPin, companies_house: Landmark, cro: Landmark,
+  opencorporates: Globe, apollo: Users, hunter: Search, firecrawl: Flame,
+};
 
 const PROVIDERS: {
   key: OrgApiSetting['provider'];
@@ -164,15 +171,17 @@ function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configur
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-control border border-line p-4">
-      <div className="flex items-center gap-2">
-        <p className="font-semibold">{label}</p>
-        {configured && (
-          <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-success">
-            <CheckCircle2 className="h-3 w-3" aria-hidden /> Configured
-          </span>
-        )}
-      </div>
+    <Collapsible
+      icon={PROVIDER_ICONS[provider] ?? KeyRound}
+      title={label}
+      summary={configured ? <span className="font-medium text-success">Configured</span> : 'Not set up yet'}
+    >
+    <div className="flex flex-col gap-3">
+      {configured && (
+        <span className="flex w-fit items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-success">
+          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Configured
+        </span>
+      )}
       <ProviderGuide url={url} ctaLabel={ctaLabel} freeText={freeText} steps={steps} />
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-0 flex-1 basis-48">
@@ -184,6 +193,7 @@ function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configur
       {children}
       {msg && <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : 'text-success'}`}>{msg.text}</p>}
     </div>
+    </Collapsible>
   );
 }
 
@@ -208,7 +218,7 @@ export function OrganizationSettings() {
       {currentOrg?.role === 'admin' && !loadError && <LookupWorkerCard key={currentOrg.id}
         configured={settings.some((s) => s.provider === 'lookup_worker' && s.is_configured)}
         shared={sharedWorker} host={workerHost} onSave={(value) => save('lookup_worker', value)} onRemove={removeWorker} />}
-      <Card>
+      <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-3">
           {PROVIDERS.filter((p) => p.key !== 'firecrawl' || currentOrg?.role === 'admin').map((p) => (
             <ProviderRow
@@ -227,7 +237,7 @@ export function OrganizationSettings() {
             </ProviderRow>
           ))}
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

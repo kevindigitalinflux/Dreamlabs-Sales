@@ -1,6 +1,7 @@
 import { workerConnectionStatus } from '../../lib/workerStatus';
 import { useState } from 'react';
-import { Card } from '../ui/Card';
+import { Server } from 'lucide-react';
+import { Collapsible } from '../ui/Collapsible';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 
@@ -23,8 +24,7 @@ export function LookupWorkerCard({ configured, shared, host, onSave, onRemove }:
       setMessage('Could not update the worker connection. Try again.');
     } finally { setBusy(false); }
   }
-  return <Card><div className="flex min-w-0 flex-col gap-3">
-    <h2 className="text-lg font-bold">Lookup worker</h2>
+  return <Collapsible icon={Server} title="Lookup worker" summary={configured ? <span className="font-medium text-success">Connected</span> : 'Not connected'}><div className="flex min-w-0 flex-col gap-3">
     <p className="break-words text-sm">{workerConnectionStatus(configured, shared, host)}</p>
     <Input label="Worker address" type="url" autoComplete="off" placeholder="https://worker.example.com"
       value={address} onChange={(e) => setAddress(e.target.value)} disabled={busy} />
@@ -35,5 +35,5 @@ export function LookupWorkerCard({ configured, shared, host, onSave, onRemove }:
       {configured && <Button variant="secondary" onClick={() => void submit(true)} disabled={busy}>Remove</Button>}
     </div>
     {message && <p role="status" className="text-sm">{message}</p>}
-  </div></Card>;
+  </div></Collapsible>;
 }
