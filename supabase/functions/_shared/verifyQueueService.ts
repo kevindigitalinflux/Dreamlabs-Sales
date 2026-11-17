@@ -1,3 +1,4 @@
+import { checkWindowEnd } from './deepFindParallel.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { makeWorkerClient } from './workerClient.ts';
 import type { WorkerConfig } from './workerRules.ts';
@@ -34,12 +35,12 @@ export function createQueueDeps(service: SupabaseClient, sharedOrgIds?: string, 
       const q = current();
       if (q.run_id !== runId || q.lead_id !== leadId) return false;
       const [run, lead] = await Promise.all([
-        service.from('deep_find_runs').select('id,org_id,created_by,status,started_at').eq('id', runId).eq('org_id', q.org_id).maybeSingle(),
+        service.from('deep_find_runs').select('id,org_id,created_by,status,started_at,lead_count,deep_find_parallel').eq('id', runId).eq('org_id', q.org_id).maybeSingle(),
         service.from('leads').select('id').eq('id', leadId).eq('org_id', q.org_id).maybeSingle(),
       ]);
       if (run.error || lead.error || !run.data || !lead.data || !['active', 'completed'].includes(run.data.status)
         || !Number.isFinite(Date.parse(run.data.started_at)) || !Number.isFinite(Date.parse(recoveryFinishedAt ?? q.created_at))
-        || Date.now() >= Date.parse(run.data.started_at) + 3 * QUEUE_RUN_WINDOW_MS
+        || Date.now() >= checkWindowEnd(Date.parse(run.data.started_at), run.data.lead_count, run.data.deep_find_parallel)
         || Date.now() >= Date.parse(recoveryFinishedAt ?? q.created_at) + QUEUE_RUN_WINDOW_MS) return false;
       const [member, access] = await Promise.all([
         service.from('org_members').select('user_id').eq('org_id', q.org_id).eq('user_id', run.data.created_by).maybeSingle(),

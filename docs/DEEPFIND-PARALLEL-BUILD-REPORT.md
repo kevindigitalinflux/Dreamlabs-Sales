@@ -71,3 +71,70 @@ Every Gemini transport, grounded and JSON, now requires the service-only gemini_
 Worker quota/refund RPCs remain authoritative. Busy/limit/domain-stalled refusals no longer consume domain starts/canary or the per-lead SMTP allowance. Run Hunter/AI caps are not reserved by worker calls. Daily usage refusals atomically claim one notice per run/resource; later leads suppress that repeated line. SQL failure suppresses repeat notices and emits a fixed diagnostic.
 
 New admission/worker/domain-state tests were observed red before implementation. Existing assertion changed: the search-provider HTTP 429 case now expects busy instead of failed. Existing known-person, monthly-meter and drafting transport fixtures mock successful admission; their behavioral assertions are unchanged. First full test gate exposed those fixtures and the intended 429 assertion; after updates all seven gates pass: 280 app files / 3,629 passed / one existing skip; wrapper 8 /166; edge29. Logs parallel-task4-*.log. Task 3 commit 746e8c1. SQL atomicity is reasoned, not executed.
+
+## Rolled-back migration and SQL checks (written, NOT EXECUTED)
+
+Run only against an empty disposable database with migrations through 077. The migration has no transaction boundary; include it inside this transaction. A raised assertion requires an explicit ROLLBACK. This does not prove simultaneous PostgreSQL scheduling; overlapping sessions and one real run remain required after approval.
+
+```sql
+BEGIN;
+-- psql, from the repository root:
+-- \i supabase/migrations/078_deep_find_parallel.sql
+-- SQL Editor: paste the full 078 body above the following DO block.
+DO $$
+DECLARE owner_id uuid:=gen_random_uuid(); org uuid; pipe uuid;
+ a uuid; b uuid; lead uuid; picked uuid; i integer; signature text; client_role text;
+BEGIN
+ ASSERT NOT EXISTS(SELECT 1 FROM public.deep_find_runs WHERE status='active'), 'Empty disposable runs required';
+ ASSERT (SELECT deep_find_parallel=3 AND gemini_per_minute=12 FROM public.deep_find_runtime_config WHERE singleton);
+ INSERT INTO auth.users(instance_id,id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
+ VALUES('00000000-0000-0000-0000-000000000000',owner_id,'authenticated','authenticated','parallel-audit@example.test','',now(),'{}','{}',now(),now());
+ INSERT INTO public.organizations(name,created_by) VALUES('Parallel audit',owner_id) RETURNING id INTO org;
+ INSERT INTO public.org_members(org_id,user_id,role) VALUES(org,owner_id,'admin');
+ INSERT INTO public.pipelines(org_id,name,is_default,created_by) VALUES(org,'Parallel audit',false,owner_id) RETURNING id INTO pipe;
+ PERFORM set_config('request.jwt.claims','{"role":"service_role"}',true);
+ INSERT INTO public.deep_find_runs(org_id,created_by,lead_count,started_at) VALUES(org,owner_id,2,now()-interval '2 minutes') RETURNING id INTO a;
+ INSERT INTO public.deep_find_runs(org_id,created_by,lead_count,started_at) VALUES(org,owner_id,2,now()-interval '1 minute') RETURNING id INTO b;
+ ASSERT NOT public.deep_find_complete(a), 'A run cannot complete before its lead rows exist';
+ FOR i IN 1..4 LOOP
+  INSERT INTO public.leads(org_id,pipeline_id,business_name,created_by) VALUES(org,pipe,'Parallel fixture '||i,owner_id) RETURNING id INTO lead;
+  INSERT INTO public.deep_find_leads(org_id,run_id,lead_id) VALUES(org,CASE WHEN i<=2 THEN a ELSE b END,lead);
+ END LOOP;
+ SELECT run_id INTO picked FROM public.deep_find_claim(1); ASSERT picked=a;
+ SELECT run_id INTO picked FROM public.deep_find_claim(1); ASSERT picked=b;
+ SELECT run_id INTO picked FROM public.deep_find_claim(1); ASSERT picked=a;
+ SELECT run_id INTO picked FROM public.deep_find_claim(1); ASSERT picked=b;
+ ASSERT NOT EXISTS(SELECT 1 FROM public.deep_find_claim(0));
+ ASSERT public.deep_find_check_deadline(now(),50,1)=now()+interval '3 hours';
+ ASSERT public.deep_find_check_deadline(now(),300,3)=now()+interval '260 minutes';
+ ASSERT public.deep_find_check_deadline(now(),1000,1)=now()+interval '8 hours';
+ ASSERT (SELECT deep_find_parallel=3 FROM public.deep_find_runs WHERE id=a);
+ UPDATE public.deep_find_runtime_config SET deep_find_parallel=1 WHERE singleton;
+ ASSERT (SELECT deep_find_parallel=3 FROM public.deep_find_runs WHERE id=a), 'Snapshot changed';
+ BEGIN UPDATE public.deep_find_runtime_config SET deep_find_parallel=0; RAISE EXCEPTION 'Missing lower bound'; EXCEPTION WHEN check_violation THEN NULL; END;
+ BEGIN UPDATE public.deep_find_runtime_config SET deep_find_parallel=6; RAISE EXCEPTION 'Missing upper bound'; EXCEPTION WHEN check_violation THEN NULL; END;
+ DELETE FROM public.gemini_minute_usage;
+ FOR i IN 1..12 LOOP ASSERT public.gemini_admit(); END LOOP;
+ ASSERT NOT public.gemini_admit(), 'Thirteenth call admitted';
+ ASSERT public.deep_find_notice_once(a,'worker_scrape');
+ ASSERT NOT public.deep_find_notice_once(a,'worker_scrape');
+ FOREACH client_role IN ARRAY ARRAY['anon','authenticated'] LOOP
+  ASSERT NOT has_table_privilege(client_role,'public.deep_find_runtime_config','UPDATE');
+  ASSERT NOT has_table_privilege(client_role,'public.gemini_minute_usage','SELECT');
+  FOREACH signature IN ARRAY ARRAY['public.deep_find_claim(integer)','public.deep_find_complete(uuid)',
+   'public.deep_find_housekeeping()','public.gemini_admit()','public.deep_find_notice_once(uuid,text)',
+   'public.deep_find_checks_claim(integer)','public.deep_find_checks_expire()'] LOOP
+   ASSERT NOT has_function_privilege(client_role,signature,'EXECUTE');
+   ASSERT has_function_privilege('service_role',signature,'EXECUTE');
+  END LOOP;
+ END LOOP;
+END $$;
+ROLLBACK;
+```
+
+## Task 5 — sized run backstop
+
+The exact deadline is started_at plus min(8 hours, max(3 hours, lead_count * 2 minutes / parallelism + 60 minutes)). New runs snapshot parallelism in a service-owned insert trigger; existing runs receive the default three. Queue SQL claim, stale recovery, expiry and edge canStillEdit use the same formula and snapshot. Queue-row sixty-minute windows and recoverProven's finished_at window are unchanged. Tests cover the three-hour floor, scaling and eight-hour ceiling. Counts above today's 50-lead cap test the formula only; lead caps are unchanged.
+
+No existing assertion changed. The SQL block above covers alternating claims, admission, notices, bounds, grants and deadline calculations but was not executed. App fixture tests do not establish SQL validity or concurrency.
+Task 5 gates: 281 app files / 3,632 passed / one existing skip; wrapper 8 /166; root and wrapper TypeScript, build, whitespace, edge29 PASS. Logs parallel-task5-*.log. Task 4 commit 29b55b0.
