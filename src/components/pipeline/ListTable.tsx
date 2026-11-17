@@ -21,7 +21,6 @@ interface ListTableProps {
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'business_name', label: 'Company' },
-  { key: 'owner_name', label: 'Owner' },
   { key: 'stage', label: 'Stage' },
   { key: 'readiness', label: 'Readiness' },
   { key: 'package_tier', label: 'Package' },
@@ -30,7 +29,7 @@ const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'last_contacted_at', label: 'Last contacted' },
 ];
 
-/** Sortable full-width lead table with sticky header; row click opens the panel. */
+/** Sortable lead table, one line per lead (owner under the company name, readiness as a short pill); row click opens the panel. */
 export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen, selected, onToggle, onToggleAll, deepFindRunning }: ListTableProps) {
   function assignee(lead: Lead): string {
     const p = profiles.find((x) => x.id === lead.assigned_to);
@@ -38,10 +37,10 @@ export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen, s
   }
 
   return (
-    <div className="overflow-x-auto rounded-surface border border-line">
-      <table className="w-full text-left text-sm">
+    <div className="overflow-x-auto rounded-surface border border-line bg-raised shadow-raised">
+      <table className="w-full whitespace-nowrap text-left text-sm">
         <thead className="sticky top-0 bg-card">
-          <tr className="border-b border-line text-xs font-semibold text-muted">
+          <tr className="border-b border-line text-[13px] font-medium text-muted">
             <th className="w-11 px-3">
               <input
                 type="checkbox"
@@ -64,7 +63,7 @@ export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen, s
         </thead>
         <tbody>
           {leads.map((lead) => (
-            <tr key={lead.id} onClick={() => onOpen(lead)} className="cursor-pointer border-b border-line last:border-0 hover:bg-surface/50">
+            <tr key={lead.id} onClick={() => onOpen(lead)} className="cursor-pointer border-b border-line last:border-0 hover:bg-surface">
               <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                 <input
                   type="checkbox"
@@ -75,16 +74,16 @@ export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen, s
                 />
               </td>
               <td className="px-3 py-3 font-semibold">
-                {lead.business_name}
+                <span className="block max-w-72 truncate">{lead.business_name}</span>
+                <small className="block max-w-72 truncate text-[13px] font-normal text-muted">{lead.owner_name ?? 'No owner yet'}</small>
                 {deepFindRunning?.has(lead.id) && (
                   <span className="ml-2 rounded-full bg-violet/15 px-2 py-0.5 text-[11px] font-semibold text-link">Deep find running</span>
                 )}
               </td>
-              <td className="px-3 py-3 text-muted">{lead.owner_name ?? '—'}</td>
               <td className="px-3 py-3"><StageBadge stage={lead.stage} /></td>
-              <td className="min-w-36 max-w-64 px-3 py-3"><ReadinessBadge readiness={lead.readiness} missing={lead.readiness_missing} /></td>
+              <td className="px-3 py-3"><ReadinessBadge compact readiness={lead.readiness} missing={lead.readiness_missing} /></td>
               <td className="px-3 py-3 text-muted">{packageLabel(lead.package_tier)}</td>
-              <td className="px-3 py-3">{lead.deal_value !== null ? formatCurrency(lead.deal_value) : '—'}</td>
+              <td className="px-3 py-3 tabular-nums">{lead.deal_value !== null ? formatCurrency(lead.deal_value) : '—'}</td>
               <td className={`px-3 py-3 ${isOverdue(lead.next_action_date) ? 'font-semibold text-attention' : 'text-muted'}`}>
                 {lead.next_action_date ? dueLabel(lead.next_action_date) : '—'}
               </td>

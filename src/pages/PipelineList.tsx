@@ -23,6 +23,7 @@ import { useDeepFindActivity } from '../hooks/useDeepFindActivity';
 import {useNeedsLook} from '../hooks/useNeedsLook';
 import { DEEP_FIND_MAX_LEADS } from '../lib/deepFindView';
 import { FilterBar } from '../components/pipeline/FilterBar';
+import { PipelineStats } from '../components/pipeline/PipelineStats';
 import { ListTable } from '../components/pipeline/ListTable';
 import { LeadPanel } from '../components/pipeline/LeadPanel';
 import { SharedPipelineBanner } from '../components/pipeline/SharedPipelineBanner';
@@ -172,7 +173,7 @@ export function PipelineList() {
       <SharedPipelineBanner />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-[28px] font-extrabold">Pipeline</h1>
+          <h1 className="text-[28px] font-bold">Pipeline</h1>
           <PipelineSwitcher />
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -239,7 +240,8 @@ export function PipelineList() {
         </div>
       )}
 
-      <FilterBar filters={filters} onChange={setFilters} profiles={profiles.filter((p) => p.role === 'contractor')} icps={icps} />
+      {!loading && !error && <PipelineStats leads={leads} />}
+      <FilterBar filters={filters} onChange={setFilters} profiles={profiles.filter((p) => p.role === 'contractor')} icps={icps} shown={visible.length} total={leads.length} />
       {needsLook.error&&<p role="alert" className="text-sm text-danger">{needsLook.error}</p>}
 
       {loading && <Skeleton className="h-64 w-full" />}
