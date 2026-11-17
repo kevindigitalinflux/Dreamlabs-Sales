@@ -70,7 +70,7 @@ export interface RoleLead { company: string; registeredName?: string | null; cit
 export interface RolePeopleInput extends RoleLead { roles: string[]; rung: RoleCandidate['rung'] }
 
 /** The same strict company comparison is used for search hits and source-only person proof. */
-function companyEvidenceMatcher(lead: RoleLead): (evidence: string) => boolean {
+export function companyEvidenceMatcher(lead: RoleLead): (evidence: string) => boolean {
   const companyWords = [lead.company, lead.registeredName ?? '', brandName(lead.company, lead.city)].map(distinctive).filter(list => list.length);
   const location = new Set(words(`${lead.city ?? ''} ${lead.country ?? ''}`));
   return evidence => {
@@ -83,7 +83,7 @@ function companyEvidenceMatcher(lead: RoleLead): (evidence: string) => boolean {
 }
 
 /** Share name, company, current-role and former-role policy without requiring a profile URL. */
-function judgeRoleEvidence(parts: string[], evidence: string, lead: RoleLead, rung: Rung): { ok: true; person: RoleCandidate } | { ok: false; why: RoleRejection } {
+export function judgeRoleEvidence(parts: string[], evidence: string, lead: RoleLead, rung: Rung): { ok: true; person: RoleCandidate } | { ok: false; why: RoleRejection } {
   const refuse = (why: RoleRejection) => ({ ok: false as const, why });
   const name = (parts[0]?.split(',')[0].trim().split(/\s+/) ?? []).filter(word => !/^\p{L}\.?$/u.test(word));
   if (name.length < 2 || name.length > 4 || !name.every(word => /^[\p{L}]+(?:[-'’][\p{L}]+)*$/u.test(word))) return refuse('no_name');
@@ -111,7 +111,7 @@ function judgeRoleEvidence(parts: string[], evidence: string, lead: RoleLead, ru
 }
 
 /** Extract company phrases without letting a matching brand hide a conflicting employer. */
-function personCompanyProof(person: { name: string; evidence: string }, lead: RoleLead, rung: Rung): { phrase: string; segment: string }[] {
+export function personCompanyProof(person: { name: string; evidence: string }, lead: RoleLead, rung: Rung): { phrase: string; segment: string }[] {
   const proof: { phrase: string; segment: string }[] = [];
   const names = [lead.company, lead.registeredName ?? '', brandName(lead.company, lead.city)].filter(Boolean);
   const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

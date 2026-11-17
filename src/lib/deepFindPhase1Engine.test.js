@@ -297,3 +297,8 @@ it('the real engine passes the twenty-five second role fallback budget',async()=
  findRolePeople.mockImplementationOnce(async input=>{await input.provider.search('fixture',{company:'Acme',roles:['Owner'],rung:'final'});return {people:[],searches:1,via:['gemini']};});
  await run();expect(geminiGroundedSearch).toHaveBeenCalled();expect(geminiGroundedSearch.mock.calls[0][2]).toBe(25000);
 });
+it('saves a trusted homepage owner pair as a team contact without enrollment',async()=>{
+ lead.website='https://acme.com';roleProfiles=[{id:'icp',org_id:'org',target_roles:['Owner']}];
+ readCompanyPages.mockImplementationOnce(async(_url,_budget,_extra,onPage)=>{const html='<html><body><footer>Owner, Gary Ramsay</footer></body></html>';onPage(html,'https://acme.com/');return [html]});
+ const out=await run();expect(contacts.find(c=>c.first_name==='Gary')).toMatchObject({last_name:'Ramsay',source:'team_page',include_in_sequences:false,title:'Owner'});expect(findRolePeople).not.toHaveBeenCalled();expect(out.people_found).toBe(1);
+});

@@ -660,7 +660,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (current.error) { steps.push('Role search: skipped, could not read saved data.'); break roleSearch; }
     const profile = chooseRoleProfile(profiles.data ?? [], run.org_id, str(lead.icp_id));
     const teamFound = teamPeopleForLead([...fetchedPhonePages, ...confirmedSites.flatMap(site => site.phonePages ?? [])], {
-      company: companyForRoles, confirmedDomains: discovery.domains.filter(domain => !domain.needs_check && verified.has(domain.domain)).map(domain => domain.domain),
+      company: companyForRoles, registeredName: registry.name, city: str(lead.city), country: str(lead.country), roles: roleLadder(profile).flatMap(rung => rung.roles), confirmedDomains: discovery.domains.filter(domain => !domain.needs_check && verified.has(domain.domain)).map(domain => domain.domain),
       suspectDomains: suspicion.suspect && siteDomain ? [siteDomain] : [],
     }).filter(person => !ownerSuppressed(person.first + ' ' + person.last));
     const teamPicked = pickTeamPeople(teamFound, roleLadder(profile));
