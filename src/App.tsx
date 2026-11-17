@@ -6,6 +6,7 @@ import { OrgProvider } from './hooks/useOrg';
 import { PipelineProvider } from './hooks/usePipeline';
 import { AdminRoute, ProtectedRoute } from './components/layout/ProtectedRoute';
 import { AppShell } from './components/layout/AppShell';
+import { UiPreview } from './pages/UiPreview';
 import { ComingSoon } from './components/layout/ComingSoon';
 import { SplashLoader } from './components/branding/SplashLoader';
 import { BigBubbles, BUBBLE_COVER_TOTAL_MS } from './components/branding/BigBubbles';
@@ -98,6 +99,7 @@ export function App() {
               <Route path="/pipeline/leads/:id" element={<LeadDetailPage />} />
               <Route path="/pipeline/manage" element={<PipelineManage />} />
               <Route path="/jobs" element={<Jobs />} />
+              {import.meta.env.DEV && <Route path="/preview/ui" element={<UiPreview />} />}
               <Route path="/jobs/lookup/:jobId" element={<LookupJob />} />
               <Route path="/pipeline/deep-find" element={<Navigate to="/jobs" replace />} />
               <Route path="/pipeline/deep-find/:runId" element={<DeepFindRun />} />
