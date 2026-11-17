@@ -29,11 +29,11 @@ export function TodaysFocus({ leads, onOpen }: TodaysFocusProps) {
               tabIndex={0}
               onClick={() => onOpen(lead)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onOpen(lead); }}
-              className={`flex cursor-pointer flex-wrap items-center gap-3 rounded-lg border p-3 hover:bg-surface/60 ${overdue ? 'border-red-500/40 bg-red-500/5' : 'border-line bg-card'}`}
+              className={`flex cursor-pointer flex-wrap items-center gap-3 rounded-lg border p-3 hover:bg-surface/60 ${overdue ? 'border-attention/40 bg-attention-soft' : 'border-line bg-card'}`}
             >
               <span className="font-heading text-sm font-bold">{lead.business_name}</span>
               <StageBadge stage={lead.stage} />
-              <span className={`text-xs font-semibold ${overdue ? 'text-danger' : 'text-link'}`}>
+              <span className={`text-xs font-semibold ${overdue ? 'text-attention' : 'text-link'}`}>
                 {dueLabel(lead.next_action_date!)}
               </span>
               {lead.next_action_note && <span className="w-full text-sm text-muted sm:w-auto sm:flex-1">{lead.next_action_note}</span>}

@@ -58,7 +58,7 @@ export function LeadCard({ lead, assigneeName, onOpen }: LeadCardProps) {
         </button>
       )}
       {due && lead.next_action_date && (
-        <p className={`flex items-center gap-1.5 text-xs font-semibold ${isOverdue(lead.next_action_date) ? 'text-danger' : 'text-link'}`}>
+        <p className={`flex items-center gap-1.5 text-xs font-semibold ${isOverdue(lead.next_action_date) ? 'text-attention' : 'text-link'}`}>
           <AlertCircle className="h-3.5 w-3.5" aria-hidden />
           {dueLabel(lead.next_action_date)}
         </p>

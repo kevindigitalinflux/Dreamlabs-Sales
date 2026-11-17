@@ -85,7 +85,7 @@ export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen, s
               <td className="min-w-36 max-w-64 px-3 py-3"><ReadinessBadge readiness={lead.readiness} missing={lead.readiness_missing} /></td>
               <td className="px-3 py-3 text-muted">{packageLabel(lead.package_tier)}</td>
               <td className="px-3 py-3">{lead.deal_value !== null ? formatCurrency(lead.deal_value) : '—'}</td>
-              <td className={`px-3 py-3 ${isOverdue(lead.next_action_date) ? 'font-semibold text-danger' : 'text-muted'}`}>
+              <td className={`px-3 py-3 ${isOverdue(lead.next_action_date) ? 'font-semibold text-attention' : 'text-muted'}`}>
                 {lead.next_action_date ? dueLabel(lead.next_action_date) : '—'}
               </td>
               <td className="px-3 py-3 text-muted">{lead.last_contacted_at ? formatShortDate(lead.last_contacted_at) : 'Never'}</td>

@@ -81,8 +81,8 @@
   --color-danger-strong: #C40A0A;
   /* Violet for outlines, selected borders and radio fills: the brand violet in light, a lighter violet in dark (brand violet on the dark card is about 2.9:1). */
   --color-violet-line: #8B32FF;
-  --color-success: #1D8660;
-  --color-warning: #986E03;
+  --color-success: #17734F;
+  --color-warning: #7F5C02;
 
   --font-heading: "Montserrat", ui-sans-serif, system-ui, sans-serif;
   --font-body: "DM Sans", ui-sans-serif, system-ui, sans-serif;
