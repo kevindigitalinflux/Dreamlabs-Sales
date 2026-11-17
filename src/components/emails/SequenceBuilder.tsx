@@ -3,7 +3,7 @@ import { DndContext, closestCenter } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Plus, Trash2 } from 'lucide-react';
+import { CalendarClock, GripVertical, ListOrdered, Plus, Target, Trash2 } from 'lucide-react';
 import { timelineLabel } from '../../lib/sequenceMath';
 import { useTemplates } from '../../hooks/useTemplates';
 import { useCategories } from '../../hooks/useCategories';
@@ -17,6 +17,8 @@ import type { EmailSequence, SequenceStep } from '../../types';
 import { Button } from '../ui/Button';
 import { Input, SelectField } from '../ui/Input';
 import { Modal } from '../ui/Modal';
+import { Collapsible } from '../ui/Collapsible';
+import { SectionTitle } from '../ui/SectionTitle';
 
 interface SequenceBuilderProps {
   sequence: EmailSequence | null;
@@ -63,7 +65,8 @@ function StepCard({ index, step, options, onChange, onRemove }: {
   const missing = !options.some((o) => o.value === current);
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }}
-      className="flex min-w-0 items-end gap-2 rounded-control border border-line bg-raised/40 p-3">
+      className="flex min-w-0 items-end gap-2 rounded-surface border border-l-4 border-line border-l-violet-line bg-raised p-3 shadow-raised">
+      <span aria-hidden className="mb-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-nested bg-violet/15 font-heading text-sm font-bold text-link">{index + 1}</span>
       <button type="button" {...attributes} {...listeners} aria-label="Reorder step" className="mb-1 flex h-11 w-11 shrink-0 cursor-grab items-center justify-center rounded-control text-muted hover:bg-surface"><GripVertical className="h-4 w-4" aria-hidden /></button>
       {/* shrink-0 keeps the days box a fixed, readable width however long the template name is. */}
       <div className="w-24 shrink-0">
@@ -127,43 +130,59 @@ export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }
     onClose();
   }
 
+  const footer = (
+    <div className="flex flex-col gap-2">
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      <div className="flex items-center justify-between gap-2">
+        {sequence && !sequence.is_default ? <Button variant="ghost" onClick={() => { setBusy(true); void onDelete(sequence.id).then((err) => { setBusy(false); if (err) setError(err); else onClose(); }); }} disabled={busy} loading={busy}>Delete</Button> : <span />}
+        <Button onClick={() => void handleSave()} disabled={busy} loading={busy}>{busy ? 'Saving…' : 'Save sequence'}</Button>
+      </div>
+    </div>
+  );
+
   return (
-    <Modal open onClose={onClose} title={sequence ? `Edit — ${sequence.name}` : 'New sequence'}>
-      <div className="flex flex-col gap-4">
-        <Input label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-        <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={form.is_active !== false}
-          onChange={event => setForm(previous => ({ ...previous, is_active: event.target.checked }))} />Active sequence (allow enrolment and drafting)</label>
-        <CategoryField value={form.category ?? ''} onChange={(category) => setForm((f) => ({ ...f, category }))} suggestions={categorySuggestions} />
-        <IcpSelect
-          icps={icps}
-          value={form.icp_id}
-          onChange={(icp_id) => setForm((f) => ({ ...f, icp_id }))}
-          hint="The default customer profile for this sequence's emails. A step whose template has its own profile uses that instead, and a lead's own profile always wins."
-        />
-        <Input label="Description (optional)" value={form.description ?? ''} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value || null }))} />
-        <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={form.steps.map((_, i) => `step-${i}`)} strategy={verticalListSortingStrategy}>
-            <ol className="flex flex-col gap-2">
-              {form.steps.map((s, i) => (
-                <StepCard key={`step-${i}`} index={i} step={s} options={stepOptions}
-                  onChange={(patch) => setStep(i, patch)}
-                  onRemove={() => setForm((f) => ({ ...f, steps: f.steps.filter((_, j) => j !== i) }))} />
-              ))}
-            </ol>
-          </SortableContext>
-        </DndContext>
-        <Button variant="secondary" onClick={addStep}><Plus className="h-4 w-4" aria-hidden />Add step</Button>
-        <p className="rounded-control bg-surface/60 p-3 text-sm font-semibold text-link">{timelineLabel(form.steps)}</p>
-        {isAdmin && (
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.is_default} onChange={(e) => setForm((f) => ({ ...f, is_default: e.target.checked }))} className="h-4 w-4 accent-violet-500" />
-            Default sequence (visible to all contractors)
-          </label>
-        )}
-        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-        <div className="flex items-center justify-between">
-          {sequence && !sequence.is_default ? <Button variant="ghost" onClick={() => { setBusy(true); void onDelete(sequence.id).then((err) => { setBusy(false); if (err) setError(err); else onClose(); }); }} disabled={busy} loading={busy}>Delete</Button> : <span />}
-          <Button onClick={() => void handleSave()} disabled={busy} loading={busy}>{busy ? 'Saving…' : 'Save sequence'}</Button>
+    <Modal open onClose={onClose} size="wide" footer={footer} title={sequence ? `Edit — ${sequence.name}` : 'New sequence'}>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <Input label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+          <Input label="Description (optional)" value={form.description ?? ''} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value || null }))} />
+          <label className="flex min-h-11 items-center gap-2 rounded-nested bg-surface px-3 text-sm"><input type="checkbox" checked={form.is_active !== false}
+            onChange={event => setForm(previous => ({ ...previous, is_active: event.target.checked }))} />Active sequence (allow enrolment and drafting)</label>
+          <Collapsible flat icon={Target} title="Who it is for" summary={form.category ? form.category : 'No category or profile'}>
+            <div className="flex flex-col gap-4">
+              <CategoryField value={form.category ?? ''} onChange={(category) => setForm((f) => ({ ...f, category }))} suggestions={categorySuggestions} />
+              <IcpSelect
+                icps={icps}
+                value={form.icp_id}
+                onChange={(icp_id) => setForm((f) => ({ ...f, icp_id }))}
+                hint="The default customer profile for this sequence's emails. A step whose template has its own profile uses that instead, and a lead's own profile always wins."
+              />
+            </div>
+          </Collapsible>
+          {isAdmin && (
+            <label className="flex min-h-11 items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.is_default} onChange={(e) => setForm((f) => ({ ...f, is_default: e.target.checked }))} className="h-4 w-4 accent-violet-500" />
+              Default sequence (visible to all contractors)
+            </label>
+          )}
+        </div>
+        <div className="flex min-w-0 flex-col gap-3">
+          <SectionTitle icon={ListOrdered} count={form.steps.length}>Steps</SectionTitle>
+          <div className="flex items-center gap-2 rounded-nested bg-violet/10 px-3 py-2 text-sm font-semibold text-link">
+            <CalendarClock className="h-4 w-4 shrink-0" aria-hidden />{timelineLabel(form.steps)}
+          </div>
+          <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={form.steps.map((_, i) => `step-${i}`)} strategy={verticalListSortingStrategy}>
+              <ol className="flex flex-col gap-2">
+                {form.steps.map((st, i) => (
+                  <StepCard key={`step-${i}`} index={i} step={st} options={stepOptions}
+                    onChange={(patch) => setStep(i, patch)}
+                    onRemove={() => setForm((f) => ({ ...f, steps: f.steps.filter((_, j) => j !== i) }))} />
+                ))}
+              </ol>
+            </SortableContext>
+          </DndContext>
+          <Button variant="secondary" className="self-start" onClick={addStep}><Plus className="h-4 w-4" aria-hidden />Add step</Button>
         </div>
       </div>
     </Modal>
