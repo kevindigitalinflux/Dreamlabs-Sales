@@ -59,6 +59,11 @@ beforeEach(() => {
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it('does not count a not-configured worker as SearXNG in saved role usage',async()=>{
+ findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
+ const out=await run();expect(out.domains.role_searches_by_provider).toEqual({searxng:0,gemini:2});
+ expect(out.domains.steps).not.toContain('The lookup worker could not be reached.');
+});
 it.each([{phone:'+1 (512) 555-0100'},{address:'Austin, Texas 78701'},{phone:'+353 1 234 5678'}])('skips all registry work and proof credit for inferred non-UK leads %#',async saved=>{
  Object.assign(lead,saved);const before=lead.country;
  resolveOrgApiKey.mockImplementation(async(_s,_o,provider)=>['gemini','companies_house'].includes(provider)?'fake':null);

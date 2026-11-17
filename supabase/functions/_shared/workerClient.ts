@@ -47,7 +47,7 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
     const deadline = Date.now() + timeoutMs;
     const already = stopped[kind];
     if (already) return { ok: false, ...already };
-    if (!config) return stop(kind, 'not_configured', workerFailureLine('not_configured'));
+    if (!config) return stop(kind, 'not_configured', kind === 'search' ? '' : workerFailureLine('not_configured'));
     const resource = WORKER_RESOURCE[kind];
     const reserve = await reserveUsage(usage, orgId, resource, units);
     if (!reserve.ok) return {...stop(kind, 'limit_reached', refusalLine(reserve.reason, resource, reserve.limit)),allowanceReached:reserve.reason==='org_limit'||reserve.reason==='shared_pool'};
@@ -72,6 +72,14 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
       });
       // Redirects are refused before forwarding credentials; no work happened at the worker.
       failure = res.status >= 300 && res.status < 400 ? 'unreachable' : failureForStatus(res.status);
+      if (res.status === 503) {
+        try {
+          const reply: unknown = await res.json();
+          if (reply && typeof reply === 'object' && 'error' in reply && reply.error === 'not_configured') failure = 'not_configured';
+        } catch {
+          console.info('Worker refusal body unavailable', 'bad_json');
+        }
+      }
       if (res.status === 429 && kind === 'verify') {
         try { const body = await res.json(); if (body?.error === 'domain_stalled') failure = 'domain_stalled'; }
         catch (error) { console.info('Worker refusal body unavailable', error instanceof Error ? error.name : 'unknown'); }
@@ -91,7 +99,7 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
     if (failure === null) return { ok: true, json };
     // Our own timeout is not "the worker did no work": it may still be running, so the units stay reserved.
     if (shouldRefund(failure) && !timedOut) await refundUsage(usage, orgId, resource, units, reserve.day);
-    const line = workerFailureLine(failure);
+    const line = kind === 'search' && failure === 'not_configured' ? '' : workerFailureLine(failure);
     if (failure === 'bad_response' || failure === 'timeout' || failure === 'domain_stalled') { addLine(line); return { ok: false, failure, line }; }
     return stop(kind, failure, line);
   }

@@ -36,10 +36,13 @@ function groundingSources(reply: GroundedReply) {
 export function makeSearchProvider(deps: { worker: WorkerClient; gemini?: (prompt: string) => Promise<GroundedReply>; reserveAi: () => Promise<boolean>; onSearch?: (via: 'searxng' | 'gemini') => void; onFallbackShape?: (shape: RoleSearchFallbackShape) => void }): SearchProvider {
   // The engine creates one provider per lead; only empty-result fallback is limited across its rungs.
   let emptyFallbackUsed = false;
+  let workerNotConfigured = false;
   return { async search(query) {
     try {
-      deps.onSearch?.('searxng');
-      const result = await deps.worker.search(query);
+      const result = workerNotConfigured ? { ok: false as const, failure: 'not_configured' as const }
+        : await deps.worker.search(query).catch(error => { deps.onSearch?.('searxng'); throw error; });
+      if (!result.ok && result.failure === 'not_configured') workerNotConfigured = true;
+      else deps.onSearch?.('searxng');
       if (result.ok && result.value.length) return { ok: true, hits: result.value.slice(0, 8), via: 'searxng' };
       if (!result.ok && result.failure === 'limit_reached') return { ok: false, why: 'limit' };
       if (!result.ok && !['busy', 'not_configured', 'unreachable'].includes(result.failure)) return { ok: false, why: 'failed' };

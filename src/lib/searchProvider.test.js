@@ -2,6 +2,13 @@ import {expect,it,vi} from 'vitest'
 import {makeSearchProvider} from '../../supabase/functions/_shared/searchProvider'
 import {findRolePeople} from '../../supabase/functions/_shared/roleSearch'
 const hit={title:'Jane Doe - Facilities Manager - Acme Offices',url:'https://linkedin.com/in/jane',snippet:'Facilities Manager at Acme Offices'};
+it('disables an unconfigured worker for this lead without counting SearXNG, preserving Gemini rungs',async()=>{
+ const worker={search:vi.fn(async()=>({ok:false,failure:'not_configured'}))},gemini=vi.fn(async()=>({text:'',sources:[]})),reserveAi=vi.fn(async()=>true),onSearch=vi.fn();
+ const provider=makeSearchProvider({worker,gemini,reserveAi,onSearch});
+ await findRolePeople({company:'Acme Offices',profile:{targetRoles:['Manager']},provider,timeLeftMs:()=>100000});
+ expect(worker.search).toHaveBeenCalledTimes(1);expect(gemini).toHaveBeenCalledTimes(3);expect(reserveAi).toHaveBeenCalledTimes(3);expect(onSearch.mock.calls).toEqual([['gemini'],['gemini'],['gemini']]);
+ await makeSearchProvider({worker,gemini,reserveAi,onSearch}).search('another lead');expect(worker.search).toHaveBeenCalledTimes(2);
+});
 // Synthetic contract fixture, not a captured Gemini reply. Real-call Step 1 was withdrawn.
 const redirect='https://vertexaisearch.cloud.google.com/grounding-api-redirect/REDACTED';
 const redirectReply={text:JSON.stringify(hit),sources:[redirect],sourceEvidence:[`${redirect} linkedin.com`,`${redirect} Jane Doe is Facilities Manager at Acme Offices.`]};
