@@ -43,7 +43,7 @@ export function FilterBar({ filters, onChange, profiles, icps = [], shown, total
             placeholder="Search company, owner, email"
             value={filters.search}
             onChange={(e) => onChange({ ...filters, search: e.target.value })}
-            className="min-h-11 w-full rounded-control border border-line bg-raised pl-9 pr-3 text-base outline-none placeholder:text-muted focus:border-focus md:min-h-10"
+            className="min-h-11 w-full rounded-control border border-field bg-raised pl-9 pr-3 text-base outline-none placeholder:text-muted focus:border-focus md:min-h-10"
           />
         </div>
         <Button variant="secondary" onClick={() => setOpen((o) => !o)} aria-expanded={open}>

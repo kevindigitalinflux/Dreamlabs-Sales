@@ -3,7 +3,7 @@ import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from 'rea
 import { Listbox } from './Listbox';
 
 const FIELD_CLASSES =
-  'w-full rounded-control border border-line bg-raised px-3 text-base text-offwhite outline-none placeholder:text-muted focus:border-focus';
+  'w-full rounded-control border border-field bg-raised px-3 text-base text-offwhite outline-none placeholder:text-muted focus:border-focus';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;

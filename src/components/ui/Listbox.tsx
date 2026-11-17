@@ -198,7 +198,7 @@ export function Listbox({ value, onChange, children, id, ariaLabel, disabled, cl
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
         onKeyDown={handleTriggerKeyDown}
-        className={`flex min-h-11 md:min-h-10 ${fullWidth ? 'w-full' : ''} cursor-pointer items-center justify-between gap-2 rounded-control border border-line bg-raised py-2 pl-3 pr-3 text-left text-offwhite outline-none hover:border-violet/60 focus:border-violet disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+        className={`flex min-h-11 md:min-h-10 ${fullWidth ? 'w-full' : ''} cursor-pointer items-center justify-between gap-2 rounded-control border border-field bg-raised py-2 pl-3 pr-3 text-left text-offwhite outline-none hover:border-violet/60 focus:border-violet disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       >
         <span className="truncate">{triggerText ?? ''}</span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-muted transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} aria-hidden />

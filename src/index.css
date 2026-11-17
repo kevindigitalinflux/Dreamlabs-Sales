@@ -26,6 +26,8 @@
   --color-raised: #FFFFFF;
   --color-muted: rgba(4, 15, 73, 0.70);
   --color-line: rgba(4, 15, 73, 0.12);
+  /* Border of form controls (inputs, dropdowns, search). Stronger than --color-line so a field's edge is visible (3:1). */
+  --color-field: rgba(4, 15, 73, 0.50);
 
   /* Aurora refresh (2026-11-16). Violet used as TEXT differs per theme because one value cannot pass contrast on both bases; cyan is no longer a text colour. */
   --color-link: #6A1FD6;
@@ -94,10 +96,11 @@
   --color-offwhite: #F4F4F8;
   --color-bg: #040F49;
   --color-card: #121D54;
-  --color-raised: rgba(244, 244, 248, 0.06);
-  --color-surface: rgba(244, 244, 248, 0.10);
-  --color-muted: rgba(244, 244, 248, 0.66);
-  --color-line: rgba(244, 244, 248, 0.12);
+  --color-raised: rgba(244, 244, 248, 0.08);
+  --color-surface: rgba(244, 244, 248, 0.13);
+  --color-muted: rgba(244, 244, 248, 0.76);
+  --color-line: rgba(244, 244, 248, 0.18);
+  --color-field: rgba(244, 244, 248, 0.50);
   --color-link: #C9A6FF;
   --color-attention: #FF7A9D;
   --color-attention-soft: rgba(240, 56, 107, 0.16);
@@ -151,6 +154,6 @@
 }
 :root[data-theme="dark"] .app-backdrop {
   background:
-    radial-gradient(60% 50% at 100% 0%, rgba(139, 50, 255, 0.42), transparent 70%),
-    radial-gradient(55% 50% at 0% 100%, rgba(100, 55, 139, 0.55), transparent 70%);
+    radial-gradient(60% 50% at 100% 0%, rgba(139, 50, 255, 0.34), transparent 70%),
+    radial-gradient(55% 50% at 0% 100%, rgba(100, 55, 139, 0.45), transparent 70%);
 }

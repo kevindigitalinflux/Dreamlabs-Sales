@@ -31,7 +31,7 @@ export function MultiSelect({ label, options, selected, onChange }: MultiSelectP
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className={`flex min-h-11 md:min-h-10 cursor-pointer items-center gap-2 rounded-control border px-3 text-sm font-semibold ${selected.length > 0 ? 'border-violet-line text-offwhite' : 'border-line text-muted'}`}
+        className={`flex min-h-11 md:min-h-10 cursor-pointer items-center gap-2 rounded-control border px-3 text-sm font-semibold ${selected.length > 0 ? 'border-violet-line text-offwhite' : 'border-field text-muted'}`}
       >
         {label}{selected.length > 0 ? ` (${selected.length})` : ''}
         <ChevronDown className="h-4 w-4" aria-hidden />
