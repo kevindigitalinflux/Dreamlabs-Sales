@@ -28,7 +28,7 @@ export function VoiceStatus({ voice }: { voice: VoiceDictation }) {
   return (
     <>
       {voice.isListening && (
-        <p role="status" className="flex items-center gap-2 text-sm font-semibold text-violet">
+        <p role="status" className="flex items-center gap-2 text-sm font-semibold text-link">
           <span className="h-2.5 w-2.5 rounded-full bg-violet motion-safe:animate-pulse" aria-hidden />
           Recording. Speak now and your words appear above as you talk.
         </p>

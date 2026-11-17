@@ -53,7 +53,7 @@ export function TemplatePicker({ templates, sequences, enrollment, orgId, loadin
   return (
     <div className="flex flex-col gap-1.5">
       {inSequence && (
-        <p className="text-xs font-semibold text-violet">Following {picker.sequenceName} (step {picker.currentStep} of {picker.totalSteps})</p>
+        <p className="text-xs font-semibold text-link">Following {picker.sequenceName} (step {picker.currentStep} of {picker.totalSteps})</p>
       )}
       <SelectField label="Template" value={value} onChange={(e) => onChange(e.target.value)} showGroupInValue={!inSequence}>
         <option value="">Choose…</option>

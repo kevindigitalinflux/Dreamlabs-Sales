@@ -7,6 +7,7 @@ import { useDrafts } from '../hooks/useDrafts';
 import type { DraftLog } from '../hooks/useDrafts';
 import { useFocusMode } from '../hooks/useFocusMode';
 import { Card } from '../components/ui/Card';
+import { Collapsible } from '../components/ui/Collapsible';
 import { Skeleton } from '../components/ui/Skeleton';
 import { StatsBar } from '../components/dashboard/StatsBar';
 import { TodaysFocus } from '../components/dashboard/TodaysFocus';
@@ -70,14 +71,12 @@ export function Dashboard() {
 
       {!focusMode && (
         <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <h2 className="mb-3 text-[18px] font-bold">Recently active</h2>
+          <Collapsible title="Recently active" summary="Leads you worked on lately" className="bg-raised self-start">
             {loading ? <Skeleton className="h-24 w-full" /> : <RecentlyActive leads={leads} onOpen={setSelected} />}
-          </Card>
-          <Card>
-            <h2 className="mb-3 text-[18px] font-bold">Pipeline snapshot</h2>
+          </Collapsible>
+          <Collapsible title="Pipeline snapshot" summary="Leads by stage" className="bg-raised self-start">
             {loading ? <Skeleton className="h-24 w-full" /> : <PipelineSnapshot leads={leads} />}
-          </Card>
+          </Collapsible>
         </div>
       )}
 

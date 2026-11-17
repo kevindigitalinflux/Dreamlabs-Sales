@@ -272,7 +272,7 @@ function ListboxOption({ opt, selected, highlighted, onSelect, onHover, indent =
       } ${highlighted ? 'bg-violet/20 text-offwhite' : 'text-offwhite'} ${selected ? 'font-semibold' : ''}`}
     >
       <span className="truncate">{opt.label}</span>
-      {selected && <Check className="h-4 w-4 shrink-0 text-violet" aria-hidden />}
+      {selected && <Check className="h-4 w-4 shrink-0 text-link" aria-hidden />}
     </li>
   );
 }

@@ -8,6 +8,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { Skeleton } from '../components/ui/Skeleton';
 import { PipelineSection } from '../components/analytics/PipelineSection';
 import { OutreachSection } from '../components/analytics/OutreachSection';
+import { Collapsible } from '../components/ui/Collapsible';
 import {TierSafety} from '../components/analytics/TierSafety';
 
 const PERIOD_LABELS: Record<AnalyticsPeriod, string> = {
@@ -25,7 +26,7 @@ export function Analytics() {
 
   return (
     <div className="flex flex-col gap-6">
-      <TierSafety/>
+      <Collapsible title="Recipient safety" summary="Bounce rates by recipient group, last 30 days" className="bg-raised"><TierSafety/></Collapsible>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[28px] font-bold">Analytics</h1>
         <div role="group" aria-label="Time period" className="flex items-center gap-1 rounded-control border border-line p-1">

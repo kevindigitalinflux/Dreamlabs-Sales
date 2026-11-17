@@ -2,7 +2,6 @@ import { CalendarClock, Kanban, MailCheck, PhoneCall } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { isDueToday, isOverdue } from '../../lib/utils';
 import type { Lead } from '../../types';
-import { Card } from '../ui/Card';
 import { Skeleton } from '../ui/Skeleton';
 
 interface StatsBarProps {
@@ -14,13 +13,13 @@ interface StatsBarProps {
 
 function Stat({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: number | null }) {
   return (
-    <Card className="flex flex-1 items-center gap-3">
-      <Icon className="h-6 w-6 shrink-0 text-link" aria-hidden />
+    <div className="flex flex-1 items-start justify-between gap-3 rounded-surface border border-line bg-raised px-4 py-3 shadow-raised">
       <div>
-        {value === null ? <Skeleton className="h-7 w-10" /> : <p className="font-heading text-[22px] font-bold">{value}</p>}
-        <p className="text-xs font-semibold text-muted">{label}</p>
+        {value === null ? <Skeleton className="h-8 w-12" /> : <b className="block font-heading text-2xl font-bold">{value}</b>}
+        <span className="text-[13px] text-muted">{label}</span>
       </div>
-    </Card>
+      <Icon className="h-5 w-5 shrink-0 text-link" aria-hidden />
+    </div>
   );
 }
 

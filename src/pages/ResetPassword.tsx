@@ -72,7 +72,7 @@ export function ResetPassword() {
           ) : !ready ? (
             <div className="flex flex-col gap-4 text-center">
               <p className="text-sm text-danger">This reset link is invalid or has expired.</p>
-              <Link to="/forgot-password" className="text-sm font-semibold text-violet hover:text-violet/80">
+              <Link to="/forgot-password" className="text-sm font-semibold text-link hover:text-violet/80">
                 Request a new link
               </Link>
             </div>
