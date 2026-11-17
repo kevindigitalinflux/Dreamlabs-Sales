@@ -85,20 +85,20 @@ it.each([[120_000,25_000],[40_000,10_000],[33_999,3_999]])('passes separate disc
 });
 it.each([false,true])('stores only fallback shape counts in the engine result, including interrupted=%s',async interrupted=>{
  const redirect='https://vertexaisearch.cloud.google.com/grounding-api-redirect/REDACTED';
- geminiGroundedSearch.mockResolvedValue({text:JSON.stringify({title:'Some Person - Director - Acme',url:'https://linkedin.com/in/some-person',snippet:'Director at Acme'}),sources:[redirect],sourceEvidence:[`${redirect} linkedin.com`,`${redirect} Different Person at Acme`]});
+ geminiGroundedSearch.mockResolvedValue({text:JSON.stringify({name:'Some Person',title:'Director',company:'Acme',linkedin_url:'https://linkedin.com/in/some-person'}),sources:[redirect],sourceEvidence:[`${redirect} linkedin.com`,`${redirect} Different Person at Acme`]});
  findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
  if(interrupted)lookUpPeople.mockRejectedValueOnce(new Error('fixture interrupted'));
  const out=await run();
  expect(out.status).toBe(interrupted?'failed':'done');
- expect(out.domains.role_search_fallback_shape).toEqual({lines_parsed:1,profile_urls:1,sources:1,redirect_sources:1,linkedin_titled_sources:1});
+ expect(out.domains.role_search_fallback_shape).toEqual({lines_parsed:1,profile_urls:1,sources:1,redirect_sources:1,linkedin_titled_sources:1,people_lines:1,people_kept:0});
  expect(Object.values(out.domains.role_search_fallback_shape).every(value=>typeof value==='number')).toBe(true);
  expect(JSON.stringify(out.domains.role_search_fallback_shape)).not.toMatch(/Some|Person|Acme|https/);
 });
-it('passes grounded redirect evidence through the engine to an accepted role contact',async()=>{
+it.each([true,false])('passes grounded evidence through the engine to an accepted role contact, LinkedIn supported=%s',async linked=>{
  const redirect='https://vertexaisearch.cloud.google.com/grounding-api-redirect/REDACTED';
- geminiGroundedSearch.mockResolvedValue({text:JSON.stringify({title:'Ann Lee - Office Manager - Acme',url:'https://linkedin.com/in/ann-lee',snippet:'Office Manager at Acme'}),sources:[redirect],sourceEvidence:[`${redirect} linkedin.com`,`${redirect} Ann Lee is Office Manager at Acme`]});
+ geminiGroundedSearch.mockResolvedValue({text:JSON.stringify({name:'Ann Lee',title:'Office Manager',company:'Acme',linkedin_url:'https://linkedin.com/in/ann-lee'}),sources:[redirect],sourceEvidence:[`${redirect} ${linked?'linkedin.com':'acme.example'}`,`${redirect} Ann Lee is Office Manager at Acme`]});
  findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
- const out=await run();expect(contacts.find(c=>c.first_name==='Ann')).toMatchObject({source:'role_search',title:'Office Manager',include_in_sequences:false});
+ const out=await run();expect(contacts.find(c=>c.first_name==='Ann')).toMatchObject({source:'role_search',title:'Office Manager',linkedin_url:linked?'https://linkedin.com/in/ann-lee':null,include_in_sequences:false});
  expect(out.domains).not.toHaveProperty('role_search_fallback_shape');
 });
 it.each(['ideal_customer_profiles','decision_maker_candidates'])('continues without role/team saves when %s cannot be read',async table=>{

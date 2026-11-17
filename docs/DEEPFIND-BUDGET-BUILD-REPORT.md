@@ -90,3 +90,36 @@ The local graph is retained in ignored .superpowers/deepfind-budget-redeploy.jso
 The quoted production observations were supplied by Kevin/Claude, not independently retrieved in this session. No scoring run, live provider request, real registry request, paid AI call, SQL/audit, production credit measurement, database concurrency, container startup or browser/mobile check ran. Local gates and fixtures prove the requested paths; they do not prove improved production pass marks. Independent review remains pending. No role change occurred. No secret or credential was read or printed; no local key path was created. The only external operation was the requested git fetch.
 
 Open this worktree and docs/HANDOFF.md, then this report. The checkout is clean at the final report commit and no task-owned server is running. Claude reviews four commits next. Kevin separately authorizes any rollout or live timing/credit/scoring checks. Builder stops here; older rollout instructions do not grant this branch production authority.
+
+## Continuation — role-search prompt and US registry skip (2026-11-17)
+
+Kevin authorized Fix 5 and Fix 2b on codex/deepfind-budget from 02b33b6. Same builder/reviewer roles and local-only limits. These newer rules supersede earlier direct-URL person acceptance and the previous non-UK saved-number exclusion. No live request or rollout is authorized. The supplied production re-run evidence was not independently read.
+
+### Fix 5 — grounded people instead of copied-result hits
+
+MET: rolePeoplePrompt takes company/city/country/roles, labels a JSON company block as data, requests CURRENT role holders in natural language across public LinkedIn profiles, company websites and news, and says not to log in. It asks for one supported sentence per person, followed by one strict name/title/company/linkedin_url JSON object per person. It contains no raw search operator or copied-results instruction. SearXNG still receives roleQuery unchanged. The ladder and its checkpoint wrapper pass structured lead/rung context separately to the Gemini path.
+
+Gemini requires at least one grounded source and both name words in one source URI's title or supported segment. judgeRolePerson shares the extracted name/company/current-role/former-role core with judgeRoleHit without needing a profile URL. All 48 existing SearXNG judge fixtures pass unchanged. Gemini returns judged people, not synthetic search-result hits. LinkedIn is nullable throughout the role/team combination and contact path: it is saved only for a valid profile URL that is an exact grounded source or has same-name evidence in a LinkedIn-titled chunk. A company/news source can establish the person without establishing LinkedIn. No result URL is fetched by this build.
+
+MET: the redirect-contract fixture is kept with LinkedIn; the same supported person without a LinkedIn chunk is kept without it. Missing name evidence, sources=0, former Owner and extra-company words are refused. Both real-engine contact paths save source role_search, include_in_sequences=false; unsupported LinkedIn stays null. Natural-language prompt/context wiring and zero-result numeric diagnostics are tested. These are synthetic real-format fixtures, not newly captured provider responses. The real model's response and live uplift remain NOT VERIFIED.
+
+Diagnostics retain the zero-kept-person emission rule. people_lines counts decoded objects with all four correctly typed person fields; people_kept records the number passing grounding and the judge (zero in an emitted zero-person diagnostic). Existing lines_parsed counts all decoded JSON lines; profile_urls now counts valid linkedin_url values from person objects. The other source counters retain their meaning. The result object contains only seven numeric counts; it stores no new name, URL, query, prompt, reply or evidence text. Successful person replies do not emit a fallback-shape diagnostic, preserving the existing rule.
+
+TDD: ten new fixtures failed before implementation at the missing prompt/judge exports, absent people return, missing accepted contact and missing counters. They now pass; one extra engine matrix case checks the no-LinkedIn contact. The existing cap, rung, cancellation, role/title/name, company, blank-fill, no-enrollment and fixed-log tests all pass. The earlier prompt export's missing function and the old empty-hit behavior were observed before production edits. An intermediate TypeScript run caught zero-argument fixture-spy inference and an unused import; both were corrected before the full gates.
+
+All seven gates before Fix 5: 276 app files / 3,591 passed / one existing opt-in skip; 8 wrapper files / 166 passed; both TypeScript, build, whitespace and edge29 PASS. Logs: .superpowers/deepfind-role-people-fix5-*.log. Fix 5 is the commit containing this continuation entry.
+
+Changed existing assertions/fixtures for Fix 5 (complete inventory):
+
+- Gemini acceptance expectations return structured people with normalized first/last/title/rung and nullable linkedinUrl instead of hits. SearXNG hit expectations are unchanged.
+- The old direct-URL/no-sourceEvidence case now expects no people: URL equality alone no longer proves a person.
+- Redirect/regional-title success cases still succeed, now from strict person JSON. Empty/busy/not-configured/unreachable fallback counts and AI reservations are unchanged; their successful fixture payloads gain person JSON and name evidence.
+- Non-LinkedIn or spoofed LinkedIn-title chunks with valid person evidence now retain the person without LinkedIn, rather than dropping the entire hit. Missing/substring-only names and source-URI collisions still reject.
+- A LinkedIn source HOST with a different profile URL but no LinkedIn domain TITLE establishes the person only, so its previously saved profile becomes null under the stricter link rule.
+- A name supported only on a separate non-LinkedIn chunk now establishes a person without borrowing the unrelated LinkedIn title; it no longer causes complete person rejection.
+- All four invalid-profile-URL cases retain the grounded person with a null link instead of dropping the entire hit.
+- The old off-source invented-profile fixture is replaced by an invented-person name absent from grounding. Its prose/invalid-JSON rejection and single valid-person expectation remain.
+- Provider diagnostic expectation adds people_lines=2 and people_kept=0. Both normal/interrupted engine diagnostic expectations add people_lines=1 and people_kept=0. Old five keys keep their counts after fixtures switch to person JSON.
+- The engine's supported-profile fixture retains all old assertions and additionally checks the saved link; its new unsupported-link companion expects null. Test transport helpers supply the structured company/rung context the real ladder now passes. No SearXNG judge assertion changed or was weakened.
+
+No schema, migration, usage cap, retry delay, role ladder, two-person limit or enrollment rule changed. judgeRoleHit was refactored onto a shared evidence core, with its profile admission/normalization and acceptance policy preserved by its unchanged fixtures. The new per-provider return shape prevents Gemini people from being forced through an invented profile URL.

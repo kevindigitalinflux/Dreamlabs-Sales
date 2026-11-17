@@ -669,7 +669,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       gemini: configured.geminiKey ? prompt => geminiGroundedSearch(prompt, configured.geminiKey!, Math.min(15_000, Math.max(1, left() - 5_000)), geminiMeter) : undefined,
     });
     const roleResult = shouldSearchAfterTeam(teamPicked) ? await findRolePeople({ company: companyForRoles, registeredName: registry.name, city: str(lead.city), country: str(lead.country), profile,
-      provider: { search: async query => { if (workerConfig || configured.geminiKey) await checkpoint(); return provider.search(query); } }, timeLeftMs: left }) : { people: [], searches: 0, via: [] };
+      provider: { search: async (query, context) => { if (workerConfig || configured.geminiKey) await checkpoint(); return provider.search(query, context); } }, timeLeftMs: left }) : { people: [], searches: 0, via: [] };
     rolePeople = combineTeamRolePeople(teamPicked, roleResult.people).filter(person => !ownerSuppressed(person.first + ' ' + person.last));
     for (const person of rolePeople) {
       await checkpoint();
