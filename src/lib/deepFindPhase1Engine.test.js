@@ -59,6 +59,11 @@ beforeEach(() => {
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it.each([[120_000,25_000],[40_000,10_000],[33_999,3_999]])('passes separate discovery budgets with %i ms left',async(left,webBudgetMs)=>{
+ const start=Date.now();vi.spyOn(Date,'now').mockReturnValueOnce(start).mockReturnValue(start+120_000-left);
+ await run();
+ expect(discoverLeadDomains.mock.calls[0][2]).toMatchObject({budgetMs:Math.min(10_000,webBudgetMs),webBudgetMs});
+});
 it.each([false,true])('stores only fallback shape counts in the engine result, including interrupted=%s',async interrupted=>{
  const redirect='https://vertexaisearch.cloud.google.com/grounding-api-redirect/REDACTED';
  geminiGroundedSearch.mockResolvedValue({text:JSON.stringify({title:'Some Person - Director - Acme',url:'https://linkedin.com/in/some-person',snippet:'Director at Acme'}),sources:[redirect],sourceEvidence:[`${redirect} linkedin.com`,`${redirect} Different Person at Acme`]});

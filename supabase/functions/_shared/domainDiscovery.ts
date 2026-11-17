@@ -561,6 +561,8 @@ export interface DiscoveryInput {
   blocked?: string[];
   allow: { hunter: boolean; site: boolean; web: boolean; apollo?: boolean };
   budgetMs: number;
+  /** Independent allowance for the parallel web task; other discovery work uses budgetMs. */
+  webBudgetMs?: number;
   /** At most this many Hunter requests in this discovery run (default MAX_DISCOVERY_HUNTER_CALLS). */
   hunterCap?: number;
 }
@@ -619,8 +621,9 @@ export async function runDomainDiscovery(input: DiscoveryInput, deps: DiscoveryD
   const blocked = new Set((input.blocked ?? []).map((b) => checks.clean(b)).filter((b): b is string => !!b));
   // The web search starts NOW and runs alongside the Hunter, DNS and website steps with its own time budget, so a slow
   // search is no longer starved by the steps before it.
-  const webTask = input.allow.web && input.budgetMs >= 4_000
-    ? deps.webSearch(Math.min(WEB_BUDGET_MS, Math.max(4_000, input.budgetMs))).catch((): Failed => ({ ok: false, failure: 'network' }))
+  const webBudgetMs = input.webBudgetMs ?? input.budgetMs;
+  const webTask = input.allow.web && webBudgetMs >= 4_000
+    ? deps.webSearch(Math.min(WEB_BUDGET_MS, webBudgetMs)).catch((): Failed => ({ ok: false, failure: 'network' }))
     : null;
   const seen: DomainCandidate[] = [...input.known];
   const problems: StepProblem[] = [];

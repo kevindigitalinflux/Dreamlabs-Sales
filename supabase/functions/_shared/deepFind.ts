@@ -44,7 +44,7 @@ import { extractPhone } from './websiteContact.ts';
 import { dedupeCompanyPhones, personPhoneSuggestion, phoneMetadata, type BusinessPhone, type PhonePage } from './phoneNumbers.ts';
 import { domainFromWebsite, isDirectoryDomain } from './knownPerson.ts';
 import { rankPeople } from './peopleRanking.ts';
-import { DOMAIN_SOURCE_LABELS, safeFailure, websiteSuspicion, type KnownPersonName, type WebPerson } from './domainDiscovery.ts';
+import { DOMAIN_SOURCE_LABELS, safeFailure, websiteSuspicion, WEB_BUDGET_MS, type KnownPersonName, type WebPerson } from './domainDiscovery.ts';
 import { creditLine, problemLines, type ProblemInput } from './deepFindProblems.ts';
 import {
   MAX_HUNTER_PEOPLE_PER_LEAD, deepFindSummary, emailOnLead, extractTeamMembers, findSamePerson, samePersonMatches,
@@ -568,6 +568,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     extraKnown: contactDomains.map((domain) => ({ domain, source: 'contact_email' as const })),
     searchMeter: geminiMeter, keys: { hunterKey, geminiKey, apolloKey }, allow: { hunter: deepEnabled, site: pages.length > 0, web: deepEnabled, apollo: deepEnabled },
     budgetMs: Math.min(10_000, Math.max(0, left() - 30_000)), pages, hunterCap: discoveryCap,
+    webBudgetMs: Math.min(WEB_BUDGET_MS, Math.max(0, left() - 30_000)),
     guard: { hunter: () => spend.hunter('company domains'), ai: () => spend.ai('web search') },
   });
   problems.push(...discovery.problems);
@@ -1053,6 +1054,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         extraKnown: contactDomains.map(domain => ({ domain, source: 'contact_email' as const })),
         searchMeter: geminiMeter, keys: { hunterKey, geminiKey, apolloKey }, allow: { hunter: true, site: pages.length > 0, web: true, apollo: !!apolloKey },
         pages, budgetMs: Math.min(10_000, Math.max(0, left() - 30_000)), hunterCap: Math.max(0, discoveryCap - (spend.used.hunter['company domains'] ?? 0)),
+        webBudgetMs: Math.min(WEB_BUDGET_MS, Math.max(0, left() - 30_000)),
         guard: { hunter: () => spend.hunter('company domains'), ai: () => spend.ai('web search') },
       });
       for (const d of deeper.domains) {

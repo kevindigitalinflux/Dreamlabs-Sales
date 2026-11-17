@@ -178,6 +178,13 @@ describe('runDomainDiscovery', () => {
     webSearch: vi.fn(async () => ({ ok: true as const, text: '{"websites":[],"email_domains":["lovelivingmgmt-love-living.com"],"people":[{"name":"David Cox","role":"Director"}]}' })),
     ...over,
   });
+  it.each([[120_000,25_000],[40_000,10_000],[33_999,0]])('separates the web budget with %i ms left',async(left,expected)=>{
+    const d=deps();const webBudgetMs=Math.min(25_000,Math.max(0,left-30_000));
+    await runDomainDiscovery(input({budgetMs:Math.min(10_000,Math.max(0,left-30_000)),webBudgetMs}),d,DOMAIN_CHECKS);
+    if(expected)expect(d.webSearch).toHaveBeenCalledWith(expected);else expect(d.webSearch).not.toHaveBeenCalled();
+    for(const [,timeout] of vi.mocked(d.readSite).mock.calls)expect(timeout).toBeLessThanOrEqual(10_000);
+    if(expected)expect(vi.mocked(d.webSearch).mock.invocationCallOrder[0]??Infinity).toBeLessThan(vi.mocked(d.readSite).mock.invocationCallOrder[0]??Infinity);
+  });
 
   it('skips company-name credits when the lead already has a confirmed website', async () => {
     const r = await runDomainDiscovery(input(), deps(), DOMAIN_CHECKS);
