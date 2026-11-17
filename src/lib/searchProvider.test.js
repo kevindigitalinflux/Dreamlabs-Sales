@@ -2,6 +2,24 @@ import {expect,it,vi} from 'vitest'
 import {makeSearchProvider} from '../../supabase/functions/_shared/searchProvider'
 import {findRolePeople} from '../../supabase/functions/_shared/roleSearch'
 const hit={title:'Jane Doe - Facilities Manager - Acme Offices',url:'https://linkedin.com/in/jane',snippet:'Facilities Manager at Acme Offices'};
+it.each([
+ [new DOMException('private key prompt reply','AbortError'),'timeout'],
+ [new Error('Gemini request timed out'),'timeout'],
+ [new Error('Gemini 429: private key prompt reply'),'http_429'],
+ [new Error('Gemini 503: private key prompt reply'),'http_503'],
+ [new SyntaxError('private key prompt reply'),'bad_json'],
+ [new Error('Gemini reply could not be read'),'bad_json'],
+ [new TypeError('private key prompt reply'),'network'],
+ [new Error('private key prompt reply'),'network'],
+])('logs only the fixed Gemini failure code %s -> %s',async(error,code)=>{
+ const log=vi.spyOn(console,'error').mockImplementation(()=>{});
+ try {
+  const provider=makeSearchProvider({worker:{search:async()=>({ok:false,failure:'not_configured'})},reserveAi:async()=>true,gemini:async()=>{throw error}});
+  expect(await provider.search('private query')).toEqual({ok:false,why:'failed'});
+  expect(log).toHaveBeenCalledExactlyOnceWith('Role search unavailable',code);
+  expect(JSON.stringify(log.mock.calls)).not.toMatch(/private|key|prompt|reply|query/);
+ }finally{log.mockRestore()}
+});
 it('disables an unconfigured worker for this lead without counting SearXNG, preserving Gemini rungs',async()=>{
  const worker={search:vi.fn(async()=>({ok:false,failure:'not_configured'}))},gemini=vi.fn(async()=>({text:'',sources:[]})),reserveAi=vi.fn(async()=>true),onSearch=vi.fn();
  const provider=makeSearchProvider({worker,gemini,reserveAi,onSearch});

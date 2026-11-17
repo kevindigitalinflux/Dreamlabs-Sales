@@ -1,3 +1,7 @@
+## Deep find budget and search status (2026-11-17) — current local checkpoint
+
+Kevin authorized four local fixes on codex/deepfind-budget from fetched origin/main 3e0f2a3. Read docs/DEEPFIND-BUDGET-BUILD-REPORT.md and docs/HANDOFF.md. Commits: f6733ed (independent 25-second discovery web budget), b8c188c (saved-data non-UK registry skip), 10fe463 (quiet not-configured search and accurate counters), then this commit (fixed safe Gemini failure codes and final report). Each fix started with failing fixtures and passed all seven gates before commit. Final: 275 app files / 3,580 passed / one existing opt-in skip; 8 wrapper files / 166 passed; both TypeScript/build/whitespace/edge29 PASS. Report lists every changed assertion and the conservative ten-function/frontend redeploy surface. No provider, SQL, VPS, install, spending, merge, push or deployment occurred. No saved country is assigned. Independent review and live timing/credit/quality gains remain unverified. Codex stays builder; Claude reviews next. Stop after the report; rollout requires separate authorization. The Claude handover below records inherited live state and is not proof of deployment of this local branch.
+
 ## HANDOVER 2026-11-17 (Claude) - START HERE, supersedes every block below
 
 Written for the next Claude session (Opus or Sonnet). Roles unchanged: Kevin directs, Claude plans/reviews/deploys, Codex builds. Every merge, push, deploy, migration, VPS change and role change needs Kevin's explicit yes for that action. Codex briefs start with `# Build brief: <task>`.

@@ -32,6 +32,16 @@ function groundingSources(reply: GroundedReply) {
   });
 }
 
+/** Classify locally; never log an exception message, provider body, prompt or credential. */
+function roleSearchFailureCode(error: unknown): string {
+  if (!(error instanceof Error)) return 'network';
+  if (['AbortError', 'TimeoutError'].includes(error.name) || error.message === 'Gemini request timed out') return 'timeout';
+  const status = /^Gemini ([1-5]\d{2})(?::|$)/.exec(error.message);
+  if (status) return `http_${status[1]}`;
+  if (error instanceof SyntaxError || error.message === 'Gemini reply could not be read') return 'bad_json';
+  return 'network';
+}
+
 /** Prefer worker snippets; spend one run AI unit only for the approved fallback cases. */
 export function makeSearchProvider(deps: { worker: WorkerClient; gemini?: (prompt: string) => Promise<GroundedReply>; reserveAi: () => Promise<boolean>; onSearch?: (via: 'searxng' | 'gemini') => void; onFallbackShape?: (shape: RoleSearchFallbackShape) => void }): SearchProvider {
   // The engine creates one provider per lead; only empty-result fallback is limited across its rungs.
@@ -84,6 +94,6 @@ export function makeSearchProvider(deps: { worker: WorkerClient; gemini?: (promp
         sources: grounded.sources.length, redirect_sources: chunks.filter(chunk => chunk.redirect).length,
         linkedin_titled_sources: chunks.filter(chunk => chunk.titled).length });
       return { ok: true, hits, via: 'gemini' };
-    } catch { console.error('Role search unavailable', 'search_failed'); return { ok: false, why: 'failed' }; }
+    } catch (error) { console.error('Role search unavailable', roleSearchFailureCode(error)); return { ok: false, why: 'failed' }; }
   } };
 }
