@@ -61,7 +61,7 @@ export function DeepFindSuggestions({ leadId, suggestions, refreshKey, roles = [
   return <section className="flex min-w-0 flex-col gap-2" aria-busy={busy}>
     <Heading level={headingLevel} className="font-heading text-sm font-bold">Suggestions to review</Heading>
     <p ref={status} tabIndex={-1} role="status" className="text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-line">{notice || (state ? 'Possible details. Review before adding.' : 'Loading review details…')}</p>
-    <div className={groups.length>0?'flex min-w-0 flex-col gap-2 rounded-xl border-2 border-red-500/40 bg-red-500/5 p-3':'min-w-0'}>
+    <div className={groups.length>0?'flex min-w-0 flex-col gap-2 rounded-surface border-2 border-red-500/40 bg-red-500/5 p-3':'min-w-0'}>
       {groups.length>0&&<><Heading level={headingLevel + 1} className="font-heading text-sm font-bold">Saved addresses that do not exist</Heading>
       <p className="text-[13px]">We checked these saved addresses and the mail server says they do not exist. Replace them with a better guess, or leave them.</p></>}
       <ReplacementRows key={leadId} suggestions={replacements} busy={busy} onAction={(s, action) => act(s, action)} />

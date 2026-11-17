@@ -63,8 +63,8 @@ function StepCard({ index, step, options, onChange, onRemove }: {
   const missing = !options.some((o) => o.value === current);
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }}
-      className="flex min-w-0 items-end gap-2 rounded-lg border border-line bg-surface/40 p-3">
-      <button type="button" {...attributes} {...listeners} aria-label="Reorder step" className="mb-1 flex h-11 w-11 shrink-0 cursor-grab items-center justify-center rounded-lg text-muted hover:bg-surface"><GripVertical className="h-4 w-4" aria-hidden /></button>
+      className="flex min-w-0 items-end gap-2 rounded-control border border-line bg-raised/40 p-3">
+      <button type="button" {...attributes} {...listeners} aria-label="Reorder step" className="mb-1 flex h-11 w-11 shrink-0 cursor-grab items-center justify-center rounded-control text-muted hover:bg-surface"><GripVertical className="h-4 w-4" aria-hidden /></button>
       {/* shrink-0 keeps the days box a fixed, readable width however long the template name is. */}
       <div className="w-24 shrink-0">
         <Input label={index === 0 ? 'Start after (days)' : 'Wait (days)'} type="number" min="0" value={String(step.delay_days)}
@@ -78,7 +78,7 @@ function StepCard({ index, step, options, onChange, onRemove }: {
           {missing && <option value={current}>(template no longer available)</option>}
         </SelectField>
       </div>
-      <button type="button" onClick={onRemove} aria-label="Remove step" className="mb-1 flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-muted hover:text-danger"><Trash2 className="h-4 w-4" aria-hidden /></button>
+      <button type="button" onClick={onRemove} aria-label="Remove step" className="mb-1 flex h-11 w-11 cursor-pointer items-center justify-center rounded-control text-muted hover:text-danger"><Trash2 className="h-4 w-4" aria-hidden /></button>
     </li>
   );
 }
@@ -153,7 +153,7 @@ export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }
           </SortableContext>
         </DndContext>
         <Button variant="secondary" onClick={addStep}><Plus className="h-4 w-4" aria-hidden />Add step</Button>
-        <p className="rounded-lg bg-surface/60 p-3 text-sm font-semibold text-link">{timelineLabel(form.steps)}</p>
+        <p className="rounded-control bg-surface/60 p-3 text-sm font-semibold text-link">{timelineLabel(form.steps)}</p>
         {isAdmin && (
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.is_default} onChange={(e) => setForm((f) => ({ ...f, is_default: e.target.checked }))} className="h-4 w-4 accent-violet-500" />

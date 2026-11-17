@@ -190,16 +190,16 @@ export function Settings() {
       <CompanyProfileCard />
       {currentOrg && <CustomPlaceholdersCard isOrgAdmin={currentOrg.role === 'admin'} />}
       {currentOrg && <UsageLimitsCard orgId={currentOrg.id} isOrgAdmin={currentOrg.role === 'admin'} />}
-      <Link to="/settings/email" className="block rounded-xl border border-line bg-card p-5 hover:bg-surface/50">
+      <Link to="/settings/email" className="block rounded-surface border border-line bg-card p-5 hover:bg-surface/50">
         <h2 className="text-[18px] font-bold">Email sending</h2>
         <p className="text-sm text-muted">Connect your Gmail/Outlook so Dreamlabs Sales can send from your address.</p>
       </Link>
-      <Link to="/settings/dialer" className="block rounded-xl border border-line bg-card p-5 hover:bg-surface/50">
+      <Link to="/settings/dialer" className="block rounded-surface border border-line bg-card p-5 hover:bg-surface/50">
         <h2 className="text-[18px] font-bold">Power dialer</h2>
         <p className="text-sm text-muted">Connect your JustCall/Kixie/Aircall account so calls log automatically.</p>
       </Link>
       {currentOrg?.role === 'admin' && (
-        <Link to="/settings/organization" className="block rounded-xl border border-line bg-card p-5 hover:bg-surface/50">
+        <Link to="/settings/organization" className="block rounded-surface border border-line bg-card p-5 hover:bg-surface/50">
           <h2 className="text-[18px] font-bold">Organization API keys</h2>
           <p className="text-sm text-muted">Bring your own Gemini/Places/Companies House keys for {currentOrg.name}.</p>
         </Link>

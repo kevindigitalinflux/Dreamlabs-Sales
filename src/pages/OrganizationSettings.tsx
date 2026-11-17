@@ -164,7 +164,7 @@ function ProviderRow({ provider, label, url, ctaLabel, freeText, steps, configur
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-line p-4">
+    <div className="flex flex-col gap-3 rounded-control border border-line p-4">
       <div className="flex items-center gap-2">
         <p className="font-semibold">{label}</p>
         {configured && (

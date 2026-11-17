@@ -113,7 +113,7 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
         />
       ) : phase === 'compose' ? (
         <div className="flex flex-col gap-4">
-          <div className="flex overflow-hidden rounded-lg border border-line" role="tablist">
+          <div className="flex overflow-hidden rounded-control border border-line" role="tablist">
             <button type="button" role="tab" aria-selected={tab === 'debrief'} onClick={() => setTab('debrief')} className={`min-h-11 flex-1 cursor-pointer text-sm font-semibold ${tab === 'debrief' ? 'bg-violet/25' : 'text-muted'}`}>
               Quick debrief
             </button>

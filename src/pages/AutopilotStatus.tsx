@@ -86,7 +86,7 @@ export function AutopilotStatus() {
           </div>
           {blocklist.length === 0 && <p className="text-sm text-muted">Nothing blocked.</p>}
           {blocklist.map((b) => (
-            <div key={b.id} className="flex items-center justify-between rounded-lg bg-surface/50 p-2 text-sm">
+            <div key={b.id} className="flex items-center justify-between rounded-control bg-surface/50 p-2 text-sm">
               <span>{b.value}{b.reason && ` — ${b.reason}`}</span>
               <button type="button" onClick={() => void removeBlocklistEntry(b.id)} className="text-danger" aria-label={`Remove ${b.value}`}>
                 <XCircle className="h-4 w-4" aria-hidden />

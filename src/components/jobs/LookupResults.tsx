@@ -21,7 +21,7 @@ export function LookupResults({rows,kind,busy,onReview,onDismiss,onChanged}:{row
   <ReviewBatchControls review={{...review,busy:locked}} ids={visible.filter(r=>!r.reviewReason).map(r=>r.id)} approveLabel="Apply selected" rejectLabel="Skip selected"
    onApprove={()=>onReview(selectedReviewRows(visible,review.selected,r=>r.id))} onReject={()=>void skip()} />
   {!visible.length&&<p className="text-sm text-muted">No lookup proposals waiting for review.</p>}
-  {visible.map(row=><section key={row.id} className="min-w-0 rounded-lg border border-line bg-card p-4">
+  {visible.map(row=><section key={row.id} className="min-w-0 rounded-control border border-line bg-card p-4">
    <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="break-words text-lg font-semibold">{row.lead?.business_name??'Lead unavailable'}</h2><span className="text-sm">{STATUS[row.status]}</span></div>
    <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" aria-label={`Select lookup proposals for ${row.lead?.business_name??row.lead_id}`} disabled={locked||!!row.reviewReason} checked={review.selected.has(row.id)} onChange={()=>review.toggle(row.id)} />Select proposals</label>
    {row.reviewReason&&<p className="text-sm text-muted">{row.reviewReason}</p>}

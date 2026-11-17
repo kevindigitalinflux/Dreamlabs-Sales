@@ -41,7 +41,7 @@ function RunGroup({title, count, children, alwaysOpen}: {title: string; count: n
  const [open, setOpen] = useState(alwaysOpen || count <= 8);
  const id = useId();
  return <section aria-label={title} className="flex flex-col gap-2">
- <h3><button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)} className="flex min-h-11 w-full items-center justify-between rounded-lg p-2 text-left text-sm font-bold hover:bg-surface focus-visible:outline-2 focus-visible:outline-violet-line">
+ <h3><button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)} className="flex min-h-11 w-full items-center justify-between rounded-control p-2 text-left text-sm font-bold hover:bg-surface focus-visible:outline-2 focus-visible:outline-violet-line">
  {title} ({count})<ChevronDown aria-hidden className={open ? 'h-4 w-4 rotate-180' : 'h-4 w-4'} />
  </button></h3><ul id={id} hidden={!open} className={open ? 'flex flex-col gap-2' : 'hidden'}>{children}</ul></section>;
 }

@@ -11,7 +11,7 @@ export function PhoneChip({ value, country, metadata }: { value: string; country
   const url = safePhoneSourceUrl(metadata?.source_url);
   const plan = phone?.lineType === 'landline' ? 'Landline' : phone?.lineType === 'mobile' ? 'Mobile number' : 'Number type unknown';
   const provenance = `${source}. ${plan}.${metadata?.found_at ? ` Found ${metadata.found_at}.` : ' Found date unknown.'}`;
-  return <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5 rounded-lg border border-line px-2 py-1 text-sm">
+  return <div className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5 rounded-control border border-line px-2 py-1 text-sm">
     {phone ? <a href={`tel:${phone.value}`} onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}
       className="min-w-0 break-all text-offwhite underline focus-visible:outline-2 focus-visible:outline-violet-line" title={provenance}>{value}</a>
       : <span className="break-all">{value}</span>}

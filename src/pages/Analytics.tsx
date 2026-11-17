@@ -28,7 +28,7 @@ export function Analytics() {
       <TierSafety/>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[28px] font-extrabold">Analytics</h1>
-        <div role="group" aria-label="Time period" className="flex items-center gap-1 rounded-lg border border-line p-1">
+        <div role="group" aria-label="Time period" className="flex items-center gap-1 rounded-control border border-line p-1">
           {(Object.keys(PERIOD_LABELS) as AnalyticsPeriod[]).map((p) => (
             <button
               key={p}

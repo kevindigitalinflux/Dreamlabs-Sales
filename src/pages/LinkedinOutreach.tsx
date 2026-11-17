@@ -153,7 +153,7 @@ export function LinkedinOutreach() {
               )}
             </div>
             {filteredPendingContacts.map((c) => (
-              <div key={c.id} className="flex items-center justify-between rounded-lg bg-surface/50 p-3">
+              <div key={c.id} className="flex items-center justify-between rounded-control bg-surface/50 p-3">
                 <label className="flex min-h-11 cursor-pointer items-center gap-2">
                   <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} className="h-4 w-4 accent-violet-500" />
                   <span className="min-w-0">

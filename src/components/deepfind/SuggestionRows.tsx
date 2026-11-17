@@ -35,14 +35,14 @@ export function SuggestionRows({ suggestions, busy, onAction }: {
   {actionable.length > 0 && <label className="flex items-center gap-2"><input type="checkbox" aria-label="Select all suggestions" disabled={locked} checked={selection.selected.size === actionable.length} onChange={selection.all} />Select all</label>}
 
   <ul className="grid min-w-0 grid-cols-1 gap-2 text-offwhite">
-    {primary.map((s) => <li key={suggestionKey(s)} className="flex min-w-0 flex-col gap-2 rounded-lg border border-line bg-surface/50 p-3">
+    {primary.map((s) => <li key={suggestionKey(s)} className="flex min-w-0 flex-col gap-2 rounded-control border border-line bg-raised/50 p-3">
       <label className="flex items-center gap-2"><input type="checkbox" aria-label={`Select suggestion for ${s.name}: ${s.value}`} disabled={locked || !actionable.includes(s)} checked={selection.selected.has(suggestionKey(s))} onChange={() => selection.toggle(suggestionKey(s))} />Select{!actionable.includes(s) && ' (role mailbox cannot be added)'}</label>
       <p className="min-w-0 break-words text-sm font-semibold">{s.name}{s.role ? ` (${s.role})` : ''}{s.field && FIELD_LABELS[s.field] ? ` (${FIELD_LABELS[s.field]})` : ''}{s.value && <>: {(s.field === 'linkedin_url' || s.field === 'website') && websiteHref(s.value)?.startsWith('https://')
         ? <a href={websiteHref(s.value)!} rel="noreferrer noopener" target="_blank" className="break-words font-normal text-offwhite underline [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-violet-line">{s.value}</a>
         : <span className="break-words font-normal [overflow-wrap:anywhere]">{s.value}</span>}</>}</p>
       {s.phone && s.value && <PhoneChip value={s.value} metadata={s.phone} />}
       {(s.label || ((!s.field || s.field === 'email') && isRoleMailbox(s.value))) && <div className="flex flex-wrap gap-1.5">
-        {s.label && <span className="break-words rounded-full border border-line bg-surface px-2 py-0.5 text-xs">{s.label}</span>}
+        {s.label && <span className="break-words rounded-full border border-line bg-raised px-2 py-0.5 text-xs">{s.label}</span>}
         {(!s.field || s.field === 'email') && isRoleMailbox(s.value) && <span className="rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 text-xs">Role mailbox, not useful for outreach</span>}
       </div>}
       <div className="flex flex-wrap gap-2">

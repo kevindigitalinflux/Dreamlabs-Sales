@@ -25,7 +25,7 @@ export function EmailsHub() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-[28px] font-extrabold">Emails</h1>
-      <div className="flex max-w-full flex-wrap rounded-lg border border-line self-start" role="tablist" aria-label="Email sections">
+      <div className="flex max-w-full flex-wrap rounded-control border border-line self-start" role="tablist" aria-label="Email sections">
         {TABS.map((t) => (
           <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} tabIndex={tab === t.key ? 0 : -1}
             id={`${instance}-${t.key}`} aria-controls={`${instance}-panel`}

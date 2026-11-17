@@ -29,7 +29,7 @@ interface RecipientDraftCardProps {
 export function RecipientDraftCard({ name, title, kind, email, draft, onChange, orgId }: RecipientDraftCardProps) {
   const written = draft.subject.trim() !== '' || draft.body.trim() !== '';
   return (
-    <section className="flex flex-col gap-3 rounded-lg border border-line p-3">
+    <section className="flex flex-col gap-3 rounded-control border border-line p-3">
       <header className="flex flex-wrap items-center gap-2">
         <UserRound className="h-4 w-4 shrink-0 text-muted" aria-hidden />
         <span className="text-sm font-bold">{name ?? email}</span>
@@ -44,7 +44,7 @@ export function RecipientDraftCard({ name, title, kind, email, draft, onChange, 
         <p className="text-xs text-warning">No value for: {draft.missing.map((m) => `{{${m}}}`).join(', ')}. Those spots are blank.</p>
       )}
       {orgId && (
-        <details className="rounded-lg bg-surface/40 p-2">
+        <details className="rounded-control bg-surface/40 p-2">
           <summary className="cursor-pointer text-xs font-semibold text-muted">
             Attachments and links{draft.attachments.length > 0 ? ` (${draft.attachments.length} attached)` : ''}
           </summary>

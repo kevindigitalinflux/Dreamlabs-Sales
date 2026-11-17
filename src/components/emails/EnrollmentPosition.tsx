@@ -16,7 +16,7 @@ export function EnrollmentPosition({ sequence, currentStep, busy, onMove }: {
   const options = useStepOptions(sequence.steps);
   const total = sequence.steps.length;
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-line p-3">
+    <div className="flex flex-col gap-2 rounded-control border border-line p-3">
       <SelectField label="Next step to draft" value={String(currentStep)} onChange={(e) => onMove(Number(e.target.value), immediate)} disabled={busy}>
         {options}
       </SelectField>

@@ -56,7 +56,7 @@ export function LinksEditor({ orgId, links, onChange }: LinksEditorProps) {
       {links.length > 0 && (
         <ul className="flex flex-col gap-1">
           {links.map((l, i) => (
-            <li key={`${l.url}-${i}`} className="flex items-center gap-2 rounded-lg bg-surface/60 px-2 py-1 text-sm">
+            <li key={`${l.url}-${i}`} className="flex items-center gap-2 rounded-control bg-surface/60 px-2 py-1 text-sm">
               <span className="min-w-0 flex-1 truncate"><span className="font-semibold">{l.label}</span> <span className="text-muted">{l.url}</span></span>
               <button
                 type="button"

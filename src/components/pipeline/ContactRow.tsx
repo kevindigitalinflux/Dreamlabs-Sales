@@ -44,7 +44,7 @@ export function ContactRow({ contact, lead, isMain, busy, apolloConfigured, erro
   }
   const own = isOwnSource(contact.source);
   return (
-    <li className="rounded-lg bg-surface/60 p-2 text-sm">
+    <li className="rounded-control bg-surface/60 p-2 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] uppercase text-muted">{candidateSourceLabel(contact.source)}</span>
         {contact.kind === 'general' && <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] uppercase text-muted">General inbox</span>}

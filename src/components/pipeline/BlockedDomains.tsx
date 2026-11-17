@@ -26,7 +26,7 @@ export function BlockedDomains({ lead }: { lead: Lead }) {
   }
 
   return (
-    <div className="flex flex-col gap-1.5 rounded-lg bg-surface/60 p-3">
+    <div className="flex flex-col gap-1.5 rounded-control bg-surface/60 p-3">
       <p className="text-xs font-semibold text-muted">Blocked domains</p>
       <ul className="flex flex-col gap-1.5">
         {list.map((d) => (

@@ -11,7 +11,7 @@ export function TierSafety(){
    if(cancelled)return;if(error||data?.error)setError('Could not load tier safety rates. Refresh to retry.');else setData(data as Metrics);
   }).catch(error=>{console.error('Tier rates unavailable',error);if(!cancelled)setError('Could not load tier safety rates. Refresh to retry.');});return()=>{cancelled=true;};
  },[currentOrg?.id]);
- return <section className="rounded-xl border border-line bg-surface p-4" aria-label="Recipient tier safety">
+ return <section className="rounded-surface border border-line bg-raised p-4" aria-label="Recipient tier safety">
   <h2 className="font-bold">Recipient safety: last 30 days</h2>
   <p className="text-sm text-muted">Organisation totals, using the tier recorded when each email was sent. Recent sends can still bounce later.</p>
   {error&&<p role="alert" className="text-danger">{error}</p>}

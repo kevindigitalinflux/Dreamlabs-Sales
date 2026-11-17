@@ -67,7 +67,7 @@ export function TemplateList() {
         {templates.filter((t) => matchesCategory(t, categoryFilter)).map((t) => (
           <li key={t.id}>
             <button type="button" onClick={() => canEdit(t) ? setEditing(t) : undefined}
-              className={`w-full rounded-xl border border-line bg-card p-4 text-left ${canEdit(t) ? 'cursor-pointer hover:bg-surface/50' : 'cursor-default'}`}>
+              className={`w-full rounded-surface border border-line bg-card p-4 text-left ${canEdit(t) ? 'cursor-pointer hover:bg-surface/50' : 'cursor-default'}`}>
               <div className="flex items-center gap-2">
                 <span className="font-heading text-sm font-bold">{t.name}</span>
                 {t.is_default && <Star className="h-3.5 w-3.5 text-warning" aria-label="Default template" />}

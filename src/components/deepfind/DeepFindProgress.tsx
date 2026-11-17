@@ -35,8 +35,8 @@ export function DeepFindProgress({ runId, leadLevel = 2 }: { runId: string; lead
         {headline} {p.people === 1 ? '1 person added so far.' : `${p.people} people added so far.`}
       </p>
       <div className="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
-        <span className="rounded-full border border-line bg-surface px-2.5 py-1">Hunter credits used: about {run.hunter_used} of {run.credit_cap_hunter}</span>
-        <span className="rounded-full border border-line bg-surface px-2.5 py-1">AI calls used: {run.ai_used} of {run.credit_cap_ai}</span>
+        <span className="rounded-full border border-line bg-raised px-2.5 py-1">Hunter credits used: about {run.hunter_used} of {run.credit_cap_hunter}</span>
+        <span className="rounded-full border border-line bg-raised px-2.5 py-1">AI calls used: {run.ai_used} of {run.credit_cap_ai}</span>
       </div>
       {active && <p className="text-[13px]">You can close this window: Deep find keeps going in the background.</p>}
       {rows.length === 0 && <p className="text-sm">No leads in this Deep find.</p>}

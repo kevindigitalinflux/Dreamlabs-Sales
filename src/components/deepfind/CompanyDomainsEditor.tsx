@@ -65,7 +65,7 @@ export function CompanyDomainsEditor({ leadId, domains, headingLevel = 3 }: { le
       <Heading level={headingLevel} className="font-heading text-sm font-bold">Company domains <span className="font-body text-[13px] font-normal">(found automatically, check before emailing)</span></Heading>
       {shown.length > 0 && <ul className="flex flex-col gap-1.5">
         {shown.map((d) => (
-          <li key={d.domain} className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-line bg-surface/60 px-2.5 py-1.5 text-[13px]">
+          <li key={d.domain} className="flex min-w-0 flex-col gap-1.5 rounded-control border border-line bg-raised/60 px-2.5 py-1.5 text-[13px]">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">{d.domain}{d.needs_check ? ' (not confirmed)' : ''}</span>
               {confirming !== d.domain && (

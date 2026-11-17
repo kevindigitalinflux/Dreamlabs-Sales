@@ -53,7 +53,7 @@ export function PipelineKanban() {
         </div>
       </div>
 
-      <p className="rounded-lg border border-line bg-card p-4 text-sm text-muted md:hidden">
+      <p className="rounded-control border border-line bg-card p-4 text-sm text-muted md:hidden">
         The Kanban board works best on desktop. Use the List view here on mobile — your progress is saved.
       </p>
 

@@ -26,7 +26,7 @@ export function AdditionalDetails({ lead, onSave }: { lead: Lead; onSave: (patch
   if (groups.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-surface/60 p-3">
+    <div className="flex flex-col gap-2 rounded-control bg-surface/60 p-3">
       {groups.map((g) => (
         <div key={g.column}>
           <p className="mb-1 text-xs font-semibold text-muted">{g.label}</p>

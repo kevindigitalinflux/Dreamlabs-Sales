@@ -42,7 +42,7 @@ export function DreamAgentCsv() {
   }
 
 return (
-        <div className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4">
+        <div className="flex flex-col gap-3 rounded-surface border border-line bg-card p-4">
           <label className="flex min-h-11 items-center gap-2">
             <input type="radio" name="csv-pipeline-choice" checked={csvPipelineChoice === 'existing'} onChange={() => setCsvPipelineChoice('existing')} className="h-4 w-4 accent-violet-500" />
             Add to an existing pipeline
@@ -58,7 +58,7 @@ return (
             Create a new pipeline
           </label>
           {csvPipelineChoice === 'new' && (
-            <input type="text" placeholder="New pipeline name" value={csvNewPipelineName} onChange={(e) => setCsvNewPipelineName(e.target.value)} className="min-h-11 rounded-lg border border-line bg-surface px-3 text-base outline-none focus:border-focus" />
+            <input type="text" placeholder="New pipeline name" value={csvNewPipelineName} onChange={(e) => setCsvNewPipelineName(e.target.value)} className="min-h-11 rounded-control border border-line bg-raised px-3 text-base outline-none focus:border-focus" />
           )}
           <input
             ref={csvInputRef}
@@ -80,7 +80,7 @@ return (
               const file = e.dataTransfer.files?.[0];
               if (file) setCsvFile(file);
             }}
-            className={`flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 text-center transition-colors ${csvDragActive ? 'border-cyan bg-cyan/5' : 'border-line hover:border-cyan/60'}`}
+            className={`flex cursor-pointer flex-col items-center gap-2 rounded-control border-2 border-dashed p-6 text-center transition-colors ${csvDragActive ? 'border-violet-line bg-cyan/5' : 'border-line hover:border-violet-line'}`}
           >
             <Upload className="h-6 w-6 text-muted" aria-hidden />
             {csvFile ? (

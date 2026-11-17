@@ -45,7 +45,7 @@ export function KnownPersonResult({ person, result, contact, extraNotes = [], ty
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-line bg-card p-3">
+    <div className="flex flex-col gap-2 rounded-control border border-line bg-card p-3">
       <p className="text-sm font-semibold text-offwhite">{summary.heading}</p>
       {summary.lines.length > 0 ? (
         <ul className="flex flex-col gap-0.5 text-sm text-offwhite">

@@ -38,7 +38,7 @@ export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen, s
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-line">
+    <div className="overflow-x-auto rounded-surface border border-line">
       <table className="w-full text-left text-sm">
         <thead className="sticky top-0 bg-card">
           <tr className="border-b border-line text-xs font-semibold text-muted">

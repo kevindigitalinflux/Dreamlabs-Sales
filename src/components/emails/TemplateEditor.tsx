@@ -92,7 +92,7 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose, o
         />
         <Input label="Subject" value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} />
         {currentOrg && (
-          <div className="flex flex-col gap-4 rounded-lg border border-line p-3">
+          <div className="flex flex-col gap-4 rounded-control border border-line p-3">
             <AttachmentFiles orgId={currentOrg.id} attachments={form.attachments} onChange={(attachments) => setForm((f) => ({ ...f, attachments }))} />
             <LinksEditor orgId={currentOrg.id} links={form.links} onChange={(links) => setForm((f) => ({ ...f, links }))} />
           </div>
@@ -100,13 +100,13 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose, o
         <div className="flex flex-wrap gap-1">
           {TEMPLATE_VARIABLES.map((v) => (
             <button key={v.key} type="button" onClick={() => insertVar(v.key)}
-              className="min-h-11 cursor-pointer rounded-md border border-line px-3 text-xs text-muted hover:border-cyan hover:text-link">
+              className="min-h-11 cursor-pointer rounded-md border border-line px-3 text-xs text-muted hover:border-violet-line hover:text-link">
               {v.label}
             </button>
           ))}
           {customKeys.map((key) => (
             <button key={key} type="button" onClick={() => insertVar(key)} title={`Your value: ${customValues[key] ?? ''}`}
-              className="min-h-11 cursor-pointer rounded-md border border-violet/50 px-3 text-xs text-offwhite hover:border-cyan hover:text-link">
+              className="min-h-11 cursor-pointer rounded-md border border-violet/50 px-3 text-xs text-offwhite hover:border-violet-line hover:text-link">
               {`{{${key}}}`}
             </button>
           ))}
@@ -119,7 +119,7 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose, o
             Default template (visible to all contractors)
           </label>
         )}
-        <div className="rounded-lg bg-surface/60 p-3">
+        <div className="rounded-control bg-surface/60 p-3">
           <p className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Preview (sample lead)</p>
           <FormattedEmail body={preview} />
           {form.links.length > 0 && <FormattedEmail body={linksBlock(form.links)} className="mt-3" />}

@@ -59,7 +59,7 @@ function FilterRow({ filters, onChange, contractors, isAdmin, onExport }: Filter
         placeholder="Search company, subject…"
         value={filters.search}
         onChange={(e) => onChange({ ...filters, search: e.target.value })}
-        className="min-h-11 min-w-56 flex-1 rounded-lg border border-line bg-surface px-3 text-base outline-none placeholder:text-muted focus:border-focus"
+        className="min-h-11 min-w-56 flex-1 rounded-control border border-line bg-raised px-3 text-base outline-none placeholder:text-muted focus:border-focus"
       />
       {isAdmin && (
         <SelectField
@@ -76,12 +76,12 @@ function FilterRow({ filters, onChange, contractors, isAdmin, onExport }: Filter
       <div className="flex flex-col gap-1.5">
         <label className="text-xs font-semibold text-muted" htmlFor="log-from">From</label>
         <input id="log-from" type="date" value={filters.from} onChange={(e) => onChange({ ...filters, from: e.target.value })}
-          className="min-h-11 rounded-lg border border-line bg-surface px-3 text-base outline-none focus:border-focus" />
+          className="min-h-11 rounded-control border border-line bg-raised px-3 text-base outline-none focus:border-focus" />
       </div>
       <div className="flex flex-col gap-1.5">
         <label className="text-xs font-semibold text-muted" htmlFor="log-to">To</label>
         <input id="log-to" type="date" value={filters.to} onChange={(e) => onChange({ ...filters, to: e.target.value })}
-          className="min-h-11 rounded-lg border border-line bg-surface px-3 text-base outline-none focus:border-focus" />
+          className="min-h-11 rounded-control border border-line bg-raised px-3 text-base outline-none focus:border-focus" />
       </div>
       <Button variant="secondary" onClick={onExport}>Export CSV</Button>
     </div>
@@ -137,7 +137,7 @@ export function EmailLogList() {
         isAdmin={currentOrg?.role === 'admin'}
         onExport={() => exportCsv(filtered, companyOf)}
       />
-      <div className="overflow-x-auto rounded-xl border border-line">
+      <div className="overflow-x-auto rounded-surface border border-line">
         <table className="w-full text-left text-sm">
           <thead className="sticky top-0 bg-card">
             <tr className="border-b border-line text-xs font-semibold text-muted">
@@ -173,7 +173,7 @@ export function EmailLogList() {
                     </td>
                   </tr>
                   {expanded && (
-                    <tr className="border-b border-line bg-surface/30 last:border-0">
+                    <tr className="border-b border-line bg-raised/30 last:border-0">
                       <td colSpan={5} className="px-3 py-3 text-sm">
                         <p className="mb-1 text-xs text-muted">To: {log.to_email}</p>
                         <FormattedEmail body={log.body} emptyText="(No body)" />

@@ -3,9 +3,10 @@ import { useFocusMode } from '../../hooks/useFocusMode';
 import { NeedsYouPill } from '../jobs/NeedsYouPill';
 import { OrgSwitcher } from './OrgSwitcher';
 import { UsageMeter } from './UsageMeter';
+import { ThemeToggle } from './ThemeToggle';
 import { UserMenu } from './UserMenu';
 
-/** Top bar: focus-mode toggle, the background-jobs pill, usage, organisation switcher and the account menu. */
+/** Top bar: focus-mode toggle, the background-jobs pill, the light/dark switch, usage, organisation switcher and the account menu. */
 export function TopBar() {
   const { focusMode, toggle } = useFocusMode();
   return (
@@ -21,6 +22,7 @@ export function TopBar() {
         {focusMode ? 'Exit focus' : 'Focus'}
       </button>
       {!focusMode && <NeedsYouPill />}
+      <ThemeToggle />
       <UsageMeter />
       <OrgSwitcher />
       <UserMenu />

@@ -91,7 +91,7 @@ export function EnrichmentReview({ open, results, leadsById, onClose, onApply,on
         {visible.map((r) => {
           const lead = leadsById[r.lead_id];
           return (
-            <div key={r.lead_id} className="rounded-lg border border-line p-3">
+            <div key={r.lead_id} className="rounded-control border border-line p-3">
               <label className="mb-2 flex min-h-11 items-center gap-2 text-sm font-semibold"><input type="checkbox" aria-label={`Select details for ${lead?.business_name??r.lead_id}`} disabled={review.busy||!checked[r.lead_id]?.size} checked={review.selected.has(r.lead_id)} onChange={()=>review.toggle(r.lead_id)} />{lead?.business_name??r.lead_id}</label>
               {!checked[r.lead_id]?.size&&<p className="text-xs text-muted">Select at least one field to apply this lead.</p>}
               {review.errors[r.lead_id]&&<p role="alert" className="text-sm text-danger">{review.errors[r.lead_id]}</p>}

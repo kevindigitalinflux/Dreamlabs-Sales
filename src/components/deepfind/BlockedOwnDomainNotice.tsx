@@ -25,7 +25,7 @@ export function BlockedOwnDomainNotice({ leadId, lead }: { leadId: string; lead:
   return (
     <div className="flex flex-col gap-2">
       {own.map((o) => (
-        <div key={o.domain} className="flex items-start gap-2 rounded-xl border-2 border-amber-500/60 bg-amber-500/10 p-3">
+        <div key={o.domain} className="flex items-start gap-2 rounded-surface border-2 border-amber-500/60 bg-amber-500/10 p-3">
           <AlertTriangle size={18} aria-hidden className="mt-0.5 shrink-0" />
           <div className="flex min-w-0 flex-col items-start gap-2">
             <p>You marked <strong className="break-words [overflow-wrap:anywhere]">{o.domain}</strong> as not theirs, but it is this lead&apos;s {o.kind === 'website' ? 'website' : 'email domain'}. Deep find skips it.</p>

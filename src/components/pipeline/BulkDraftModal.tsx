@@ -156,7 +156,7 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
           const files = chosen.attachments ?? [];
           const links = chosen.links ?? [];
           return (
-            <p className="rounded-lg bg-surface/60 p-2 text-xs text-muted">
+            <p className="rounded-control bg-surface/60 p-2 text-xs text-muted">
               {files.length === 0 && links.length === 0
                 ? 'This template has no attachments or links. You can add them in Emails, Templates.'
                 : `Every draft will include: ${[...files.map((f) => `📎 ${f.name}`), ...links.map((l) => `🔗 ${l.label}`)].join(', ')}.`}
@@ -186,7 +186,7 @@ export function BulkDraftModal({ open, leads, onClose, onGenerated }: BulkDraftM
             </span>
           </label>
         )}
-        <div className="rounded-lg bg-surface/60 p-3 text-sm" aria-live="polite">
+        <div className="rounded-control bg-surface/60 p-3 text-sm" aria-live="polite">
           <p className="font-semibold">{writable.length === 0 ? 'No emails to write' : `Will write ${writable.length} ${writable.length === 1 ? 'email' : 'emails'}`}</p>
           {targets.length > 0 && (
             <ul className="mt-1 flex max-h-32 flex-col gap-0.5 overflow-y-auto text-xs text-muted">

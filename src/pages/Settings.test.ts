@@ -41,7 +41,7 @@ it.each(['member', 'admin'])('offers a real setup zip download for an organisati
   expect(link).toMatch(/\bdownload(?:="[^"]*")?/);
   expect(link).toContain('Download setup skill');
   expect(link).toContain('focus-visible:');
-  for (const token of ['bg-violet', 'text-on-accent', 'hover:bg-violet/85', 'min-h-11', 'motion-reduce:transition-none']) expect(link).toContain(token);
+  for (const token of ['from-violet', 'text-on-accent', 'hover:brightness-110', 'min-h-11', 'motion-reduce:transition-none']) expect(link).toContain(token);
   const imports = html.match(/<button\b[^>]*>Import setup files<\/button>/g) ?? [];
   expect(imports).toHaveLength(role === 'admin' ? 1 : 0);
   if (role === 'admin') {

@@ -171,7 +171,7 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
           const lead = leadsById[leadId];
           const candidates = candidatesByLead[leadId] ?? [];
           return (
-            <div key={leadId} className="rounded-lg border border-line p-3">
+            <div key={leadId} className="rounded-control border border-line p-3">
               <p className="mb-2 text-sm font-semibold">{lead?.business_name ?? leadId}</p>
               <ul className="flex flex-col gap-2">
                 {candidates.map((candidate) => (

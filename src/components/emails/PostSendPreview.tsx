@@ -21,7 +21,7 @@ export function PostSendPreview({ lines, report, multi }: PostSendPreviewProps) 
   }
   if (!lines || lines.length === 0) return null;
   return (
-    <div className="flex flex-col gap-1 rounded-lg bg-surface/60 p-3 text-xs text-muted">
+    <div className="flex flex-col gap-1 rounded-control bg-surface/60 p-3 text-xs text-muted">
       <p className="font-bold uppercase tracking-wide">What happens after sending</p>
       {lines.map((l) => <p key={l}>{l}</p>)}
       {multi && <p>Applied once for this lead, from the first email sent.</p>}

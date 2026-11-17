@@ -47,7 +47,7 @@ export function ContactForm({ initial, submitLabel, onSubmit, onCancel, storedLi
   }
 
   return (
-    <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-2 rounded-lg border border-line bg-card p-3" aria-label={submitLabel}>
+    <form noValidate onSubmit={(e) => void submit(e)} className="flex flex-col gap-2 rounded-control border border-line bg-card p-3" aria-label={submitLabel}>
       {isPerson ? (
         <div className="grid grid-cols-2 gap-2">
           <Input label="First name" value={form.first_name} onChange={set('first_name')} autoComplete="off" />

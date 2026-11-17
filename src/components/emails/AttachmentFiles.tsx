@@ -55,7 +55,7 @@ export function AttachmentFiles({ orgId, attachments, onChange, compact = false 
           {attachments.map((a) => {
             const Icon = a.type === 'application/pdf' ? FileText : Image;
             return (
-              <li key={a.path} className="flex items-center gap-2 rounded-lg bg-surface/60 px-2 py-1 text-sm">
+              <li key={a.path} className="flex items-center gap-2 rounded-control bg-surface/60 px-2 py-1 text-sm">
                 <Icon className="h-4 w-4 shrink-0 text-muted" aria-hidden />
                 <span className="min-w-0 flex-1 truncate">{a.name}</span>
                 <span className="shrink-0 text-xs text-muted">{formatBytes(a.size)}</span>

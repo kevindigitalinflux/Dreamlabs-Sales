@@ -22,7 +22,7 @@ export function PickerFilterBar({ value, onChange, pipelines }: Props) {
     <Input label="Search company, owner or email" type="search" value={value.search}
       onChange={e => onChange({ ...value, search: e.target.value })} placeholder="Search leads…" />
     <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-      <details className="min-w-0 rounded-lg border border-line p-3">
+      <details className="min-w-0 rounded-control border border-line p-3">
         <summary className="min-h-8 cursor-pointer break-words font-semibold focus-visible:outline-2 focus-visible:outline-violet-line">
           Pipelines ({selectedPipelines.length})
         </summary>

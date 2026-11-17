@@ -12,7 +12,7 @@ export function ViewToggle({ current }: { current: 'kanban' | 'list' }) {
 
   const base = 'flex min-h-11 cursor-pointer items-center gap-2 px-4 text-sm font-semibold transition-colors motion-reduce:transition-none';
   return (
-    <div className="flex overflow-hidden rounded-lg border border-line" role="group" aria-label="Pipeline view">
+    <div className="flex overflow-hidden rounded-control border border-line" role="group" aria-label="Pipeline view">
       <button type="button" onClick={() => go('kanban')} aria-pressed={current === 'kanban'} className={`${base} ${current === 'kanban' ? 'bg-violet/25 text-offwhite' : 'text-muted hover:text-offwhite'}`}>
         <KanbanSquare className="h-4 w-4" aria-hidden />
         Kanban

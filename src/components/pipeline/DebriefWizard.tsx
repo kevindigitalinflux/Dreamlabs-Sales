@@ -65,7 +65,7 @@ export function DebriefWizard({ onSubmit, onCancel }: DebriefWizardProps) {
                 type="button"
                 onClick={() => { setOutcome(value); setStep(2); }}
                 aria-pressed={outcome === value}
-                className={`flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border text-sm font-semibold ${outcome === value ? 'border-cyan text-link' : 'border-line text-muted hover:text-offwhite'}`}
+                className={`flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-2 rounded-control border text-sm font-semibold ${outcome === value ? 'border-violet-line text-link' : 'border-line text-muted hover:text-offwhite'}`}
               >
                 <Icon className="h-5 w-5" aria-hidden />
                 {value}

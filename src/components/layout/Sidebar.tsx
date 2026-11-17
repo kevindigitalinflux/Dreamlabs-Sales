@@ -26,7 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
-const ROW = 'relative flex min-h-11 items-center gap-3 rounded-control px-3 text-[15px] font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nav-active';
+const ROW = 'relative flex min-h-11 md:min-h-9 items-center gap-3 rounded-control px-3 text-[15px] md:text-sm font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-nav-active';
 
 /** One menu row. Collapsed: the label is kept for screen readers and as a hover title, and the badge sits on the icon's corner. */
 function SidebarLink({ item, collapsed, badge }: { item: NavItem; collapsed: boolean; badge?: ReactNode }) {
@@ -63,14 +63,14 @@ export function Sidebar() {
   };
   const CollapseIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
   return (
-    <aside className={`sticky top-0 hidden h-dvh shrink-0 flex-col overflow-y-auto border-r border-nav-line bg-nav-bg transition-[width] duration-200 motion-reduce:transition-none md:flex ${collapsed ? 'w-[60px] p-2' : 'w-56 p-4'}`}>
-      <div className={`mb-6 flex items-center gap-2 ${collapsed ? 'justify-center pt-2' : 'px-2'}`}>
+    <aside className={`sticky top-0 hidden h-dvh shrink-0 flex-col overflow-hidden border-r border-nav-line bg-nav-bg transition-[width] duration-200 motion-reduce:transition-none md:flex ${collapsed ? 'w-[60px] p-2' : 'w-56 p-3'}`}>
+      <div className={`mb-4 flex flex-col gap-1 ${collapsed ? 'items-center pt-2' : 'items-start px-2'}`}>
         <img src={logoIcon} alt="" className="h-9 w-auto" />
         {!collapsed && (
-          <p className="font-heading text-lg font-extrabold text-nav-text">Dreamlabs<span className="text-cyan">Sales</span></p>
+          <p className="whitespace-nowrap font-heading text-lg font-extrabold text-nav-text">Dreamlabs<span className="text-cyan">Sales</span></p>
         )}
       </div>
-      <nav className="flex flex-col gap-1" aria-label="Main">
+      <nav className="flex min-h-0 flex-col gap-0.5" aria-label="Main">
         {NAV_ITEMS.map((item) => <SidebarLink key={item.to} item={item} collapsed={collapsed} badge={badges[item.to]} />)}
         {currentOrg?.role === 'admin' && <SidebarLink item={{ to: '/admin', label: 'Admin', icon: Shield }} collapsed={collapsed} />}
       </nav>

@@ -12,7 +12,7 @@ export function RecentlyActive({ leads, onOpen }: { leads: Lead[]; onOpen: (lead
     <ul className="flex flex-col gap-1">
       {recent.map((lead) => (
         <li key={lead.id}>
-          <button type="button" onClick={() => onOpen(lead)} className="flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-lg px-2 text-left hover:bg-surface/60">
+          <button type="button" onClick={() => onOpen(lead)} className="flex min-h-11 w-full cursor-pointer items-center gap-3 rounded-control px-2 text-left hover:bg-surface/60">
             <span className="flex-1 truncate text-sm font-semibold">{lead.business_name}</span>
             <StageBadge stage={lead.stage} />
             <span className="text-xs text-muted">{formatShortDate(lead.updated_at)}</span>

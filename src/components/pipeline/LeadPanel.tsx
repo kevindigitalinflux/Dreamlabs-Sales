@@ -64,13 +64,13 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
                 onClick={() => void onUpdate(lead.id, { is_priority: !lead.is_priority })}
                 aria-pressed={lead.is_priority}
                 aria-label={lead.is_priority ? 'Unmark as priority' : 'Mark as priority'}
-                className={`flex h-8 w-8 items-center justify-center rounded-lg ${lead.is_priority ? 'text-warning' : 'text-muted hover:text-warning'}`}
+                className={`flex h-8 w-8 items-center justify-center rounded-control ${lead.is_priority ? 'text-warning' : 'text-muted hover:text-warning'}`}
               >
                 <Star className="h-4 w-4" aria-hidden fill={lead.is_priority ? 'currentColor' : 'none'} />
               </button>
             </div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close panel" className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted hover:bg-surface">
+          <button type="button" onClick={onClose} aria-label="Close panel" className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-control text-muted hover:bg-surface">
             <X className="h-5 w-5" aria-hidden />
           </button>
         </div>

@@ -34,7 +34,7 @@ export function JobRow({ job, now, stopping, error, onStop, onDelete }: JobRowPr
   const badge = BADGE[job.state];
   const pct = job.progress && job.progress.total > 0 ? Math.min(100, Math.round((job.progress.done / job.progress.total) * 100)) : null;
   return (
-    <li className="flex flex-col gap-2 rounded-xl border border-line bg-card p-3">
+    <li className="flex flex-col gap-2 rounded-surface border border-line bg-card p-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs font-semibold text-offwhite">
           <span className={`h-2 w-2 rounded-full ${badge.dot}`} aria-hidden />
@@ -53,7 +53,7 @@ export function JobRow({ job, now, stopping, error, onStop, onDelete }: JobRowPr
       )}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       <div className="flex flex-wrap gap-2">
-        <Link to={job.href} className="flex min-h-11 items-center rounded-lg border border-line bg-surface px-4 text-sm font-semibold hover:bg-surface/70">Open</Link>
+        <Link to={job.href} className="flex min-h-11 items-center rounded-control border border-line bg-raised px-4 text-sm font-semibold hover:bg-surface/70">Open</Link>
         {job.canStop && <Button variant="secondary" loading={stopping} onClick={onStop}>Stop</Button>}
         {job.canDelete && <Button variant="ghost" onClick={onDelete}>Delete</Button>}
       </div>

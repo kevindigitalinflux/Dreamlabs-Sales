@@ -57,7 +57,7 @@ export function SuggestedSequence({ leadId, onEnroll }: SuggestedSequenceProps) 
 
   const suggestion = state.kind === 'done' ? state.suggestion : null;
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-line p-3">
+    <div className="flex flex-col gap-2 rounded-control border border-line p-3">
       {state.kind !== 'done' && (
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" onClick={() => void suggest()} disabled={state.kind === 'asking'} loading={state.kind === 'asking'}>

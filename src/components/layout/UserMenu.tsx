@@ -4,9 +4,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { initials } from '../../lib/utils';
 import { Popover } from '../ui/Popover';
 import { Button } from '../ui/Button';
-import { ThemeToggle } from './ThemeToggle';
 
-/** Avatar button in the top bar. Opens the account menu: who is signed in, the light/dark switch and Sign out. */
+/** Avatar button in the top bar. Opens the account menu: who is signed in and Sign out. */
 export function UserMenu() {
   const { profile, signOut } = useAuth();
   const [open, setOpen] = useState(false);
@@ -36,10 +35,6 @@ export function UserMenu() {
           <div className="min-w-0">
             <p className="truncate font-semibold">{profile?.full_name ?? 'Signed in'}</p>
             {profile?.email && <p className="truncate text-sm text-muted">{profile.email}</p>}
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-muted">Theme</span>
-            <ThemeToggle />
           </div>
           <Button variant="secondary" onClick={() => void signOut()}>
             <LogOut className="h-4 w-4" aria-hidden />

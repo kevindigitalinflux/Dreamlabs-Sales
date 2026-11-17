@@ -37,7 +37,7 @@ export function LeadCard({ lead, assigneeName, onOpen }: LeadCardProps) {
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') onOpen?.(lead);
       }}
-      className={`flex cursor-pointer flex-col gap-1.5 rounded-lg border border-line border-l-4 bg-card p-3 text-left hover:bg-surface/60 ${STAGE_BORDER_CLASSES[lead.stage]}`}
+      className={`flex cursor-pointer flex-col gap-1.5 rounded-control border border-line border-l-4 bg-card p-3 text-left hover:bg-surface/60 ${STAGE_BORDER_CLASSES[lead.stage]}`}
     >
       <div className="flex items-start justify-between gap-2">
         <p className="font-heading text-sm font-bold">{lead.business_name}</p>

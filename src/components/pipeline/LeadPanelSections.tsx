@@ -88,7 +88,7 @@ export function ContactInfo({ lead, onSave }: EditableSectionProps) {
   const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
-  const action = 'flex h-11 w-11 shrink-0 items-center justify-center self-end rounded-lg text-link hover:bg-surface';
+  const action = 'flex h-11 w-11 shrink-0 items-center justify-center self-end rounded-control text-link hover:bg-surface';
   const website = websiteHref(lead.website);
   return (
     <div className="flex flex-col gap-3">
@@ -213,7 +213,7 @@ export function NotesPreview({ notes, loading, onEditNote, onDeleteNote }: {
     <div className="flex flex-col gap-2">
       <ul className="flex flex-col gap-2">
         {visible.map((n) => (
-          <li key={n.id} className="rounded-lg bg-surface/60 p-2 text-sm">
+          <li key={n.id} className="rounded-control bg-surface/60 p-2 text-sm">
             {onEditNote
               ? <EditableNote note={n} onSave={onEditNote} onDelete={onDeleteNote} clamp />
               : <p className="line-clamp-3 whitespace-pre-wrap break-words">{n.content}</p>}

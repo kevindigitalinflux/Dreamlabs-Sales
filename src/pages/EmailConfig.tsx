@@ -94,7 +94,7 @@ export function EmailConfig() {
       </header>
       <p className="text-muted">Connect your own email address — everything you send goes out from it, not from a robot address.</p>
       <MailboxStatusView settings={settings} />
-      <section className="rounded-lg border border-line bg-surface p-4 text-sm" aria-label="Connect reply detection">
+      <section className="rounded-control border border-line bg-raised p-4 text-sm" aria-label="Connect reply detection">
         <h2 className="font-bold">Connect your inbox for replies</h2>
         {form.provider === 'gmail' && <ol className="list-inside list-decimal">
           <li>Open Gmail Settings, then Forwarding and POP/IMAP. Enable IMAP if the option is shown; some accounts keep it on automatically.</li>
@@ -116,7 +116,7 @@ export function EmailConfig() {
           </SelectField>
 
           {steps.length > 0 && (
-            <ol className="flex flex-col gap-2 rounded-lg bg-surface/60 p-4 text-sm">
+            <ol className="flex flex-col gap-2 rounded-control bg-surface/60 p-4 text-sm">
               {steps.map((s, i) => (
                 <li key={s} className="flex gap-2"><span className="font-bold text-link">{i + 1}.</span>{s}</li>
               ))}

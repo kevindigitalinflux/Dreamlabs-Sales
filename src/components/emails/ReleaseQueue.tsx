@@ -7,6 +7,7 @@ import type { DraftLog } from '../../hooks/useDrafts';
 import { useOrgLeads } from '../../hooks/useOrgLeads';
 import {useReviewBatch} from '../../hooks/useReviewBatch';
 import {ReviewBatchControls} from '../ui/ReviewBatchControls';
+import { ToggleChip } from '../ui/ToggleChip';
 import {discardReviewDraft,releaseReviewDraft,reviewedDraftMatches} from '../../lib/draftReviewActions';
 import { EmailReviewQueue } from '../dashboard/EmailReviewQueue';
 import { EmailComposer } from './EmailComposer';
@@ -79,7 +80,7 @@ export function ReleaseQueue() {
     <div className="flex flex-col gap-3">
       <p className="text-sm text-muted">Autopilot drafts need individual review. <Link className="underline" to="/outreach/autopilot">Review Autopilot drafts</Link></p>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      <button type="button" aria-pressed={needsLookOnly} onClick={()=>setNeedsLookOnly(!needsLookOnly)} className="min-h-11 self-start rounded-lg border border-line px-3 text-sm text-muted">Needs a look</button>
+      <ToggleChip className="self-start" pressed={needsLookOnly} onPressedChange={setNeedsLookOnly}>Needs a look</ToggleChip>
       {needsLook.error&&<p role="alert" className="text-sm text-danger">{needsLook.error}</p>}
       <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" checked={resumeReputation} onChange={event=>setResumeReputation(event.target.checked)} disabled={checking||review.busy}/>I reviewed the mailbox bounce warning and knowingly resume this batch</label>
       <ReviewBatchControls review={{...review,busy:review.busy||checking||!!reviewing,summary:summary??review.summary}} ids={visible.map(d=>d.id)} approveLabel="Release selected" rejectLabel="Reject selected" onApprove={()=>void handleBatch('release')} onReject={()=>void handleBatch('reject')} />

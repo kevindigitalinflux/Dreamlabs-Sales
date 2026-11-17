@@ -26,7 +26,7 @@ export function RepliesPanel() {
     {loading ? <Skeleton className="h-32 w-full" /> : selected ? rows[0] ? <ReplyDetail reply={rows[0]} onChanged={refresh} /> : <p>Reply not found.</p>
       : rows.length === 0 ? <p className="text-sm text-muted">No replies yet. Connected inboxes are checked about every five minutes.</p>
       : <ul className="flex flex-col gap-2">{orderReplies(rows, unread).map(reply => <li key={reply.id}>
-        <button type="button" onClick={() => setParams({ tab: 'replies', reply: reply.id })} className="flex min-h-11 w-full flex-col gap-1 rounded-lg border border-line bg-card p-3 text-left hover:bg-surface focus-visible:outline-2 focus-visible:outline-violet-line">
+        <button type="button" onClick={() => setParams({ tab: 'replies', reply: reply.id })} className="flex min-h-11 w-full flex-col gap-1 rounded-control border border-line bg-card p-3 text-left hover:bg-surface focus-visible:outline-2 focus-visible:outline-violet-line">
           <span className="break-words font-semibold">{unread.has(reply.id) && <strong>New · </strong>}{reply.lead?.business_name ?? 'Lead'}<ChevronRight className="ml-2 inline h-4 w-4" aria-hidden /></span>
           <span className="break-all text-xs text-muted">{reply.from_email} · <time dateTime={reply.received_at} title={new Date(reply.received_at).toLocaleString('en-GB')}>{relativeReplyTime(reply.received_at)}</time></span>
           <span className="break-words text-sm">{reply.preview || reply.body.slice(0, 200)}</span>

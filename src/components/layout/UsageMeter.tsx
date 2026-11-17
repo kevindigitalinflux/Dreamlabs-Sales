@@ -87,7 +87,7 @@ export function UsageMeter() {
         aria-controls={panelId}
         aria-label={`${label}. Show usage details`}
         onClick={() => setPinned((p) => !p)}
-        className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm font-semibold ${CHIP_CLASS[state]}`}
+        className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-control border px-3 text-sm font-semibold ${CHIP_CLASS[state]}`}
       >
         <Zap className="h-4 w-4 shrink-0" aria-hidden />
         <span className="hidden whitespace-nowrap sm:inline">{label}</span>
@@ -100,7 +100,7 @@ export function UsageMeter() {
           id={panelId}
           role="region"
           aria-label="Worker usage today"
-          className="absolute right-0 top-full z-30 mt-2 w-80 max-w-[90vw] rounded-xl border border-line bg-card p-3 shadow-lg"
+          className="absolute right-0 top-full z-30 mt-2 w-80 max-w-[90vw] rounded-surface border border-line bg-card p-3 shadow-lg"
         >
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Lookup worker, today</p>
           {error || rows.length === 0 ? (

@@ -189,7 +189,7 @@ export function ScraperJob() {
 
       <label className="flex items-center gap-2 sm:hidden"><input type="checkbox" aria-label="Select all actionable scraped leads" disabled={reviewDisabled || !pending.length} checked={pending.length > 0 && pending.every(l => selected.has(l.id))} onChange={() => toggleSelectAll(pending.map(l => l.id))} />Select all</label>
       <BulkActionBar count={pending.filter(l => selected.has(l.id)).length} busy={reviewDisabled} approveLabel="Approve selected" rejectLabel="Remove selected" onApprove={() => { if (pipelineId) void approveSelected(pending); else setRowError({id:'', text:'Choose a pipeline before approving.'}); }} onReject={() => void removeSelected(pending)} onClear={() => setSelected(new Set())} />
-      <div className="overflow-x-auto rounded-xl border border-line">
+      <div className="overflow-x-auto rounded-surface border border-line">
         <table className="block w-full text-left text-sm sm:table">
           <thead className="hidden sm:table-header-group">
             <tr className="border-b border-line text-xs text-muted">

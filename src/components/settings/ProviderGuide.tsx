@@ -26,13 +26,13 @@ export function ProviderGuide({ url, ctaLabel, freeText, steps }: ProviderGuideP
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex min-h-11 w-fit cursor-pointer items-center justify-center gap-2 rounded-lg border border-line bg-surface px-4 text-[15px] font-semibold text-offwhite transition-colors hover:bg-surface/70"
+        className="inline-flex min-h-11 w-fit cursor-pointer items-center justify-center gap-2 rounded-control border border-line bg-raised px-4 text-[15px] font-semibold text-offwhite transition-colors hover:bg-surface/70"
       >
         {ctaLabel}
         <ExternalLink className="h-4 w-4" aria-hidden />
       </a>
       {steps && steps.length > 0 && (
-        <ol className="flex flex-col gap-2 rounded-lg bg-surface/60 p-4 text-sm">
+        <ol className="flex flex-col gap-2 rounded-control bg-surface/60 p-4 text-sm">
           {steps.map((s, i) => (
             <li key={s} className="flex gap-2">
               <span className="font-bold text-link">{i + 1}.</span>{s}

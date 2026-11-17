@@ -41,7 +41,7 @@ export function NotesTimeline({ notes, loading, authorName, onEditNote, onDelete
       {notes.map((note) => {
         const Icon = NOTE_TYPE_ICONS[note.note_type];
         return (
-          <li key={note.id} className="flex gap-3 rounded-lg bg-surface/50 p-3">
+          <li key={note.id} className="flex gap-3 rounded-control bg-surface/50 p-3">
             <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted" aria-label={note.note_type} />
             <div className="min-w-0 flex-1">
               {onEditNote

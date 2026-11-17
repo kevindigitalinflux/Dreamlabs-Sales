@@ -4,6 +4,7 @@ import { NO_PROFILE } from '../../lib/leadFilters';
 import type { LeadFilters } from '../../lib/leadFilters';
 import type { IdealCustomerProfile, Profile } from '../../types';
 import type { Stage } from '../../types';
+import { ToggleChip } from '../ui/ToggleChip';
 import { MultiSelect } from '../ui/MultiSelect';
 import { useOrg } from '../../hooks/useOrg';
 
@@ -28,7 +29,7 @@ export function FilterBar({ filters, onChange, profiles, icps = [] }: FilterBarP
           placeholder="Search company, owner, email…"
           value={filters.search}
           onChange={(e) => onChange({ ...filters, search: e.target.value })}
-          className="min-h-11 w-full rounded-lg border border-line bg-surface pl-9 pr-3 text-base outline-none placeholder:text-muted focus:border-focus"
+          className="min-h-11 w-full rounded-control border border-line bg-raised pl-9 pr-3 text-base outline-none placeholder:text-muted focus:border-focus"
         />
       </div>
       <MultiSelect
@@ -53,20 +54,12 @@ export function FilterBar({ filters, onChange, profiles, icps = [] }: FilterBarP
           onChange={(assignees) => onChange({ ...filters, assignees })}
         />
       )}
-      <button
-        type="button"
-        onClick={() => onChange({ ...filters, overdueOnly: !filters.overdueOnly })}
-        aria-pressed={filters.overdueOnly}
-        className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm font-semibold ${filters.overdueOnly ? 'border-red-400 text-danger' : 'border-line text-muted'}`}
-      >
+      <ToggleChip tone="attention" pressed={!!filters.overdueOnly} onPressedChange={(overdueOnly) => onChange({ ...filters, overdueOnly })}>
         <AlertCircle className="h-4 w-4" aria-hidden />
         Overdue only
-      </button>
-      {(['hasPhone', 'hasDirectLine'] as const).map(key => <button key={key} type="button"
-        aria-pressed={!!filters[key]} onClick={() => onChange({ ...filters, [key]: !filters[key] })}
-        className={`min-h-11 cursor-pointer rounded-lg border px-3 text-sm font-semibold ${filters[key] ? 'border-cyan text-offwhite' : 'border-line text-muted'}`}>
-        {key === 'hasPhone' ? 'Has phone' : 'Has direct line'}
-      </button>)}
+      </ToggleChip>
+      <ToggleChip pressed={!!filters.hasPhone} onPressedChange={(hasPhone) => onChange({ ...filters, hasPhone })}>Has phone</ToggleChip>
+      <ToggleChip pressed={!!filters.hasDirectLine} onPressedChange={(hasDirectLine) => onChange({ ...filters, hasDirectLine })}>Has direct line</ToggleChip>
       <MultiSelect
         label="Readiness"
         options={[{ value: 'ready', label: 'Ready' }, { value: 'almost', label: 'Almost' },
@@ -74,7 +67,7 @@ export function FilterBar({ filters, onChange, profiles, icps = [] }: FilterBarP
         selected={filters.readiness ?? []}
         onChange={(readiness) => onChange({ ...filters, readiness: readiness as LeadFilters['readiness'] })}
       />
-      <button type="button" aria-pressed={!!filters.needsLookOnly} onClick={()=>onChange({...filters,needsLookOnly:!filters.needsLookOnly})} className="min-h-11 rounded-lg border border-line px-3 text-sm text-muted">Needs a look</button>
+      <ToggleChip pressed={!!filters.needsLookOnly} onPressedChange={(needsLookOnly) => onChange({ ...filters, needsLookOnly })}>Needs a look</ToggleChip>
     </div>
   );
 }

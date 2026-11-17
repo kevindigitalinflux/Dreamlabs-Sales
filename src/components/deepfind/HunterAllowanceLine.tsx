@@ -28,5 +28,5 @@ export function HunterAllowanceLine({ requested = 0, onAllowance }: { requested?
   if (!text) return <p className="text-[13px] text-offwhite/80">Could not check how many Hunter searches are left.</p>;
   const warning = hunterShortfall(hunterAllowanceLeft(state.allowance), requested);
   if (!(state.allowance?.usedUp || warning)) return <p role="status" className="text-[13px] text-offwhite/80">{text}</p>;
-  return <p role="status" className="flex items-start gap-2 rounded-xl border-2 border-amber-500/60 bg-amber-500/10 p-3 text-sm text-offwhite"><AlertTriangle size={18} aria-hidden className="mt-0.5 shrink-0" /><span><span className="font-semibold">Allowance warning: </span>{text}{warning && <> {warning}</>}</span></p>;
+  return <p role="status" className="flex items-start gap-2 rounded-surface border-2 border-amber-500/60 bg-amber-500/10 p-3 text-sm text-offwhite"><AlertTriangle size={18} aria-hidden className="mt-0.5 shrink-0" /><span><span className="font-semibold">Allowance warning: </span>{text}{warning && <> {warning}</>}</span></p>;
 }

@@ -10,7 +10,7 @@ export function MailboxStatusView({ settings, warningOnly = false, compact = fal
   const label = status === 'working' ? 'Working' : status === 'problem' ? 'Problem' : 'Not connected';
   const code = settings?.last_imap_error;
   const problem = code && Object.hasOwn(IMAP_MESSAGES, code) ? IMAP_MESSAGES[code as ImapError] : IMAP_MESSAGES.check_failed;
-  return <div className={compact ? 'text-xs text-muted' : 'rounded-lg border border-line bg-surface p-3 text-sm text-offwhite'} role="status">
+  return <div className={compact ? 'text-xs text-muted' : 'rounded-control border border-line bg-raised p-3 text-sm text-offwhite'} role="status">
     <p className="font-semibold">Reply detection: {label}</p>
     {status !== 'working' && <p>{status === 'problem' ? problem : 'Replies to this email will not be picked up: connect your inbox.'} <a className="underline" href="/settings/email">Connect your inbox</a></p>}
   </div>;

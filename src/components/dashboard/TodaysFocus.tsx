@@ -29,7 +29,7 @@ export function TodaysFocus({ leads, onOpen }: TodaysFocusProps) {
               tabIndex={0}
               onClick={() => onOpen(lead)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onOpen(lead); }}
-              className={`flex cursor-pointer flex-wrap items-center gap-3 rounded-lg border p-3 hover:bg-surface/60 ${overdue ? 'border-attention/40 bg-attention-soft' : 'border-line bg-card'}`}
+              className={`flex cursor-pointer flex-wrap items-center gap-3 rounded-control border p-3 hover:bg-surface/60 ${overdue ? 'border-attention/40 bg-attention-soft' : 'border-line bg-card'}`}
             >
               <span className="font-heading text-sm font-bold">{lead.business_name}</span>
               <StageBadge stage={lead.stage} />
@@ -38,7 +38,7 @@ export function TodaysFocus({ leads, onOpen }: TodaysFocusProps) {
               </span>
               {lead.next_action_note && <span className="w-full text-sm text-muted sm:w-auto sm:flex-1">{lead.next_action_note}</span>}
               {lead.phone && (
-                <a href={`tel:${lead.phone}`} onClick={(e) => e.stopPropagation()} className="ml-auto flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-link hover:bg-surface">
+                <a href={`tel:${lead.phone}`} onClick={(e) => e.stopPropagation()} className="ml-auto flex min-h-11 items-center gap-1.5 rounded-control px-3 text-sm font-semibold text-link hover:bg-surface">
                   <Phone className="h-4 w-4" aria-hidden />
                   Call
                 </a>

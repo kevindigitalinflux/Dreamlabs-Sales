@@ -18,9 +18,9 @@ export function KanbanColumn({ stage, count, children }: KanbanColumnProps) {
     <section
       ref={setNodeRef}
       aria-label={stageInfo(stage).label}
-      className={`flex w-64 shrink-0 flex-col gap-2 rounded-xl border p-2 ${isOver ? 'border-cyan bg-surface' : 'border-line bg-surface/50'}`}
+      className={`flex w-64 shrink-0 flex-col gap-2 rounded-surface border p-2 ${isOver ? 'border-violet-line bg-surface' : 'border-line bg-raised/50'}`}
     >
-      <header className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-semibold ${STAGE_BADGE_CLASSES[stage]}`}>
+      <header className={`flex items-center gap-2 rounded-control px-2 py-1.5 text-xs font-semibold ${STAGE_BADGE_CLASSES[stage]}`}>
         <Icon className="h-4 w-4" aria-hidden />
         {stageInfo(stage).label}
         <span className="ml-auto rounded-full bg-black/25 px-2 py-0.5">{count}</span>

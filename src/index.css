@@ -122,6 +122,9 @@
 }
 
 @layer base {
+  html {
+    scrollbar-gutter: stable;
+  }
   body {
     @apply bg-bg font-body text-offwhite;
     font-size: 16px;
