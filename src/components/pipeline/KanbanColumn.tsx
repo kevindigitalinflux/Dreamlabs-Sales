@@ -23,7 +23,7 @@ export function KanbanColumn({ stage, count, children }: KanbanColumnProps) {
       <header className={`flex items-center gap-2 rounded-control px-2 py-1.5 text-xs font-semibold ${STAGE_BADGE_CLASSES[stage]}`}>
         <Icon className="h-4 w-4" aria-hidden />
         {stageInfo(stage).label}
-        <span className="ml-auto rounded-full bg-black/25 px-2 py-0.5">{count}</span>
+        <span className="ml-auto rounded-full bg-navy/25 px-2 py-0.5">{count}</span>
       </header>
       <div className="flex min-h-24 flex-col gap-2 overflow-y-auto">{children}</div>
     </section>

@@ -1,23 +1,18 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
-import { ArrowRight, Star, X } from 'lucide-react';
 import type { LeadPatch } from '../../lib/leadUpdates';
-import { STAGES } from '../../lib/utils';
 import { useLeadNotes } from '../../hooks/useLeadNotes';
 import { useOrg } from '../../hooks/useOrg';
 import type { OrgProfile } from '../../hooks/useProfiles';
-import type { Lead, Stage } from '../../types';
+import type { Lead } from '../../types';
 import { Button } from '../ui/Button';
-import { SelectField } from '../ui/Input';
-import { StageBadge } from './StageBadge';
-import { ReadinessBadge } from './ReadinessBadge';
-import { NextActionEditor } from './NextActionEditor';
-import { ContactInfo, NotesPreview, PipelineInfo } from './LeadPanelSections';
+import { Tabs, TabPanel } from '../ui/Tabs';
+import { DeepFindModal } from '../deepfind/DeepFindModal';
+import { LeadPanelHeader } from './LeadPanelHeader';
+import { LeadPanelOverview } from './LeadPanelOverview';
+import { NotesPreview } from './LeadPanelSections';
 import { NoteComposer } from './NoteComposer';
 import { DecisionMakersCard } from './DecisionMakersCard';
 import { EmailComposer } from '../emails/EmailComposer';
-import { EnrollmentControl } from '../emails/EnrollmentControl';
-import { PainPointCard } from './PainPointCard';
 
 interface LeadPanelProps {
   lead: Lead | null;
@@ -26,103 +21,54 @@ interface LeadPanelProps {
   onUpdate: (id: string, patch: LeadPatch) => Promise<string | null>;
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="border-b border-line pb-4">
-      <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">{title}</h3>
-      {children}
-    </section>
-  );
-}
-
-/** Right slide-in expanded card (SPEC.md §6). Renders nothing when no lead selected. */
+/**
+ * The lead record: a full-height panel fixed to the right edge. Summary and the three main actions on top, then three
+ * tabs (Overview, Contacts, Notes and emails) with the detail folded away. Renders nothing when no lead is selected.
+ */
 export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps) {
-  const navigate = useNavigate();
   const { currentOrg } = useOrg();
+  const [tab, setTab] = useState('overview');
   const [noteOpen, setNoteOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [deepFindOpen, setDeepFindOpen] = useState(false);
   const { notes, loading: notesLoading, addNote, updateNote, deleteNote } = useLeadNotes(lead?.id ?? 'none');
 
   if (!lead) return null;
+  const save = (patch: LeadPatch) => onUpdate(lead.id, patch);
   return (
     <div className="fixed inset-0 z-40" role="presentation">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-navy/40" onClick={onClose} />
       <aside
         role="dialog"
         aria-label={lead.business_name}
-        className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col gap-4 overflow-y-auto border-l border-line bg-card p-5 motion-safe:animate-[slidein_.15s_ease-out]"
+        className="absolute inset-y-0 right-0 flex w-full max-w-[430px] flex-col border-l border-line bg-card shadow-[-24px_0_48px_-24px_rgba(2,6,40,0.6)] motion-safe:animate-[slidein_.15s_ease-out]"
       >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-[22px] font-bold">{lead.business_name}</h2>
-            {lead.owner_name && <p className="text-sm text-muted">{lead.owner_name}</p>}
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <StageBadge stage={lead.stage} />
-              <ReadinessBadge readiness={lead.readiness} missing={lead.readiness_missing} />
-              <button
-                type="button"
-                onClick={() => void onUpdate(lead.id, { is_priority: !lead.is_priority })}
-                aria-pressed={lead.is_priority}
-                aria-label={lead.is_priority ? 'Unmark as priority' : 'Mark as priority'}
-                className={`flex h-8 w-8 items-center justify-center rounded-control ${lead.is_priority ? 'text-warning' : 'text-muted hover:text-warning'}`}
-              >
-                <Star className="h-4 w-4" aria-hidden fill={lead.is_priority ? 'currentColor' : 'none'} />
-              </button>
-            </div>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close panel" className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-control text-muted hover:bg-surface">
-            <X className="h-5 w-5" aria-hidden />
-          </button>
+        <LeadPanelHeader lead={lead} onClose={onClose} onUpdate={onUpdate} onEmail={() => setEmailOpen(true)} onDeepFind={() => setDeepFindOpen(true)} />
+        <div className="shrink-0 px-6">
+          <Tabs label="Lead sections" value={tab} onChange={setTab} tabs={[
+            { id: 'overview', label: 'Overview' },
+            { id: 'contacts', label: 'Contacts' },
+            { id: 'notes', label: 'Notes and emails', count: notes.length || undefined },
+          ]} />
         </div>
-
-        <Section title="Stage">
-          <SelectField label="Move to stage" value={lead.stage} onChange={(e) => void onUpdate(lead.id, { stage: e.target.value as Stage })}>
-            {STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </SelectField>
-        </Section>
-
-        <Section title="Contact"><ContactInfo lead={lead} onSave={(patch) => onUpdate(lead.id, patch)} /></Section>
-        <Section title="Contacts"><DecisionMakersCard leadId={lead.id} lead={lead} onSave={(patch) => onUpdate(lead.id, patch)} /></Section>
-        <Section title="Pipeline"><PipelineInfo lead={lead} onSave={(patch) => onUpdate(lead.id, patch)} /></Section>
-
-        <Section title="Next action">
-          <NextActionEditor lead={lead} onSave={(patch) => onUpdate(lead.id, patch)} />
-        </Section>
-
-        <Section title="Sequence"><EnrollmentControl lead={lead} /></Section>
-        <PainPointCard leadId={lead.id} icpId={lead.icp_id} refreshKey={notes} />
-
-        {currentOrg?.role === 'admin' && (
-          <Section title="Assignment">
-            <SelectField label="Assigned to" value={lead.assigned_to ?? ''} onChange={(e) => void onUpdate(lead.id, { assigned_to: e.target.value || null })}>
-              <option value="">Unassigned</option>
-              {profiles.filter((p) => p.role !== 'admin').map((p) => (
-                <option key={p.id} value={p.id}>{p.full_name ?? p.email}</option>
-              ))}
-            </SelectField>
-          </Section>
-        )}
-
-        <Section title="Recent notes"><NotesPreview notes={notes} loading={notesLoading} onEditNote={updateNote} onDeleteNote={deleteNote} /></Section>
-
-        <div className="mt-auto flex flex-col gap-2">
-          <Button onClick={() => setNoteOpen(true)}>Log note</Button>
-          <Button onClick={() => navigate(`/pipeline/leads/${lead.id}`)}>
-            Open full record <ArrowRight className="h-4 w-4" aria-hidden />
-          </Button>
-          <Button variant="secondary" onClick={() => setEmailOpen(true)}>Draft email</Button>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+          <TabPanel id="overview" active={tab === 'overview'}>
+            <LeadPanelOverview lead={lead} profiles={profiles} isAdmin={currentOrg?.role === 'admin'} notesKey={notes} onSave={save} />
+          </TabPanel>
+          <TabPanel id="contacts" active={tab === 'contacts'}>
+            <DecisionMakersCard leadId={lead.id} lead={lead} onSave={save} />
+          </TabPanel>
+          <TabPanel id="notes" active={tab === 'notes'}>
+            <div className="flex flex-col gap-4">
+              <Button variant="secondary" className="self-start" onClick={() => setNoteOpen(true)}>Log note</Button>
+              <NotesPreview notes={notes} loading={notesLoading} onEditNote={updateNote} onDeleteNote={deleteNote} />
+            </div>
+          </TabPanel>
         </div>
       </aside>
-      {lead && (
-        <NoteComposer
-          open={noteOpen}
-          onClose={() => setNoteOpen(false)}
-          lead={lead}
-          addNote={addNote}
-          onUpdateLead={(patch) => onUpdate(lead.id, patch)}
-        />
-      )}
-      {lead && <EmailComposer lead={lead} open={emailOpen} onClose={() => setEmailOpen(false)} />}
+      <NoteComposer open={noteOpen} onClose={() => setNoteOpen(false)} lead={lead} addNote={addNote} onUpdateLead={save} />
+      <EmailComposer lead={lead} open={emailOpen} onClose={() => setEmailOpen(false)} />
+      <DeepFindModal open={deepFindOpen} leadIds={[lead.id]} onClose={() => setDeepFindOpen(false)} />
     </div>
   );
 }
