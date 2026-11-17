@@ -1,3 +1,4 @@
+import { completeDeepFindRun, maintainDeepFind } from './deepFindMaintenance.ts';
 import type { GeminiSearchContext } from './geminiSearchMeter.ts';
 import { geminiGroundedSearch } from './ai.ts';
 import { makeSearchProvider, type RoleSearchFallbackShape } from './searchProvider.ts';
@@ -48,7 +49,7 @@ import { DOMAIN_SOURCE_LABELS, safeFailure, websiteSuspicion, WEB_BUDGET_MS, typ
 import { creditLine, problemLines, type ProblemInput } from './deepFindProblems.ts';
 import {
   MAX_HUNTER_PEOPLE_PER_LEAD, deepFindSummary, emailOnLead, extractTeamMembers, findSamePerson, samePersonMatches,
-  hunterPeople, namedPersonIsStored, parseLeadPersonName, peopleToLookUp, stuckAction, type ExistingContact, type LeadStats, type SitePerson,
+  hunterPeople, namedPersonIsStored, parseLeadPersonName, peopleToLookUp, type ExistingContact, type LeadStats, type SitePerson,
 } from './deepFindRules.ts';
 import { makeRunVerifyGate, saveRunResult } from './runVerifyGateStore.ts';
 import { makeWorkerClient } from './workerClient.ts';
@@ -1533,11 +1534,7 @@ async function updateRow(service: SupabaseClient, id: string, patch: Record<stri
 
 /** Completes an active run once none of its rows is queued or running. */
 async function completeIfDone(service: SupabaseClient, runId: string): Promise<void> {
-  const { count } = await service.from('deep_find_leads').select('id', { count: 'exact', head: true })
-    .eq('run_id', runId).in('status', ['queued', 'running']);
-  if ((count ?? 1) > 0) return;
-  const { error } = await service.from('deep_find_runs').update({ status: 'completed', finished_at: nowIso() }).eq('id', runId).eq('status', 'active');
-  if (error) console.error('deep find: complete run failed');
+  await completeDeepFindRun(service,runId);
 }
 
 /** Cancels a run (engine side) and skips its queued rows. */
@@ -1550,25 +1547,7 @@ export async function cancelDeepFindRun(service: SupabaseClient, runId: string, 
 
 /** Housekeeping: interrupted rows are requeued once then failed; queued rows of ended runs are skipped; empty runs complete. */
 async function housekeeping(service: SupabaseClient): Promise<void> {
-  const { data: running } = await service.from('deep_find_leads').select('id, claimed_at, attempts').eq('status', 'running');
-  const now = new Date();
-  for (const r of (running ?? []) as { id: string; claimed_at: string | null; attempts: number; domains?: Record<string, unknown> }[]) {
-    const action = stuckAction(r, now);
-    if (action === 'ignore') continue;
-    const patch = action === 'requeue'
-      ? { status: 'queued', claimed_at: null }
-      : { status: 'failed', reason: 'This lead was interrupted twice, so Deep find stopped trying.', finished_at: nowIso() };
-    await service.from('deep_find_leads').update({ ...patch, updated_at: nowIso() }).eq('id', r.id).eq('status', 'running');
-  }
-  const { data: orphans } = await service.from('deep_find_leads').select('id, deep_find_runs!inner(status)')
-    .eq('status', 'queued').neq('deep_find_runs.status', 'active');
-  const ids = ((orphans ?? []) as { id: string }[]).map((o) => o.id);
-  if (ids.length > 0) {
-    await service.from('deep_find_leads').update({ status: 'skipped', reason: 'The Deep find was stopped before this lead.', updated_at: nowIso() })
-      .in('id', ids).eq('status', 'queued');
-  }
-  const { data: active } = await service.from('deep_find_runs').select('id').eq('status', 'active');
-  for (const r of (active ?? []) as { id: string }[]) await completeIfDone(service, r.id);
+  await maintainDeepFind(service);
 }
 
 /**
