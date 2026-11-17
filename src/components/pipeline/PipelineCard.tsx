@@ -48,7 +48,7 @@ export function PipelineCard({
   onRevoke,
 }: PipelineCardProps) {
   return (
-    <li className="rounded-surface border border-line bg-card p-4">
+    <li className="rounded-surface border border-line bg-raised shadow-raised p-4">
       <div className="flex items-center justify-between gap-3">
         <span className="font-semibold">
           {pipeline.name}

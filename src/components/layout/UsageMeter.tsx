@@ -100,7 +100,7 @@ export function UsageMeter() {
           id={panelId}
           role="region"
           aria-label="Worker usage today"
-          className="absolute right-0 top-full z-30 mt-2 w-80 max-w-[90vw] rounded-surface border border-line bg-card p-3 shadow-lg"
+          className="absolute right-0 top-full z-30 mt-2 w-80 max-w-[90vw] rounded-surface border border-line bg-card shadow-raised p-3 shadow-lg"
         >
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Lookup worker, today</p>
           {error || rows.length === 0 ? (

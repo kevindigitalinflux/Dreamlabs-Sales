@@ -37,7 +37,7 @@ export function MultiSelect({ label, options, selected, onChange }: MultiSelectP
         <ChevronDown className="h-4 w-4" aria-hidden />
       </button>
       {open && (
-        <div className="absolute z-30 mt-1 flex max-h-64 min-w-48 flex-col overflow-y-auto rounded-surface border border-line bg-card p-1 shadow-raised">
+        <div className="absolute z-30 mt-1 flex max-h-64 min-w-48 flex-col overflow-y-auto rounded-surface border border-line bg-card shadow-raised p-1 shadow-raised">
           {options.map((opt) => (
             <label key={opt.value} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-nested px-2 text-sm hover:bg-surface">
               <input type="checkbox" checked={selected.includes(opt.value)} onChange={() => toggle(opt.value)} className="h-4 w-4 accent-violet-500" />

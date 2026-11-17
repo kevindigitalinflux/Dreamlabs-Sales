@@ -9,7 +9,7 @@ export function ActionLeadCard({action,resolution,leadsById,scopedPipelineId,nee
     const rows = patchRows(action.patch, leadsById[action.lead_id], true, icpNames);
     const confirmed = resolution.status === 'confirmed_update';
     return (
-      <div className="flex flex-col gap-2 rounded-surface border border-line bg-card p-4">
+      <div className="flex flex-col gap-2 rounded-surface border border-line bg-raised shadow-raised p-4">
         <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-link" aria-hidden />{action.business_name}</p>
         <ul className="flex flex-col gap-1">
           {rows.map((r) => (
@@ -36,7 +36,7 @@ export function ActionLeadCard({action,resolution,leadsById,scopedPipelineId,nee
     const confirmed = resolution.status === 'confirmed_create';
     const pipelineId = resolution.status === 'confirmed_create' ? resolution.pipeline_id : (scopedPipelineId ?? '');
     return (
-      <div className="flex flex-col gap-2 rounded-surface border border-line bg-card p-4">
+      <div className="flex flex-col gap-2 rounded-surface border border-line bg-raised shadow-raised p-4">
         <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-link" aria-hidden />New lead: {action.extracted.business_name}</p>
         <p className="text-xs text-muted">{[action.extracted.owner_name, action.extracted.address, action.extracted.city, action.extracted.postcode, action.extracted.phone, action.extracted.email, action.extracted.website, action.extracted.vertical].filter(Boolean).join(' · ') || 'No extra details found'}</p>
         <ul className="flex flex-col gap-1">

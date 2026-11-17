@@ -115,7 +115,7 @@ export function DreamAgent() {
       {contactReport.failed.map((m) => <p key={m} role="alert" className="text-sm text-danger">{m}</p>)}
       {contactReport.notes.map((m) => <p key={m} role="status" className="text-sm text-muted">{m}</p>)}
 
-      <div className="flex flex-col gap-2 rounded-surface border border-line bg-card p-4">
+      <div className="flex flex-col gap-2 rounded-surface border border-line bg-raised shadow-raised p-4">
         <SelectField label="Match against" value={matchScope} onChange={(e) => setMatchScope(e.target.value)}>
           <option value="">Whole platform</option>
           {orgPipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}

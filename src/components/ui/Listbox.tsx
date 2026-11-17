@@ -217,7 +217,7 @@ export function Listbox({ value, onChange, children, id, ariaLabel, disabled, cl
             width: fullWidth ? coords.width : undefined,
             minWidth: fullWidth ? undefined : coords.width,
           }}
-          className="fixed z-50 max-h-64 overflow-auto rounded-surface border border-line bg-card p-1 shadow-raised outline-none"
+          className="fixed z-50 max-h-64 overflow-auto rounded-surface border border-line bg-card shadow-raised p-1 shadow-raised outline-none"
         >
           {parsed.map((o, gi) =>
             isGroup(o) ? (

@@ -44,7 +44,7 @@ export function ReplyDetail({ reply, onChanged }: { reply: EmailReply; onChanged
     } catch { console.error('replies: review action failed'); setError('Could not save this change. You may need edit access to this lead.'); }
     finally { setBusy(false); }
   }
-  return <article className="flex min-w-0 flex-col gap-3 rounded-surface border border-line bg-card p-4">
+  return <article className="flex min-w-0 flex-col gap-3 rounded-surface border border-line bg-raised shadow-raised p-4">
     <Link to="/emails?tab=replies" className="w-fit underline focus-visible:outline-2 focus-visible:outline-violet-line">Back to replies</Link>
     <header><h2 className="break-words text-xl font-bold">{reply.lead?.business_name ?? 'Lead'}</h2>
     <p className="break-words text-sm text-muted">{reply.subject || 'Reply'}</p></header>

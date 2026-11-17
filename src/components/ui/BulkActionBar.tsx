@@ -5,7 +5,7 @@ export function BulkActionBar({ count, busy, approveLabel, rejectLabel, onApprov
  onApprove:()=>void; onReject?:()=>void; onClear:()=>void;
 }) {
  if (!count&&!showEmpty) return null;
- return <div className="sticky bottom-2 z-10 flex min-w-0 flex-wrap items-center gap-2 rounded-surface border border-line bg-card p-3 shadow-raised" aria-busy={busy}>
+ return <div className="sticky bottom-2 z-10 flex min-w-0 flex-wrap items-center gap-2 rounded-surface border border-line bg-card shadow-raised p-3 shadow-raised" aria-busy={busy}>
  <span role="status">{count} selected:</span>
  <Button disabled={busy||!count} onClick={onApprove}>{approveLabel}</Button>
  {onReject&&<Button variant="secondary" disabled={busy||!count} onClick={onReject}>{rejectLabel}</Button>}

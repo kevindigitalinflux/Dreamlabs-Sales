@@ -42,7 +42,7 @@ export function DreamAgentCsv() {
   }
 
 return (
-        <div className="flex flex-col gap-3 rounded-surface border border-line bg-card p-4">
+        <div className="flex flex-col gap-3 rounded-surface border border-line bg-raised shadow-raised p-4">
           <label className="flex min-h-11 items-center gap-2">
             <input type="radio" name="csv-pipeline-choice" checked={csvPipelineChoice === 'existing'} onChange={() => setCsvPipelineChoice('existing')} className="h-4 w-4 accent-violet-500" />
             Add to an existing pipeline
