@@ -29,9 +29,9 @@ export function LeadPanelOverview({ lead, profiles, isAdmin, notesKey, onSave }:
         <b className="block">{lead.next_action_note ?? 'No next action set'}</b>
         {lead.next_action_date && <span className={`text-[13px] ${overdue ? 'font-medium text-attention' : 'text-muted'}`}>{dueLabel(lead.next_action_date)}</span>}
       </div>
-      <Collapsible title="Change next action" summary="Date and note"><NextActionEditor lead={lead} onSave={onSave} /></Collapsible>
-      <Collapsible title="Contact details" summary={contactHint}><ContactInfo lead={lead} onSave={onSave} /></Collapsible>
-      <Collapsible title="Deal" summary={dealHint}>
+      <Collapsible flat title="Change next action" summary="Date and note"><NextActionEditor lead={lead} onSave={onSave} /></Collapsible>
+      <Collapsible flat title="Contact details" summary={contactHint}><ContactInfo lead={lead} onSave={onSave} /></Collapsible>
+      <Collapsible flat title="Deal" summary={dealHint}>
         <div className="flex flex-col gap-4">
           <SelectField label="Move to stage" value={lead.stage} onChange={(e) => void onSave({ stage: e.target.value as Stage })}>
             {STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
@@ -45,7 +45,7 @@ export function LeadPanelOverview({ lead, profiles, isAdmin, notesKey, onSave }:
           )}
         </div>
       </Collapsible>
-      <Collapsible title="Follow-up emails" summary="Sequence and pain point">
+      <Collapsible flat title="Follow-up emails" summary="Sequence and pain point">
         <div className="flex flex-col gap-4">
           <EnrollmentControl lead={lead} />
           <PainPointCard leadId={lead.id} icpId={lead.icp_id} refreshKey={notesKey} />

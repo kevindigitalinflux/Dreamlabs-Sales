@@ -71,10 +71,10 @@ export function Dashboard() {
 
       {!focusMode && (
         <div className="grid gap-6 lg:grid-cols-2">
-          <Collapsible title="Recently active" summary="Leads you worked on lately" className="bg-raised self-start">
+          <Collapsible title="Recently active" summary="Leads you worked on lately" className="self-start">
             {loading ? <Skeleton className="h-24 w-full" /> : <RecentlyActive leads={leads} onOpen={setSelected} />}
           </Collapsible>
-          <Collapsible title="Pipeline snapshot" summary="Leads by stage" className="bg-raised self-start">
+          <Collapsible title="Pipeline snapshot" summary="Leads by stage" className="self-start">
             {loading ? <Skeleton className="h-24 w-full" /> : <PipelineSnapshot leads={leads} />}
           </Collapsible>
         </div>

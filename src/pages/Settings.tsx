@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router';
-import { Trash2, Upload } from 'lucide-react';
+import { Building2, ChevronRight, Gauge, KeyRound, Mail, PackageOpen, Phone, Trash2, Upload, UserRound } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useOrg } from '../hooks/useOrg';
@@ -18,6 +19,20 @@ import { UsageLimitsCard } from '../components/settings/UsageLimitsCard';
 import { DesktopNotificationsCard } from '../components/settings/DesktopNotificationsCard';
 import { SetupSkillCard } from '../components/settings/SetupSkillCard';
 import { MailboxStatus } from '../components/settings/MailboxStatus';
+
+/** A link to a settings sub-page, styled like the folding groups above it so the page reads as one set of floating sections. */
+function ConnectionLink({ to, icon: Icon, title, hint }: { to: string; icon: LucideIcon; title: string; hint: string }) {
+  return (
+    <Link to={to} className="flex min-h-14 items-center gap-3 rounded-surface border border-line bg-raised px-4 py-3 shadow-raised hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-nested bg-violet/15 text-link"><Icon className="h-4 w-4" aria-hidden /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-heading text-[15px] font-semibold">{title}</span>
+        <span className="block text-sm text-muted">{hint}</span>
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted" aria-hidden />
+    </Link>
+  );
+}
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 
@@ -143,7 +158,7 @@ export function Settings() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-3">
       <h1 className="mb-3 text-[28px] font-bold">Settings</h1>
-      <Collapsible title="Your account" summary={profile?.full_name ?? profile?.email ?? 'Profile and notifications'} defaultOpen className="bg-raised">
+      <Collapsible icon={UserRound} title="Your account" summary={profile?.full_name ?? profile?.email ?? 'Profile and notifications'} defaultOpen>
       <div className="flex flex-col gap-4">
       <DesktopNotificationsCard />
       <MailboxStatus warningOnly />
@@ -190,11 +205,11 @@ export function Settings() {
       </div>
       </Collapsible>
       {currentOrg && (
-        <Collapsible title="Setup skill" summary="Download and import your setup" className="bg-raised">
+        <Collapsible icon={PackageOpen} title="Setup skill" summary="Download and import your setup">
           <SetupSkillCard isAdmin={currentOrg.role === 'admin'} onApplied={() => setImportRevision((v) => v + 1)} />
         </Collapsible>
       )}
-      <Collapsible title="Company and AI" summary="Company context, customer profiles, placeholders" className="bg-raised">
+      <Collapsible icon={Building2} title="Company and AI" summary="Company context, customer profiles, placeholders">
       <div className="flex flex-col gap-4">
       {currentOrg && <CompanyContextCard key={`context-${importRevision}`} orgId={currentOrg.id} orgName={currentOrg.name} isOrgAdmin={currentOrg.role === 'admin'} />}
       {currentOrg && <IdealCustomerProfilesCard key={`icps-${importRevision}`} isOrgAdmin={currentOrg.role === 'admin'} />}
@@ -203,23 +218,14 @@ export function Settings() {
       </div>
       </Collapsible>
       {currentOrg && (
-        <Collapsible title="Usage limits" summary="Daily allowances for the lookup worker" className="bg-raised">
+        <Collapsible icon={Gauge} title="Usage limits" summary="Daily allowances for the lookup worker">
           <UsageLimitsCard orgId={currentOrg.id} isOrgAdmin={currentOrg.role === 'admin'} />
         </Collapsible>
       )}
-      <Link to="/settings/email" className="block rounded-surface border border-line bg-raised p-4 hover:bg-surface">
-        <h2 className="text-[18px] font-bold">Email sending</h2>
-        <p className="text-sm text-muted">Connect your Gmail/Outlook so Dreamlabs Sales can send from your address.</p>
-      </Link>
-      <Link to="/settings/dialer" className="block rounded-surface border border-line bg-raised p-4 hover:bg-surface">
-        <h2 className="text-[18px] font-bold">Power dialer</h2>
-        <p className="text-sm text-muted">Connect your JustCall/Kixie/Aircall account so calls log automatically.</p>
-      </Link>
+      <ConnectionLink to="/settings/email" icon={Mail} title="Email sending" hint="Connect your Gmail or Outlook so Dreamlabs Sales can send from your address." />
+      <ConnectionLink to="/settings/dialer" icon={Phone} title="Power dialer" hint="Connect your JustCall, Kixie or Aircall account so calls log automatically." />
       {currentOrg?.role === 'admin' && (
-        <Link to="/settings/organization" className="block rounded-surface border border-line bg-raised p-4 hover:bg-surface">
-          <h2 className="text-[18px] font-bold">Organization API keys</h2>
-          <p className="text-sm text-muted">Bring your own Gemini/Places/Companies House keys for {currentOrg.name}.</p>
-        </Link>
+        <ConnectionLink to="/settings/organization" icon={KeyRound} title="Organization API keys" hint={`Bring your own Gemini, Places and Companies House keys for ${currentOrg.name}.`} />
       )}
     </div>
   );

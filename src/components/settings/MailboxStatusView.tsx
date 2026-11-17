@@ -10,8 +10,10 @@ export function MailboxStatusView({ settings, warningOnly = false, compact = fal
   const label = status === 'working' ? 'Working' : status === 'problem' ? 'Problem' : 'Not connected';
   const code = settings?.last_imap_error;
   const problem = code && Object.hasOwn(IMAP_MESSAGES, code) ? IMAP_MESSAGES[code as ImapError] : IMAP_MESSAGES.check_failed;
-  return <div className={compact ? 'text-xs text-muted' : 'rounded-control border border-line bg-raised p-3 text-sm text-offwhite'} role="status">
-    <p className="font-semibold">Reply detection: {label}</p>
-    {status !== 'working' && <p>{status === 'problem' ? problem : 'Replies to this email will not be picked up: connect your inbox.'} <a className="underline" href="/settings/email">Connect your inbox</a></p>}
+  // Same floating surface as the Settings cards; a coloured left edge says how healthy it is (green working, magenta problem, violet not connected).
+  const edge = status === 'working' ? 'border-l-success' : status === 'problem' ? 'border-l-attention' : 'border-l-violet-line';
+  return <div className={compact ? 'text-xs text-muted' : `rounded-surface border border-l-4 border-line bg-raised p-4 text-sm text-offwhite shadow-raised ${edge}`} role="status">
+    <p className="font-heading text-[15px] font-semibold">Reply detection: {label}</p>
+    {status !== 'working' && <p className="mt-1 text-muted">{status === 'problem' ? problem : 'Replies to this email will not be picked up: connect your inbox.'} <a className="font-semibold text-link underline underline-offset-2" href="/settings/email">Connect your inbox</a></p>}
   </div>;
 }

@@ -85,13 +85,13 @@ export function Jobs() {
           title="Finished"
           summary={`${groups.finished.length} ${groups.finished.length === 1 ? 'job' : 'jobs'}`}
           defaultOpen={!busyNow}
-          className="bg-raised"
+         
         >
           <ul className="flex flex-col gap-2">{groups.finished.map(row)}</ul>
         </Collapsible>
       )}
       {groups.older.length > 0 && (
-        <Collapsible title="Older than 14 days" summary={`${groups.older.length} ${groups.older.length === 1 ? 'job' : 'jobs'}`} open={showOlder} onOpenChange={setShowOlder} className="bg-raised">
+        <Collapsible title="Older than 14 days" summary={`${groups.older.length} ${groups.older.length === 1 ? 'job' : 'jobs'}`} open={showOlder} onOpenChange={setShowOlder}>
           <ul className="flex flex-col gap-2">{groups.older.map(row)}</ul>
         </Collapsible>
       )}

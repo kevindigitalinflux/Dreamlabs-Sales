@@ -123,7 +123,7 @@ export function AutopilotSetup() {
             </SelectField>
             <Input label="Leads to scrape per day" type="number" value={String(dailyLeadTarget)} onChange={(e) => setDailyLeadTarget(Math.max(1, Math.min(60, Number(e.target.value) || 1)))} />
             <Input label="Cold outreach sends per day" type="number" value={String(dailyOutreachTarget)} onChange={(e) => setDailyOutreachTarget(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} />
-            <Collapsible title="Safety and cost limits" summary={`Ramp-up ${rampUp ? 'on' : 'off'}, ${spendCap ? `spend cap $${spendCap}` : 'no spend cap'}`}>
+            <Collapsible flat title="Safety and cost limits" summary={`Ramp-up ${rampUp ? 'on' : 'off'}, ${spendCap ? `spend cap $${spendCap}` : 'no spend cap'}`}>
               <div className="flex flex-col gap-4">
                 <label className="flex min-h-11 items-center gap-2">
                   <input type="checkbox" checked={rampUp} onChange={(e) => setRampUp(e.target.checked)} className="h-4 w-4 accent-violet-500" />
