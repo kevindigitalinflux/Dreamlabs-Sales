@@ -43,6 +43,7 @@ export function LeadPanel({ lead, profiles, onClose, onUpdate }: LeadPanelProps)
         aria-label={lead.business_name}
         className="absolute inset-y-0 right-0 flex w-full max-w-[430px] flex-col border-l border-line bg-card shadow-[-24px_0_48px_-24px_rgba(2,6,40,0.6)] motion-safe:animate-[slidein_.15s_ease-out]"
       >
+        <div className="h-1.5 shrink-0 bg-linear-to-r from-violet via-purple to-magenta" aria-hidden />
         <LeadPanelHeader lead={lead} onClose={onClose} onUpdate={onUpdate} onEmail={() => setEmailOpen(true)} onDeepFind={() => setDeepFindOpen(true)} />
         <div className="shrink-0 px-6">
           <Tabs label="Lead sections" value={tab} onChange={setTab} tabs={[

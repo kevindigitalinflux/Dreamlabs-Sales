@@ -95,14 +95,15 @@
 :root[data-theme="dark"] {
   --color-offwhite: #F4F4F8;
   --color-bg: #040F49;
-  --color-card: #121D54;
-  --color-raised: rgba(244, 244, 248, 0.08);
+  /* Dark surfaces are solid fills, one step apart: page #040F49, sections and cards (raised) #14216B, dialogs and menus (card) #1A2878. */
+  --color-card: #1A2878;
+  --color-raised: #14216B;
   --color-surface: rgba(244, 244, 248, 0.13);
   --color-muted: rgba(244, 244, 248, 0.76);
-  --color-line: rgba(244, 244, 248, 0.18);
+  --color-line: rgba(244, 244, 248, 0.22);
   --color-field: rgba(244, 244, 248, 0.50);
   --color-link: #C9A6FF;
-  --color-attention: #FF7A9D;
+  --color-attention: #FF8FAE;
   --color-attention-soft: rgba(240, 56, 107, 0.16);
   --color-focus: #00DFDF;
   --shadow-raised: 0 18px 40px -18px rgba(2, 6, 40, 0.55);
@@ -117,8 +118,8 @@
   --color-stage-won: #22C55E;
   --color-stage-lost: #EF4444;
   --color-stage-nurture: #C9A6E8;
-  --color-danger: #F87171;
-  --color-danger-strong: #F87171;
+  --color-danger: #FCA5A5;
+  --color-danger-strong: #FCA5A5;
   --color-violet-line: #B794FF;
   --color-success: #34D399;
   --color-warning: #FBBF24;
