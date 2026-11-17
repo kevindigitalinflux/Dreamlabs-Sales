@@ -125,6 +125,10 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
   // The email shown in the single editor: the one recipient's, or (nothing ticked yet) the seed/blank one.
   const shownKey = selectedTargets[0]?.key ?? SEED_KEY;
   const current = drafts[shownKey] ?? BLANK_DRAFT;
+  // With several recipients the preview follows whichever person's card the user last clicked.
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
+  const previewTarget = selectedTargets.find((t) => t.key === previewKey) ?? selectedTargets[0];
+  const previewDraft = multi ? (previewTarget ? drafts[previewTarget.key] ?? BLANK_DRAFT : BLANK_DRAFT) : current;
   const missing = unionMissing(selectedTargets.length > 0 ? selectedTargets : [{ key: SEED_KEY, email: '', name: null }], drafts);
 
   function update(key: string, patch: Partial<RecipientDraft>) {
@@ -281,8 +285,8 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
   );
 
   return (
-    <Modal open={open} onClose={onClose} size={multi ? 'md' : 'wide'} footer={footer} title={`Email — ${lead.business_name}`}>
-      <div className={multi ? '' : 'grid gap-6 lg:grid-cols-2'}>
+    <Modal open={open} onClose={onClose} size="wide" footer={footer} title={`Email — ${lead.business_name}`}>
+      <div className="grid gap-6 lg:grid-cols-2">
       <div className="flex min-w-0 flex-col gap-4">
         {selectedTargets.map(target=><p key={target.key} className="break-words text-xs">{target.email}: <EmailVerificationBadge value={verification.get(target.email)}/></p>)}
         {verification.error&&<p role="alert" className="text-xs text-warning">Could not load previous checks. The server will check before sending.</p>}
@@ -320,6 +324,8 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
                 draft={drafts[t.key] ?? BLANK_DRAFT}
                 onChange={(patch) => update(t.key, patch)}
                 orgId={currentOrg?.id}
+                active={previewTarget?.key === t.key}
+                onActivate={() => setPreviewKey(t.key)}
               />
             ))}
           </div>
@@ -347,14 +353,13 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
 
         <PostSendPreview lines={previewLines} report={report} multi={multi} />
       </div>
-      {!multi && (
-        <EmailPreviewPane
-          to={answer?.to_email ?? selectedTargets[0]?.email ?? ''}
-          subject={current.subject}
-          body={current.body}
-          attachmentNames={current.attachments.map((a) => a.name)}
-        />
-      )}
+      <EmailPreviewPane
+        to={answer?.to_email ?? previewTarget?.email ?? ''}
+        caption={multi && previewTarget ? `for ${previewTarget.name ?? previewTarget.email}` : undefined}
+        subject={previewDraft.subject}
+        body={previewDraft.body}
+        attachmentNames={previewDraft.attachments.map((a) => a.name)}
+      />
       </div>
     </Modal>
   );
