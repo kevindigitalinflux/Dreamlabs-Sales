@@ -4,6 +4,9 @@ import { supabase } from '../lib/supabase';
 import { useOrg } from '../hooks/useOrg';
 import type { OrgMemberRow } from '../types';
 import { Button } from '../components/ui/Button';
+import { Collapsible } from '../components/ui/Collapsible';
+import { SectionTitle } from '../components/ui/SectionTitle';
+import { ArrowRightLeft } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { SelectField } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
@@ -84,7 +87,7 @@ export function Admin() {
 
       <Card>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-[18px] font-bold">Members</h2>
+          <SectionTitle icon={Users} count={members.length}>Members</SectionTitle>
           {isPlatformOwner && orgOptions.length > 1 && (
             <div className="w-full sm:w-64">
               <SelectField label="Manage members of" value={manageOrgId} onChange={(e) => setManageOrgId(e.target.value)}>
@@ -102,10 +105,9 @@ export function Admin() {
         )}
       </Card>
 
-      <Card>
-        <h2 className="mb-3 text-[18px] font-bold">Lead assignment {currentOrg ? `— ${currentOrg.name}` : ''}</h2>
+      <Collapsible icon={ArrowRightLeft} title={`Lead assignment${currentOrg ? `, ${currentOrg.name}` : ''}`} summary={`${currentOrgContractors.length} ${currentOrgContractors.length === 1 ? 'team member' : 'team members'} can be given leads`}>
         <AssignmentPanel contractors={currentOrgContractors} />
-      </Card>
+      </Collapsible>
 
       <InviteModal canInviteAdmin={isPlatformOwner} open={inviteOpen} onClose={() => setInviteOpen(false)} orgId={manageOrgId} onInvited={() => void loadMembers(manageOrgId)} />
       {isPlatformOwner && (
