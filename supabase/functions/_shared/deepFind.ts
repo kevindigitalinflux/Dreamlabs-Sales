@@ -1,3 +1,4 @@
+import { roleGeminiBudgetMs } from './deepFindTimeBudget.ts';
 import { claimRunNotice, readGeminiRefusal, geminiRefusalLine } from './geminiAdmission.ts';
 import { completeDeepFindRun, maintainDeepFind } from './deepFindMaintenance.ts';
 import type { GeminiSearchContext } from './geminiSearchMeter.ts';
@@ -673,7 +674,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         if (allowed) spend.used.ai['role search'] = (spend.used.ai['role search'] ?? 0) + 1;
         return allowed;
       },
-      gemini: configured.geminiKey ? prompt => geminiGroundedSearch(prompt, configured.geminiKey!, Math.min(15_000, Math.max(1, left() - 5_000)), geminiMeter) : undefined,
+      gemini: configured.geminiKey ? prompt => {
+        const budget = roleGeminiBudgetMs(left());
+        return budget === null ? Promise.resolve({text:'',sources:[]}) : geminiGroundedSearch(prompt, configured.geminiKey!, budget, geminiMeter);
+      } : undefined,
     });
     const roleResult = shouldSearchAfterTeam(teamPicked) ? await findRolePeople({ company: companyForRoles, registeredName: registry.name, city: str(lead.city), country: str(lead.country), profile,
       provider: { search: async (query, context) => { if (workerConfig || configured.geminiKey) await checkpoint(); return provider.search(query, context); } }, timeLeftMs: left }) : { people: [], searches: 0, via: [] };

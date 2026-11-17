@@ -293,3 +293,7 @@ it('a saved run refusal skips all Gemini work and gives this lead one combined s
  const out=await run();expect(geminiGroundedSearch).not.toHaveBeenCalled();
  expect(out.domains.steps.filter(line=>line.includes('Gemini refused the key'))).toEqual(['Web search and role search skipped: Gemini refused the key (error 402). Check the Gemini billing or key.']);
 });
+it('the real engine passes the twenty-five second role fallback budget',async()=>{
+ findRolePeople.mockImplementationOnce(async input=>{await input.provider.search('fixture',{company:'Acme',roles:['Owner'],rung:'final'});return {people:[],searches:1,via:['gemini']};});
+ await run();expect(geminiGroundedSearch).toHaveBeenCalled();expect(geminiGroundedSearch.mock.calls[0][2]).toBe(25000);
+});

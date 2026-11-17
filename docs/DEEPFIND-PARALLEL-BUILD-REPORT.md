@@ -160,3 +160,7 @@ END;
 ASSERT NOT has_function_privilege('anon','public.gemini_run_status(uuid,integer)','EXECUTE');
 ASSERT NOT has_function_privilege('authenticated','public.gemini_run_status(uuid,integer)','EXECUTE');
 ```
+
+## Task 7 — role fallback time budget
+
+The role Gemini adapter uses min(25,000, left minus 5,000) and refuses to dispatch below 20,000 ms remaining. The existing ladder threshold remains unchanged. Four red budget fixtures now cover 120s, 25s, 20s and 19,999ms, and the real engine fixture observes a 25,000ms provider timeout. No existing assertion changed. All seven gates PASS: 285 app files /3,645 passed /one existing skip; wrapper 8 /166; edge29. Logs parallel-task7-*.log. Task 6 commit 605a197. Real model latency remains unverified.
