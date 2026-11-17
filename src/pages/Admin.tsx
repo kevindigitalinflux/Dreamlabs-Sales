@@ -65,7 +65,7 @@ export function Admin() {
   return (
     <div className="flex max-w-4xl flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[28px] font-extrabold">Admin</h1>
+        <h1 className="text-[28px] font-bold">Admin</h1>
         <div className="flex flex-wrap items-center gap-2">
           {isPlatformOwner && (
             <Button variant="secondary" onClick={() => setNewOrgOpen(true)}>

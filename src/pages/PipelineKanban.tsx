@@ -41,7 +41,7 @@ export function PipelineKanban() {
       <SharedPipelineBanner />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-[28px] font-extrabold">Pipeline</h1>
+          <h1 className="text-[28px] font-bold">Pipeline</h1>
           <PipelineSwitcher />
         </div>
         <div className="flex items-center gap-3">

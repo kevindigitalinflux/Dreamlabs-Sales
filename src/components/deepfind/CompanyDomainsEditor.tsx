@@ -4,7 +4,7 @@ import { blockDeepFindDomain, unblockDeepFindDomain, wasInEmailDomains } from '.
 import type { DeepFindDomain } from '../../lib/deepFindView';
 import { Heading } from './Heading';
 
-const btn = 'inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-center rounded-md border px-2 py-0.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-line disabled:cursor-not-allowed disabled:opacity-50';
+const btn = 'inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-center rounded-nested border px-2 py-0.5 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-line disabled:cursor-not-allowed disabled:opacity-50';
 
 /**
  * The company domains as a small editable list. "Not their domain" asks to confirm in place, then removes the domain

@@ -149,7 +149,7 @@ export function PipelineManage() {
 
   return (
     <div className="flex max-w-3xl flex-col gap-8">
-      <h1 className="text-[28px] font-extrabold">Manage pipelines</h1>
+      <h1 className="text-[28px] font-bold">Manage pipelines</h1>
       {bannerError && <p role="alert" className="text-sm text-danger">{bannerError}</p>}
       {message && <p role="status" className="text-sm text-success">{message}</p>}
 

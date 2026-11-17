@@ -11,6 +11,7 @@ import { useOrg } from '../hooks/useOrg';
 import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/Button';
 import { SelectField, Textarea } from '../components/ui/Input';
+import { Tabs } from '../components/ui/Tabs';
 import {AgentActionReview} from '../components/dreamAgent/AgentActionReview';
 import {DreamAgentCsv} from '../components/dreamAgent/DreamAgentCsv';
 import type { Lead } from '../types';
@@ -83,17 +84,10 @@ export function DreamAgent() {
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <header className="flex items-center gap-3">
         <Sparkles className="h-6 w-6 text-link" aria-hidden />
-        <h1 className="text-[28px] font-extrabold">Dream Agent</h1>
+        <h1 className="text-[28px] font-bold">Dream Agent</h1>
       </header>
 
-      <div className="flex overflow-hidden rounded-control border border-line" role="tablist">
-        <button type="button" role="tab" aria-selected={tab === 'notes'} onClick={() => setTab('notes')} className={`min-h-11 flex-1 cursor-pointer text-sm font-semibold ${tab === 'notes' ? 'bg-violet/25' : 'text-muted'}`}>
-          Session notes
-        </button>
-        <button type="button" role="tab" aria-selected={tab === 'csv'} onClick={() => setTab('csv')} className={`min-h-11 flex-1 cursor-pointer text-sm font-semibold ${tab === 'csv' ? 'bg-violet/25' : 'text-muted'}`}>
-          Upload CSV
-        </button>
-      </div>
+      <Tabs label="Dream Agent sections" value={tab} onChange={(id) => setTab(id as 'notes' | 'csv')} tabs={[{ id: 'notes', label: 'Session notes' }, { id: 'csv', label: 'Upload CSV' }]} />
 
       {tab==='csv'&&<DreamAgentCsv />}
 

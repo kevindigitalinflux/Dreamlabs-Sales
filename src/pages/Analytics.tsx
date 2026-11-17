@@ -27,7 +27,7 @@ export function Analytics() {
     <div className="flex flex-col gap-6">
       <TierSafety/>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[28px] font-extrabold">Analytics</h1>
+        <h1 className="text-[28px] font-bold">Analytics</h1>
         <div role="group" aria-label="Time period" className="flex items-center gap-1 rounded-control border border-line p-1">
           {(Object.keys(PERIOD_LABELS) as AnalyticsPeriod[]).map((p) => (
             <button
@@ -35,7 +35,7 @@ export function Analytics() {
               type="button"
               onClick={() => setPeriod(p)}
               aria-pressed={period === p}
-              className={`min-h-9 cursor-pointer rounded-md px-3 text-sm font-semibold ${period === p ? 'bg-violet text-on-accent' : 'text-muted hover:text-offwhite'}`}
+              className={`min-h-9 cursor-pointer rounded-nested px-3 text-sm font-semibold ${period === p ? 'bg-linear-to-br from-violet to-purple text-on-accent' : 'text-muted hover:text-offwhite'}`}
             >
               {PERIOD_LABELS[p]}
             </button>

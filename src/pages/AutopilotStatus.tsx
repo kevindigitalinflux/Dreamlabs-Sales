@@ -28,7 +28,7 @@ export function AutopilotStatus() {
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <header className="flex items-center gap-3">
         <Rocket className="h-6 w-6 text-link" aria-hidden />
-        <h1 className="text-[28px] font-extrabold">Autopilot</h1>
+        <h1 className="text-[28px] font-bold">Autopilot</h1>
       </header>
       {notice && <p role="status" className="text-sm text-warning">{notice}</p>}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}

@@ -112,7 +112,7 @@ export function LinkedinOutreach() {
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <header className="flex items-center gap-3">
         <LinkedinIcon className="h-6 w-6 text-link" aria-hidden />
-        <h1 className="text-[28px] font-extrabold">LinkedIn outreach</h1>
+        <h1 className="text-[28px] font-bold">LinkedIn outreach</h1>
       </header>
       <div className="flex flex-wrap items-end gap-3">
         <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Contact or company name" className="max-w-xs" />

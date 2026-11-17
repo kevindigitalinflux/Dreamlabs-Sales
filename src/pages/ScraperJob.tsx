@@ -160,7 +160,7 @@ export function ScraperJob() {
     <div className="flex min-w-0 flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-[28px] font-extrabold">Scrape results</h1>
+          <h1 className="text-[28px] font-bold">Scrape results</h1>
           {statusBadge({ status })}
         </div>
         <div className="flex flex-wrap items-center gap-3">

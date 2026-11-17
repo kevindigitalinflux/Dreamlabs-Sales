@@ -48,7 +48,7 @@ export function Dashboard() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <h1 className="text-[28px] font-extrabold">{greeting()}, {firstName}</h1>
+        <h1 className="text-[28px] font-bold">{greeting()}, {firstName}</h1>
         <p className="text-muted">{today}</p>
       </header>
 

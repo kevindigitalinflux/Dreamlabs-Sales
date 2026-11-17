@@ -80,7 +80,7 @@ export function AutopilotSetup() {
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <header className="flex items-center gap-3">
         <Rocket className="h-6 w-6 text-link" aria-hidden />
-        <h1 className="text-[28px] font-extrabold">Start autopilot</h1>
+        <h1 className="text-[28px] font-bold">Start autopilot</h1>
       </header>
       <ModeSwitch mode={mode} onChange={next => { setMode(next); if (next === 'selected') setSelectedVisited(true); }} />
       {(mode === 'selected' || selectedVisited) && <div hidden={mode !== 'selected'}>

@@ -60,7 +60,7 @@ export function Jobs() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[28px] font-extrabold">Jobs</h1>
+        <h1 className="text-[28px] font-bold">Jobs</h1>
         {clearable.length > 0 && <Button variant="secondary" onClick={() => setConfirmClear(true)}>Clear finished ({clearable.length})</Button>}
       </div>
       <p className="text-sm text-muted">Everything that works in the background, named by the leads it is working on. Jobs that need you stay at the top.</p>

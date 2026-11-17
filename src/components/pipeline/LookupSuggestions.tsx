@@ -61,7 +61,7 @@ export function LookupSuggestions({ suggestions, filled, onUse }: LookupSuggesti
       {shown.filter(s => !dismissed.includes(keyFor(s))).map((s) => {
         const key = `${s.field}:${s.value}`;
         return (
-          <div key={key} className="flex flex-col gap-1 rounded-md border border-line p-2">
+          <div key={key} className="flex flex-col gap-1 rounded-nested border border-line p-2">
             {!used[key] && <label className="flex items-center gap-2"><input type="checkbox" aria-label={`Select ${s.field}: ${s.value}`} disabled={busy !== null} checked={selection.selected.has(key)} onChange={() => selection.toggle(key)} />Select</label>}
             <p className="break-all text-sm text-offwhite">
               {FIELD_LABEL[s.field]}: {s.value} <span className="text-xs text-warning">({s.label})</span>

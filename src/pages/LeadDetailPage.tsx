@@ -48,7 +48,7 @@ export function LeadDetailPage() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4 pb-24 md:pb-4">
       <header className="flex flex-wrap items-center gap-3">
-        <h1 className="text-[28px] font-extrabold">{lead.business_name}</h1>
+        <h1 className="text-[28px] font-bold">{lead.business_name}</h1>
         <StageBadge stage={lead.stage} />
         <ReadinessBadge readiness={lead.readiness} missing={lead.readiness_missing} />
         {assignedProfile && (

@@ -30,7 +30,7 @@ export function BlockedOwnDomainNotice({ leadId, lead }: { leadId: string; lead:
           <div className="flex min-w-0 flex-col items-start gap-2">
             <p>You marked <strong className="break-words [overflow-wrap:anywhere]">{o.domain}</strong> as not theirs, but it is this lead&apos;s {o.kind === 'website' ? 'website' : 'email domain'}. Deep find skips it.</p>
             <button type="button" onClick={() => void restore(o.domain)} disabled={busy !== null} aria-label={`Restore this domain: ${o.domain}`}
-              className="inline-flex min-h-6 cursor-pointer items-center rounded-md border border-line bg-card px-2.5 py-1 text-xs font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-line disabled:cursor-not-allowed disabled:opacity-50">
+              className="inline-flex min-h-6 cursor-pointer items-center rounded-nested border border-line bg-card px-2.5 py-1 text-xs font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-line disabled:cursor-not-allowed disabled:opacity-50">
               {busy === o.domain ? 'Restoring...' : 'Restore this domain'}
             </button>
           </div>
