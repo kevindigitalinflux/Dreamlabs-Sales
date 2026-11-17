@@ -91,7 +91,7 @@ export function makeSearchProvider(deps: { worker: WorkerClient; gemini?: (promp
         };
         const supported = name.length >= 2 ? chunks.filter(chunk => sourceUrl(chunk.uri) && chunk.evidence.some(supportsName)) : [];
         if (!grounded.sources.length || !supported.length) continue;
-        const judged = judgeRolePerson({ ...candidate, evidence: supported.flatMap(chunk => chunk.evidence).join(' ') }, input, { rung: input.rung, roles: input.roles });
+        const judged = judgeRolePerson({ ...candidate, evidence: supported.flatMap(chunk => chunk.evidence.filter(supportsName)).join('\n') }, input, { rung: input.rung, roles: input.roles });
         if (!judged.ok) continue;
         const linked = profile && (sources.has(profile.href) || supported.some(chunk => chunk.titled && chunk.evidence.some(supportsName)));
         if (profile && linked) { profile.protocol = 'https:'; profile.search = ''; profile.hash = ''; profile.pathname = profile.pathname.replace(/\/+$/, ''); }

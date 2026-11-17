@@ -58,11 +58,11 @@ it.each(['example.com','linkedin.com.attacker.test'])('keeps a person supported 
 });
 it('keeps a source-host-supported person without an unproven profile link',async()=>{
  const source='https://uk.linkedin.com/in/grounded-person';
- expect(await fallback({...redirectReply,sources:[source],sourceEvidence:[`${source} Profile`,`${source} Jane Doe at Acme Offices`]}).search('query')).toMatchObject({ok:true,people:[{...accepted,linkedinUrl:null}]});
+ expect(await fallback({...redirectReply,sources:[source],sourceEvidence:[`${source} Profile`,`${source} Jane Doe is Facilities Manager at Acme Offices`]}).search('query')).toMatchObject({ok:true,people:[{...accepted,linkedinUrl:null}]});
 });
 it('uses non-LinkedIn grounding without borrowing an unrelated LinkedIn title',async()=>{
  const other='https://example.com/source';
- expect(await fallback({...redirectReply,sources:[redirect,other],sourceEvidence:[`${redirect} linkedin.com`,`${other} Jane Doe at Acme Offices`]}).search('query')).toMatchObject({ok:true,people:[{...accepted,linkedinUrl:null}]});
+ expect(await fallback({...redirectReply,sources:[redirect,other],sourceEvidence:[`${redirect} linkedin.com`,`${other} Jane Doe is Facilities Manager at Acme Offices`]}).search('query')).toMatchObject({ok:true,people:[{...accepted,linkedinUrl:null}]});
 });
 it.each(['https://linkedin.com/company/acme','https://linkedin.com.attacker.test/in/jane','https://attacker.linkedin.com/in/jane','https://user@linkedin.com/in/jane'])('drops invalid profile URL %s while keeping the grounded person',url=>{
  return expect(fallback({...redirectReply,text:JSON.stringify({...person,linkedin_url:url})}).search('query')).resolves.toMatchObject({ok:true,people:[{...accepted,linkedinUrl:null}]});

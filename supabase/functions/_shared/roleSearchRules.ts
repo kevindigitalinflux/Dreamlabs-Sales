@@ -69,21 +69,26 @@ export function judgeRoleHit(hit: { title: string; url: string; snippet: string 
 export interface RoleLead { company: string; registeredName?: string | null; city?: string | null; country?: string | null }
 export interface RolePeopleInput extends RoleLead { roles: string[]; rung: RoleCandidate['rung'] }
 
-/** Share name, company, current-role and former-role policy without requiring a profile URL. */
-function judgeRoleEvidence(parts: string[], evidence: string, lead: RoleLead, rung: Rung): { ok: true; person: RoleCandidate } | { ok: false; why: RoleRejection } {
-  const refuse = (why: RoleRejection) => ({ ok: false as const, why });
-  const name = (parts[0]?.split(',')[0].trim().split(/\s+/) ?? []).filter(word => !/^\p{L}\.?$/u.test(word));
-  if (name.length < 2 || name.length > 4 || !name.every(word => /^[\p{L}]+(?:[-'’][\p{L}]+)*$/u.test(word))) return refuse('no_name');
-  const companies = [lead.company, lead.registeredName ?? '', brandName(lead.company, lead.city)].filter(Boolean);
-  const companyWords = companies.map(distinctive).filter(list => list.length);
+/** The same strict company comparison is used for search hits and source-only person proof. */
+function companyEvidenceMatcher(lead: RoleLead): (evidence: string) => boolean {
+  const companyWords = [lead.company, lead.registeredName ?? '', brandName(lead.company, lead.city)].map(distinctive).filter(list => list.length);
   const location = new Set(words(`${lead.city ?? ''} ${lead.country ?? ''}`));
-  const matchesCompany = (evidence: string) => {
+  return evidence => {
     const evidenceWords = distinctive(evidence.replace(/\b\d{4}\s*[-–]\s*(?:\d{4}|present)\b/gi, '')).filter(word => !location.has(word));
     return companyWords.some(list => {
       const expected = list.filter(word => !location.has(word));
       return expected.length > 0 && expected.every(word => evidenceWords.includes(word)) && evidenceWords.every(word => list.includes(word));
     });
   };
+}
+
+/** Share name, company, current-role and former-role policy without requiring a profile URL. */
+function judgeRoleEvidence(parts: string[], evidence: string, lead: RoleLead, rung: Rung): { ok: true; person: RoleCandidate } | { ok: false; why: RoleRejection } {
+  const refuse = (why: RoleRejection) => ({ ok: false as const, why });
+  const name = (parts[0]?.split(',')[0].trim().split(/\s+/) ?? []).filter(word => !/^\p{L}\.?$/u.test(word));
+  if (name.length < 2 || name.length > 4 || !name.every(word => /^[\p{L}]+(?:[-'’][\p{L}]+)*$/u.test(word))) return refuse('no_name');
+  const companies = [lead.company, lead.registeredName ?? '', brandName(lead.company, lead.city)].filter(Boolean);
+  const matchesCompany = companyEvidenceMatcher(lead);
   const snippetEvidence = [...evidence.matchAll(/(?:Experience\s*:|\bat\s+)([^\n.;|·]+)/gi)].map(match => match[1]);
   const companyPart = parts.length >= 3 ? parts.slice(2).join(' ') : /\bat\s+(.+)$/i.exec(parts[1] ?? '')?.[1]
     ?? (rung.roles.some(role => contains(parts[1] ?? '', words(role))) ? undefined : parts[1]);
@@ -105,9 +110,53 @@ function judgeRoleEvidence(parts: string[], evidence: string, lead: RoleLead, ru
   return { ok: true, person: { first: name[0], last: name.slice(1).join(' '), title: titleRole ? title : snippetRole!, linkedinUrl: null, rung: rung.rung } };
 }
 
-/** Judge a grounded structured person using exactly the search-hit evidence rules. */
+/** Extract company phrases without letting a matching brand hide a conflicting employer. */
+function personCompanyProof(person: { name: string; evidence: string }, lead: RoleLead, rung: Rung): { phrase: string; segment: string }[] {
+  const proof: { phrase: string; segment: string }[] = [];
+  const names = [lead.company, lead.registeredName ?? '', brandName(lead.company, lead.city)].filter(Boolean);
+  const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const trimPhrase = (value: string) => value.split(/,|\s[-–]\s/)[0].replace(/\s+(?:in|as|where|which|who|since|from|with)\b.*$/i, '').trim();
+  for (const segment of person.evidence.split(/[.;|·\n]/).filter(Boolean)) {
+    const insideKnownPhrase = (index: number) => [...rung.roles, ...names].some(value => {
+      const start = segment.toLowerCase().lastIndexOf(value.toLowerCase(), index);
+      return start >= 0 && start <= index && start + value.length > index;
+    });
+    for (const match of segment.matchAll(/\b(at|of|Experience\s*:)\s+(?=([^,;|·]+))/gi)) {
+      if (insideKnownPhrase(match.index!)) continue;
+      proof.push({ phrase: trimPhrase(match[2]), segment });
+    }
+    for (const match of segment.matchAll(/\b([\p{L}\p{N}][\p{L}\p{N}&'’ -]*?\b(?:Ltd|Limited|LLC|Inc|PLC))\b/giu)) {
+      let phrase = match[1].trim();
+      const connectors = [...phrase.matchAll(/\b(?:at|of|with|for|Experience\s*:)\s+/gi)].filter(connector => !insideKnownPhrase(match.index! + connector.index!));
+      const connector = connectors.at(-1);
+      if (connector) phrase = phrase.slice(connector.index! + connector[0].length);
+      const withoutName = phrase.replace(new RegExp(`^${escape(person.name)}\\s+`, 'i'), '');
+      if (withoutName !== phrase) {
+        phrase = withoutName.replace(/^(?:is\s+)?(?:the\s+)?/i, '');
+        for (const role of rung.roles) phrase = phrase.replace(new RegExp(`^${escape(role)}\\s+`, 'i'), '');
+      }
+      proof.push({ phrase: trimPhrase(phrase), segment });
+    }
+    // A bare, bounded company mention can prove the company too; retain its suffix for the extra-word check.
+    for (const name of names) for (const match of segment.matchAll(new RegExp(`(?<![\\p{L}\\p{N}])${escape(name)}(?![\\p{L}\\p{N}])`, 'giu'))) {
+      proof.push({ phrase: trimPhrase(segment.slice(match.index!)), segment });
+    }
+  }
+  return proof;
+}
+
+/** Model company is a veto only; company and the saved role must be supported by the same source segment. */
 export function judgeRolePerson(person: { name: string; title: string; company: string; evidence: string }, lead: RoleLead, rung: Rung): ReturnType<typeof judgeRoleEvidence> {
-  return judgeRoleEvidence([person.name, person.title, person.company], person.evidence, lead, rung);
+  const refuse = (why: RoleRejection) => ({ ok: false as const, why });
+  const matchesCompany = companyEvidenceMatcher(lead);
+  if (person.company.trim() && !matchesCompany(person.company)) return refuse('company_mismatch');
+  const proof = personCompanyProof(person, lead, rung);
+  if (!proof.length || proof.some(item => !matchesCompany(item.phrase))) return refuse('company_mismatch');
+  const bound = proof.flatMap(item => rung.roles.filter(role => contains(item.segment, words(role))).map(role => ({ ...item, role })));
+  if (!bound.length) return refuse('role_mismatch');
+  const chosen = bound.find(item => contains(person.title, words(item.role))) ?? bound[0];
+  const title = contains(person.title, words(chosen.role)) ? person.title : chosen.role;
+  return judgeRoleEvidence([person.name, title, chosen.phrase], `${person.title}\n${person.evidence}`, lead, rung);
 }
 
 /** Ask for grounded current people in sentences; source pages and company fields remain data only. */

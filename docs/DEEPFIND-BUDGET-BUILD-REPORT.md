@@ -2,7 +2,7 @@
 
 ## Result
 
-All six local fixes (original Fixes 1–4 plus the appended Fix 5 and Fix 2b) are built and tested on codex/deepfind-budget from fetched origin/main 3e0f2a310a95bb06480b4232d239c7814b0d8a25. The latest continuation starts at 02b33b6 and supersedes the earlier direct-URL Gemini acceptance and non-UK saved-number exclusion. Kevin directs; Claude architects/reviews; Codex builds. Independent review and live improvement remain unverified. No push, merge, deployment, migration execution, VPS change, installation, paid fallback or real provider request is authorized or occurred.
+All seven local fixes (original Fixes 1–4 plus Fix 5, Fix 2b and the appended Fix 6) are built and tested on codex/deepfind-budget from fetched origin/main 3e0f2a310a95bb06480b4232d239c7814b0d8a25. Latest Fix 6 starts at 0201d9e and requires positive Gemini company/role proof from named source evidence only; the model company field is a rejection veto. Earlier continuations supersede direct-URL-only person acceptance and restore saved-number precedence. Kevin directs; Claude architects/reviews; Codex builds. Independent review and live improvement remain unverified. No push, merge, deployment, migration execution, VPS change, installation, paid fallback or real provider request is authorized or occurred.
 
 ## Acceptance evidence
 
@@ -12,6 +12,7 @@ All six local fixes (original Fixes 1–4 plus the appended Fix 5 and Fix 2b) ar
 4. MET (Fix 4): eight error fixtures first logged search_failed, then emitted only timeout, http_429, http_503, bad_json or network as applicable. Assertions prove no key/prompt/query/reply/error text is logged. All existing fallback, grounding and cap cases still pass.
 5. MET (Fix 5): natural-language Gemini role prompt, grounded structured people, shared URL-free judge, optional independently proven LinkedIn and two added numeric people counters pass the appended contract/engine fixtures. SearXNG policy and its 48 judge fixtures remain unchanged.
 6. MET (Fix 2b): quoted ten/eleven-digit North American formats infer non_GB; quoted UK/Irish national formats remain unknown. Saved company numbers again fetch registry profiles even for explicit/inferred non-UK leads. Country and saved number remain unchanged. Latest gates: 276 app files / 3,603 passed / one existing skip; 8 wrapper files / 166 passed; all seven PASS.
+7. MET (Fix 6): source-only company proof, conflicting-company veto and source-bound roles pass the quoted defect/positive fixtures and engine checks. All 48 existing SearXNG judge fixtures remain unchanged. Latest gates: 276 app files / 3,619 passed / one existing skip; 8 wrapper files / 166 passed; all seven PASS. See the appended Fix 6 section for the exact evidence and limits.
 
 ## What changed
 
@@ -154,3 +155,42 @@ A fresh relative-import traversal from every edge index.ts (including dynamic an
 NOT VERIFIED: whether the revised prompt grounds in the deployed model, real grounding metadata, real current-person/company accuracy, live timing/credits/pass marks, database/RLS/concurrency, visual/mobile, container/provider runtime and independent re-review. Source/fixture evidence does not prove production uplift. The supplied source-zero production evidence was not independently fetched. These fixtures are synthetic and privacy-safe; no real personal response was captured. The earlier one-call authorization remains withdrawn.
 
 No unresolved build question. SearXNG still uses its existing query and judge policy; Gemini uses grounded person records and a shared evidence core without needing a profile URL. A valid person can be saved without LinkedIn, never enrolled automatically. Diagnostic emission remains restricted to zero-kept-person results, so people_kept is zero in those saved diagnostic objects. The current full local branch contains six implementation commits; the newest two supersede the specific earlier policies listed above. Codex stops here. Claude reviews the continuation, then Kevin separately authorizes any rollout/live checks. Read the top of docs/HANDOFF.md to resume.
+
+## Fix 6 — Gemini company proof from grounded sources only (2026-11-17)
+
+### Result and acceptance evidence
+
+Local continuation on codex/deepfind-budget from 0201d9e2d6ea236dfed67df82e59811ea4ae6125. Kevin directs; Claude architects/reviews; Codex builds. One commit contains this fix, its fixtures and report. This section supersedes earlier statements that the Gemini JSON company field can establish company identity.
+
+1. MET: Ann Roe / Director / model company Cleancat with source text "Ann Roe is a Director at Cleancat Logistics Ltd in Cork." now returns company_mismatch. The same JSON with "Ann Roe, Director." also returns company_mismatch. Both were accepted in the initial red run.
+2. MET: the founder-of-Cleancat descriptive sentence is accepted, as is "Ann Roe, Founder at Cleancat Ltd". Legal words do not manufacture a company mismatch. The source-bound Founder role is saved when the model instead claims an unbound Director title.
+3. MET: a conflicting at/of/Experience/legal-suffix company phrase vetoes the person even when another phrase matches. Fixtures cover Brightway after Cleancat, a different company in the model JSON despite matching source evidence, a longer legal-suffix company without at/of, and a second Ltd company introduced with with.
+4. MET: role words must occur in the same source sentence/segment as matching company proof. A model Owner title and source text that merely says owns no longer establish the literal ladder role. The provider cannot borrow a company/role row about Someone Else from a chunk that also mentions Jane Doe separately.
+5. MET: registered-name evidence, roles containing of (Head of Operations), company names containing at (At Home) and the existing person/role safeguards pass. All 48 existing judgeRoleHit fixtures are unchanged and pass. No SearXNG policy or assertion changed.
+6. MET: both real-engine defect fixtures save no Ann contact and retain numeric people_lines=1/people_kept=0 diagnostics. Existing grounded positive contacts, nullable LinkedIn, no enrollment, caps and retry tests pass.
+
+### What changed
+
+roleSearchRules.ts factors the existing strict company comparison into one private helper, shared with SearXNG without changing its word/legal/location rules. judgeRolePerson uses the JSON company field only as a mismatch veto. It extracts company phrases from source text, rejects any conflicting phrase, then selects a matching company and role from the same sentence/segment. Only that source-derived phrase is passed to the common name/former-role/current-role core. Model text cannot supply positive company evidence. If a model title's ladder role is unsupported in the matching segment, the saved title uses the proven ladder role instead; the model title still participates in the existing conservative former-role check.
+
+Company phrase parsing covers at/of/Experience markers, legal suffixes and bounded full/registered/brand mentions. Descriptive comma clauses and ordinary location/role qualifiers delimit the company phrase; extra distinctive company words remain part of the comparison. All recognized company phrases are checked, rather than stopping at the first matching brand. Role/company names containing ordinary marker words are protected from being split internally. This is conservative local phrase parsing, not a claim of general natural-language understanding or production accuracy.
+
+searchProvider.ts now passes only the exact sourceEvidence rows that contain both name words; rows are separated with newlines. Other rows from a chunk that mentions the person cannot provide the company or role. The chunk title remains available independently for the unchanged LinkedIn proof rule. The JSON company claim, arbitrary source URLs, unrelated rows and the Gemini prompt are never injected into company proof. No new personal text is persisted or logged. Diagnostics retain the existing seven numeric fields and zero-person emission rule.
+
+### Tests first, gates and changed assertions
+
+The initial focused run exposed 11 failures, including both supplied false accepts, mixed-company evidence, disconnected roles and unrelated-row borrowing. A later legal-suffix conflict fixture also failed before its correction. The model-company veto companion already passed before implementation. New regression coverage is 14 rule/provider fixtures plus two real-engine cases, 16 tests total against the 3,603 baseline. All focused 152 tests passed before the full gates.
+
+All seven gates PASS before the commit: 276 app files / 3,619 passed / one existing opt-in skip / zero failed; 8 wrapper files / 166 passed. Commands: npx tsc --noEmit; npx vitest run; npm run build; git diff --check; node scripts/places-edge-typecheck.mjs; and in worker/wrapper npx tsc --noEmit plus npx vitest run. Edge shim covers 29 entrypoints. Environment remains VITE_SUPABASE_URL=http://127.0.0.1:54321 and VITE_SUPABASE_ANON_KEY=local-test-placeholder. The whitespace runner uses core.safecrlf=false without rewriting line endings. Existing large-chunk warning and opt-in skip remain. Logs: .superpowers/deepfind-company-source-fix6-*.log.
+
+Changed existing assertions: none. Existing Gemini fixtures were strengthened in three places to satisfy the new source-role requirement: the URL-free judge's positive fixture now says "is Owner at" instead of "currently owns"; the source-host and separate non-LinkedIn grounding fixtures now explicitly name Facilities Manager. Their original acceptance/null-link assertions remain. A new negative fixture explicitly proves that the old owns-only sentence returns role_mismatch. Every old judgeRoleHit fixture and assertion remains unchanged. No cap, retry delay, role ladder, verdict, tier, schema, saved-country or registry-precedence rule changed.
+
+Commit: the single commit containing this Fix 6 section, titled fix: require source-only company proof for role people. The exact final hash is supplied in the final handoff because a commit cannot embed its own hash. Only explicit paths are staged. Commit hooks are disabled only for this commit to preserve the accepted-main vault mirror.
+
+### Redeploy list, unverified items and handoff
+
+Fix 6 alone requires run-deep-find. A fresh recursive relative-import graph from every function index.ts, including dynamic/type-only imports, reaches changed roleSearchRules.ts and searchProvider.ts from that single entrypoint. No frontend, wrapper, container, secret or migration change is needed for this fix. The earlier full-branch rollout surface remains separately documented; it is not reduced by this incremental list. Nothing was deployed.
+
+NOT VERIFIED: independent review, real source phrasing/model output, production company/person accuracy, live timing/credits/pass marks, database/RLS/concurrency, browser/mobile and actual provider/container runtime. No live/production read or call, provider request, key access, installation, spending, SQL/audit, VPS change, push, merge or deployment occurred. Fixtures are synthetic; the single-call authorization remains withdrawn. Subscription usage is unavailable. No task-owned server was started.
+
+No unresolved build question or change of role. Codex stops after this one commit and report. Claude reviews Fix 6 at the exact saved tip; Kevin separately authorizes any rollout or live verification. Project and shared handoffs record the latest source-only proof rule while preserving older branch/main snapshots.

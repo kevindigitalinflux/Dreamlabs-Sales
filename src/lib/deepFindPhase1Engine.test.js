@@ -59,6 +59,15 @@ beforeEach(() => {
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it.each(['Ann Roe is a Director at Cleancat Logistics Ltd in Cork.','Ann Roe, Director.'])('does not save a Gemini company claim without source company proof: %s',async evidence=>{
+ lead.business_name='Cleancat - Commercial Cleaning Services Dublin';lead.city='Dublin';
+ roleProfiles=[{id:'icp',org_id:'org',target_roles:['Director']}];
+ const redirect='https://vertexaisearch.cloud.google.com/grounding-api-redirect/REDACTED';
+ geminiGroundedSearch.mockResolvedValue({text:JSON.stringify({name:'Ann Roe',title:'Director',company:'Cleancat',linkedin_url:null}),sources:[redirect],sourceEvidence:[`${redirect} linkedin.com`,`${redirect} ${evidence}`]});
+ findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
+ const out=await run();expect(out.status).toBe('done');expect(contacts.some(contact=>contact.first_name==='Ann')).toBe(false);
+ expect(out.domains.role_search_fallback_shape).toMatchObject({people_lines:1,people_kept:0});
+});
 it('does not count a not-configured worker as SearXNG in saved role usage',async()=>{
  findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
  const out=await run();expect(out.domains.role_searches_by_provider).toEqual({searxng:0,gemini:2});
