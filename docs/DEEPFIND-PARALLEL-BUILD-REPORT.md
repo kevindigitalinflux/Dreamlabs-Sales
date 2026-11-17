@@ -57,3 +57,9 @@ DO $$ BEGIN
 END $$;
 ROLLBACK;
 ```
+
+## Task 3 — fair claims
+
+The service-only claim RPC locks the singleton config row before selecting a lead. Each subsequent SQL statement sees committed running counts; each loop iteration also sees its own prior claim. Ordering is running count, run start, queued timestamp, ID. The short transaction lock serializes admission only, not lead processing; SKIP LOCKED and the ten-row ceiling remain. This avoids simultaneous equal-count snapshots choosing the same oldest run. Live PostgreSQL scheduling is not verified.
+
+The new SQL contract test was red before the function existed. Its first gate failed because a TypeScript test imported node:fs outside the app's configured types; the test was moved to JavaScript, with no product change. All seven gates then passed: 279 app files / 3,623 passed / one existing skip; wrapper 8 / 166; edge 29. Logs parallel-task3-*.log. No existing assertion changed. Task 2 commit 300f9eb; Task 3 is this entry's commit.

@@ -50,3 +50,25 @@ SELECT cron.schedule('run-deep-find-tick','*/2 * * * *',$cron$
   body:='{"action":"tick"}'::jsonb)
  FROM generate_series(1,(SELECT deep_find_parallel FROM public.deep_find_runtime_config WHERE singleton));
 $cron$);
+
+-- Task 3: serialize only claim selection, never lead work. The next statement sees a fresh snapshot.
+CREATE OR REPLACE FUNCTION public.deep_find_claim(max_leads integer) RETURNS SETOF public.deep_find_leads
+LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+DECLARE selected_id uuid; claimed public.deep_find_leads%rowtype; n integer;
+BEGIN
+ IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Service only' USING ERRCODE='42501'; END IF;
+ PERFORM 1 FROM public.deep_find_runtime_config WHERE singleton FOR UPDATE;
+ FOR n IN 1..least(10,greatest(0,coalesce(max_leads,0))) LOOP
+  SELECT q.id INTO selected_id FROM public.deep_find_leads q JOIN public.deep_find_runs r ON r.id=q.run_id
+  WHERE q.status='queued' AND r.status='active'
+  ORDER BY (SELECT count(*) FROM public.deep_find_leads running WHERE running.run_id=q.run_id AND running.status='running'),
+   r.started_at,q.updated_at,q.id
+  LIMIT 1 FOR UPDATE OF q SKIP LOCKED;
+  IF NOT FOUND THEN RETURN; END IF;
+  UPDATE public.deep_find_leads SET status='running',claimed_at=now(),updated_at=now(),attempts=attempts+1
+   WHERE id=selected_id AND status='queued' RETURNING * INTO claimed;
+  IF FOUND THEN RETURN NEXT claimed; END IF;
+ END LOOP;
+END $$;
+REVOKE ALL ON FUNCTION public.deep_find_claim(integer) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.deep_find_claim(integer) TO service_role;
