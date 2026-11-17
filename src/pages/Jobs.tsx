@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ListChecks } from 'lucide-react';
+import { Activity, Archive, BellRing, CheckCircle2, ListChecks } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { SectionTitle } from '../components/ui/SectionTitle';
 import { useJobs } from '../hooks/useJobs';
 import { JobRow } from '../components/jobs/JobRow';
 import { ConfirmDialog } from '../components/jobs/ConfirmDialog';
@@ -10,10 +12,10 @@ import { Skeleton } from '../components/ui/Skeleton';
 import { Collapsible } from '../components/ui/Collapsible';
 import { isFinishedState, JOB_KIND_NAME, type JobItem } from '../lib/jobs/model';
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, icon, children }: { title: string; icon: LucideIcon; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-2">
-      <h2 className="text-[18px] font-bold">{title}</h2>
+      <SectionTitle icon={icon}>{title}</SectionTitle>
       <ul className="flex flex-col gap-2">{children}</ul>
     </section>
   );
@@ -77,11 +79,12 @@ export function Jobs() {
         <EmptyState icon={ListChecks} title="No background jobs yet" hint="Deep find, outreach to selected leads and lead searches show up here while they work." />
       )}
 
-      {groups.needsYou.length > 0 && <Section title="Needs you">{groups.needsYou.map(row)}</Section>}
-      {groups.running.length > 0 && <Section title="Running">{groups.running.map(row)}</Section>}
+      {groups.needsYou.length > 0 && <Section title="Needs you" icon={BellRing}>{groups.needsYou.map(row)}</Section>}
+      {groups.running.length > 0 && <Section title="Running" icon={Activity}>{groups.running.map(row)}</Section>}
       {groups.finished.length > 0 && (
         <Collapsible
           key={`finished-${busyNow}`}
+          icon={CheckCircle2}
           title="Finished"
           summary={`${groups.finished.length} ${groups.finished.length === 1 ? 'job' : 'jobs'}`}
           defaultOpen={!busyNow}
@@ -91,7 +94,7 @@ export function Jobs() {
         </Collapsible>
       )}
       {groups.older.length > 0 && (
-        <Collapsible title="Older than 14 days" summary={`${groups.older.length} ${groups.older.length === 1 ? 'job' : 'jobs'}`} open={showOlder} onOpenChange={setShowOlder}>
+        <Collapsible icon={Archive} title="Older than 14 days" summary={`${groups.older.length} ${groups.older.length === 1 ? 'job' : 'jobs'}`} open={showOlder} onOpenChange={setShowOlder}>
           <ul className="flex flex-col gap-2">{groups.older.map(row)}</ul>
         </Collapsible>
       )}
