@@ -1,11 +1,12 @@
-import { AlertTriangle, CheckCircle2, CircleSlash, Clock, Loader2, MailCheck, MailX, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, CircleSlash, Clock, Loader2, MailCheck, MailX, XCircle } from 'lucide-react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { DEEP_FIND_STATUS_LABELS, readDeepFindDetails } from '../../lib/deepFindView';
+import { DEEP_FIND_STATUS_LABELS } from '../../lib/deepFindView';
+import { PRIORITY_LABEL, deepFindRowFlags, type DeepFindPriority } from '../../lib/deepFindPriority';
 import type { DeepFindRowWithLead } from '../../hooks/useDeepFindRun';
 import { DeepFindCompanyChoice } from './DeepFindCompanyChoice';
 import { CompanyDomainsEditor } from './CompanyDomainsEditor';
 import { DeepFindSuggestions } from './DeepFindSuggestions';
-import { registrySkipReason } from '../../../supabase/functions/_shared/deepFindSuggestions';
 import { DeepFindAutoChanges } from './DeepFindAutoChanges';
 import { BlockedOwnDomainNotice } from './BlockedOwnDomainNotice';
 import { Heading } from './Heading';
@@ -29,6 +30,20 @@ const STATUS_CLASSES: Record<DeepFindRowWithLead['status'], string> = {
   skipped: 'border-line bg-raised',
 };
 
+/** Left edge and pill colours by how much the lead needs the user: magenta for most, violet to review, quiet for nothing. */
+const PRIORITY_EDGE: Record<DeepFindPriority, string> = {
+  most: 'border-line border-l-attention',
+  some: 'border-line border-l-violet-line',
+  working: 'border-line border-l-line',
+  none: 'border-line border-l-line',
+};
+const PRIORITY_PILL: Record<DeepFindPriority, string> = {
+  most: 'bg-attention-soft text-attention',
+  some: 'bg-violet/15 text-link',
+  working: 'bg-surface text-muted',
+  none: 'bg-surface text-muted',
+};
+
 /** One titled block inside a lead result. */
 function Section({ title, level, children }: { title: string; level: number; children: ReactNode }) {
   return <section className="flex min-w-0 flex-col gap-2">
@@ -43,20 +58,25 @@ function Section({ title, level, children }: { title: string; level: number; chi
  * with their role, and the names to check.
  */
 export function DeepFindLeadResult({ row, level = 2 }: { row: DeepFindRowWithLead; level?: number }) {
-  const details = readDeepFindDetails(row.domains);
-  // Only the officer step waits for this choice; everything else already ran (the row is done).
-  const registrySkipped = registrySkipReason(row.lead ?? {});
-  const openChoice = details.companyCandidates.length > 0 && !row.lead?.company_number && !registrySkipped;
-  const toCheck = [...details.unverified, ...details.namedByWeb, ...details.namedOnSite];
+  const { details, registrySkipped, openChoice, toCheck, toReview, priority } = deepFindRowFlags(row);
+  // Leads that need a decision open by themselves; the rest stay folded until asked for.
+  const [open, setOpen] = useState(priority === 'most');
   return (
-    <li className="flex min-w-0 flex-col gap-4 rounded-surface border border-line bg-card p-4 text-sm text-offwhite">
+    <li className={`flex min-w-0 flex-col gap-4 rounded-surface border border-l-4 bg-raised p-4 text-sm text-offwhite shadow-raised ${PRIORITY_EDGE[priority]}`}>
       <div className="flex flex-wrap items-center gap-2">
-        <Heading level={level} className="min-w-0 flex-1 break-words font-heading text-base font-bold">{row.lead?.business_name ?? 'A lead you cannot see'}</Heading>
+        <Heading level={level} className="min-w-0 flex-1 font-heading text-base font-bold">
+          <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex min-h-11 w-full cursor-pointer items-center gap-2 text-left focus-visible:outline-2 focus-visible:outline-focus">
+            <ChevronDown className={`h-4 w-4 shrink-0 text-muted transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} aria-hidden />
+            <span className="break-words">{row.lead?.business_name ?? 'A lead you cannot see'}</span>
+          </button>
+        </Heading>
+        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${PRIORITY_PILL[priority]}`}>{PRIORITY_LABEL[priority]}{toReview > 0 && priority === 'some' ? `: ${toReview}` : ''}</span>
         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${STATUS_CLASSES[row.status]}`}>{STATUS_ICONS[row.status]}{DEEP_FIND_STATUS_LABELS[row.status]}</span>
         {row.status === 'done' && (
           <span className="inline-flex items-center rounded-full border border-line bg-raised px-2.5 py-1 text-xs font-semibold">{row.people_found === 1 ? '1 person added' : `${row.people_found} people added`}</span>
         )}
       </div>
+      {open && <div className="flex min-w-0 flex-col gap-4">
       {row.lead && <BlockedOwnDomainNotice leadId={row.lead_id} lead={row.lead} />}
       {row.reason && <p>{row.reason}</p>}
       {openChoice && (
@@ -116,6 +136,7 @@ export function DeepFindLeadResult({ row, level = 2 }: { row: DeepFindRowWithLea
         </details>
       )}
       {row.lead && row.status === 'done' && <QueuedChecksLine leadId={row.lead_id} runId={row.run_id} />}
+      </div>}
     </li>
   );
 }
