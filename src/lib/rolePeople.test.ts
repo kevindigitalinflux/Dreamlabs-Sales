@@ -77,5 +77,14 @@ it('keeps SearXNG queries while sending structured rung context to the Gemini pr
 });
 it('adds only numeric people counts to zero-person diagnostics',async()=>{
  const shape=vi.fn();await provider({...reply,sources:[]},shape).search('query',context);
- expect(shape).toHaveBeenCalledExactlyOnceWith({lines_parsed:1,profile_urls:1,sources:0,redirect_sources:0,linkedin_titled_sources:0,people_lines:1,people_kept:0});
+ expect(shape).toHaveBeenCalledExactlyOnceWith({lines_parsed:1,profile_urls:1,sources:0,redirect_sources:0,linkedin_titled_sources:0,people_lines:1,people_kept:0,objects_found:1});
+});
+it.each([
+ JSON.stringify(person),
+ JSON.stringify(person,null,2),
+ '```json\n'+JSON.stringify([person],null,2)+'\n```',
+ 'Public person:\n'+JSON.stringify(person,null,2)+'\nEnd.',
+ '{invalid}\n'+JSON.stringify(person),
+])('keeps the grounded person across Gemini object layouts: %s',async text=>{
+ expect(await provider({...reply,text}).search('query',context)).toMatchObject({people:[{first:'Jane',last:'Doe'}]});
 });

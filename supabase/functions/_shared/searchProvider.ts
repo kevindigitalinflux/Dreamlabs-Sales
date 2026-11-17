@@ -1,3 +1,4 @@
+import { jsonObjects } from './jsonObjects.ts';
 import type { SearchHit } from './workerRules.ts';
 import type { WorkerClient } from './workerClient.ts';
 import { judgeRolePerson, rolePeoplePrompt, type RoleCandidate, type RolePeopleInput } from './roleSearchRules.ts';
@@ -8,7 +9,7 @@ export interface SearchProvider {
 
 export interface RoleSearchFallbackShape {
   lines_parsed: number; profile_urls: number; sources: number; redirect_sources: number; linkedin_titled_sources: number;
-  people_lines: number; people_kept: number;
+  people_lines: number; people_kept: number; objects_found: number;
 }
 type GroundedReply = { text: string; sources: string[]; sourceEvidence?: string[] };
 const linkedinHost = (host: string) => /^(?:(?:www|[a-z]{2}(?:-[a-z]{2})?)\.)?linkedin\.com$/i.test(host);
@@ -71,10 +72,10 @@ export function makeSearchProvider(deps: { worker: WorkerClient; gemini?: (promp
       const chunks = groundingSources(grounded);
       let linesParsed = 0, profileUrls = 0, peopleLines = 0;
       const people: RoleCandidate[] = [];
-      for (const line of grounded.text.split(/\r?\n/).slice(0, 100)) {
-        let hit: unknown;
-        try { hit = JSON.parse(line); } catch { continue; }
-        linesParsed++;
+      // Retain the original line diagnostic; objects_found counts the tolerant reader separately.
+      for (const line of grounded.text.split(/\r?\n/).slice(0,100)) { try { JSON.parse(line); linesParsed++; } catch { /* Not a standalone JSON line. */ } }
+      const objects = jsonObjects(grounded.text);
+      for (const {value: hit} of objects) {
         if (!hit || typeof hit !== 'object' || Array.isArray(hit)) continue;
         const row = hit as Record<string, unknown>;
         if (typeof row.name !== 'string' || typeof row.title !== 'string' || typeof row.company !== 'string'
@@ -100,7 +101,7 @@ export function makeSearchProvider(deps: { worker: WorkerClient; gemini?: (promp
       }
       if (!people.length) deps.onFallbackShape?.({ lines_parsed: linesParsed, profile_urls: profileUrls,
         sources: grounded.sources.length, redirect_sources: chunks.filter(chunk => chunk.redirect).length,
-        linkedin_titled_sources: chunks.filter(chunk => chunk.titled).length, people_lines: peopleLines, people_kept: people.length });
+        linkedin_titled_sources: chunks.filter(chunk => chunk.titled).length, people_lines: peopleLines, people_kept: people.length, objects_found: objects.length });
       return { ok: true, people, via: 'gemini' };
     } catch (error) { const code = roleSearchFailureCode(error); console.error('Role search unavailable', code); return { ok: false, why: code === 'http_429' ? 'busy' : 'failed' }; }
   } };

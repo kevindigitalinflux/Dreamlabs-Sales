@@ -70,7 +70,7 @@ it.each(['https://linkedin.com/company/acme','https://linkedin.com.attacker.test
 it('emits only fixed numeric fallback shape counts when no hit is kept',async()=>{
  const onFallbackShape=vi.fn();const reply={...redirectReply,text:['prose','{bad}',JSON.stringify({...person,name:'Someone Else'}),JSON.stringify({...person,name:'Someone Else',linkedin_url:'https://linkedin.com/company/acme'})].join('\n')};
  expect(await fallback(reply,onFallbackShape).search('private query')).toMatchObject({ok:true,people:[]});
- expect(onFallbackShape).toHaveBeenCalledExactlyOnceWith({lines_parsed:2,profile_urls:1,sources:1,redirect_sources:1,linkedin_titled_sources:1,people_lines:2,people_kept:0});
+ expect(onFallbackShape).toHaveBeenCalledExactlyOnceWith({lines_parsed:2,profile_urls:1,sources:1,redirect_sources:1,linkedin_titled_sources:1,people_lines:2,people_kept:0,objects_found:2});
  expect(JSON.stringify(onFallbackShape.mock.calls)).not.toMatch(/Jane|Doe|query|https|Acme/);
  const kept=vi.fn();await fallback(redirectReply,kept).search('query');expect(kept).not.toHaveBeenCalled();
 });

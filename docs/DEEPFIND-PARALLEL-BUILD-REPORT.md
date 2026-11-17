@@ -164,3 +164,11 @@ ASSERT NOT has_function_privilege('authenticated','public.gemini_run_status(uuid
 ## Task 7 — role fallback time budget
 
 The role Gemini adapter uses min(25,000, left minus 5,000) and refuses to dispatch below 20,000 ms remaining. The existing ladder threshold remains unchanged. Four red budget fixtures now cover 120s, 25s, 20s and 19,999ms, and the real engine fixture observes a 25,000ms provider timeout. No existing assertion changed. All seven gates PASS: 285 app files /3,645 passed /one existing skip; wrapper 8 /166; edge29. Logs parallel-task7-*.log. Task 6 commit 605a197. Real model latency remains unverified.
+
+## Task 8 — tolerant grounded JSON
+
+The bounded shared object reader handles JSON lines, multi-line objects, fenced arrays, prose and balanced invalid objects. It respects string escapes and emits an outer object once, without treating nested objects as separate people. Role field validation and company/name/grounding judges are unchanged. The known-person web parser reuses it, still requiring email/profile proof outside all JSON spans; its strict automatic-profile path also reads the same parsed objects.
+
+The zero-person diagnostic adds objects_found, still counts only. lines_parsed keeps its original standalone-JSON-line meaning, so pretty replies can have zero lines_parsed with positive objects_found. Changed existing assertions: the two source-proof engine cases, two normal/interrupted engine shape cases, the rolePeople shape assertion and searchProvider shape assertion add objects_found (one, or two for the two-object fixture). No accepted-person verdict was relaxed.
+
+Red parser fixtures preceded implementation. The first typecheck caught an incomplete edited block and was corrected. One later full run hit Vitest fork startup timeouts; another was interrupted by the server restart. The final fresh full run passes all seven gates: 286 app files /3,656 passed /one existing skip; wrapper 8 /166; edge29. Logs parallel-task8-*.log. Task 7 commit d32461b. Real Gemini reply shape remains NOT VERIFIED; every reply fixture is synthetic/redacted.

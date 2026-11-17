@@ -66,7 +66,7 @@ it.each(['Ann Roe is a Director at Cleancat Logistics Ltd in Cork.','Ann Roe, Di
  geminiGroundedSearch.mockResolvedValue({text:JSON.stringify({name:'Ann Roe',title:'Director',company:'Cleancat',linkedin_url:null}),sources:[redirect],sourceEvidence:[`${redirect} linkedin.com`,`${redirect} ${evidence}`]});
  findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
  const out=await run();expect(out.status).toBe('done');expect(contacts.some(contact=>contact.first_name==='Ann')).toBe(false);
- expect(out.domains.role_search_fallback_shape).toMatchObject({people_lines:1,people_kept:0});
+ expect(out.domains.role_search_fallback_shape).toMatchObject({people_lines:1,people_kept:0,objects_found:1});
 });
 it('does not count a not-configured worker as SearXNG in saved role usage',async()=>{
  findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
@@ -108,7 +108,7 @@ it.each([false,true])('stores only fallback shape counts in the engine result, i
  if(interrupted)lookUpPeople.mockRejectedValueOnce(new Error('fixture interrupted'));
  const out=await run();
  expect(out.status).toBe(interrupted?'failed':'done');
- expect(out.domains.role_search_fallback_shape).toEqual({lines_parsed:1,profile_urls:1,sources:1,redirect_sources:1,linkedin_titled_sources:1,people_lines:1,people_kept:0});
+ expect(out.domains.role_search_fallback_shape).toEqual({lines_parsed:1,profile_urls:1,sources:1,redirect_sources:1,linkedin_titled_sources:1,people_lines:1,people_kept:0,objects_found:1});
  expect(Object.values(out.domains.role_search_fallback_shape).every(value=>typeof value==='number')).toBe(true);
  expect(JSON.stringify(out.domains.role_search_fallback_shape)).not.toMatch(/Some|Person|Acme|https/);
 });

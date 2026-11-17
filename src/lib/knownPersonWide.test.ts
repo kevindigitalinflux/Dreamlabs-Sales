@@ -326,3 +326,9 @@ describe('failureReason and webFailureDetail', () => {
     expect(webFailureDetail('provider_refused_abc' as never)).toBe('Gemini could not be reached for the web search.');
   });
 });
+it('reads people web findings from a fenced array while retaining outside-prose proof',()=>{
+ const person={email:'john.sipple@lovelyliving.co.uk',linkedin_url:'https://www.linkedin.com/in/john-sipple'};
+ const text='John Sipple: john.sipple@lovelyliving.co.uk linkedin.com/in/john-sipple\n```json\n'+JSON.stringify([person],null,2)+'\n```';
+ expect(parseWebFindings(text,'lovelyliving.co.uk','John','Sipple')).toEqual(person);
+ expect(parseWebFindings('```json\n'+JSON.stringify([person])+'\n```','lovelyliving.co.uk','John','Sipple')).toEqual({email:null,linkedin_url:null});
+});
