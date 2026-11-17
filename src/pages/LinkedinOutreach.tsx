@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Contact as LinkedinIcon, CheckCircle2, ExternalLink, Sparkles, SkipForward } from 'lucide-react';
+import { Contact as LinkedinIcon, CheckCircle2, ExternalLink, Inbox, ListTodo, Sparkles, SkipForward, UserPlus } from 'lucide-react';
 import { useLinkedinOutreach } from '../hooks/useLinkedinOutreach';
 import { usePipeline } from '../hooks/usePipeline';
 import { useOrg } from '../hooks/useOrg';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { Collapsible } from '../components/ui/Collapsible';
+import { SectionTitle } from '../components/ui/SectionTitle';
 import { Input, SelectField, Textarea } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -109,7 +111,7 @@ export function LinkedinOutreach() {
   if (loading) return <Skeleton className="h-96 w-full" />;
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-6">
+    <div className="mx-auto flex max-w-3xl flex-col gap-6">
       <header className="flex items-center gap-3">
         <LinkedinIcon className="h-6 w-6 text-link" aria-hidden />
         <h1 className="text-[28px] font-bold">LinkedIn outreach</h1>
@@ -130,21 +132,20 @@ export function LinkedinOutreach() {
       </div>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
-      <Card>
+      <Collapsible icon={UserPlus} title="Add a contact" summary="Name, LinkedIn link and a context signal">
         <div className="flex flex-col gap-3">
-          <p className="font-semibold">Add a contact</p>
           <Input label="Full name" value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} />
           <Input label="LinkedIn URL (optional)" value={form.linkedin_url} onChange={(e) => setForm((f) => ({ ...f, linkedin_url: e.target.value }))} />
           <Textarea label="Context signal (optional — a recent post, job change, etc.)" value={form.context_signal} onChange={(e) => setForm((f) => ({ ...f, context_signal: e.target.value }))} />
           <Button onClick={() => void handleAdd()} disabled={busy === 'add' || !form.full_name.trim()} loading={busy === 'add'}>{busy === 'add' ? 'Adding…' : 'Add contact'}</Button>
         </div>
-      </Card>
+      </Collapsible>
 
       {filteredPendingContacts.length > 0 && (
         <Card>
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <p className="font-semibold">Not yet drafted</p>
+              <SectionTitle icon={ListTodo} count={filteredPendingContacts.length}>Not yet drafted</SectionTitle>
               {selected.size > 0 && (
                 <Button variant="secondary" onClick={() => void handleBulkDraft()} disabled={bulkDrafting} loading={bulkDrafting}>
                   <Sparkles className="h-4 w-4" aria-hidden />
@@ -153,7 +154,7 @@ export function LinkedinOutreach() {
               )}
             </div>
             {filteredPendingContacts.map((c) => (
-              <div key={c.id} className="flex items-center justify-between rounded-control bg-surface/50 p-3">
+              <div key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-nested bg-surface p-3">
                 <label className="flex min-h-11 cursor-pointer items-center gap-2">
                   <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} className="h-4 w-4 accent-violet-500" />
                   <span className="min-w-0">
@@ -174,14 +175,14 @@ export function LinkedinOutreach() {
       )}
 
       <div className="flex flex-col gap-3">
-        <p className="font-semibold">Review queue</p>
+        <SectionTitle icon={Inbox} count={filteredDrafts.length}>Review queue</SectionTitle>
         {filteredDrafts.length === 0 && (
           <EmptyState icon={LinkedinIcon} title="No drafts waiting" hint="Add a contact and draft a message to see it here." />
         )}
         {filteredDrafts.map((d) => (
-          <Card key={d.id}>
+          <div key={d.id} className={`rounded-surface border border-l-4 border-line bg-raised p-4 shadow-raised ${d.status === 'approved' ? 'border-l-success' : 'border-l-violet-line'}`}>
             <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-semibold">{d.contact.full_name}</p>
                   <LeadSource contact={d.contact} />
@@ -192,7 +193,7 @@ export function LinkedinOutreach() {
                   </a>
                 )}
               </div>
-              <p className="whitespace-pre-wrap break-words text-sm">{d.message}</p>
+              <p className="whitespace-pre-wrap break-words rounded-nested bg-surface p-3 text-[15px] leading-relaxed">{d.message}</p>
               <div className="flex flex-wrap items-center gap-2">
                 {d.status === 'draft' && (
                   <>
@@ -206,7 +207,7 @@ export function LinkedinOutreach() {
                 <DeleteContactButton onDelete={() => deleteContact(d.contact)} onError={setError} />
               </div>
             </div>
-          </Card>
+          </div>
         ))}
       </div>
     </div>
