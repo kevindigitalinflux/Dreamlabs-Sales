@@ -288,3 +288,8 @@ it('a fallback team-page person still allows the search ladder',async()=>{
  readCompanyPages.mockImplementationOnce(async(_url,_budget,_extra,onPage)=>{const html='<article><h3>Ann Lee</h3><p>Office Manager</p></article>';onPage(html,'https://acme.com/team');return [html]});
  await run();expect(findRolePeople).toHaveBeenCalledTimes(1);expect(contacts.find(c=>c.first_name==='Ann')).toMatchObject({source:'team_page',include_in_sequences:false});
 });
+it('a saved run refusal skips all Gemini work and gives this lead one combined step',async()=>{
+ const original=service.rpc;service.rpc=vi.fn(async(name,args)=>name==='gemini_run_status'?{data:402}:original(name,args));
+ const out=await run();expect(geminiGroundedSearch).not.toHaveBeenCalled();
+ expect(out.domains.steps.filter(line=>line.includes('Gemini refused the key'))).toEqual(['Web search and role search skipped: Gemini refused the key (error 402). Check the Gemini billing or key.']);
+});

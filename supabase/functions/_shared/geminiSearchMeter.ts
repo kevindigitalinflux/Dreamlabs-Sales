@@ -1,6 +1,6 @@
 export const GEMINI_FREE_SEARCHES_PER_MONTH = 5000;
 export interface GeminiMeterClient { rpc(name: string, args: Record<string, unknown>): PromiseLike<{ data?: unknown; error?: unknown }> }
-export interface GeminiSearchContext { service: GeminiMeterClient; orgId: string; sharedKey: boolean }
+export interface GeminiSearchContext { service: GeminiMeterClient; orgId: string; sharedKey: boolean; runId?: string; onRefused?: (status: number) => void }
 export interface GeminiSearchSnapshot { orgSearches: number; sharedKey: boolean; sharedSearches: number | null }
 
 /** Informational counting must never turn a successful lookup into a failure. */

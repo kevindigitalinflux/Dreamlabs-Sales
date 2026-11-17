@@ -177,3 +177,19 @@ REVOKE ALL ON FUNCTION public.deep_find_checks_claim(integer) FROM PUBLIC,anon,a
 REVOKE ALL ON FUNCTION public.deep_find_checks_expire() FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.deep_find_checks_claim(integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.deep_find_checks_expire() TO service_role;
+
+ALTER TABLE public.deep_find_runs ADD COLUMN gemini_refused_status integer CHECK (gemini_refused_status IN (401,402,403));
+CREATE OR REPLACE FUNCTION public.gemini_run_status(p_run uuid,p_status integer DEFAULT NULL) RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE result integer;
+BEGIN
+ IF auth.role() IS DISTINCT FROM 'service_role' THEN RAISE EXCEPTION 'Service only' USING ERRCODE='42501'; END IF;
+ IF p_status IS NOT NULL AND p_status NOT IN (401,402,403) THEN RAISE EXCEPTION 'Invalid refusal'; END IF;
+ IF p_status IS NOT NULL THEN
+  UPDATE public.deep_find_runs SET gemini_refused_status=coalesce(gemini_refused_status,p_status)
+  WHERE id=p_run RETURNING gemini_refused_status INTO result;
+ ELSE SELECT gemini_refused_status INTO result FROM public.deep_find_runs WHERE id=p_run; END IF;
+ RETURN result;
+END $$;
+REVOKE ALL ON FUNCTION public.gemini_run_status(uuid,integer) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.gemini_run_status(uuid,integer) TO service_role;

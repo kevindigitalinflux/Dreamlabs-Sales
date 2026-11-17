@@ -1,4 +1,4 @@
-import { admitGemini } from './geminiAdmission.ts';
+import { admitGemini, recordGeminiRefusal } from './geminiAdmission.ts';
 import { countGeminiSearch, type GeminiSearchContext } from './geminiSearchMeter.ts';
 import { stripAiPunctuation } from './textGuardrails.ts';
 import { EMAIL_FORMAT_PROMPT_LINE } from './emailFormatPrompt.ts';
@@ -60,7 +60,7 @@ export async function geminiJson(prompt: string, apiKey: string, timeoutMs?: num
       generationConfig: { responseMimeType: 'application/json', temperature: 0.4 },
     }),
   });
-  if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  if (!res.ok) { await recordGeminiRefusal(context, res.status); throw new Error(`Gemini ${res.status}: refused`); }
   const data = await res.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error('Gemini returned no content');
@@ -93,7 +93,7 @@ export async function geminiGroundedSearch(prompt: string, apiKey: string, timeo
         generationConfig: { temperature: 0.3 },
       }),
     });
-    if (!res.ok) throw new Error(`Gemini ${res.status}: ${(await res.text().catch(() => '')).slice(0, 300)}`);
+    if (!res.ok) { await recordGeminiRefusal(meter, res.status); throw new Error(`Gemini ${res.status}: refused`); }
     let data: {
       candidates?: {
         content?: { parts?: { text?: string }[] };

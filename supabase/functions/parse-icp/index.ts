@@ -1,3 +1,4 @@
+import { admitGemini } from '../_shared/geminiAdmission.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
@@ -50,7 +51,8 @@ USER'S DESCRIPTION:
 ${rawInput}`;
 
   try {
-    const res = await fetch(`${GEMINI_URL}/${AI_MODEL}:generateContent?key=${apiKey}`, {
+    await admitGemini();
+      const res = await fetch(`${GEMINI_URL}/${AI_MODEL}:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

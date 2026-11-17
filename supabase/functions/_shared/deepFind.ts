@@ -1,4 +1,4 @@
-import { claimRunNotice } from './geminiAdmission.ts';
+import { claimRunNotice, readGeminiRefusal, geminiRefusalLine } from './geminiAdmission.ts';
 import { completeDeepFindRun, maintainDeepFind } from './deepFindMaintenance.ts';
 import type { GeminiSearchContext } from './geminiSearchMeter.ts';
 import { geminiGroundedSearch } from './ai.ts';
@@ -154,7 +154,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     return { status: 'skipped', reason: 'This organisation reached its daily Deep find limit. Try again tomorrow.' };
   }
 
-  const geminiMeter: GeminiSearchContext = { service, orgId: run.org_id, sharedKey: false };
+  let geminiRefused: number | null = null;
+  const geminiMeter: GeminiSearchContext = { service, orgId: run.org_id, sharedKey: false, runId: run.id,
+    onRefused: status => { geminiRefused = status; } };
   let [hunterKey, geminiKey, chKey, apolloKey, firecrawlKey, placesKey, ocKey] = await Promise.all([
     resolveOrgApiKey(service, run.org_id, 'hunter'),
     resolveOrgApiKey(service, run.org_id, 'gemini', source => { geminiMeter.sharedKey = source === 'global'; }),
@@ -164,6 +166,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     resolveOrgApiKey(service, run.org_id, 'google_places', source => { placesContext.shared = source === 'global'; }),
     resolveOrgApiKey(service, run.org_id, 'opencorporates'),
   ]);
+  try { geminiRefused = await readGeminiRefusal(geminiMeter); }
+  catch { console.error('deep_find_gemini_status_unavailable'); geminiKey = null; }
+  if (geminiRefused) geminiKey = null;
   const configured = { hunterKey, geminiKey, apolloKey, firecrawlKey, placesKey, ocKey };
   let deepEnabled = effort === 'custom';
   if (!deepEnabled) { hunterKey = null; geminiKey = null; apolloKey = null; firecrawlKey = null; placesKey = null; ocKey = null; }
@@ -694,7 +699,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         if (stored) Object.assign(stored, contact);
       }
     }
-    if (shouldSearchAfterTeam(teamPicked)) steps.push(roleSearchLine({ ...roleResult, via: roleSearchUsage.gemini > 0 ? [...roleResult.via, 'gemini'] : roleResult.via }));
+    if (shouldSearchAfterTeam(teamPicked) && (!geminiRefused || roleResult.people.length)) steps.push(roleSearchLine({ ...roleResult, via: roleSearchUsage.gemini > 0 ? [...roleResult.via, 'gemini'] : roleResult.via }));
   }
   await addRegistryOfficers();
   for (const site of ownSites) for (const html of site.pages) {
@@ -1381,7 +1386,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }
   for (const [domain, lines] of domainDetails) steps.push(domain + ': ' + [...lines].join(' '));
   steps.push(...firecrawl.lines());
-  steps.push(...problemLines(problems));
+  const refusalLine = geminiRefusalLine(geminiRefused);
+  if (refusalLine && !steps.includes(refusalLine)) steps.push(refusalLine);
+  steps.push(...problemLines(problems.filter(p => !geminiRefused || !(p.step === 'web' || (p.step === 'person' && p.target.includes('Web search'))))));
   steps.push(creditLine({ ...spend.used, firecrawl: firecrawl.pagesUsed() }));
 
   // LinkedIn auto-capture, like findDecisionMakers, for contacts this run created or filled
@@ -1587,6 +1594,11 @@ export async function runDeepFindTick(service: SupabaseClient, startedAt: number
       if (!placesRuns.has(run.id)) placesRuns.set(run.id, createPlacesContext(service, run.org_id));
       out = await processDeepFindLead(service, run, row, placesRuns.get(run.id), startedAt + WALL_BUDGET_MS);
     } catch { console.error('deep find: claimed lead processing failed'); out = { status: 'failed', reason: 'Something went wrong while searching this lead.' }; }
+    try {
+      const refusal = await readGeminiRefusal({service,orgId:run.org_id,sharedKey:false,runId:run.id});
+      const line = geminiRefusalLine(refusal);
+      if (line) out.domains = {...out.domains, steps:[...new Set([...(Array.isArray(out.domains?.steps) ? out.domains.steps as string[] : []),line])]};
+    } catch { console.error('deep_find_gemini_status_unavailable'); }
     const effort = effortPolicy(row.domains);
     const label = effort === 'custom' ? 'Custom' : EFFORT_LEVELS[effort].label;
     const freshSteps = row.domains?.start_fresh === true && Array.isArray(row.domains.steps)

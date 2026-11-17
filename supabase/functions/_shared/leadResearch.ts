@@ -178,6 +178,7 @@ ${neutralise(web.text.slice(0, 4000)) || '(none)'}
 """`,
           key,
           budget,
+          input.searchMeter,
         );
         bullets = bulletsFrom(reply);
       } catch (e) { logGeminiFailure('summary', e); }

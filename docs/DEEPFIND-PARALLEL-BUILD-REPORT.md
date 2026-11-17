@@ -138,3 +138,25 @@ The exact deadline is started_at plus min(8 hours, max(3 hours, lead_count * 2 m
 
 No existing assertion changed. The SQL block above covers alternating claims, admission, notices, bounds, grants and deadline calculations but was not executed. App fixture tests do not establish SQL validity or concurrency.
 Task 5 gates: 281 app files / 3,632 passed / one existing skip; wrapper 8 /166; root and wrapper TypeScript, build, whitespace, edge29 PASS. Logs parallel-task5-*.log. Task 4 commit 29b55b0.
+
+## Task 6 — stop Gemini after key/billing refusal
+
+078 adds a monotonic run column and service-only gemini_run_status RPC. The first 401/402/403 wins under the run row lock. Each grounded or JSON call with a run context reads it before minute admission and HTTP. Research summary JSON now receives that context too. Later leads disable Gemini before reserving ordinary AI work. The engine stores the fixed combined sentence once, and the run page renders one warning from the run column. HTTP 429 never sets the flag. Already dispatched concurrent calls cannot be recalled; calls admitted before the first refusal may finish. An RPC failure refuses new Gemini work rather than bypassing the flag.
+
+A wider transport search found parse-icp and org-api-settings key validation bypassing ai.ts. Their Gemini requests now use the shared minute admission too. This completes Task 4's all-call surface in this commit; no provider request was made. An initial Task 6 gate caught fixture typing and a misplaced SSR test import, both corrected. No existing behavioral assertion changed. Three existing admission mocks now supply the refusal recorder as well.
+
+Tests: 401/402/403 persist across separate lead contexts and prevent a second HTTP request; 429 permits later requests; the engine gives a saved-refusal lead one exact combined line and no Gemini call; SSR renders one warning; source contracts cover the two separate transports. All seven gates PASS: 284 app files / 3,640 passed / one existing skip; wrapper 8 /166; edge29. Logs parallel-task6-*.log. Task 5 commit 7c071cf. Browser rendering and real overlapping request behavior remain NOT VERIFIED.
+
+Additional dry-run assertions inside the preceding DO block, after run a exists (not executed):
+
+```sql
+ASSERT public.gemini_run_status(a) IS NULL;
+ASSERT public.gemini_run_status(a,402)=402;
+ASSERT public.gemini_run_status(a,401)=402;
+BEGIN PERFORM public.gemini_run_status(a,429); RAISE EXCEPTION '429 flagged';
+EXCEPTION WHEN raise_exception THEN
+ ASSERT (SELECT gemini_refused_status=402 FROM public.deep_find_runs WHERE id=a);
+END;
+ASSERT NOT has_function_privilege('anon','public.gemini_run_status(uuid,integer)','EXECUTE');
+ASSERT NOT has_function_privilege('authenticated','public.gemini_run_status(uuid,integer)','EXECUTE');
+```

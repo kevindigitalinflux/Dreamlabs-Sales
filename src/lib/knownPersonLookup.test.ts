@@ -1,4 +1,4 @@
-vi.mock('../../supabase/functions/_shared/geminiAdmission', () => ({ admitGemini: vi.fn(async()=>{}) }));
+vi.mock('../../supabase/functions/_shared/geminiAdmission', () => ({ admitGemini: vi.fn(async()=>{}), recordGeminiRefusal: vi.fn(async()=>{}) }));
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   hunterAccount,

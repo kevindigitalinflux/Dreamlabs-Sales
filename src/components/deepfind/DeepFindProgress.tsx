@@ -1,3 +1,4 @@
+import { geminiRefusalLine } from '../../../supabase/functions/_shared/geminiAdmission';
 import { useState } from 'react';
 import { Button } from '../ui/Button';
 import { Skeleton } from '../ui/Skeleton';
@@ -38,6 +39,7 @@ export function DeepFindProgress({ runId, leadLevel = 2 }: { runId: string; lead
         <span className="rounded-full border border-line bg-surface px-2.5 py-1">Hunter credits used: about {run.hunter_used} of {run.credit_cap_hunter}</span>
         <span className="rounded-full border border-line bg-surface px-2.5 py-1">AI calls used: {run.ai_used} of {run.credit_cap_ai}</span>
       </div>
+      {geminiRefusalLine(run.gemini_refused_status) && <p role="alert" className="text-sm text-danger-strong">{geminiRefusalLine(run.gemini_refused_status)}</p>}
       {active && <p className="text-[13px]">You can close this window: Deep find keeps going in the background.</p>}
       {rows.length === 0 && <p className="text-sm">No leads in this Deep find.</p>}
       <ul className="flex flex-col gap-3">{rows.map((r) => <DeepFindLeadResult key={r.id} row={r} level={leadLevel} />)}</ul>
