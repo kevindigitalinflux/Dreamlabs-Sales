@@ -12,7 +12,7 @@ const row = (over: Partial<UsageRow> = {}): UsageRow => ({
 describe('defaults', () => {
   it('match the agreed caps', () => {
     expect(USAGE_DEFAULTS).toEqual({
-      worker_scrape: { orgLimit: 100, globalLimit: 400 },
+      worker_scrape: { orgLimit: 400, globalLimit: 1600 },
       worker_verify: { orgLimit: 1500, globalLimit: 3000 },
       worker_search: { orgLimit: 400, globalLimit: 1200 },
       worker_fetch: { orgLimit: 300, globalLimit: 1000 },

@@ -2,7 +2,7 @@
 
 ## Result and scope
 
-Local build on codex/deepfind-parallel, fetched base d1bad26de090285e1afa65bed1b04e5d40d16da0. Kevin directs, Claude architects/reviews, Codex builds. Ten tasks are authorized, one commit per task with all seven gates. Migration 078 is written only; no SQL, provider request, deployment, push/merge, VPS change, installation or spending is authorized. Independent review and live concurrency remain unverified.
+Local build on codex/deepfind-parallel, fetched base d1bad26de090285e1afa65bed1b04e5d40d16da0. Kevin directs, Claude architects/reviews, Codex builds. All ten tasks are locally built, one commit per task with all seven gates passing. Migration 078 is written only; no SQL, provider request, deployment, push/merge, VPS change, installation or spending is authorized. Independent review and live concurrency remain unverified.
 
 Claude's brief-execution hook was read and manually invoked with a UserPromptSubmit task event. It returned BUILD BRIEF DETECTED. Automatic lifecycle interception was not established, and hook/trust configuration was not changed. The brief-execution report rules are followed. The other discovered fable-mode skill was inspected to identify the requested runbook, not silently activated.
 
@@ -27,9 +27,9 @@ The lead engine has a 120-second budget within a 130-second invocation budget; s
 
 Two local RPC contract tests were red at the absent maintenance module, then passed. The existing tick fixture accepts the new RPCs without changing its assertions. SQL reasoning is source review, not an executed database test. All seven gates PASS: 277 app files / 3,621 passed / one existing skip; wrapper 8 files / 166 passed; root/wrapper TypeScript, build, whitespace, edge29. Logs .superpowers/parallel-task1-*.log. Task 1 is the commit containing this initial report.
 
-## Pending tasks / outside gates
+## Initial Task 1 checkpoint / outside gates
 
-Tasks 2–10 follow. Migration dry-run SQL, fairness and sized-backstop fixtures will be included in this report; none is executed locally. With the existing 50-lead maximum, the exact Task 5 formula remains three hours at every allowed parallelism. This was reported before building; the formula is retained rather than changing lead caps.
+At the initial checkpoint Tasks 2–10 remained. Their subsequent results and migration dry-run SQL follow below; no SQL was executed locally. With the existing 50-lead maximum, the exact Task 5 formula remains three hours at every allowed parallelism. This was reported before building; the formula is retained rather than changing lead caps.
 
 ## Not verified
 
@@ -83,9 +83,10 @@ BEGIN;
 -- SQL Editor: paste the full 078 body above the following DO block.
 DO $$
 DECLARE owner_id uuid:=gen_random_uuid(); org uuid; pipe uuid;
- a uuid; b uuid; lead uuid; picked uuid; i integer; signature text; client_role text;
+ a uuid; b uuid; lead uuid; queued uuid; picked uuid; i integer; signature text; client_role text;
 BEGIN
  ASSERT NOT EXISTS(SELECT 1 FROM public.deep_find_runs WHERE status='active'), 'Empty disposable runs required';
+ ASSERT NOT EXISTS(SELECT 1 FROM public.deep_find_check_queue), 'Empty disposable queue required';
  ASSERT (SELECT deep_find_parallel=3 AND gemini_per_minute=12 FROM public.deep_find_runtime_config WHERE singleton);
  INSERT INTO auth.users(instance_id,id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
  VALUES('00000000-0000-0000-0000-000000000000',owner_id,'authenticated','authenticated','parallel-audit@example.test','',now(),'{}','{}',now(),now());
@@ -116,6 +117,22 @@ BEGIN
  DELETE FROM public.gemini_minute_usage;
  FOR i IN 1..12 LOOP ASSERT public.gemini_admit(); END LOOP;
  ASSERT NOT public.gemini_admit(), 'Thirteenth call admitted';
+ SELECT lead_id INTO lead FROM public.deep_find_leads WHERE run_id=a LIMIT 1;
+ UPDATE public.deep_find_runs SET started_at=now()-interval '70 minutes' WHERE id=a;
+ INSERT INTO public.deep_find_check_queue(org_id,run_id,lead_id,address,domain,kind)
+ VALUES(org,a,lead,'backstop@fixture.test','fixture.test','smtp') RETURNING id INTO queued;
+ ASSERT (SELECT count(*)=1 FROM public.deep_find_checks_claim(1)), 'Late enqueue should be claimable';
+ UPDATE public.deep_find_check_queue SET status='queued',created_at=now() WHERE id=queued;
+ UPDATE public.deep_find_runs SET started_at=now()-interval '181 minutes' WHERE id=a;
+ ASSERT NOT EXISTS(SELECT 1 FROM public.deep_find_checks_claim(1)), 'Run backstop failed';
+ PERFORM public.deep_find_checks_expire();
+ ASSERT EXISTS(SELECT 1 FROM public.deep_find_check_queue WHERE id=queued AND status='skipped' AND reason='run_time_limit');
+ UPDATE public.deep_find_runs SET status='cancelled',started_at=now() WHERE id=a;
+ UPDATE public.deep_find_check_queue SET status='running',created_at=now(),claimed_at=now() WHERE id=queued;
+ PERFORM public.deep_find_checks_expire();
+ ASSERT EXISTS(SELECT 1 FROM public.deep_find_check_queue WHERE id=queued AND status='skipped' AND reason='run_time_limit');
+ UPDATE public.usage_resources SET default_org_limit=400,global_limit=1600 WHERE resource='worker_scrape';
+ ASSERT (SELECT default_org_limit=400 AND global_limit=1600 FROM public.usage_resources WHERE resource='worker_scrape');
  ASSERT public.deep_find_notice_once(a,'worker_scrape');
  ASSERT NOT public.deep_find_notice_once(a,'worker_scrape');
  FOREACH client_role IN ARRAY ARRAY['anon','authenticated'] LOOP
@@ -153,8 +170,11 @@ Additional dry-run assertions inside the preceding DO block, after run a exists 
 ASSERT public.gemini_run_status(a) IS NULL;
 ASSERT public.gemini_run_status(a,402)=402;
 ASSERT public.gemini_run_status(a,401)=402;
-BEGIN PERFORM public.gemini_run_status(a,429); RAISE EXCEPTION '429 flagged';
-EXCEPTION WHEN raise_exception THEN
+DECLARE rejected boolean:=false;
+BEGIN
+ BEGIN PERFORM public.gemini_run_status(a,429);
+ EXCEPTION WHEN raise_exception THEN rejected:=true; END;
+ ASSERT rejected, '429 was accepted as a run refusal';
  ASSERT (SELECT gemini_refused_status=402 FROM public.deep_find_runs WHERE id=a);
 END;
 ASSERT NOT has_function_privilege('anon','public.gemini_run_status(uuid,integer)','EXECUTE');
@@ -180,3 +200,55 @@ Plain prose and footer extraction now recognizes role-first and name-first comma
 Six positive fixtures were red before implementation; negatives cover Owner Operated, Owners Club, a third-party testimonial, former roles, company-as-name, nested review markup, wrong domains and roles outside the supplied ladder. A real-engine homepage fixture saves Gary Ramsay as team_page with include_in_sequences false and skips the satisfied target ladder. No existing assertion changed; existing SearXNG judge fixtures pass unchanged.
 
 All seven gates PASS: 287 app files /3,671 passed /one existing skip; wrapper 8 /166; edge29. Logs parallel-task9-*.log. Task 8 commit a5c82f4. Live site extraction and false-positive rate remain NOT VERIFIED.
+
+
+## Task 10 — scrape cap defaults
+
+USAGE_DEFAULTS.worker_scrape is now orgLimit 400/globalLimit 1600. The idempotent migration UPDATE records those same Kevin-approved production defaults. UsageLimitsCard already uses this constant for its reset label/message and removes the scoped override so usage_snapshot returns the database default; no redundant card implementation change was needed. A red UI-handler fixture now verifies Reset to 400, the scoped override deletion, reload and the 400-per-day confirmation. The existing agreed-caps assertion changes only worker_scrape from 100/400 to 400/1600. Old snapshot/reservation fixture values remain arbitrary response data, not stale defaults. Firecrawl's 100-page cap, Places shared 900 and places_usage_limits are unchanged.
+
+## Acceptance evidence
+
+1. Task 1 audit and unsafe maintenance: MET for source changes and local fixtures; the audit table lists every requested write. SQL execution/concurrency: NOT VERIFIED.
+2. Task 2 parallel cron: MET as a written migration, default three/bounds one through five, Vault secret lookup and unchanged two-minute schedule. Cron/runtime: NOT VERIFIED.
+3. Task 3 fair claims: MET as SQL ordering, short transaction lock, SKIP LOCKED and ten-row ceiling. Alternating-claim dry-run SQL is provided, NOT EXECUTED.
+4. Task 4 limits: MET in local guard/refund/notice fixtures. Database admission is atomic by conditional UPSERT; real contention and quota boundaries are NOT VERIFIED.
+5. Task 5 backstop: MET for formula fixtures and SQL/edge wiring. The dry run includes deadline, late-enqueue, expiry and cancellation checks, NOT EXECUTED.
+6. Task 6 key refusal: MET in separate-lead 401/402/403 and 429 fixtures, engine result and one-warning SSR checks. Live overlap/UI: NOT VERIFIED.
+7. Task 7 timing: MET for 25-second engine argument, bounded remaining-time fixtures and existing twenty-second ladder threshold. Live latency: NOT VERIFIED.
+8. Task 8 JSON: MET for line/pretty/array/fence/prose/invalid layouts and preserved evidence checks; objects_found is numeric only. Real reply: NOT VERIFIED.
+9. Task 9 owner names: MET for six positive patterns, former/foreign/non-person/exclusion cases and a team_page/no-enrollment engine save. Live precision/recall: NOT VERIFIED.
+10. Task 10 defaults/reset: MET in pure defaults and UI-handler fixtures; the database UPDATE is written only. Actual production state is supplied evidence, NOT VERIFIED here.
+
+## Redeploy list — proposed only
+
+Apply/review migration 078 before deploying callers that require the new RPCs. It changes service-only runtime configuration, minute counters, notice/refusal run state, parallelism snapshots, maintenance/claim/check RPCs, the cron command and scrape defaults. Existing 075/076/077 files are not edited. No migration or deployment was performed.
+
+A local recursive import-graph scan of changed shared modules and entrypoints found this conservative function union: check-replies, check-sequences, draft-linkedin-message, draft-reply, enrich-apollo, enrich-hunter, enrich-leads-bulk, find-decision-makers, generate-email, org-api-settings, parse-csv-leads, parse-icp, parse-notes, parse-session-notes, run-deep-find, run-lookup-jobs, run-selected-autopilot, run-verify-queue, scrape-companies-house, scrape-cro, scrape-google-places, send-email, suggest-sequence. Type-only import edges are included conservatively. Shared Gemini admission affects existing non-Deep-find AI callers too. Frontend rebuild is needed for the run warning and Reset to 400. No wrapper/container/VPS, secret, environment, Firecrawl or Places quota change is required.
+
+## Not verified
+
+No database was started or queried; migration syntax/execution, RLS, Vault/pg_cron/pg_net, overlapping claims, counter contention and dry-run assertions remain unverified. The local edge check is a TypeScript shim, not Deno execution. No search-engine, Gemini, LinkedIn, Microsoft, SMTP, registry or production request was made. No keys were read or created. No installation or spending. No push, merge, deploy, migration apply or VPS change. No task-owned server remains. Browser/mobile checks and independent Claude review are pending; UI evidence here is SSR/handler fixtures. One approved real run is needed after review/rollout to measure actual throughput, fairness, refusals and quality. Three cron invocations suggest up to three concurrent lead jobs, not proven threefold throughput.
+
+## Deviations and open questions
+
+The brief-execution hook was manually invoked; automatic lifecycle interception remains unverified. No hook/trust setup was altered. The all-Gemini transport audit found two separate HTTP paths during Task 6, so their Task 4 guard wiring is included in that commit. Run backstop snapshots parallelism at run creation to keep edge and SQL decisions consistent. The exact sizing formula stays at three hours under today's fifty-lead ceiling; the formula is still implemented exactly, including its eight-hour ceiling. No unrequested cap or verdict policy was changed. Once-per-run daily notices are keyed by resource, so distinct exhausted resources each get one useful notice. Existing accepted-main vault mirrors remain untouched; this branch receives its own checkpoint. Subscription usage is not exposed; checkpoints are saved proactively. Independent review is pending, not represented by builder self-checks.
+
+
+## Final commits and seven-gate counts
+
+| Task | Commit | App files | App passed | Wrapper files/passed | Other five gates |
+| --- | --- | ---: | ---: | --- | --- |
+| 1 audit/maintenance | d301d94 | 277 | 3,621 | 8 /166 | PASS |
+| 2 cron parallelism | 300f9eb | 278 | 3,622 | 8 /166 | PASS |
+| 3 fair claims | 746e8c1 | 279 | 3,623 | 8 /166 | PASS |
+| 4 limits/notices | 29b55b0 | 280 | 3,629 | 8 /166 | PASS |
+| 5 backstop | 7c071cf | 281 | 3,632 | 8 /166 | PASS |
+| 6 key refusal | 605a197 | 284 | 3,640 | 8 /166 | PASS |
+| 7 role budget | d32461b | 285 | 3,645 | 8 /166 | PASS |
+| 8 JSON layouts | a5c82f4 | 286 | 3,656 | 8 /166 | PASS |
+| 9 owner names | a6a3d6b | 287 | 3,671 | 8 /166 | PASS |
+| 10 scrape defaults | This report-containing commit; resolve HEAD | 288 | 3,672 | 8 /166 | PASS |
+
+Each app run retains one pre-existing opt-in skip. Other five gates are root TypeScript, production build, git diff --check (safecrlf disabled for checking only), the 29-entrypoint local edge TypeScript shim and wrapper TypeScript. Commands: npx tsc --noEmit; npx vitest run; npm run build; git -c core.safecrlf=false diff --check; node scripts/places-edge-typecheck.mjs; then npx tsc --noEmit and npx vitest run in worker/wrapper. Environment: VITE_SUPABASE_URL=http://127.0.0.1:54321 and VITE_SUPABASE_ANON_KEY=local-test-placeholder. Per-task ignored logs are .superpowers/parallel-taskN-*.log. Final Task 10 full gates passed before commit. All staging is by explicit path. Repository sync hooks are disabled for these local commits to preserve the accepted-main vault mirror; this does not disable the separately invoked brief-execution hook.
+
+There are 53 more passing app tests than the fetched baseline (3,619), with the same 166 wrapper tests and existing skip. These fixtures demonstrate changed behavior locally, not production uplift. The final worktree is intended to be clean after the Task 10 commit. Shared status/handoff/index and a labelled checkpoint record the full resolved tip and hashes after commit; no accepted-main mirror is overwritten.

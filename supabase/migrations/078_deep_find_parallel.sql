@@ -193,3 +193,6 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.gemini_run_status(uuid,integer) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.gemini_run_status(uuid,integer) TO service_role;
+
+-- Match the Kevin-approved production values; do not change Firecrawl or Places quotas.
+UPDATE public.usage_resources SET default_org_limit=400,global_limit=1600 WHERE resource='worker_scrape';

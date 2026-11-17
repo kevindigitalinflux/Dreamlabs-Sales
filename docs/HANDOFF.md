@@ -1,3 +1,13 @@
+## Deep find parallel processing — local checkpoint 2026-11-17
+
+Kevin authorized ten local tasks on codex/deepfind-parallel from fetched origin/main d1bad26de090285e1afa65bed1b04e5d40d16da0. Codex remains builder; Claude remains architect/reviewer. Tasks 1–9 commits: d301d94, 300f9eb, 746e8c1, 29b55b0, 7c071cf, 605a197, d32461b, a5c82f4, a6a3d6b. Task 10 is the commit containing this checkpoint; resolve git rev-parse HEAD for the exact final tip. Read docs/DEEPFIND-PARALLEL-BUILD-REPORT.md for the audit, gates, assertions, rolled-back SQL and proposed 23-function/frontend rollout.
+
+Migration 078 is written only: atomic maintenance, three bounded cron invocations, fair SQL claims, shared Gemini twelve-per-minute admission, once-per-resource run notices, sized check backstop and parallelism snapshots, monotonic Gemini key refusal, and scrape defaults 400/1600. Role Gemini gets up to 25 seconds; grounded JSON accepts pretty/fenced/array objects without changing person proof; trusted company pages/footers recognize owner/name pairs. Contacts remain non-enrolled. Firecrawl and Places caps are unchanged. Every task starts with red fixtures and has all seven local gates before its explicit-path commit; exact final counts are in the report.
+
+No SQL, deployment, push, merge, VPS change, provider/production request, key access, installation or spending. No task-owned server. The brief-execution hook was read and manually invoked, without changing hook/trust setup; automatic interception is unverified. SQL validity/concurrency/cron, browser/mobile, real model/source accuracy and throughput remain unverified. Independent Claude review is pending. The exact deadline formula remains three hours under the existing fifty-lead cap. Stop after this build/report; rollout and one real concurrency run need separate Kevin authorization. Accepted-main vault mirror is preserved; use the labelled deepfind-parallel checkpoint. Subscription usage is unavailable; checkpoints are proactive.
+
+---
+
 ## Role company proof from sources only (2026-11-17) — START HERE for local Fix 6
 
 Worktree C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2, branch codex/deepfind-budget. Fix 6 base 0201d9e2d6ea236dfed67df82e59811ea4ae6125; this single commit contains the fix, report and handoff. Resolve git rev-parse HEAD for the exact final tip. Kevin directs; Claude architects/reviews; Codex builds. Read the appended Fix 6 in docs/DEEPFIND-BUDGET-BUILD-REPORT.md before the historical sections.

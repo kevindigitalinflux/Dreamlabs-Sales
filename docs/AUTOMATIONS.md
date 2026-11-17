@@ -1,3 +1,19 @@
+## Deep find parallel processing (2026-11-17, local only)
+
+This branch proposes migration 078 and preserves the existing Supabase-only automation ownership. Nothing below is deployed or applied here. Details and unverified runtime checks are in docs/DEEPFIND-PARALLEL-BUILD-REPORT.md.
+
+| Automation | Trigger | Changes | Owner |
+| --- | --- | --- | --- |
+| Parallel Deep find | Existing run-deep-find-tick, every two minutes | Three configurable HTTP invocations (bounds 1–5), each serially claims one lead; SQL fair turns and atomic maintenance | Deep find |
+| Gemini admission/refusal | Every Gemini request; run-scoped for Deep find | Atomic shared 12-per-minute admission; first run 401/402/403 suppresses later requests; busy steps continue leads | Gemini callers / Deep find |
+| Worker limit notices | Daily quota refusal | One notice per run/resource; refused calls preserve usage refunds and checker pacing allowances | Deep find |
+| Remaining-address backstop | Existing queue claim/expiry | Per-row hour unchanged; run deadline sized by lead count and snapshotted parallelism, floor 3h/cap 8h | Deep find verifier |
+| Trusted page people | Existing company-page reads | Footer/prose owner-name extraction, role ladder filters, source team_page, no enrollment or sends | Deep find |
+
+No new messaging automation, n8n, provider, or infrastructure system is added. Firecrawl and Places quotas remain separate and unchanged.
+
+---
+
 # Automations Register
 
 ## Verifier defects and Stage 2 people (2026-11-16, local only)
