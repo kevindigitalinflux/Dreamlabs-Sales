@@ -14,6 +14,7 @@ import { Modal } from '../ui/Modal';
 import { AttachmentFiles } from './AttachmentFiles';
 import { InsertLink } from './InsertLink';
 import { EmailTextEditor } from './EmailTextEditor';
+import { EmailPreviewPane } from './EmailPreviewPane';
 import { RecipientDraftCard } from './RecipientDraftCard';
 import { RecipientPicker } from './RecipientPicker';
 import { BLANK_DRAFT, SEED_KEY, firstIncompleteDraft, generationIdentity, patchDraft, unionMissing } from '../../lib/composerDrafts';
@@ -253,9 +254,36 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
   const previewLines = usePostSendPreview(
     { templates, sequences, enrollment, loading: tplLoading || seqLoading || enrLoading }, templateId, lead.next_action_date, current.subject, selectedTargets[0]?.email ?? '');
 
+  const footer = (
+    <div className="flex flex-col gap-3">
+    {msg && (
+      <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : msg.kind === 'warn' ? 'text-warning' : 'text-success'}`}>
+        {msg.text}
+      </p>
+    )}
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <Button variant="ghost" onClick={() => void send(true)} disabled={busy !== null} loading={busy === 'save'}>
+        {busy === 'save' ? 'Saving…' : multi ? `Save ${n} drafts` : 'Save as draft'}
+      </Button>
+      <Button onClick={() => void send(false)} disabled={busy !== null || selectedTargets.length === 0 || (contactsLoading && !draft)} loading={busy === 'send'}>
+        <Send className="h-4 w-4" aria-hidden />
+        {busy === 'send'
+          ? 'Sending…'
+          : multi
+            ? `Send ${n} emails`
+            : n === 1
+              ? `Send to ${selectedTargets[0]!.email}`
+              : 'Send'}
+      </Button>
+    </div>
+      <MailboxStatus warningOnly compact />
+    </div>
+  );
+
   return (
-    <Modal open={open} onClose={onClose} title={`Email — ${lead.business_name}`}>
-      <div className="flex flex-col gap-4">
+    <Modal open={open} onClose={onClose} size={multi ? 'md' : 'wide'} footer={footer} title={`Email — ${lead.business_name}`}>
+      <div className={multi ? '' : 'grid gap-6 lg:grid-cols-2'}>
+      <div className="flex min-w-0 flex-col gap-4">
         {selectedTargets.map(target=><p key={target.key} className="break-words text-xs">{target.email}: <EmailVerificationBadge value={verification.get(target.email)}/></p>)}
         {verification.error&&<p role="alert" className="text-xs text-warning">Could not load previous checks. The server will check before sending.</p>}
         {recipients.length === 0 && <p role="alert" className="text-sm text-danger">No email addresses available for this lead or its contacts.</p>}
@@ -313,32 +341,20 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
                 <button type="button" onClick={() => update(shownKey, { showDiff: false })} className="mt-1 flex min-h-11 cursor-pointer items-center text-link">Hide diff</button>
               </div>
             )}
-            <EmailTextEditor label="Body" rows={10} value={current.body} onChange={(body) => update(shownKey, { body })} />
+            <EmailTextEditor label="Body" rows={12} value={current.body} onChange={(body) => update(shownKey, { body })} showPreview={false} />
           </>
         )}
 
         <PostSendPreview lines={previewLines} report={report} multi={multi} />
-        {msg && (
-          <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : msg.kind === 'warn' ? 'text-warning' : 'text-success'}`}>
-            {msg.text}
-          </p>
-        )}
-        <div className="flex items-center justify-between">
-          <Button variant="ghost" onClick={() => void send(true)} disabled={busy !== null} loading={busy === 'save'}>
-            {busy === 'save' ? 'Saving…' : multi ? `Save ${n} drafts` : 'Save as draft'}
-          </Button>
-          <Button onClick={() => void send(false)} disabled={busy !== null || selectedTargets.length === 0 || (contactsLoading && !draft)} loading={busy === 'send'}>
-            <Send className="h-4 w-4" aria-hidden />
-            {busy === 'send'
-              ? 'Sending…'
-              : multi
-                ? `Send ${n} emails`
-                : n === 1
-                  ? `Send to ${selectedTargets[0]!.email}`
-                  : 'Send'}
-          </Button>
-        </div>
-        <MailboxStatus warningOnly compact />
+      </div>
+      {!multi && (
+        <EmailPreviewPane
+          to={answer?.to_email ?? selectedTargets[0]?.email ?? ''}
+          subject={current.subject}
+          body={current.body}
+          attachmentNames={current.attachments.map((a) => a.name)}
+        />
+      )}
       </div>
     </Modal>
   );
