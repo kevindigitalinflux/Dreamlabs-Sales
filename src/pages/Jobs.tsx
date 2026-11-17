@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../components/jobs/ConfirmDialog';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Skeleton } from '../components/ui/Skeleton';
+import { Collapsible } from '../components/ui/Collapsible';
 import { isFinishedState, JOB_KIND_NAME, type JobItem } from '../lib/jobs/model';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -31,6 +32,7 @@ export function Jobs() {
   // Opening this page counts as having seen everything that finished.
   useEffect(() => { markFinishedSeen(); }, [markFinishedSeen, jobs]);
 
+  const busyNow = groups.needsYou.length + groups.running.length > 0;
   const clearable = jobs.filter((j) => isFinishedState(j.state) && j.canDelete);
 
   async function doDelete(job: JobItem) {
@@ -77,14 +79,21 @@ export function Jobs() {
 
       {groups.needsYou.length > 0 && <Section title="Needs you">{groups.needsYou.map(row)}</Section>}
       {groups.running.length > 0 && <Section title="Running">{groups.running.map(row)}</Section>}
-      {groups.finished.length > 0 && <Section title="Finished">{groups.finished.map(row)}</Section>}
+      {groups.finished.length > 0 && (
+        <Collapsible
+          key={`finished-${busyNow}`}
+          title="Finished"
+          summary={`${groups.finished.length} ${groups.finished.length === 1 ? 'job' : 'jobs'}`}
+          defaultOpen={!busyNow}
+          className="bg-raised"
+        >
+          <ul className="flex flex-col gap-2">{groups.finished.map(row)}</ul>
+        </Collapsible>
+      )}
       {groups.older.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <Button variant="ghost" className="self-start" aria-expanded={showOlder} onClick={() => setShowOlder((v) => !v)}>
-            {showOlder ? 'Hide' : 'Show'} {groups.older.length} older {groups.older.length === 1 ? 'job' : 'jobs'} (over 14 days)
-          </Button>
-          {showOlder && <ul className="flex flex-col gap-2">{groups.older.map(row)}</ul>}
-        </section>
+        <Collapsible title="Older than 14 days" summary={`${groups.older.length} ${groups.older.length === 1 ? 'job' : 'jobs'}`} open={showOlder} onOpenChange={setShowOlder} className="bg-raised">
+          <ul className="flex flex-col gap-2">{groups.older.map(row)}</ul>
+        </Collapsible>
       )}
       <p className="text-xs text-muted">Shows the last 60 days (up to 100 jobs of each kind). Older jobs are still stored.</p>
 

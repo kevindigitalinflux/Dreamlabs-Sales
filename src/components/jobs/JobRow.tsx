@@ -1,5 +1,6 @@
 import { Link } from 'react-router';
 import { Button } from '../ui/Button';
+import { buttonClasses } from '../../lib/ui/buttonClasses';
 import { timeAgo } from '../../lib/jobs/view';
 import type { JobItem, JobState } from '../../lib/jobs/model';
 
@@ -29,34 +30,38 @@ interface JobRowProps {
   onDelete: () => void;
 }
 
-/** One job: state badge in words, what it works on, one plain line, progress, when, and its actions. */
+/** One job on one compact row: state, what it works on and what happened, then its actions. */
 export function JobRow({ job, now, stopping, error, onStop, onDelete }: JobRowProps) {
   const badge = BADGE[job.state];
   const pct = job.progress && job.progress.total > 0 ? Math.min(100, Math.round((job.progress.done / job.progress.total) * 100)) : null;
   return (
-    <li className="flex flex-col gap-2 rounded-surface border border-line bg-card p-3">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs font-semibold text-offwhite">
-          <span className={`h-2 w-2 rounded-full ${badge.dot}`} aria-hidden />
+    <li className="flex flex-col gap-2 rounded-surface border border-line bg-raised p-3 shadow-raised">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span className="inline-flex w-36 shrink-0 items-center gap-2 text-sm font-semibold">
+          <span className={`h-2.5 w-2.5 rounded-full ${badge.dot}`} aria-hidden />
           {badge.label}
         </span>
-        <span className="text-xs text-muted">{KIND_LABEL[job.kind]}</span>
-        <span className="text-xs text-muted">Started {timeAgo(job.startedAt, now)}</span>
-      </div>
-      <Link to={job.href} className="text-[15px] font-bold hover:underline">{job.title}</Link>
-      <p className="text-sm text-muted">{job.detail}</p>
-      {job.deleteBlockedReason && <p className="text-sm text-muted">{job.deleteBlockedReason}</p>}
-      {pct !== null && (
-        <div className="h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-surface" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${job.title} progress`}>
-          <div className="h-full bg-violet" style={{ width: `${pct}%` }} />
+        <div className="min-w-0 flex-1 basis-64">
+          <Link to={job.href} className="block truncate text-[15px] font-semibold hover:underline">{job.title}</Link>
+          <p className="line-clamp-2 text-sm text-muted">{job.detail}</p>
+          <p className="text-[13px] text-muted">{KIND_LABEL[job.kind]}, started {timeAgo(job.startedAt, now)}</p>
+          {job.deleteBlockedReason && <p className="text-[13px] text-muted">{job.deleteBlockedReason}</p>}
         </div>
-      )}
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      <div className="flex flex-wrap gap-2">
-        <Link to={job.href} className="flex min-h-11 items-center rounded-control border border-line bg-raised px-4 text-sm font-semibold hover:bg-surface/70">Open</Link>
-        {job.canStop && <Button variant="secondary" loading={stopping} onClick={onStop}>Stop</Button>}
-        {job.canDelete && <Button variant="ghost" onClick={onDelete}>Delete</Button>}
+        {pct !== null && (
+          <div className="flex w-32 shrink-0 items-center gap-2">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${job.title} progress`}>
+              <div className="h-full bg-violet" style={{ width: `${pct}%` }} />
+            </div>
+            <span className="text-[13px] tabular-nums text-muted">{pct}%</span>
+          </div>
+        )}
+        <div className="flex shrink-0 gap-2">
+          <Link to={job.href} className={buttonClasses('secondary', 'sm')}>Open</Link>
+          {job.canStop && <Button variant="secondary" size="sm" loading={stopping} onClick={onStop}>Stop</Button>}
+          {job.canDelete && <Button variant="ghost" size="sm" onClick={onDelete}>Delete</Button>}
+        </div>
       </div>
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
     </li>
   );
 }
