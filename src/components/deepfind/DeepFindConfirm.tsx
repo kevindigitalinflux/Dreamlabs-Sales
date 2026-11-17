@@ -61,7 +61,7 @@ export function DeepFindConfirm({ leadCount, hunterCap, aiCap, onHunterCap, onAi
                 <SpendChip icon={<Search size={12} aria-hidden />} label="Hunter" n={level.hunter} />
                 <SpendChip icon={<Sparkles size={12} aria-hidden />} label="AI" n={level.ai} />
                 <SpendChip icon={<Globe size={12} aria-hidden />} label="Firecrawl" n={level.firecrawl} />
-                <span className="self-center text-xs text-offwhite/80">per lead, at most</span>
+                <span className="self-center text-xs text-offwhite">per lead, at most</span>
               </span>
               <span id={`${uid}-${value}-best`} className="block text-[13px]"><span className="font-semibold">Best for:</span> {EFFORT_COPY[value].best}</span>
             </label>;

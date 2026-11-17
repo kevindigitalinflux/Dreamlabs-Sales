@@ -137,10 +137,10 @@ export function EmailLogList() {
         isAdmin={currentOrg?.role === 'admin'}
         onExport={() => exportCsv(filtered, companyOf)}
       />
-      <div className="overflow-x-auto rounded-surface border border-line">
+      <div className="overflow-x-auto rounded-surface border border-line bg-raised shadow-raised">
         <table className="w-full text-left text-sm">
           <thead className="sticky top-0 bg-card">
-            <tr className="border-b border-line text-xs font-semibold text-muted">
+            <tr className="border-b border-line text-[13px] font-medium text-muted">
               <th className="px-3 py-2">Date</th>
               <th className="px-3 py-2">Company</th>
               <th className="px-3 py-2">Subject</th>
@@ -154,7 +154,7 @@ export function EmailLogList() {
               return (
                 <Fragment key={log.id}>
                   <tr onClick={() => setExpandedId(expanded ? null : log.id)}
-                    className="cursor-pointer border-b border-line last:border-0 hover:bg-surface/50">
+                    className="cursor-pointer border-b border-line last:border-0 hover:bg-surface">
                     <td className="px-3 py-3 text-muted">{formatShortDate(log.sent_at)}</td>
                     <td className="px-3 py-3 font-semibold">{companyOf(log.lead_id)}</td>
                     <td className="max-w-xs truncate px-3 py-3">{log.subject}</td>
@@ -173,7 +173,7 @@ export function EmailLogList() {
                     </td>
                   </tr>
                   {expanded && (
-                    <tr className="border-b border-line bg-raised/30 last:border-0">
+                    <tr className="border-b border-line bg-surface last:border-0">
                       <td colSpan={5} className="px-3 py-3 text-sm">
                         <p className="mb-1 text-xs text-muted">To: {log.to_email}</p>
                         <FormattedEmail body={log.body} emptyText="(No body)" />

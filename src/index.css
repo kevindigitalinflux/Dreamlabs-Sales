@@ -95,15 +95,15 @@
 :root[data-theme="dark"] {
   --color-offwhite: #F4F4F8;
   --color-bg: #040F49;
-  /* Dark surfaces are solid fills, one step apart: page #040F49, sections and cards (raised) #14216B, dialogs and menus (card) #1A2878. */
-  --color-card: #1A2878;
-  --color-raised: #14216B;
+  /* Dark surfaces are solid fills, one step apart: page #040F49, sections and cards (raised) #1C2C82, dialogs and menus (card) #263898. */
+  --color-card: #263898;
+  --color-raised: #1C2C82;
   --color-surface: rgba(244, 244, 248, 0.13);
-  --color-muted: rgba(244, 244, 248, 0.76);
-  --color-line: rgba(244, 244, 248, 0.22);
-  --color-field: rgba(244, 244, 248, 0.50);
-  --color-link: #C9A6FF;
-  --color-attention: #FF8FAE;
+  --color-muted: rgba(244, 244, 248, 0.82);
+  --color-line: rgba(244, 244, 248, 0.28);
+  --color-field: rgba(244, 244, 248, 0.60);
+  --color-link: #D4B8FF;
+  --color-attention: #FFA0BA;
   --color-attention-soft: rgba(240, 56, 107, 0.16);
   --color-focus: #00DFDF;
   --shadow-raised: 0 18px 40px -18px rgba(2, 6, 40, 0.55);

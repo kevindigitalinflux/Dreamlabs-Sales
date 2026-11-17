@@ -78,7 +78,7 @@ export function ReleaseQueue() {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-sm text-muted">Autopilot drafts need individual review. <Link className="underline" to="/outreach/autopilot">Review Autopilot drafts</Link></p>
+      <p className="rounded-surface border border-l-4 border-line border-l-violet-line bg-raised p-3 text-sm shadow-raised">Autopilot drafts need individual review. <Link className="font-semibold text-link underline underline-offset-2" to="/outreach/autopilot">Review Autopilot drafts</Link></p>
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       <ToggleChip className="self-start" pressed={needsLookOnly} onPressedChange={setNeedsLookOnly}>Needs a look</ToggleChip>
       {needsLook.error&&<p role="alert" className="text-sm text-danger">{needsLook.error}</p>}
