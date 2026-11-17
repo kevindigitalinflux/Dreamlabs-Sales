@@ -9,6 +9,7 @@ import { initials } from '../lib/utils';
 import { Button } from '../components/ui/Button';
 import { Input, Textarea } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
+import { Collapsible } from '../components/ui/Collapsible';
 import { Skeleton } from '../components/ui/Skeleton';
 import { CompanyProfileCard } from '../components/settings/CompanyProfileCard';
 import { IdealCustomerProfilesCard } from '../components/settings/IdealCustomerProfilesCard';
@@ -140,8 +141,10 @@ export function Settings() {
   }
 
   return (
-    <div className="mx-auto flex max-w-xl flex-col gap-6">
-      <h1 className="text-[28px] font-extrabold">Settings</h1>
+    <div className="mx-auto flex max-w-3xl flex-col gap-3">
+      <h1 className="mb-3 text-[28px] font-bold">Settings</h1>
+      <Collapsible title="Your account" summary={profile?.full_name ?? profile?.email ?? 'Profile and notifications'} defaultOpen className="bg-raised">
+      <div className="flex flex-col gap-4">
       <DesktopNotificationsCard />
       <MailboxStatus warningOnly />
       <Card>
@@ -184,22 +187,36 @@ export function Settings() {
           </form>
         </div>
       </Card>
-      {currentOrg && <SetupSkillCard isAdmin={currentOrg.role === 'admin'} onApplied={() => setImportRevision((v) => v + 1)} />}
+      </div>
+      </Collapsible>
+      {currentOrg && (
+        <Collapsible title="Setup skill" summary="Download and import your setup" className="bg-raised">
+          <SetupSkillCard isAdmin={currentOrg.role === 'admin'} onApplied={() => setImportRevision((v) => v + 1)} />
+        </Collapsible>
+      )}
+      <Collapsible title="Company and AI" summary="Company context, customer profiles, placeholders" className="bg-raised">
+      <div className="flex flex-col gap-4">
       {currentOrg && <CompanyContextCard key={`context-${importRevision}`} orgId={currentOrg.id} orgName={currentOrg.name} isOrgAdmin={currentOrg.role === 'admin'} />}
       {currentOrg && <IdealCustomerProfilesCard key={`icps-${importRevision}`} isOrgAdmin={currentOrg.role === 'admin'} />}
       <CompanyProfileCard />
       {currentOrg && <CustomPlaceholdersCard isOrgAdmin={currentOrg.role === 'admin'} />}
-      {currentOrg && <UsageLimitsCard orgId={currentOrg.id} isOrgAdmin={currentOrg.role === 'admin'} />}
-      <Link to="/settings/email" className="block rounded-surface border border-line bg-card p-5 hover:bg-surface/50">
+      </div>
+      </Collapsible>
+      {currentOrg && (
+        <Collapsible title="Usage limits" summary="Daily allowances for the lookup worker" className="bg-raised">
+          <UsageLimitsCard orgId={currentOrg.id} isOrgAdmin={currentOrg.role === 'admin'} />
+        </Collapsible>
+      )}
+      <Link to="/settings/email" className="block rounded-surface border border-line bg-raised p-4 hover:bg-surface">
         <h2 className="text-[18px] font-bold">Email sending</h2>
         <p className="text-sm text-muted">Connect your Gmail/Outlook so Dreamlabs Sales can send from your address.</p>
       </Link>
-      <Link to="/settings/dialer" className="block rounded-surface border border-line bg-card p-5 hover:bg-surface/50">
+      <Link to="/settings/dialer" className="block rounded-surface border border-line bg-raised p-4 hover:bg-surface">
         <h2 className="text-[18px] font-bold">Power dialer</h2>
         <p className="text-sm text-muted">Connect your JustCall/Kixie/Aircall account so calls log automatically.</p>
       </Link>
       {currentOrg?.role === 'admin' && (
-        <Link to="/settings/organization" className="block rounded-surface border border-line bg-card p-5 hover:bg-surface/50">
+        <Link to="/settings/organization" className="block rounded-surface border border-line bg-raised p-4 hover:bg-surface">
           <h2 className="text-[18px] font-bold">Organization API keys</h2>
           <p className="text-sm text-muted">Bring your own Gemini/Places/Companies House keys for {currentOrg.name}.</p>
         </Link>

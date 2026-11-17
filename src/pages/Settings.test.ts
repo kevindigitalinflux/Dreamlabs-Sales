@@ -9,6 +9,8 @@ vi.mock('../hooks/useOrg', () => ({ useOrg: () => ({ currentOrg: { id: 'org', na
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ profile: null, session: { user: { id: 'user' } }, refreshProfile: async () => {} }) }));
 vi.mock('../lib/supabase', () => ({ supabase: {} }));
 // These unrelated cards read remote state. Keep the Settings setup card and import control real.
+// Folding is not under test here: render every group's content so the cards inside can be checked.
+vi.mock('../components/ui/Collapsible', () => ({ Collapsible: ({ children }: { children: unknown }) => children }));
 vi.mock('../components/settings/CompanyProfileCard', () => ({ CompanyProfileCard: () => null }));
 vi.mock('../components/settings/IdealCustomerProfilesCard', () => ({ IdealCustomerProfilesCard: () => null }));
 vi.mock('../components/settings/CustomPlaceholdersCard', () => ({ CustomPlaceholdersCard: () => null }));

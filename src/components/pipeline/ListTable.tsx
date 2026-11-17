@@ -19,14 +19,15 @@ interface ListTableProps {
   deepFindRunning?: Set<string>;
 }
 
-const COLUMNS: { key: SortKey; label: string }[] = [
+/** `hide` keeps the table inside the screen: these columns drop out on narrower windows (the detail is still in the lead record). */
+const COLUMNS: { key: SortKey; label: string; hide?: string }[] = [
   { key: 'business_name', label: 'Company' },
   { key: 'stage', label: 'Stage' },
   { key: 'readiness', label: 'Readiness' },
-  { key: 'package_tier', label: 'Package' },
+  { key: 'package_tier', label: 'Package', hide: 'hidden xl:table-cell' },
   { key: 'deal_value', label: 'Value' },
   { key: 'next_action_date', label: 'Next action' },
-  { key: 'last_contacted_at', label: 'Last contacted' },
+  { key: 'last_contacted_at', label: 'Last contacted', hide: 'hidden 2xl:table-cell' },
 ];
 
 /** Sortable lead table, one line per lead (owner under the company name, readiness as a short pill); row click opens the panel. */
@@ -51,14 +52,14 @@ export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen, s
               />
             </th>
             {COLUMNS.map((col) => (
-              <th key={col.key} aria-sort={sortKey === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+              <th key={col.key} className={col.hide} aria-sort={sortKey === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
                 <button type="button" onClick={() => onSort(col.key)} className="flex min-h-11 w-full cursor-pointer items-center gap-1 px-3 hover:text-offwhite">
                   {col.label}
                   {sortKey === col.key && (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" aria-hidden /> : <ArrowDown className="h-3 w-3" aria-hidden />)}
                 </button>
               </th>
             ))}
-            <th className="px-3">Assigned</th>
+            <th className="hidden px-3 xl:table-cell">Assigned</th>
           </tr>
         </thead>
         <tbody>
@@ -82,13 +83,13 @@ export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen, s
               </td>
               <td className="px-3 py-3"><StageBadge stage={lead.stage} /></td>
               <td className="px-3 py-3"><ReadinessBadge compact readiness={lead.readiness} missing={lead.readiness_missing} /></td>
-              <td className="px-3 py-3 text-muted">{packageLabel(lead.package_tier)}</td>
+              <td className="hidden px-3 py-3 text-muted xl:table-cell">{packageLabel(lead.package_tier)}</td>
               <td className="px-3 py-3 tabular-nums">{lead.deal_value !== null ? formatCurrency(lead.deal_value) : '—'}</td>
               <td className={`px-3 py-3 ${isOverdue(lead.next_action_date) ? 'font-semibold text-attention' : 'text-muted'}`}>
                 {lead.next_action_date ? dueLabel(lead.next_action_date) : '—'}
               </td>
-              <td className="px-3 py-3 text-muted">{lead.last_contacted_at ? formatShortDate(lead.last_contacted_at) : 'Never'}</td>
-              <td className="px-3 py-3">
+              <td className="hidden px-3 py-3 text-muted 2xl:table-cell">{lead.last_contacted_at ? formatShortDate(lead.last_contacted_at) : 'Never'}</td>
+              <td className="hidden px-3 py-3 xl:table-cell">
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-purple text-[10px] font-bold text-on-accent">{assignee(lead)}</span>
               </td>
             </tr>
