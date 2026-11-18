@@ -1,10 +1,11 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { loadSenderMailbox, sendLeadEmail } from '../_shared/sendLeadEmail.ts';
 import { applyPostSendUpdates, type PostSendResult } from '../_shared/postSendUpdates.ts';
 import { loadVisibleReply } from '../_shared/replyAccess.ts';
 
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('verification', async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
@@ -147,4 +148,4 @@ Deno.serve(async (req) => {
     }
   }
   return json({ ok: true, log_id: result.logId, ...(result.verification?{verification:result.verification}:{}), ...(result.warning ? { warning: result.warning } : {}), ...(postSend ? { post_send: postSend } : {}) }, 200, headers);
-});
+}));

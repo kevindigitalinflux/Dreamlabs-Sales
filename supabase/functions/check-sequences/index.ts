@@ -1,3 +1,4 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { json } from '../_shared/cors.ts';
 import { draftEmail, draftEmailClaude, generateLeadNotes } from '../_shared/ai.ts';
@@ -55,7 +56,7 @@ function rampedCap(dailyTarget: number, dayNumber: number): number {
  * NOT drafted or advanced: the enrolment is set to 'paused' (so it is not retried daily), a lead
  * note says why (once per 7 days), and the response lists it in `skipped` as 'no recipients'.
  */
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('drafting', async (req) => {
   const startedAt = Date.now();
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, HEADERS);
   if (req.headers.get('x-cron-secret') !== Deno.env.get('CRON_SECRET')) {
@@ -501,4 +502,4 @@ Deno.serve(async (req) => {
   }
 
   return json({ processed: (due ?? []).length, drafted, skipped }, 200, HEADERS);
-});
+}));

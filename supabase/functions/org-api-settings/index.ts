@@ -1,3 +1,7 @@
+import {resolveOrgApiKey,resolveOrgWorkerConfig} from '../_shared/orgApiKeys.ts';
+import {bindKeyHealth,savedKeyHealthOk} from '../_shared/keyHealthScope.ts';
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
+import {keyHealthFetch as fetch} from '../_shared/keyHealthFetch.ts';
 import { validatePlacesKey } from '../_shared/placesClient.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
@@ -89,7 +93,7 @@ async function validateKey(provider: Provider, key: string): Promise<string | nu
   }
 }
 
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('key_test', async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
@@ -149,19 +153,31 @@ Deno.serve(async (req) => {
     return json({ ok: true }, 200, headers);
   }
 
-  if (body.action === 'save') {
+  if (body.action === 'save' || body.action === 'test') {
     if (!canManage) return json({ error: 'Org admin only' }, 403, headers);
     const provider = String(body.provider ?? '') as Provider;
-    const apiKey = String(body.api_key ?? '').trim();
+    let apiKey = String(body.api_key ?? '').trim();
+    let keySource:'org'|'global'='org';
     // Architect ruling: worker and Firecrawl management require admin membership of this organisation.
     if ((provider === 'lookup_worker' || provider === 'firecrawl') && membership?.role !== 'admin')
       return json({ error: 'An admin of this organisation must manage this provider.' }, 403, headers);
     if (!['gemini', 'google_places', 'google_places_pro', 'companies_house', 'apollo', 'hunter', 'anthropic', 'opencorporates', 'cro', 'lookup_worker', 'firecrawl'].includes(provider)) return json({ error: 'Invalid provider' }, 400, headers);
-    if (!apiKey) return json({ error: 'api_key is required' }, 400, headers);
+    if(!apiKey&&body.action==='test') {
+      if(provider==='lookup_worker') {
+        const config=await resolveOrgWorkerConfig(service,orgId,Deno.env.get('WORKER_SHARED_ORG_IDS'),source=>{keySource=source;});
+        if(config)apiKey=config.url+'|'+config.secret;
+      } else apiKey=await resolveOrgApiKey(service,orgId,provider,source=>{keySource=source;})??'';
+    }
+    if (!apiKey) return json({ error: 'No key is available to test.' }, 400, headers);
 
+    if(provider==='lookup_worker') {
+      const config=parseOrgWorkerSecret(apiKey);
+      if(config)bindKeyHealth(service,orgId,provider,config.secret,keySource,config.url);
+    } else bindKeyHealth(service,orgId,provider,apiKey,keySource);
     const validationError = await validateKey(provider, apiKey);
     if (validationError) return json({ error: validationError }, 400, headers);
 
+    if(body.action==='test'){savedKeyHealthOk(service,orgId,provider);return json({ok:true},200,headers);}
     const { error: vaultErr } = await service.rpc('app_set_org_api_key', { target_org: orgId, target_provider: provider, secret: apiKey });
     if (vaultErr) return json({ error: 'Could not store the key.' }, 500, headers);
     const { error: upsertErr } = await service.from('org_api_settings').upsert(
@@ -169,8 +185,9 @@ Deno.serve(async (req) => {
       { onConflict: 'org_id,provider' },
     );
     if (upsertErr) return json({ error: 'Could not save provider settings.' }, 400, headers);
+    savedKeyHealthOk(service,orgId,provider);
     return json({ ok: true }, 200, headers);
   }
 
   return json({ error: 'Unknown action' }, 400, headers);
-});
+}));

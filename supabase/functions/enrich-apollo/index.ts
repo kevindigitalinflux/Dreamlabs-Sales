@@ -1,10 +1,12 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
+import {keyHealthFetch as fetch} from '../_shared/keyHealthFetch.ts';
 // supabase/functions/enrich-apollo/index.ts
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { bareDomain } from '../_shared/domain.ts';
 
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('lookup', async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
@@ -66,4 +68,4 @@ Deno.serve(async (req) => {
   if (updateErr) return json({ error: updateErr.message }, 500, headers);
 
   return json({ ok: true, organization: org }, 200, headers);
-});
+}));

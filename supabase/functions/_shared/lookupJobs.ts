@@ -1,3 +1,4 @@
+import {withKeyHealthOrg} from './keyHealthScope.ts';
 import { createPlacesContext, type PlacesContext } from './placesClient.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { enrichOneLead, type EnrichLeadRow } from './enrichLead.ts';
@@ -38,6 +39,7 @@ async function checkAuthorisation(service: SupabaseClient, row: Claimed, job: Jo
 }
 
 async function processLead(service: SupabaseClient, row: Claimed, job: Job, startedAt: number, placesContext = createPlacesContext(service, job.org_id)): Promise<Outcome> {
+ return withKeyHealthOrg(job.org_id,async()=>{
   const deadline = Math.min(Date.now() + LOOKUP_LIMITS.leadBudgetMs,
     startedAt + LOOKUP_LIMITS.wallBudgetMs - LOOKUP_LIMITS.checkpointMarginMs);
   const { data, error } = await service.from('leads').select('id, org_id, business_name, website, email, phone, owner_name, city, blocked_domains')
@@ -105,6 +107,8 @@ async function processLead(service: SupabaseClient, row: Claimed, job: Job, star
   return { status: 'done', reason: Object.keys(proposed).length ? 'Found details to review.' : 'No additional details were found.',
     review: lookupReview('enrich', proposed) as 'none' | 'pending',
     result: { proposed, source: found?.source ?? {}, steps: ['Checked available sources for contact details.', ...placesLines, ...worker.lines(), ...firecrawl.lines()] } };
+
+ });
 }
 
 /** Cron and create share this runner. SQL handles stale leases, cancellation and atomic completion. */

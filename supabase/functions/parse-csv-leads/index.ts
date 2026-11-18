@@ -1,3 +1,4 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
@@ -31,7 +32,7 @@ function isDuplicate(seen: { business_name: string; city: string | null; email: 
   );
 }
 
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('csv_parsing', async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
@@ -143,4 +144,4 @@ Deno.serve(async (req) => {
   }
 
   return json({ job_id: job.id, mapped_count: mappedCount, duplicate_count: duplicateCount, unmapped_count: unmappedCount }, 200, headers);
-});
+}));

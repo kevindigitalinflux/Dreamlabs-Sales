@@ -1,3 +1,4 @@
+import {keyHealthHandler} from '../../supabase/functions/_shared/keyHealthScope';
 import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
 import { expect, it, vi } from 'vitest';
@@ -20,6 +21,7 @@ function handler({ denied = false, busy = false } = {}) {
   const rate = vi.fn(async () => true);
   let clients = 0;
   const adapters = {
+    '../_shared/keyHealthScope.ts': {keyHealthHandler},
     'npm:@supabase/supabase-js@2': { createClient: () => clients++ ? client : service },
     '../_shared/cors.ts': { corsHeaders: () => ({}), json: (body, status) => new Response(JSON.stringify(body), { status }) },
     '../_shared/rateLimit.ts': { checkRateLimit: rate },

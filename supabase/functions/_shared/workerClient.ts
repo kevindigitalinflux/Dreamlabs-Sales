@@ -1,3 +1,4 @@
+import {keyHealthFetch} from './keyHealthFetch.ts';
 // supabase/functions/_shared/workerClient.ts
 // Calls the shared lookup worker for one lead. Reserve usage BEFORE the request, refund at most once and only when
 // the worker did no work, fail closed. Never logs or returns the secret, the address or raw worker text.
@@ -29,7 +30,7 @@ type RawResult = { ok: true; json: unknown } | { ok: false; failure: WorkerFailu
 
 export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
   const { usage, orgId, config } = opts;
-  const fetchImpl = opts.fetchImpl ?? fetch;
+  const fetchImpl:typeof fetch = opts.fetchImpl ?? ((input,init)=>keyHealthFetch(input,init,globalThis.fetch,orgId));
   const stopped: Partial<Record<Kind, Stopped>> = {};
   const failureLines: string[] = [];
   const tally = { checked: 0, valid: 0, invalid: 0, undecided: 0 };

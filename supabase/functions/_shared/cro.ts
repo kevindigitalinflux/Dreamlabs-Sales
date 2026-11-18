@@ -1,3 +1,4 @@
+import {keyHealthFetch as fetch} from './keyHealthFetch.ts';
 // supabase/functions/_shared/cro.ts
 // CONFIRM against a live response once the CRO key exists.
 // Everything below is a best guess (no CRO key at build time): the endpoint,

@@ -1,10 +1,11 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { loadVisibleReply } from '../_shared/replyAccess.ts';
 import { composeReply } from '../_shared/replyDraft.ts';
 
 /** Explicit user-requested draft only. Never writes email_logs or sends mail. */
-Deno.serve(async req => {
+Deno.serve(keyHealthHandler('reply_drafting', async req => {
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
@@ -22,4 +23,4 @@ Deno.serve(async req => {
     console.error('draft reply: draft failed');
     return json({ error: 'Could not draft an answer. Check your organisation’s AI settings and try again.' }, 503, headers);
   }
-});
+}));

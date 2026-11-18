@@ -1,3 +1,4 @@
+import {keyHealthFetch as fetch} from './keyHealthFetch.ts';
 import { cancelBody, readCapped } from './cappedBody.ts';
 import { problemLines } from './deepFindProblems.ts';
 import { chooseFirecrawlPage, firecrawlTimeoutFor, parseFirecrawlReply, FIRECRAWL_MAX_BYTES, FIRECRAWL_NOT_CONFIGURED, type FirecrawlTeam } from './firecrawlRules.ts';

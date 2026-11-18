@@ -1,3 +1,4 @@
+import {keyHealthFetch as fetch} from './keyHealthFetch.ts';
 import { jsonObjects } from './jsonObjects.ts';
 import type { GeminiSearchContext } from './geminiSearchMeter.ts';
 // supabase/functions/_shared/knownPersonLookup.ts

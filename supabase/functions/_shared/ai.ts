@@ -1,3 +1,4 @@
+import {keyHealthFetch as fetch} from './keyHealthFetch.ts';
 import { admitGemini, isDeepFindContext, recordGeminiRefusal } from './geminiAdmission.ts';
 import { countGeminiSearch, type GeminiSearchContext } from './geminiSearchMeter.ts';
 import { stripAiPunctuation } from './textGuardrails.ts';

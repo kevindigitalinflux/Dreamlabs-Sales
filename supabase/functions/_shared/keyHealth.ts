@@ -1,11 +1,11 @@
 import {classifyKeyFailure,type KeyProvider,type KeyFeature} from './keyHealthRules.ts';
 
 export interface HealthService {rpc(name:string,args:Record<string,unknown>):PromiseLike<{error?:unknown;data?:unknown}>}
-export interface KeyHealthInvocation {ok:Set<string>}
+export interface KeyHealthInvocation {ok:Set<string>;observations:Map<string,Promise<void>>}
 export interface KeyHealthContext {service:HealthService;orgId:string;provider:KeyProvider;keySource:'org'|'global';feature:KeyFeature;invocation:KeyHealthInvocation}
 
 /** Create once per request, never once per module/isolate. */
-export function createKeyHealthInvocation():KeyHealthInvocation {return {ok:new Set()};}
+export function createKeyHealthInvocation():KeyHealthInvocation {return {ok:new Set(),observations:new Map()};}
 
 function persist(context:KeyHealthContext,name:string,args:Record<string,unknown>):Promise<void> {
   const task=(async()=>{try{const result=await context.service.rpc(name,args);if(result.error)console.error('api_key_health_write_failed');}catch{console.error('api_key_health_write_failed');}})();

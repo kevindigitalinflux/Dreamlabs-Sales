@@ -1,3 +1,4 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { json } from '../_shared/cors.ts';
 import { makeReplyInbox, parseReplyMime } from '../_shared/replyImap.ts';
@@ -6,7 +7,7 @@ import { autoDraftReply } from '../_shared/replyDraft.ts';
 import { mailboxDue } from '../_shared/replyRules.ts';
 
 /** Five-minute cron: bounded UID scans of each sender's INBOX; real replies only, optional drafts never sent. */
-Deno.serve(async req => {
+Deno.serve(keyHealthHandler('reply_drafting', async req => {
   const headers = { 'Content-Type': 'application/json' };
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
   const secret = Deno.env.get('CRON_SECRET');
@@ -37,4 +38,4 @@ Deno.serve(async req => {
     }
   }
   return json({ ...totals, errors }, 200, headers);
-});
+}));

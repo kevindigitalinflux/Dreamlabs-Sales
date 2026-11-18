@@ -1,3 +1,4 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
 import { createPlacesContext } from '../_shared/placesClient.ts';
 // supabase/functions/enrich-leads-bulk/index.ts
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -10,7 +11,7 @@ const MAX_LEADS = 40;
 
 type LeadRow = EnrichLeadRow;
 
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('lookup', async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
@@ -74,4 +75,4 @@ Deno.serve(async (req) => {
   const results = enriched.filter((r): r is EnrichResult => r !== null);
 
   return json({ results }, 200, headers);
-});
+}));

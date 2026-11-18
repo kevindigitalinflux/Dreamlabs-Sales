@@ -1,3 +1,5 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
+import {keyHealthFetch as fetch} from '../_shared/keyHealthFetch.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
@@ -5,7 +7,7 @@ import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const AI_MODEL = 'gemini-3.6-flash'; // keep in sync with _shared/ai.ts
 
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('icp_parsing', async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
@@ -67,4 +69,4 @@ ${rawInput}`;
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : String(e) }, 500, headers);
   }
-});
+}));

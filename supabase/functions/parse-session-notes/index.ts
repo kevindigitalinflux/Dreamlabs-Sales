@@ -1,3 +1,4 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { parseSessionNotes } from '../_shared/ai.ts';
@@ -13,7 +14,7 @@ const MAX_CONTACTS_TOTAL = 1500;
 const LEAD_CHUNK = 100;
 const PAGE_SIZE = 1000;
 
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('note_parsing', async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
@@ -69,7 +70,7 @@ Deno.serve(async (req) => {
     console.error('parse-session-notes failed:', e);
     return json({ actions: [], error: 'AI unavailable' }, 200, headers);
   }
-});
+}));
 
 /**
  * Adds each lead's live contacts (with or without an email) to the lead index, only for

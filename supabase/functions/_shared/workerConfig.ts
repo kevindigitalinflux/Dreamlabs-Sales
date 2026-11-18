@@ -1,3 +1,4 @@
+import {keyHealthFetch as fetch} from './keyHealthFetch.ts';
 import { parseSafeWebsiteUrl } from './hostGuard.ts';
 import { readWorkerConfig, type WorkerConfig } from './workerRules.ts';
 

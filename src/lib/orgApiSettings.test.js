@@ -49,7 +49,8 @@ it('refuses Places quota errors before Vault and never echoes raw Google text', 
   const body = JSON.stringify(await response.json());
   expect(body).toContain('quota');
   expect(body).not.toContain('fake-secret');
-  expect(rpc.mock.calls.filter(([name]) => name !== 'is_platform_owner')).toEqual([]);
+  expect(rpc.mock.calls.filter(([name]) => !['is_platform_owner','api_key_failure'].includes(name))).toEqual([]);
+  expect(rpc).toHaveBeenCalledWith('api_key_failure',expect.objectContaining({p_org:'org',p_provider:'google_places',p_feature:'key_test',p_source:'org',p_code:429,p_state:'rate_limited'}));
 });
 
 it('returns only host and status, never the saved worker credential', async () => {
@@ -144,4 +145,25 @@ it('ownership lookup failure gives no platform-wide access', async () => {
   const response = await request({ action: 'get' });
   expect(response.status).toBe(403);
   expect(await response.json()).toEqual({ error: 'Not a member of this organization' });
+});
+it('clears a successful key test without writing Vault or settings',async()=>{
+ const response=await request({action:'test',provider:'firecrawl',api_key:'fixture-key'});
+ expect(response.status).toBe(200);await Promise.resolve();
+ expect(rpc).toHaveBeenCalledWith('api_key_ok',{p_org:'org',p_provider:'firecrawl'});
+ expect(rpc.mock.calls.some(([name])=>name==='app_set_org_api_key')).toBe(false);expect(updates).not.toHaveBeenCalled();
+});
+it('records a failed Gemini test with key_test and fixed fields only',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({error:'private body'},{status:402})));
+ const response=await request({action:'test',provider:'gemini',api_key:'fixture-key'});expect(response.status).toBe(400);
+ await Promise.resolve();await Promise.resolve();
+ expect(rpc).toHaveBeenCalledWith('api_key_failure',{p_org:'org',p_provider:'gemini',p_state:'needs_topup',p_code:402,p_source:'org',p_feature:'key_test'});
+ expect(rpc.mock.calls.some(([name])=>name==='app_set_org_api_key')).toBe(false);
+});
+it('tests the existing shared Gemini key with its global provenance and no Vault write',async()=>{
+ vi.stubGlobal('Deno',{env:{get:name=>name==='GEMINI_API_KEY'?'shared-fixture':undefined}});
+ vi.stubGlobal('fetch',vi.fn(async()=>Response.json({}, {status:402})));
+ const response=await request({action:'test',provider:'gemini'});expect(response.status).toBe(400);
+ await Promise.resolve();await Promise.resolve();
+ expect(rpc).toHaveBeenCalledWith('api_key_failure',expect.objectContaining({p_provider:'gemini',p_source:'global',p_feature:'key_test'}));
+ expect(rpc.mock.calls.some(([name])=>name==='app_set_org_api_key')).toBe(false);
 });

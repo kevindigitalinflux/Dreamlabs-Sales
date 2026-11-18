@@ -1,3 +1,4 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
 // supabase/functions/find-decision-makers/index.ts
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
@@ -16,7 +17,7 @@ interface LeadRow {
   city: string | null; postcode: string | null; email_domains?: unknown; raw_lead_id?: string | null;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('lookup', async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
@@ -113,4 +114,4 @@ Deno.serve(async (req) => {
 
   const results = perLead.filter((r) => r.candidates.length > 0);
   return json({ results }, 200, headers);
-});
+}));

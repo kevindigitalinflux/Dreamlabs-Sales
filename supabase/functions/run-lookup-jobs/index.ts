@@ -1,3 +1,4 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
 // Gateway JWT verification is disabled for cron. Every action authenticates here.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
@@ -14,7 +15,7 @@ function background(task: Promise<unknown>): void {
   // Outside EdgeRuntime cron will pick up the queued row; never wait on providers in the create response.
 }
 
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('lookup', async (req) => {
   const startedAt = Date.now();
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
@@ -77,4 +78,4 @@ Deno.serve(async (req) => {
     console.error('lookup jobs: request failed', lookupErrorKind(err));
     return json({ error: 'This lookup request could not be completed. Try again.' }, 500, headers);
   }
-});
+}));

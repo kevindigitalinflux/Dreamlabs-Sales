@@ -1,3 +1,4 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
 // supabase/functions/run-deep-find/index.ts
 // DEPLOY WITH verify_jwt = false (see supabase/config.toml): the pg_cron tick sends only x-cron-secret, no Authorization
 // header, so the gateway would answer 401. The function authenticates every action itself:
@@ -32,7 +33,7 @@ async function background(task: Promise<unknown>): Promise<void> {
   if (rt) rt.waitUntil(task); else await task;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('deep_find', async (req) => {
   const startedAt = Date.now();
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
@@ -137,4 +138,4 @@ Deno.serve(async (req) => {
 
   await background(runDeepFindTick(service, startedAt).catch(() => console.error('deep find start failed')));
   return json({ run_id: queued.runId, queued: queued.queued, already_running: busyIds.size + queued.raced }, 202, headers);
-});
+}));

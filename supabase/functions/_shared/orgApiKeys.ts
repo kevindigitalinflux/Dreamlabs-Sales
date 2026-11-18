@@ -1,3 +1,4 @@
+import {bindKeyHealth} from './keyHealthScope.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { resolveWorkerConfig } from './workerConfig.ts';
 import { readWorkerConfig, type WorkerConfig } from './workerRules.ts';
@@ -51,19 +52,20 @@ export async function resolveOrgApiKey(
   if (settings?.is_configured) {
     const { data: key,error:keyError } = await service.rpc('app_get_org_api_key', { target_org: orgId, target_provider: provider });
     if(provider==='email_verifier'&&keyError)return null;
-    if (key) { onSource?.('org'); return key as string; }
+    if (key) { onSource?.('org'); bindKeyHealth(service,orgId,provider,String(key),'org'); return key as string; }
   }
   // BYO-only regardless of any current or future environment variable or organisation fallback flag.
   if (provider === 'firecrawl' || provider === 'lookup_worker' || provider==='email_verifier') return null;
   const { data: org } = await service.from('organizations').select('use_global_api_fallback').eq('id', orgId).single();
   const variable = GLOBAL_ENV_VARS[provider];
-  if (org?.use_global_api_fallback && variable) { onSource?.('global'); return Deno.env.get(variable) ?? null; }
+  if (org?.use_global_api_fallback && variable) { onSource?.('global'); const key=Deno.env.get(variable)??null; if(key)bindKeyHealth(service,orgId,provider,key,'global'); return key; }
   return null;
 }
 
-export async function resolveOrgWorkerConfig(service: SupabaseClient, orgId: string, sharedOrgIds: string | undefined): Promise<WorkerConfig | null> {
+export async function resolveOrgWorkerConfig(service: SupabaseClient, orgId: string, sharedOrgIds: string | undefined, onSource?: (source:'org'|'global')=>void): Promise<WorkerConfig | null> {
   try {
-    return await resolveWorkerConfig({
+    let source:'org'|'global'='global';
+    const config=await resolveWorkerConfig({
       orgId, sharedOrgIds,
       own: async () => {
         const { data, error } = await service.from('org_api_settings').select('is_configured')
@@ -72,6 +74,7 @@ export async function resolveOrgWorkerConfig(service: SupabaseClient, orgId: str
         if (!data?.is_configured) return { configured: false, value: null };
         const { data: value, error: vaultError } = await service.rpc('app_get_org_api_key', { target_org: orgId, target_provider: 'lookup_worker' });
         if (vaultError) throw vaultError;
+        source='org';
         return { configured: true, value: typeof value === 'string' ? value : null };
       },
       fallbackAllowed: async () => {
@@ -81,6 +84,8 @@ export async function resolveOrgWorkerConfig(service: SupabaseClient, orgId: str
       },
       global: () => readWorkerConfig(Deno.env.get('WORKER_URL'), Deno.env.get('WORKER_SECRET')),
     });
+    if(config){onSource?.(source);bindKeyHealth(service,orgId,'lookup_worker',config.secret,source,config.url);}
+    return config;
   } catch {
     console.error('lookup worker: configuration could not be resolved');
     return null;

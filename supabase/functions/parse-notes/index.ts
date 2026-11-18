@@ -1,10 +1,11 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { parseNotes } from '../_shared/ai.ts';
 import { resolveOrgApiKey } from '../_shared/orgApiKeys.ts';
 import { formatIcpContext, formatProfilesForPrompt, loadOrgIcps } from '../_shared/icp.ts';
 
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('note_parsing', async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
@@ -45,4 +46,4 @@ Deno.serve(async (req) => {
     console.error('parse-notes failed:', e);
     return json({ suggestion: null, error: 'AI unavailable' }, 200, headers);
   }
-});
+}));

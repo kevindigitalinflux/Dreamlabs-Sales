@@ -1,3 +1,4 @@
+import {withKeyHealthOrg} from './keyHealthScope.ts';
 import type { PlacesContext } from './placesClient.ts';
 // The real per-lead pipeline for the selected-leads autopilot (Task 12b).
 // Safety first: whenever there is doubt the lead is parked (needs_input) or skipped with a plain reason. Never send on uncertainty.
@@ -135,6 +136,7 @@ async function run(ctx: PipelineContext, progress: Progress): Promise<PipelineOu
  * never retried and the slot is never released.
  */
 export async function processLeadPipeline(ctx: PipelineContext): Promise<PipelineOutcome> {
+ return withKeyHealthOrg(ctx.run.org_id,async()=>{
   const progress: Progress = { costCents: 0, reserved: false, sendStarted: false };
   try {
     return await run(ctx, progress);
@@ -147,4 +149,6 @@ export async function processLeadPipeline(ctx: PipelineContext): Promise<Pipelin
     if (progress.reserved) { try { await ctx.releaseSend(); } catch { console.error('autopilot: could not release the send slot'); } }
     return { outcome: 'failed', reason: plainReason(e instanceof Error ? e.message : ''), ...common };
   }
+
+ });
 }

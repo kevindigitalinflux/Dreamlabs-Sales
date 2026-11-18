@@ -1,3 +1,4 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
 // supabase/functions/run-selected-autopilot/index.ts
 // DEPLOY WITH verify_jwt = false (see supabase/config.toml): the pg_cron tick sends only x-cron-secret, no Authorization header,
 // so the gateway would answer 401. The function authenticates both actions itself (cron secret for tick, user JWT + membership for start).
@@ -13,7 +14,7 @@ async function background(task: Promise<unknown>): Promise<void> {
   if (rt) rt.waitUntil(task); else await task;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('lookup', async (req) => {
   const startedAt = Date.now();
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
@@ -57,4 +58,4 @@ Deno.serve(async (req) => {
   }
 
   return json({ error: 'Unknown action' }, 400, headers);
-});
+}));

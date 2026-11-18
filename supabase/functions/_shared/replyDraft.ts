@@ -1,3 +1,4 @@
+import {withKeyHealthOrg} from './keyHealthScope.ts';
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { classifyReply, draftEmailClaude } from './ai.ts';
 import { resolveOrgApiKey } from './orgApiKeys.ts';
@@ -8,6 +9,7 @@ import type { ReplyContext } from './replyPolling.ts';
 
 /** Shared classify-then-draft behavior. Own organization Anthropic key; never sends or saves by itself. */
 export async function composeReply(service: SupabaseClient, context: ReplyContext, actorId = context.senderId): Promise<{ subject: string; body: string }> {
+ return withKeyHealthOrg(context.sent.org_id,async()=>{
   const apiKey = await resolveOrgApiKey(service, context.sent.org_id, 'anthropic');
   if (!apiKey) throw new Error('Your organisation has no Anthropic key configured');
   const [profile, org, notes] = await Promise.all([
@@ -26,6 +28,8 @@ export async function composeReply(service: SupabaseClient, context: ReplyContex
     orgName: org.data?.name ?? 'our team', companyContext: org.data?.company_context, icpContext, apiKey,
     model: complexity === 'complex' ? 'claude-sonnet-5' : 'claude-haiku-4-5', untrustedData: true });
   return { subject: stripAiPunctuation(draft.subject), body: stripAiPunctuation(draft.body) };
+
+ });
 }
 /** Existing optional sequence auto-draft remains draft-only and addressed to the trusted original recipient. */
 export async function autoDraftReply(service: SupabaseClient, context: ReplyContext, timeoutMs = 60_000): Promise<string | null> {

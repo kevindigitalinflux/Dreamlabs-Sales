@@ -1,3 +1,4 @@
+import {keyHealthFetch as fetch} from './keyHealthFetch.ts';
 // supabase/functions/_shared/fetchWithTimeout.ts
 
 /**

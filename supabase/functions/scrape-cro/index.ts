@@ -1,3 +1,4 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
 import { createPlacesContext } from '../_shared/placesClient.ts';
 // supabase/functions/scrape-cro/index.ts
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -75,7 +76,7 @@ async function runScrapeJob(service: SupabaseClient, jobId: string, orgId: strin
   }
 }
 
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('scrape', async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
@@ -151,4 +152,4 @@ Deno.serve(async (req) => {
   (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime?.waitUntil(task);
 
   return json({ job_id: job.id }, 200, headers);
-});
+}));

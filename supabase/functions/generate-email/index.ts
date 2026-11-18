@@ -1,3 +1,4 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { draftEmail } from '../_shared/ai.ts';
@@ -11,7 +12,7 @@ import { painPointList, resolvePainPoint } from '../_shared/painPointPick.ts';
 import { loadPainPointNotes, saveAiPainPoint } from '../_shared/painPointStorage.ts';
 import {loadRecipientContext} from '../_shared/recipientContext.ts';
 
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('drafting', async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
@@ -100,4 +101,4 @@ Deno.serve(async (req) => {
     console.error('generate-email: tailored draft or pain point save failed; using the plain template');
     return respond(subject.text, bodyText.text, false);
   }
-});
+}));

@@ -1,3 +1,4 @@
+import {keyHealthHandler} from '../_shared/keyHealthScope.ts';
 // supabase/functions/suggest-sequence/index.ts
 // POST { lead_id } with the user's JWT. Suggests which of the org's email sequences fits a lead best, using the same
 // helper and id validation as the autopilot (chooseSequenceClaude + pickSequence). The model can only ever return
@@ -36,7 +37,7 @@ function leadFacts(lead: Record<string, unknown>, notes: string[]): string {
   return parts.filter(Boolean).join('\n');
 }
 
-Deno.serve(async (req) => {
+Deno.serve(keyHealthHandler('lookup', async (req) => {
   const headers = corsHeaders(req.headers.get('origin'));
   if (req.method === 'OPTIONS') return new Response(null, { headers });
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405, headers);
@@ -113,4 +114,4 @@ Deno.serve(async (req) => {
     console.error('suggest-sequence failed', e instanceof Error ? e.name : 'error');
     return json(result(null, null, 'Could not suggest a sequence right now'), 200, headers);
   }
-});
+}));

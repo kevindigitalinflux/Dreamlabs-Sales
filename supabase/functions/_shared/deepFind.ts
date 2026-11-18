@@ -1,3 +1,4 @@
+import {withKeyHealthOrg,withKeyHealthFeature} from './keyHealthScope.ts';
 import { roleGeminiBudgetMs } from './deepFindTimeBudget.ts';
 import { claimRunNotice, readGeminiRefusal, geminiRefusalLine } from './geminiAdmission.ts';
 import { completeDeepFindRun, maintainDeepFind } from './deepFindMaintenance.ts';
@@ -135,6 +136,7 @@ async function insertContacts(service: SupabaseClient, rows: Record<string, unkn
 
 /** One lead, start to finish. Returns the outcome to store; never throws for provider problems. */
 export async function processDeepFindLead(service: SupabaseClient, run: DeepFindRun, row: ClaimedRow, placesContext = createPlacesContext(service, run.org_id), invocationDeadline = Infinity): Promise<LeadOutcome> {
+ return withKeyHealthOrg(run.org_id,async()=>{
   const effort = effortPolicy(row.domains);
   const metadata = { ...(row.domains?.start_fresh === true ? { start_fresh: true } : {}), effort, effort_caps: effort === 'custom' ? row.domains?.effort_caps : { hunter: EFFORT_LEVELS[effort].hunter, ai: EFFORT_LEVELS[effort].ai, firecrawl: EFFORT_LEVELS[effort].firecrawl } };
   const deadline = leadDeadline(Date.now(), invocationDeadline);
@@ -674,10 +676,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         if (allowed) spend.used.ai['role search'] = (spend.used.ai['role search'] ?? 0) + 1;
         return allowed;
       },
-      gemini: configured.geminiKey ? prompt => {
+      gemini: configured.geminiKey ? prompt => withKeyHealthFeature('role_search',()=>{
         const budget = roleGeminiBudgetMs(left());
         return budget === null ? Promise.resolve({text:'',sources:[]}) : geminiGroundedSearch(prompt, configured.geminiKey!, budget, geminiMeter);
-      } : undefined,
+      }) : undefined,
     });
     const roleResult = shouldSearchAfterTeam(teamPicked) ? await findRolePeople({ company: companyForRoles, registeredName: registry.name, city: str(lead.city), country: str(lead.country), profile,
       provider: { search: async (query, context) => { if (workerConfig || configured.geminiKey) await checkpoint(); return provider.search(query, context); } }, timeLeftMs: left }) : { people: [], searches: 0, via: [] };
@@ -1538,6 +1540,8 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
       reason: error instanceof DeepFindAuthorisationLost ? error.message : 'Deep find could not finish. Saved changes are listed below with Undo.',
       people_found: created.length, domains: { ...metadata, ...(roleSearchFallbackShape ? { role_search_fallback_shape: roleSearchFallbackShape } : {}), dismissed_people: dismissedPeople, registry_evidence: registryEvidence, auto_applied: autoApplied.slice(0, 100), suggestions: finalSuggestions, steps } };
   }
+
+ });
 }
 
 async function updateRow(service: SupabaseClient, id: string, patch: Record<string, unknown>): Promise<void> {
