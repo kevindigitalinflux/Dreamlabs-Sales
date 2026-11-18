@@ -63,7 +63,7 @@ This checkout is `C:/Users/kevin/Projects/dreamlabs-sales-phone`, branch `codex/
 ## Where the project is
 - **Local folder: `C:\Users\kevin\Projects\dreamlabs-sales`** (Windows 11; drag this folder into Codex).
 - GitHub: `https://github.com/kevindigitalinflux/Dreamlabs-Sales` (branch `main` auto-deploys).
-- Live site: `https://dreamlabs-sales.kevindigitalinflux.workers.dev` (also `https://sales.didreamlabs.com`). Cloudflare Workers deploys from `main`, about 2 to 3 minutes.
+- Live site: `https://sales.didreamlabs.com`. The older `https://dreamlabs-sales.kevindigitalinflux.workers.dev` address still answers but the app moves visitors from it to the main address (`src/lib/canonicalRedirect.ts`). Cloudflare Workers deploys from `main`, about 2 to 3 minutes.
 - Supabase project ref: `wgomksxelyfkzepbnkdd`.
 - Lookup worker (VPS): `https://lookup.didreamlabs.com`, code in `worker/`.
 - Full project memory: `CLAUDE.md` (long, newest entries at the end of "Current Status"), spec `SPEC.md`, to-do list `docs/NEXT-STEPS.md`, specs and plans in `docs/superpowers/specs/` and `docs/superpowers/plans/`.

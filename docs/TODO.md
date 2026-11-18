@@ -3,7 +3,8 @@
 Signing in with Google at `sales.didreamlabs.com` drops the person on `dreamlabs-sales.kevindigitalinflux.workers.dev`, so the custom domain shows the login screen again. Kevin decided: the old address should redirect to `sales.didreamlabs.com`. Full brief: `docs/SIGNIN-REDIRECT-BUILD-BRIEF.md` on local branch `claude/signin-redirect-brief` (`b04ba37`, worktree `dreamlabs-sales-signin`, not pushed).
 
 - [ ] Kevin: Supabase, Authentication, URL Configuration: note current Site URL and Redirect URLs; set Site URL to `https://sales.didreamlabs.com`; Redirect URLs to `https://sales.didreamlabs.com/**`, `http://localhost:5173/**`, `https://dreamlabs-sales.kevindigitalinflux.workers.dev/**`; check the invite and reset email templates use `{{ .ConfirmationURL }}`.
-- [ ] Build the brief's items C1 to C5 (C5 is the redirect), only after the settings above. Review before any merge.
+- [x] Code items C1 to C5 built 2026-11-18 on branch `claude/signin-redirect` (not merged): helper, Google error message, exact invite check, shared email link rule, redirect from workers.dev. Gates green.
+- [ ] Kevin's yes to merge; deploy `admin-users` and `pipeline-shares`; K5 `APP_PUBLIC_URL` secret. **Merge the redirect only after the Supabase settings above are done**, or Google sign-in from the old address could fail for everyone.
 
 # Dreamlabs Sales: to-do list
 
