@@ -67,7 +67,7 @@ export function ForgotPassword() {
             </form>
           )}
 
-          <Link to="/login" className="mt-6 block text-center text-sm font-semibold text-violet hover:text-violet/80">
+          <Link to="/login" className="mt-6 block text-center text-sm font-semibold text-link hover:text-violet/80">
             Back to sign in
           </Link>
         </div>

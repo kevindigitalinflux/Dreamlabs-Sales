@@ -59,13 +59,13 @@ export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selecte
         </li>
       )}
       {drafts.map((d) => (
-        <li key={d.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-line p-3">
+        <li key={d.id} className="flex flex-wrap items-center gap-3 rounded-control border border-line p-3">
           {selectable && (
             <input type="checkbox" checked={selected.has(d.id)} onChange={() => onToggle(d.id)} disabled={selectionDisabled} className="h-4 w-4 accent-violet-500 disabled:cursor-not-allowed disabled:opacity-50" aria-label={`Select ${d.lead?.business_name ?? d.to_email}`} />
           )}
           <span className="font-heading text-sm font-bold">{d.lead?.business_name ?? d.to_email}</span>
           <EmailVerificationBadge value={verification.get(d.to_email)} />
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${d.sequence_enrollment_id ? 'bg-violet/25 text-offwhite' : 'bg-surface text-muted'}`}>
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${d.sequence_enrollment_id ? 'bg-violet-soft text-offwhite' : 'bg-surface text-muted'}`}>
             {d.sequence_enrollment_id ? 'Sequence' : 'Manual'}
           </span>
           {d.status === 'failed' && (
@@ -80,7 +80,7 @@ export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selecte
               onClick={() => void discard(d.id)}
               disabled={selectionDisabled||discardingId === d.id}
               aria-label="Discard draft"
-              className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-muted hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-control text-muted hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
             >
               {discardingId === d.id
                 ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-violet border-t-transparent motion-reduce:animate-none" aria-hidden />

@@ -26,7 +26,7 @@ export const PipelineSection = memo(function PipelineSection({ group, value, onC
   return <Card>
     <section aria-label={group.pipelineName} className="flex min-w-0 flex-col gap-2">
       <h2><button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}
-        className="flex min-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-lg p-2 text-left font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-violet-line">
+        className="flex min-h-11 w-full min-w-0 items-center justify-between gap-2 rounded-control p-2 text-left font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-violet-line">
         <span className="min-w-0 break-words">{group.pipelineName} ({group.leads.length})</span>
         <ChevronDown aria-hidden className={`h-4 w-4 shrink-0 ${open ? 'rotate-180' : ''}`} />
       </button></h2>

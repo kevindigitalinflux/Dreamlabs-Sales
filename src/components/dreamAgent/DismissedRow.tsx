@@ -8,9 +8,9 @@ export function DismissedRow({ title, onUndo }: { title: string; onUndo: () => v
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => { box.current?.querySelector('button')?.focus(); }, []);
   return (
-    <div ref={box} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-surface/40 px-4 py-2">
-      <p className="min-w-0 flex-1 break-words text-sm text-offwhite/80 line-through">{title}</p>
-      <span role="status" className="text-xs font-semibold text-offwhite/80">
+    <div ref={box} className="flex flex-wrap items-center justify-between gap-2 rounded-surface border border-line bg-raised px-4 py-2">
+      <p className="min-w-0 flex-1 break-words text-sm text-offwhite line-through">{title}</p>
+      <span role="status" className="text-xs font-semibold text-offwhite">
         <span className="sr-only">Dismissed {title}</span>
         <span aria-hidden>Dismissed</span>
       </span>

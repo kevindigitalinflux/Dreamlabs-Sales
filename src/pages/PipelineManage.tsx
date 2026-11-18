@@ -149,7 +149,7 @@ export function PipelineManage() {
 
   return (
     <div className="flex max-w-3xl flex-col gap-8">
-      <h1 className="text-[28px] font-extrabold">Manage pipelines</h1>
+      <h1 className="text-[28px] font-bold">Manage pipelines</h1>
       {bannerError && <p role="alert" className="text-sm text-danger">{bannerError}</p>}
       {message && <p role="status" className="text-sm text-success">{message}</p>}
 
@@ -210,7 +210,7 @@ export function PipelineManage() {
                   <button
                     type="button"
                     onClick={() => handleGoMoveLeads(pipeline)}
-                    className="cursor-pointer font-semibold text-cyan hover:underline"
+                    className="cursor-pointer font-semibold text-link hover:underline"
                   >
                     Go move/delete its leads →
                   </button>
@@ -226,10 +226,10 @@ export function PipelineManage() {
         {incoming.length === 0 && <p className="text-sm text-muted">Nothing shared with you yet.</p>}
         <ul className="flex flex-col gap-3">
           {incoming.map((share) => (
-            <li key={share.id} className="flex flex-col gap-3 rounded-xl border border-line bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+            <li key={share.id} className="flex flex-col gap-3 rounded-surface border border-line bg-raised shadow-raised p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold">{share.pipelines.name}</span>
-                <Badge className={share.permission === 'edit' ? 'bg-cyan/15 text-cyan' : 'bg-surface text-muted'}>
+                <Badge className={share.permission === 'edit' ? 'bg-violet-soft text-link' : 'bg-surface text-muted'}>
                   {share.permission === 'edit' ? 'Can edit' : 'View only'}
                 </Badge>
               </div>

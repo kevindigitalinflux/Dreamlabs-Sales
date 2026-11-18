@@ -16,7 +16,9 @@ import { Modal } from '../ui/Modal';
 import { AttachmentFiles } from './AttachmentFiles';
 import { LinksEditor } from './LinksEditor';
 import { EmailTextEditor } from './EmailTextEditor';
-import { FormattedEmail } from './FormattedEmail';
+import { EmailPreviewPane } from './EmailPreviewPane';
+import { Collapsible } from '../ui/Collapsible';
+import { Paperclip } from 'lucide-react';
 
 const SAMPLE_VARS: Record<string, string> = {
   first_name: 'Ana', business_name: 'Shiny Cleaners', owner_name: 'Ana Diaz',
@@ -77,69 +79,86 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose, o
     onClose();
   }
 
-  const preview = substituteVariables(form.body, { ...SAMPLE_VARS, ...customValues }).text;
+  const vars = { ...SAMPLE_VARS, ...customValues };
+  const preview = substituteVariables(form.body, vars).text;
+  const previewSubject = substituteVariables(form.subject, vars).text;
+  const attachCount = form.attachments.length + form.links.length;
+
+  const footer = (
+    <div className="flex flex-col gap-2">
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {template && !template.is_default && <Button variant="ghost" onClick={() => void handleDelete()} disabled={busy}>Delete</Button>}
+          {template && onDuplicate && <Button variant="secondary" disabled={busy} onClick={async () => {
+            setBusy(true);
+            try { const problem = await onDuplicate(); if (problem) setError(problem); }
+            catch (error) { console.error('Could not duplicate template', { templateId: template.id, error }); setError('Could not duplicate template. Check the list before trying again.'); }
+            finally { setBusy(false); }
+          }}>Duplicate</Button>}
+        </div>
+        <Button onClick={() => void handleSave()} disabled={busy} loading={busy}>{busy ? 'Saving…' : 'Save template'}</Button>
+      </div>
+    </div>
+  );
 
   return (
-    <Modal open onClose={onClose} title={template ? `Edit — ${template.name}` : 'New template'}>
-      <div className="flex flex-col gap-4">
-        <Input label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-        <CategoryField value={form.category ?? ''} onChange={(category) => setForm((f) => ({ ...f, category }))} suggestions={categorySuggestions} />
-        <IcpSelect
-          icps={icps}
-          value={form.icp_id}
-          onChange={(icp_id) => setForm((f) => ({ ...f, icp_id }))}
-          hint="Who this template is written for. {{pain_point}} uses their top pain point when a lead has none noted, and the AI is given the whole profile so the email resonates."
-        />
-        <Input label="Subject" value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} />
-        {currentOrg && (
-          <div className="flex flex-col gap-4 rounded-lg border border-line p-3">
-            <AttachmentFiles orgId={currentOrg.id} attachments={form.attachments} onChange={(attachments) => setForm((f) => ({ ...f, attachments }))} />
-            <LinksEditor orgId={currentOrg.id} links={form.links} onChange={(links) => setForm((f) => ({ ...f, links }))} />
+    <Modal open onClose={onClose} size="wide" footer={footer} title={template ? `Edit — ${template.name}` : 'New template'}>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Input label="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+            <CategoryField value={form.category ?? ''} onChange={(category) => setForm((f) => ({ ...f, category }))} suggestions={categorySuggestions} />
           </div>
-        )}
-        <div className="flex flex-wrap gap-1">
-          {TEMPLATE_VARIABLES.map((v) => (
-            <button key={v.key} type="button" onClick={() => insertVar(v.key)}
-              className="min-h-11 cursor-pointer rounded-md border border-line px-3 text-xs text-muted hover:border-cyan hover:text-cyan">
-              {v.label}
-            </button>
-          ))}
-          {customKeys.map((key) => (
-            <button key={key} type="button" onClick={() => insertVar(key)} title={`Your value: ${customValues[key] ?? ''}`}
-              className="min-h-11 cursor-pointer rounded-md border border-violet/50 px-3 text-xs text-offwhite hover:border-cyan hover:text-cyan">
-              {`{{${key}}}`}
-            </button>
-          ))}
-        </div>
-        <p className="-mt-2 text-xs text-muted">Need another placeholder, like a meeting link? Add your own in Settings, Custom placeholders.</p>
-        <EmailTextEditor ref={bodyRef} label="Body" rows={8} value={form.body} onChange={(body) => setForm((f) => ({ ...f, body }))} showPreview={false} />
-        {isAdmin && (
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.is_default} onChange={(e) => setForm((f) => ({ ...f, is_default: e.target.checked }))} className="h-4 w-4 accent-violet-500" />
-            Default template (visible to all contractors)
-          </label>
-        )}
-        <div className="rounded-lg bg-surface/60 p-3">
-          <p className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Preview (sample lead)</p>
-          <FormattedEmail body={preview} />
-          {form.links.length > 0 && <FormattedEmail body={linksBlock(form.links)} className="mt-3" />}
-          {form.attachments.length > 0 && (
-            <p className="mt-3 text-xs text-muted">Attached: {form.attachments.map((a) => a.name).join(', ')}</p>
+          <IcpSelect
+            icps={icps}
+            value={form.icp_id}
+            onChange={(icp_id) => setForm((f) => ({ ...f, icp_id }))}
+            hint="Who this template is written for. {{pain_point}} uses their top pain point when a lead has none noted, and the AI is given the whole profile so the email resonates."
+          />
+          <Input label="Subject" value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} />
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium text-muted">Insert a placeholder</p>
+            <div className="flex flex-wrap gap-1.5">
+              {TEMPLATE_VARIABLES.map((v) => (
+                <button key={v.key} type="button" onClick={() => insertVar(v.key)}
+                  className="min-h-8 cursor-pointer rounded-full border border-line bg-raised px-3 text-[13px] font-medium text-muted hover:border-violet-line hover:text-link focus-visible:outline-2 focus-visible:outline-focus">
+                  {v.label}
+                </button>
+              ))}
+              {customKeys.map((key) => (
+                <button key={key} type="button" onClick={() => insertVar(key)} title={`Your value: ${customValues[key] ?? ''}`}
+                  className="min-h-8 cursor-pointer rounded-full border border-violet-line bg-violet-soft px-3 text-[13px] font-medium text-link hover:bg-violet-soft focus-visible:outline-2 focus-visible:outline-focus">
+                  {`{{${key}}}`}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted">Need another, like a meeting link? Add your own in Settings, Custom placeholders.</p>
+          </div>
+          <EmailTextEditor ref={bodyRef} label="Body" rows={10} value={form.body} onChange={(body) => setForm((f) => ({ ...f, body }))} showPreview={false} />
+          {currentOrg && (
+            <Collapsible flat icon={Paperclip} title="Attachments and links" summary={attachCount > 0 ? `${attachCount} added` : 'None yet'}>
+              <div className="flex flex-col gap-4">
+                <AttachmentFiles orgId={currentOrg.id} attachments={form.attachments} onChange={(attachments) => setForm((f) => ({ ...f, attachments }))} />
+                <LinksEditor orgId={currentOrg.id} links={form.links} onChange={(links) => setForm((f) => ({ ...f, links }))} />
+              </div>
+            </Collapsible>
+          )}
+          {isAdmin && (
+            <label className="flex min-h-11 items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.is_default} onChange={(e) => setForm((f) => ({ ...f, is_default: e.target.checked }))} className="h-4 w-4 accent-violet-500" />
+              Default template (visible to all contractors)
+            </label>
           )}
         </div>
-        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-        {template && onDuplicate && <Button variant="secondary" disabled={busy} onClick={async () => {
-          setBusy(true);
-          try { const problem = await onDuplicate(); if (problem) setError(problem); }
-          catch (error) { console.error('Could not duplicate template', { templateId: template.id, error }); setError('Could not duplicate template. Check the list before trying again.'); }
-          finally { setBusy(false); }
-        }}>Duplicate</Button>}
-        <div className="flex items-center justify-between">
-          {template && !template.is_default ? (
-            <Button variant="ghost" onClick={() => void handleDelete()} disabled={busy} loading={busy}>Delete</Button>
-          ) : <span />}
-          <Button onClick={() => void handleSave()} disabled={busy} loading={busy}>{busy ? 'Saving…' : 'Save template'}</Button>
-        </div>
+        <EmailPreviewPane
+          to="Ana Diaz, Shiny Cleaners"
+          caption="with a sample lead"
+          subject={previewSubject}
+          body={preview}
+          linksText={form.links.length > 0 ? linksBlock(form.links) : undefined}
+          attachmentNames={form.attachments.map((a) => a.name)}
+        />
       </div>
     </Modal>
   );

@@ -25,7 +25,7 @@ function statusBadge(job: { status: string } | null) {
   if (!job) return null;
   const classes: Record<string, string> = {
     pending: 'bg-slate-500/15 text-muted',
-    running: 'bg-cyan/15 text-cyan',
+    running: 'bg-violet-soft text-link',
     completed: 'bg-emerald-500/15 text-success',
     failed: 'bg-red-500/15 text-danger',
   };
@@ -160,7 +160,7 @@ export function ScraperJob() {
     <div className="flex min-w-0 flex-col gap-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-[28px] font-extrabold">Scrape results</h1>
+          <h1 className="text-[28px] font-bold">Scrape results</h1>
           {statusBadge({ status })}
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -185,14 +185,27 @@ export function ScraperJob() {
       {missing.map((s) => <p key={s} role="status" className="text-sm text-danger">{SOURCE_NAMES[s]} has not returned a job. Results from other sources are still available.</p>)}
       {running && <p role="status" className="text-sm text-muted">{rawLeads.length} businesses found so far. Review opens when all started sources finish.</p>}
       {timedOut && <p role="status" className="text-sm text-warning">One source did not finish. You can review what arrived.</p>}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          { label: 'Businesses found', value: visible.length, tone: '' },
+          { label: 'Waiting for review', value: pending.length, tone: '' },
+          { label: 'Possible duplicates', value: visible.filter((l) => l.status === 'duplicate').length, tone: 'text-warning' },
+          { label: 'Approved', value: visible.filter((l) => l.status === 'approved').length, tone: 'text-success' },
+        ].map((tile) => (
+          <div key={tile.label} className="rounded-surface border border-line bg-raised px-4 py-3 shadow-raised">
+            <b className={`block font-heading text-2xl font-bold ${tile.tone}`}>{tile.value}</b>
+            <span className="text-[13px] text-muted">{tile.label}</span>
+          </div>
+        ))}
+      </div>
       <p className="text-sm text-muted">Approve a result into a pipeline before using Deep find.</p>
 
       <label className="flex items-center gap-2 sm:hidden"><input type="checkbox" aria-label="Select all actionable scraped leads" disabled={reviewDisabled || !pending.length} checked={pending.length > 0 && pending.every(l => selected.has(l.id))} onChange={() => toggleSelectAll(pending.map(l => l.id))} />Select all</label>
       <BulkActionBar count={pending.filter(l => selected.has(l.id)).length} busy={reviewDisabled} approveLabel="Approve selected" rejectLabel="Remove selected" onApprove={() => { if (pipelineId) void approveSelected(pending); else setRowError({id:'', text:'Choose a pipeline before approving.'}); }} onReject={() => void removeSelected(pending)} onClear={() => setSelected(new Set())} />
-      <div className="overflow-x-auto rounded-xl border border-line">
+      <div className="overflow-x-auto rounded-surface border border-line bg-raised shadow-raised">
         <table className="block w-full text-left text-sm sm:table">
           <thead className="hidden sm:table-header-group">
-            <tr className="border-b border-line text-xs text-muted">
+            <tr className="border-b border-line text-[13px] font-medium text-muted">
               <th className="p-3">
                 <input type="checkbox" checked={selected.size > 0 && selected.size === pending.length} disabled={reviewDisabled} onChange={() => toggleSelectAll(pending.map((l) => l.id))} className="h-4 w-4 accent-violet-500" aria-label="Select all" />
               </th>

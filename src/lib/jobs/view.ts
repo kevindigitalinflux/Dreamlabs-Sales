@@ -83,3 +83,12 @@ export function timeAgo(iso: string, now: Date): string {
   const days = Math.floor(hours / 24);
   return `${days} ${days === 1 ? 'day' : 'days'} ago`;
 }
+
+/** What the top-bar "Needs you" pill shows: the one-line summary, the tone of the most urgent line, and every line (no cap). Null when there is nothing to say. */
+export function pillView(items: JobItem[], seen: ReadonlySet<string>, now: Date): { text: string; tone: NotifyLine['tone']; lines: NotifyLine[] } | null {
+  const text = summaryLine(items, seen, now);
+  const { lines } = notifyLines(items, seen, now, Number.POSITIVE_INFINITY);
+  const first = lines[0];
+  if (!text || !first) return null;
+  return { text, tone: first.tone, lines };
+}

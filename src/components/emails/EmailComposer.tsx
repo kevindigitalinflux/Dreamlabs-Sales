@@ -14,6 +14,7 @@ import { Modal } from '../ui/Modal';
 import { AttachmentFiles } from './AttachmentFiles';
 import { InsertLink } from './InsertLink';
 import { EmailTextEditor } from './EmailTextEditor';
+import { EmailPreviewPane } from './EmailPreviewPane';
 import { RecipientDraftCard } from './RecipientDraftCard';
 import { RecipientPicker } from './RecipientPicker';
 import { BLANK_DRAFT, SEED_KEY, firstIncompleteDraft, generationIdentity, patchDraft, unionMissing } from '../../lib/composerDrafts';
@@ -124,6 +125,10 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
   // The email shown in the single editor: the one recipient's, or (nothing ticked yet) the seed/blank one.
   const shownKey = selectedTargets[0]?.key ?? SEED_KEY;
   const current = drafts[shownKey] ?? BLANK_DRAFT;
+  // With several recipients the preview follows whichever person's card the user last clicked.
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
+  const previewTarget = selectedTargets.find((t) => t.key === previewKey) ?? selectedTargets[0];
+  const previewDraft = multi ? (previewTarget ? drafts[previewTarget.key] ?? BLANK_DRAFT : BLANK_DRAFT) : current;
   const missing = unionMissing(selectedTargets.length > 0 ? selectedTargets : [{ key: SEED_KEY, email: '', name: null }], drafts);
 
   function update(key: string, patch: Partial<RecipientDraft>) {
@@ -253,9 +258,36 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
   const previewLines = usePostSendPreview(
     { templates, sequences, enrollment, loading: tplLoading || seqLoading || enrLoading }, templateId, lead.next_action_date, current.subject, selectedTargets[0]?.email ?? '');
 
+  const footer = (
+    <div className="flex flex-col gap-3">
+    {msg && (
+      <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : msg.kind === 'warn' ? 'text-warning' : 'text-success'}`}>
+        {msg.text}
+      </p>
+    )}
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <Button variant="ghost" onClick={() => void send(true)} disabled={busy !== null} loading={busy === 'save'}>
+        {busy === 'save' ? 'Saving…' : multi ? `Save ${n} drafts` : 'Save as draft'}
+      </Button>
+      <Button onClick={() => void send(false)} disabled={busy !== null || selectedTargets.length === 0 || (contactsLoading && !draft)} loading={busy === 'send'}>
+        <Send className="h-4 w-4" aria-hidden />
+        {busy === 'send'
+          ? 'Sending…'
+          : multi
+            ? `Send ${n} emails`
+            : n === 1
+              ? `Send to ${selectedTargets[0]!.email}`
+              : 'Send'}
+      </Button>
+    </div>
+      <MailboxStatus warningOnly compact />
+    </div>
+  );
+
   return (
-    <Modal open={open} onClose={onClose} title={`Email — ${lead.business_name}`}>
-      <div className="flex flex-col gap-4">
+    <Modal open={open} onClose={onClose} size="wide" footer={footer} title={`Email — ${lead.business_name}`}>
+      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="flex min-w-0 flex-col gap-4">
         {selectedTargets.map(target=><p key={target.key} className="break-words text-xs">{target.email}: <EmailVerificationBadge value={verification.get(target.email)}/></p>)}
         {verification.error&&<p role="alert" className="text-xs text-warning">Could not load previous checks. The server will check before sending.</p>}
         {recipients.length === 0 && <p role="alert" className="text-sm text-danger">No email addresses available for this lead or its contacts.</p>}
@@ -292,6 +324,8 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
                 draft={drafts[t.key] ?? BLANK_DRAFT}
                 onChange={(patch) => update(t.key, patch)}
                 orgId={currentOrg?.id}
+                active={previewTarget?.key === t.key}
+                onActivate={() => setPreviewKey(t.key)}
               />
             ))}
           </div>
@@ -299,46 +333,33 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
           <>
             <Input label="Subject" value={current.subject} onChange={(e) => update(shownKey, { subject: e.target.value })} />
             {currentOrg && (
-              <div className="flex flex-col gap-4 rounded-lg border border-line p-3">
+              <div className="flex flex-col gap-4 rounded-control border border-line p-3">
                 <AttachmentFiles orgId={currentOrg.id} attachments={current.attachments} onChange={(attachments) => update(shownKey, { attachments })} compact />
                 <InsertLink orgId={currentOrg.id} onInsert={(link) => update(shownKey, { body: appendLinkToBody(current.body, link) })} />
               </div>
             )}
             {diff && (
-              <div className="max-h-48 overflow-y-auto rounded-lg bg-surface/60 p-3 text-xs">
+              <div className="max-h-48 overflow-y-auto rounded-control bg-surface p-3 text-xs">
                 <p className="mb-1 flex items-center gap-1 font-bold uppercase tracking-wide text-muted"><WandSparkles className="h-3.5 w-3.5" aria-hidden />Template → AI changes</p>
                 {diff.map((l, i) => (
-                  <p key={i} className={`whitespace-pre-wrap ${l.kind === 'added' ? 'text-success' : l.kind === 'removed' ? 'text-danger/70 line-through' : 'text-muted/60'}`}>{l.text || ' '}</p>
+                  <p key={i} className={`whitespace-pre-wrap ${l.kind === 'added' ? 'text-success' : l.kind === 'removed' ? 'text-danger/70 line-through' : 'text-muted'}`}>{l.text || ' '}</p>
                 ))}
-                <button type="button" onClick={() => update(shownKey, { showDiff: false })} className="mt-1 flex min-h-11 cursor-pointer items-center text-cyan">Hide diff</button>
+                <button type="button" onClick={() => update(shownKey, { showDiff: false })} className="mt-1 flex min-h-11 cursor-pointer items-center text-link">Hide diff</button>
               </div>
             )}
-            <EmailTextEditor label="Body" rows={10} value={current.body} onChange={(body) => update(shownKey, { body })} />
+            <EmailTextEditor label="Body" rows={12} value={current.body} onChange={(body) => update(shownKey, { body })} showPreview={false} />
           </>
         )}
 
         <PostSendPreview lines={previewLines} report={report} multi={multi} />
-        {msg && (
-          <p role={msg.kind === 'err' ? 'alert' : 'status'} className={`text-sm ${msg.kind === 'err' ? 'text-danger' : msg.kind === 'warn' ? 'text-warning' : 'text-success'}`}>
-            {msg.text}
-          </p>
-        )}
-        <div className="flex items-center justify-between">
-          <Button variant="ghost" onClick={() => void send(true)} disabled={busy !== null} loading={busy === 'save'}>
-            {busy === 'save' ? 'Saving…' : multi ? `Save ${n} drafts` : 'Save as draft'}
-          </Button>
-          <Button onClick={() => void send(false)} disabled={busy !== null || selectedTargets.length === 0 || (contactsLoading && !draft)} loading={busy === 'send'}>
-            <Send className="h-4 w-4" aria-hidden />
-            {busy === 'send'
-              ? 'Sending…'
-              : multi
-                ? `Send ${n} emails`
-                : n === 1
-                  ? `Send to ${selectedTargets[0]!.email}`
-                  : 'Send'}
-          </Button>
-        </div>
-        <MailboxStatus warningOnly compact />
+      </div>
+      <EmailPreviewPane
+        to={answer?.to_email ?? previewTarget?.email ?? ''}
+        caption={multi && previewTarget ? `for ${previewTarget.name ?? previewTarget.email}` : undefined}
+        subject={previewDraft.subject}
+        body={previewDraft.body}
+        attachmentNames={previewDraft.attachments.map((a) => a.name)}
+      />
       </div>
     </Modal>
   );

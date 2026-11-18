@@ -9,6 +9,8 @@ vi.mock('../hooks/useOrg', () => ({ useOrg: () => ({ currentOrg: { id: 'org', na
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => ({ profile: null, session: { user: { id: 'user' } }, refreshProfile: async () => {} }) }));
 vi.mock('../lib/supabase', () => ({ supabase: {} }));
 // These unrelated cards read remote state. Keep the Settings setup card and import control real.
+// Folding is not under test here: render every group's content so the cards inside can be checked.
+vi.mock('../components/ui/Collapsible', () => ({ Collapsible: ({ children }: { children: unknown }) => children }));
 vi.mock('../components/settings/CompanyProfileCard', () => ({ CompanyProfileCard: () => null }));
 vi.mock('../components/settings/IdealCustomerProfilesCard', () => ({ IdealCustomerProfilesCard: () => null }));
 vi.mock('../components/settings/CustomPlaceholdersCard', () => ({ CustomPlaceholdersCard: () => null }));
@@ -41,11 +43,11 @@ it.each(['member', 'admin'])('offers a real setup zip download for an organisati
   expect(link).toMatch(/\bdownload(?:="[^"]*")?/);
   expect(link).toContain('Download setup skill');
   expect(link).toContain('focus-visible:');
-  for (const token of ['bg-violet', 'text-on-accent', 'hover:bg-violet/85', 'min-h-11', 'motion-reduce:transition-none']) expect(link).toContain(token);
+  for (const token of ['from-violet', 'text-on-accent', 'hover:brightness-110', 'min-h-11', 'motion-reduce:transition-none']) expect(link).toContain(token);
   const imports = html.match(/<button\b[^>]*>Import setup files<\/button>/g) ?? [];
   expect(imports).toHaveLength(role === 'admin' ? 1 : 0);
   if (role === 'admin') {
-    expect(imports[0]).toContain('border-line bg-surface text-offwhite');
+    expect(imports[0]).toContain('border-line bg-transparent text-offwhite');
     expect(html.indexOf('Download setup skill')).toBeLessThan(html.indexOf('>Import setup files'));
   }
   const steps = setupSteps(html);

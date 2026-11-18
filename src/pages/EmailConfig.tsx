@@ -72,7 +72,7 @@ export function EmailConfig() {
   if (error) {
     return (
       <div className="mx-auto flex max-w-2xl flex-col gap-4">
-        <h1 className="text-[28px] font-extrabold">Email sending</h1>
+        <h1 className="text-[28px] font-bold">Email sending</h1>
         <Card>
           <p role="alert" className="text-sm text-danger">Could not load your email settings — {error}</p>
         </Card>
@@ -85,7 +85,7 @@ export function EmailConfig() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <header className="flex items-center gap-3">
-        <h1 className="text-[28px] font-extrabold">Email sending</h1>
+        <h1 className="text-[28px] font-bold">Email sending</h1>
         {settings?.is_verified && (
           <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-success">
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Verified
@@ -94,7 +94,7 @@ export function EmailConfig() {
       </header>
       <p className="text-muted">Connect your own email address — everything you send goes out from it, not from a robot address.</p>
       <MailboxStatusView settings={settings} />
-      <section className="rounded-lg border border-line bg-surface p-4 text-sm" aria-label="Connect reply detection">
+      <section className="rounded-control border border-line bg-raised p-4 text-sm" aria-label="Connect reply detection">
         <h2 className="font-bold">Connect your inbox for replies</h2>
         {form.provider === 'gmail' && <ol className="list-inside list-decimal">
           <li>Open Gmail Settings, then Forwarding and POP/IMAP. Enable IMAP if the option is shown; some accounts keep it on automatically.</li>
@@ -116,9 +116,9 @@ export function EmailConfig() {
           </SelectField>
 
           {steps.length > 0 && (
-            <ol className="flex flex-col gap-2 rounded-lg bg-surface/60 p-4 text-sm">
+            <ol className="flex flex-col gap-2 rounded-control bg-surface p-4 text-sm">
               {steps.map((s, i) => (
-                <li key={s} className="flex gap-2"><span className="font-bold text-cyan">{i + 1}.</span>{s}</li>
+                <li key={s} className="flex gap-2"><span className="font-bold text-link">{i + 1}.</span>{s}</li>
               ))}
             </ol>
           )}

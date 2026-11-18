@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { JobItem } from './model';
-import { groupJobs, notifyLines, seenKey, summaryLine, tabTitle, tabTitleCount, timeAgo, unseenFinished } from './view';
+import { groupJobs, notifyLines, pillView, seenKey, summaryLine, tabTitle, tabTitleCount, timeAgo, unseenFinished } from './view';
 
 const NOW = new Date('2026-10-14T12:00:00Z');
 const job = (over: Partial<JobItem> = {}): JobItem => ({
@@ -136,5 +136,28 @@ describe('timeAgo', () => {
   it('never shows the future or a bad date as nonsense', () => {
     expect(timeAgo('2026-10-14T12:30:00Z', NOW)).toBe('just now');
     expect(timeAgo('garbage', NOW)).toBe('');
+  });
+});
+
+describe('pillView', () => {
+  const many = [
+    job({ id: 'n1', state: 'needs_you', needsYou: 1 }), job({ id: 'n2', state: 'needs_you', needsYou: 1 }),
+    job({ id: 'r1', state: 'running' }), job({ id: 'r2', state: 'running' }),
+    finished('f1', '2026-10-14T11:00:00Z'),
+  ];
+  it('is null when there is nothing to say', () => {
+    expect(pillView([], new Set(), NOW)).toBeNull();
+  });
+  it('uses the summary line as its text and holds every line, uncapped, in notify order', () => {
+    const view = pillView(many, new Set(), NOW);
+    expect(view?.text).toBe(summaryLine(many, new Set(), NOW));
+    expect(view?.lines).toHaveLength(5);
+    expect(view?.lines).toEqual(notifyLines(many, new Set(), NOW, Number.POSITIVE_INFINITY).lines);
+    expect(view?.tone).toBe(view?.lines[0]?.tone);
+  });
+  it('leaves out a finished job that was already seen', () => {
+    const f = finished('f1', '2026-10-14T11:00:00Z');
+    const view = pillView([job({ id: 'r1', state: 'running' }), f], new Set([seenKey(f)]), NOW);
+    expect(view?.lines.map((l) => l.jobId)).toEqual(['r1']);
   });
 });

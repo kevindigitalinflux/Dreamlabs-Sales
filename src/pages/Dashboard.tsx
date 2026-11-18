@@ -7,6 +7,9 @@ import { useDrafts } from '../hooks/useDrafts';
 import type { DraftLog } from '../hooks/useDrafts';
 import { useFocusMode } from '../hooks/useFocusMode';
 import { Card } from '../components/ui/Card';
+import { SectionTitle } from '../components/ui/SectionTitle';
+import { BarChart3, CalendarCheck, Clock, MailCheck } from 'lucide-react';
+import { Collapsible } from '../components/ui/Collapsible';
 import { Skeleton } from '../components/ui/Skeleton';
 import { StatsBar } from '../components/dashboard/StatsBar';
 import { TodaysFocus } from '../components/dashboard/TodaysFocus';
@@ -48,14 +51,14 @@ export function Dashboard() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <h1 className="text-[28px] font-extrabold">{greeting()}, {firstName}</h1>
+        <h1 className="text-[28px] font-bold">{greeting()}, {firstName}</h1>
         <p className="text-muted">{today}</p>
       </header>
 
       {!focusMode && <StatsBar leads={leads} leadsLoading={loading} draftCount={draftsLoading ? null : drafts.length} callsThisWeek={callsThisWeek} />}
 
       <Card>
-        <h2 className="mb-3 text-[18px] font-bold">Today's follow-ups</h2>
+        <div className="mb-3"><SectionTitle icon={CalendarCheck}>Today's follow-ups</SectionTitle></div>
         {loading && <Skeleton className="h-24 w-full" />}
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         {!loading && !error && <TodaysFocus leads={leads} onOpen={setSelected} />}
@@ -64,20 +67,18 @@ export function Dashboard() {
       <NeedsInputNotice />
 
       <Card>
-        <h2 className="mb-3 text-[18px] font-bold">Emails ready to review</h2>
+        <div className="mb-3"><SectionTitle icon={MailCheck}>Emails ready to review</SectionTitle></div>
         <EmailReviewQueue drafts={drafts} loading={draftsLoading} onReview={setReviewing} onChanged={() => void refreshDrafts()} />
       </Card>
 
       {!focusMode && (
         <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <h2 className="mb-3 text-[18px] font-bold">Recently active</h2>
+          <Collapsible icon={Clock} title="Recently active" summary="Leads you worked on lately" className="self-start">
             {loading ? <Skeleton className="h-24 w-full" /> : <RecentlyActive leads={leads} onOpen={setSelected} />}
-          </Card>
-          <Card>
-            <h2 className="mb-3 text-[18px] font-bold">Pipeline snapshot</h2>
+          </Collapsible>
+          <Collapsible icon={BarChart3} title="Pipeline snapshot" summary="Leads by stage" className="self-start">
             {loading ? <Skeleton className="h-24 w-full" /> : <PipelineSnapshot leads={leads} />}
-          </Card>
+          </Collapsible>
         </div>
       )}
 

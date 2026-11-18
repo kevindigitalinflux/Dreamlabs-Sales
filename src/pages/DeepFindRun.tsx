@@ -10,7 +10,7 @@ export function DeepFindRun() {
   return (
     <div className="flex max-w-3xl flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[28px] font-extrabold">Deep find</h1>
+        <h1 className="text-[28px] font-bold">Deep find</h1>
         <Link to="/pipeline/deep-find" className="text-sm underline hover:text-offwhite">All Deep find runs</Link>
       </div>
       {valid ? <DeepFindProgress runId={runId} /> : <p role="alert" className="text-sm text-danger-strong">This Deep find could not be found.</p>}

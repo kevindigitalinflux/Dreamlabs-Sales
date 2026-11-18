@@ -8,6 +8,8 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { Skeleton } from '../components/ui/Skeleton';
 import { PipelineSection } from '../components/analytics/PipelineSection';
 import { OutreachSection } from '../components/analytics/OutreachSection';
+import { Collapsible } from '../components/ui/Collapsible';
+import { ShieldCheck } from 'lucide-react';
 import {TierSafety} from '../components/analytics/TierSafety';
 
 const PERIOD_LABELS: Record<AnalyticsPeriod, string> = {
@@ -25,17 +27,17 @@ export function Analytics() {
 
   return (
     <div className="flex flex-col gap-6">
-      <TierSafety/>
+      <Collapsible icon={ShieldCheck} title="Recipient safety" summary="Bounce rates by recipient group, last 30 days"><TierSafety/></Collapsible>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-[28px] font-extrabold">Analytics</h1>
-        <div role="group" aria-label="Time period" className="flex items-center gap-1 rounded-lg border border-line p-1">
+        <h1 className="text-[28px] font-bold">Analytics</h1>
+        <div role="group" aria-label="Time period" className="flex items-center gap-1 rounded-control border border-line p-1">
           {(Object.keys(PERIOD_LABELS) as AnalyticsPeriod[]).map((p) => (
             <button
               key={p}
               type="button"
               onClick={() => setPeriod(p)}
               aria-pressed={period === p}
-              className={`min-h-9 cursor-pointer rounded-md px-3 text-sm font-semibold ${period === p ? 'bg-violet text-on-accent' : 'text-muted hover:text-offwhite'}`}
+              className={`min-h-9 cursor-pointer rounded-nested px-3 text-sm font-semibold ${period === p ? 'bg-linear-to-br from-violet to-purple text-on-accent' : 'text-muted hover:text-offwhite'}`}
             >
               {PERIOD_LABELS[p]}
             </button>

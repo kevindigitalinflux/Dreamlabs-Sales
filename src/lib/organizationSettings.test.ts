@@ -3,6 +3,8 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 vi.mock('../hooks/useOrgApiSettings', () => ({ useOrgApiSettings: vi.fn() }));
 vi.mock('../hooks/useOrg', () => ({ useOrg: vi.fn() }));
+// Folding is not under test here: render every section's content so the controls inside can be checked.
+vi.mock('../components/ui/Collapsible', () => ({ Collapsible: ({ children }: { children: unknown }) => children }));
 import { useOrgApiSettings } from '../hooks/useOrgApiSettings';
 import { useOrg } from '../hooks/useOrg';
 import { OrganizationSettings } from '../pages/OrganizationSettings';

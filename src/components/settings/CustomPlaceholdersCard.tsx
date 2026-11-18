@@ -1,5 +1,6 @@
 import { useCustomVariables } from '../../hooks/useCustomVariables';
-import { Card } from '../ui/Card';
+import { Collapsible } from '../ui/Collapsible';
+import { Braces } from 'lucide-react';
 import { Skeleton } from '../ui/Skeleton';
 import { PlaceholderAddForm } from './PlaceholderAddForm';
 import { PlaceholderRow } from './PlaceholderRow';
@@ -15,16 +16,12 @@ export function CustomPlaceholdersCard({ isOrgAdmin }: { isOrgAdmin: boolean }) 
   const { personal, companyWide, loading, error, add, update, remove } = useCustomVariables();
 
   return (
-    <Card>
+    <Collapsible icon={Braces} title="Custom placeholders" summary={loading ? 'Loading' : `${personal.length + companyWide.length} set`}>
       <div className="flex flex-col gap-4">
-        <div>
-          <h2 className="text-[18px] font-bold">Custom placeholders</h2>
-          <p className="mt-1 text-sm text-muted">
-            Make your own <code>{'{{placeholders}}'}</code> for things the built-in ones don't cover, like your Google Meet link
-            or your booking page. Add one here, then use it in any email template or sequence. When an email is written, each
-            placeholder is replaced with the sender's own value.
-          </p>
-        </div>
+        <p className="text-sm text-muted">
+          Make your own <code>{'{{placeholders}}'}</code> for things the built-in ones don't cover, like your Google Meet link
+          or your booking page. Use one in any email template or sequence; each email gets the sender's own value.
+        </p>
         {loading && <Skeleton className="h-24 w-full" />}
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
 
@@ -54,6 +51,6 @@ export function CustomPlaceholdersCard({ isOrgAdmin }: { isOrgAdmin: boolean }) 
           {isOrgAdmin && <PlaceholderAddForm scope="company" onAdd={add} />}
         </section>
       </div>
-    </Card>
+    </Collapsible>
   );
 }

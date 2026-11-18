@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { unblockDeepFindDomain } from '../../lib/deepFind';
 import type { Lead } from '../../types';
 
-const small = 'min-h-6 cursor-pointer rounded-md border border-line px-2 py-0.5 text-xs font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-line disabled:opacity-50';
+const small = 'min-h-6 cursor-pointer rounded-nested border border-line px-2 py-0.5 text-xs font-semibold hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-line disabled:opacity-50';
 
 /** Domains marked "Not their domain" on this lead, each with a Restore button. Renders nothing when there are none. */
 export function BlockedDomains({ lead }: { lead: Lead }) {
@@ -26,7 +26,7 @@ export function BlockedDomains({ lead }: { lead: Lead }) {
   }
 
   return (
-    <div className="flex flex-col gap-1.5 rounded-lg bg-surface/60 p-3">
+    <div className="flex flex-col gap-1.5 rounded-control bg-surface p-3">
       <p className="text-xs font-semibold text-muted">Blocked domains</p>
       <ul className="flex flex-col gap-1.5">
         {list.map((d) => (

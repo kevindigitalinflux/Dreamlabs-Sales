@@ -6,7 +6,7 @@ interface Props {
 
 /** Sticky summary always counts the cross-pipeline selection, independently of filters. */
 export function PickerSelectionBar({ count, pipelines, hidden, matching, selectedOnly, onSelectAll, onClear, onSelectedOnly }: Props) {
-  return <div className="sticky top-0 z-20 flex min-w-0 flex-col gap-2 rounded-xl border border-line bg-card p-3 shadow-sm">
+  return <div className="sticky top-0 z-20 flex min-w-0 flex-col gap-2 rounded-surface border border-line bg-card shadow-raised p-3 shadow-sm">
     <p role="status" className="text-sm font-semibold">{count} selected in {pipelines} {pipelines === 1 ? 'pipeline' : 'pipelines'}</p>
     <div className="flex flex-wrap gap-2">
       <Button variant="secondary" onClick={onSelectAll} disabled={matching === 0}>Select all matching ({matching})</Button>

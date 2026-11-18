@@ -27,7 +27,7 @@ export function PainPointEditor({ choice, points, loading, error, onSave, review
   }
   if (loading) return <p role="status" className="text-sm text-muted">Loading pain point…</p>;
   if (error) return <p role="alert" className="text-sm text-danger">{error}</p>;
-  return <section aria-label="Pain point" className="flex min-w-0 flex-col gap-2 rounded-lg border border-line p-3">
+  return <section aria-label="Pain point" className="flex min-w-0 flex-col gap-2 rounded-control border border-line p-3">
     <p className="break-words text-sm font-semibold">{choice ? `Pain point: ${choice.pain_point}` : 'No pain point chosen yet'}</p>
     {choice && <p className="break-words text-xs text-muted">{choice.source === 'manual' ? 'Chosen by you' : `Chosen by AI because ${choice.reason}`}</p>}
     {review && <p className="text-xs text-muted">Saving a choice does not rewrite this email. Personalise again or edit the email before sending.</p>}

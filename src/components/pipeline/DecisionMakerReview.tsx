@@ -171,11 +171,11 @@ export function DecisionMakerReview({ open, resultsByLead, leadsById, onClose, o
           const lead = leadsById[leadId];
           const candidates = candidatesByLead[leadId] ?? [];
           return (
-            <div key={leadId} className="rounded-lg border border-line p-3">
+            <div key={leadId} className="rounded-control border border-line p-3">
               <p className="mb-2 text-sm font-semibold">{lead?.business_name ?? leadId}</p>
               <ul className="flex flex-col gap-2">
                 {candidates.map((candidate) => (
-                  <li key={candidate.id} className="rounded bg-surface/60 p-2 text-sm">
+                  <li key={candidate.id} className="rounded bg-surface p-2 text-sm">
                     <label className="flex items-center gap-2"><input type="checkbox" aria-label={`Select ${candidateName(candidate)}`} disabled={addingAll || busyId !== null} checked={selection.selected.has(candidate.id)} onChange={() => selection.toggle(candidate.id)} />Select</label>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] uppercase text-muted">{candidateSourceLabel(candidate.source)}</span>

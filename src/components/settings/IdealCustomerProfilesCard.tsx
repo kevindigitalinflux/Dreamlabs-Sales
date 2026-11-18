@@ -3,7 +3,8 @@ import { Plus, Users } from 'lucide-react';
 import { useIcps } from '../../hooks/useIcps';
 import type { IdealCustomerProfile } from '../../types';
 import { Button } from '../ui/Button';
-import { Card } from '../ui/Card';
+import { Collapsible } from '../ui/Collapsible';
+import { Target } from 'lucide-react';
 import { Skeleton } from '../ui/Skeleton';
 import { IcpEditor } from './IcpEditor';
 
@@ -18,18 +19,14 @@ export function IdealCustomerProfilesCard({ isOrgAdmin }: { isOrgAdmin: boolean 
   const [editing, setEditing] = useState<IdealCustomerProfile | null | 'new'>(null);
 
   return (
-    <Card>
+    <Collapsible icon={Target} title="Ideal customer profiles" summary={loading ? 'Loading' : icps.length === 0 ? 'None yet' : `${icps.length} ${icps.length === 1 ? 'profile' : 'profiles'}`}>
       <div className="flex flex-col gap-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-[18px] font-bold">Ideal customer profiles</h2>
-            <p className="mt-1 text-sm text-muted">
-              Describe each kind of customer you sell to, in as much detail as you can: who they are, what keeps them up
-              at night, what they want, what they push back on. Pick a profile on a template, a sequence or a lead, and
-              the emails written for it use that context, including <code>{'{{pain_point}}'}</code>, so they read as
-              written for that customer.
-            </p>
-          </div>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <p className="min-w-0 flex-1 basis-64 text-sm text-muted">
+            Describe each kind of customer you sell to: who they are, what keeps them up at night, what they want and what
+            they push back on. Pick a profile on a template, a sequence or a lead, and the emails written for it use that
+            context, including <code>{'{{pain_point}}'}</code>.
+          </p>
           {isOrgAdmin && (
             <Button className="shrink-0" onClick={() => setEditing('new')}><Plus className="h-4 w-4" aria-hidden />Add profile</Button>
           )}
@@ -37,7 +34,7 @@ export function IdealCustomerProfilesCard({ isOrgAdmin }: { isOrgAdmin: boolean 
         {loading && <Skeleton className="h-20 w-full" />}
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         {!loading && icps.length === 0 && (
-          <p className="flex items-center gap-2 rounded-lg bg-surface/60 p-3 text-sm text-muted">
+          <p className="flex items-center gap-2 rounded-control bg-surface p-3 text-sm text-muted">
             <Users className="h-4 w-4 shrink-0" aria-hidden />
             {isOrgAdmin ? 'No profiles yet. Add your first one, for example "Property managers".' : 'No profiles yet. An org admin can add them.'}
           </p>
@@ -45,7 +42,7 @@ export function IdealCustomerProfilesCard({ isOrgAdmin }: { isOrgAdmin: boolean 
         <ul className="grid gap-2 sm:grid-cols-2">
           {icps.map((p) => (
             <li key={p.id}>
-              <button type="button" onClick={() => setEditing(p)} className="w-full cursor-pointer rounded-lg border border-line bg-surface/40 p-3 text-left hover:bg-surface/70">
+              <button type="button" onClick={() => setEditing(p)} className="w-full cursor-pointer rounded-control border border-line bg-raised p-3 text-left hover:bg-surface">
                 <span className="block text-sm font-bold">{p.name}</span>
                 <span className="mt-1 line-clamp-2 block whitespace-pre-wrap break-words text-xs text-muted">{p.summary ?? p.pain_points ?? 'No details yet'}</span>
               </button>
@@ -62,6 +59,6 @@ export function IdealCustomerProfilesCard({ isOrgAdmin }: { isOrgAdmin: boolean 
           onClose={() => setEditing(null)}
         />
       )}
-    </Card>
+    </Collapsible>
   );
 }

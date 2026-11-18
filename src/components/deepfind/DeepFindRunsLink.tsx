@@ -9,7 +9,7 @@ export function DeepFindRunsLink({ attention, running }: { attention: number; ru
   return (
     <Link
       to="/jobs"
-      className="relative flex min-h-11 items-center gap-2 rounded-lg border border-line bg-surface px-4 text-sm font-semibold text-offwhite hover:bg-surface/70"
+      className="relative flex min-h-11 items-center gap-2 rounded-control border border-line bg-raised px-4 text-sm font-semibold text-offwhite hover:bg-surface"
     >
       <Telescope className="h-4 w-4" aria-hidden />
       Jobs

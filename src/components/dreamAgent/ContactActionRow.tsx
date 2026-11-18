@@ -58,9 +58,9 @@ export function ContactActionRow({ action, resolution, leadName, existing, leadC
   const text = (key: TextKey) => (e: { target: { value: string } }) => edit(key, e.target.value);
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-line bg-card p-4">
+    <div className="flex flex-col gap-2 rounded-surface border border-line bg-raised shadow-raised p-4">
       <p className="flex items-center gap-2 text-sm font-semibold">
-        <Icon className="h-4 w-4 text-cyan" aria-hidden />
+        <Icon className="h-4 w-4 text-link" aria-hidden />
         {isAdd ? 'Add' : 'Update'} {isPerson ? 'person' : 'general inbox'} on {leadName}
       </p>
       {action.excerpt && <p className="text-xs text-muted">{quoted ? <>&ldquo;{action.excerpt}&rdquo;</> : <>AI summary: {action.excerpt}</>}</p>}

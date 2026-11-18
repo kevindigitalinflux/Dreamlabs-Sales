@@ -57,7 +57,7 @@ export function SuggestedSequence({ leadId, onEnroll }: SuggestedSequenceProps) 
 
   const suggestion = state.kind === 'done' ? state.suggestion : null;
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-line p-3">
+    <div className="flex flex-col gap-2 rounded-control border border-line p-3">
       {state.kind !== 'done' && (
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" onClick={() => void suggest()} disabled={state.kind === 'asking'} loading={state.kind === 'asking'}>
@@ -75,14 +75,14 @@ export function SuggestedSequence({ leadId, onEnroll }: SuggestedSequenceProps) 
             <Button onClick={() => void enrol(suggestion.sequence_id!)} disabled={enrolling} loading={enrolling}>
               {enrolling ? 'Enrolling…' : `Enrol in ${suggestion.sequence_name}`}
             </Button>
-            <button type="button" onClick={() => setState({ kind: 'idle' })} className="flex min-h-11 cursor-pointer items-center text-xs text-cyan">Dismiss</button>
+            <button type="button" onClick={() => setState({ kind: 'idle' })} className="flex min-h-11 cursor-pointer items-center text-xs text-link">Dismiss</button>
           </div>
         </>
       )}
       {suggestion && !suggestion.sequence_id && (
         <>
           <p className="text-sm text-muted">{suggestion.reason || 'No sequence is a clear fit for this lead'}</p>
-          <button type="button" onClick={() => setState({ kind: 'idle' })} className="flex min-h-11 cursor-pointer items-center self-start text-xs text-cyan">Try again</button>
+          <button type="button" onClick={() => setState({ kind: 'idle' })} className="flex min-h-11 cursor-pointer items-center self-start text-xs text-link">Try again</button>
         </>
       )}
       {enrollError && <p role="alert" className="text-sm text-danger">{enrollError}</p>}

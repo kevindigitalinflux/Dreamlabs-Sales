@@ -1,3 +1,4 @@
+import { buttonClasses } from '../../lib/ui/buttonClasses';
 import instructions from '../../../setup-skill/instructions.json';
 import { Card } from '../ui/Card';
 import { ImportSetupButton } from '../mdImport/ImportSetupButton';
@@ -22,7 +23,7 @@ export function SetupSkillCard({ isAdmin, onApplied }: { isAdmin: boolean; onApp
         <a
           href="/downloads/dreamlabs-sales-setup-skill.zip"
           download="dreamlabs-sales-setup-skill.zip"
-          className="inline-flex min-h-11 max-w-full items-center justify-center rounded-lg bg-violet px-4 py-2 text-[15px] font-semibold text-on-accent transition-colors hover:bg-violet/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-line motion-reduce:transition-none"
+          className={`${buttonClasses('primary', 'md')} max-w-full`}
         >Download setup skill</a>
         {isAdmin && <ImportSetupButton onApplied={onApplied} />}
       </div>
@@ -30,13 +31,13 @@ export function SetupSkillCard({ isAdmin, onApplied }: { isAdmin: boolean; onApp
         {instructions.steps.map(step => <li key={step.title} className="pl-1 marker:font-bold">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <strong>{step.title}</strong>
-            {step.badge && <span className="rounded border border-line bg-surface px-2 py-0.5 text-xs font-semibold">{step.badge}</span>}
+            {step.badge && <span className="rounded border border-line bg-raised px-2 py-0.5 text-xs font-semibold">{step.badge}</span>}
           </div>
           {step.paragraphs.map(text => <p key={text}><InstructionText text={text} /></p>)}
           {step.note && <p className="mt-2">{step.note}</p>}
           {step.options && <div className="mt-3 space-y-3">
-            {step.options.map(option => <details key={option.name} open={option.recommended || undefined} className="min-w-0 rounded-lg border border-line bg-surface">
-              <summary className="min-h-11 cursor-pointer rounded-lg px-3 py-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-line">
+            {step.options.map(option => <details key={option.name} open={option.recommended || undefined} className="min-w-0 rounded-control border border-line bg-raised">
+              <summary className="min-h-11 cursor-pointer rounded-control px-3 py-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-line">
                 <strong>{option.name}</strong>{' '}
                 <span className="whitespace-nowrap">({option.folder})</span>{' '}
                 {option.recommended && <span className="inline-block rounded border border-violet-line px-2 py-0.5 text-xs font-semibold">Recommended</span>}
@@ -48,7 +49,7 @@ export function SetupSkillCard({ isAdmin, onApplied }: { isAdmin: boolean; onApp
           </div>}
         </li>)}
       </ol>
-      <aside aria-label={instructions.troubleshooting.title} className="rounded-lg border border-line bg-surface p-4 text-sm text-offwhite">
+      <aside aria-label={instructions.troubleshooting.title} className="rounded-control border border-line bg-raised p-4 text-sm text-offwhite">
         <strong>{instructions.troubleshooting.title}</strong>
         {instructions.troubleshooting.tips.map(text => <p key={text} className="mt-2"><InstructionText text={text} /></p>)}
       </aside>

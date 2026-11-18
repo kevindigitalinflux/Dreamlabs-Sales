@@ -64,7 +64,7 @@ export function AssignmentPanel({ contractors }: { contractors: { id: string; fu
       <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto">
         {unassigned.map((lead) => (
           <li key={lead.id}>
-            <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2 hover:bg-surface">
+            <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-control px-2 hover:bg-surface">
               <input type="checkbox" checked={selected.has(lead.id)} onChange={() => toggle(lead.id)} className="h-5 w-5 accent-violet-500" />
               <span className="font-semibold">{lead.business_name}</span>
               <span className="text-sm text-muted">{lead.city ?? ''}</span>

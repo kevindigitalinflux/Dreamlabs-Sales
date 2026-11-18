@@ -32,8 +32,8 @@ function ToolButton({ label, icon, pressed, onClick, disabled }: { label: string
       disabled={disabled}
       onMouseDown={keepSelection}
       onClick={onClick}
-      className={`inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-semibold transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 ${
-        pressed ? 'border-violet bg-violet/15 text-offwhite' : 'border-line bg-surface text-muted hover:text-offwhite'
+      className={`inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1.5 rounded-control border px-3 text-sm font-semibold transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 ${
+        pressed ? 'border-violet bg-violet-soft text-offwhite' : 'border-line bg-raised text-muted hover:text-offwhite'
       }`}
     >
       {icon}
@@ -76,7 +76,7 @@ export function EmailFormatToolbar({ active, onBold, onBullets, onHeading, onLin
         <ToolButton label="Link" icon={<Link2 className="h-4 w-4" aria-hidden />} pressed={linkOpen} onClick={() => setLinkOpen((o) => !o)} disabled={disabled} />
       </div>
       {linkOpen && (
-        <div className="flex flex-col gap-2 rounded-lg border border-line p-2 sm:flex-row sm:items-end">
+        <div className="flex flex-col gap-2 rounded-control border border-line p-2 sm:flex-row sm:items-end">
           <Input
             label="Link address"
             value={url}

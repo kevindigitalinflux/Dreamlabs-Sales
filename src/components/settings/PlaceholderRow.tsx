@@ -27,8 +27,8 @@ export function PlaceholderRow({ variable, canEdit, onUpdate, onDelete }: Placeh
   }
 
   return (
-    <li className="flex flex-col gap-2 rounded-lg border border-line bg-surface/40 p-3">
-      <code className="w-fit rounded bg-violet/20 px-2 py-0.5 text-sm font-semibold">{`{{${variable.key}}}`}</code>
+    <li className="flex flex-col gap-2 rounded-control border border-line bg-raised p-3">
+      <code className="w-fit rounded bg-violet-soft px-2 py-0.5 text-sm font-semibold">{`{{${variable.key}}}`}</code>
       <div className="flex flex-col gap-2 sm:flex-row">
         <Input label="Label" value={label} disabled={!canEdit} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Google Meet link" />
         <Input label="Value" value={value} disabled={!canEdit} onChange={(e) => setValue(e.target.value)} placeholder="https://meet.google.com/…" />

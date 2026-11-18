@@ -26,7 +26,7 @@ export function AdditionalDetails({ lead, onSave }: { lead: Lead; onSave: (patch
   if (groups.length === 0) return null;
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg bg-surface/60 p-3">
+    <div className="flex flex-col gap-2 rounded-control bg-surface p-3">
       {groups.map((g) => (
         <div key={g.column}>
           <p className="mb-1 text-xs font-semibold text-muted">{g.label}</p>
@@ -34,7 +34,7 @@ export function AdditionalDetails({ lead, onSave }: { lead: Lead; onSave: (patch
             {g.values.map((value) => (
               <li key={value} className="flex items-center gap-1 rounded-full border border-line bg-card py-0.5 pl-2.5 pr-1 text-sm">
                 {g.column === 'additional_phones' ? <PhoneChip value={value} country={lead.country} metadata={lead.phone_meta?.[parsePhone(value, lead.country)?.value ?? '']} /> : g.href?.(value)
-                  ? <a href={g.href(value)!} target={g.column === 'additional_websites' ? '_blank' : undefined} rel="noreferrer noopener" className="text-cyan hover:underline">{value}</a>
+                  ? <a href={g.href(value)!} target={g.column === 'additional_websites' ? '_blank' : undefined} rel="noreferrer noopener" className="text-link hover:underline">{value}</a>
                   : <span>{value}</span>}
                 <button
                   type="button"

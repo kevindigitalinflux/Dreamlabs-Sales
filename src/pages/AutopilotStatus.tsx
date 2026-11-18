@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router';
-import { Rocket, XCircle } from 'lucide-react';
+import { Ban, Rocket, XCircle } from 'lucide-react';
 import { useAutopilot } from '../hooks/useAutopilot';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { Collapsible } from '../components/ui/Collapsible';
+import { SectionTitle } from '../components/ui/SectionTitle';
 import { Input } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -27,8 +29,8 @@ export function AutopilotStatus() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <header className="flex items-center gap-3">
-        <Rocket className="h-6 w-6 text-cyan" aria-hidden />
-        <h1 className="text-[28px] font-extrabold">Autopilot</h1>
+        <Rocket className="h-6 w-6 text-link" aria-hidden />
+        <h1 className="text-[28px] font-bold">Autopilot</h1>
       </header>
       {notice && <p role="status" className="text-sm text-warning">{notice}</p>}
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
@@ -47,26 +49,35 @@ export function AutopilotStatus() {
 
       {run && (
         <Card>
-          <div className="flex flex-col gap-3">
-            <p className="font-semibold">Day {dayNumber} of {run.duration_days}</p>
-            <p className="text-sm text-muted">Leads scraped: {run.leads_scraped_total}</p>
-            <p className="text-sm text-muted">Outreach sent: {run.outreach_sent_total}</p>
+          <div className="flex flex-col gap-4">
+            <div>
+              <SectionTitle icon={Rocket}>Day {dayNumber} of {run.duration_days}</SectionTitle>
+              {run.duration_days != null && (
+                <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-surface" role="progressbar" aria-valuenow={Math.min(dayNumber, run.duration_days)} aria-valuemin={0} aria-valuemax={run.duration_days} aria-label="Autopilot progress">
+                  <div className="h-full bg-violet" style={{ width: `${Math.min(100, Math.round((dayNumber / run.duration_days) * 100))}%` }} />
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-nested bg-surface p-3"><b className="block font-heading text-xl font-bold">{run.leads_scraped_total}</b><span className="text-[13px] text-muted">Leads scraped</span></div>
+              <div className="rounded-nested bg-surface p-3"><b className="block font-heading text-xl font-bold">{run.outreach_sent_total}</b><span className="text-[13px] text-muted">Outreach sent</span></div>
+              <div className="rounded-nested bg-surface p-3"><b className="block font-heading text-xl font-bold">${(run.actual_ai_cost_cents / 100).toFixed(2)}</b><span className="text-[13px] text-muted">AI spend so far</span></div>
+              <div className="rounded-nested bg-surface p-3"><b className={`block font-heading text-xl font-bold ${run.bounce_count > 0 ? 'text-attention' : ''}`}>{run.bounce_count}</b><span className="text-[13px] text-muted">Bounces</span></div>
+            </div>
             <p className="text-sm text-muted">
-              AI spend so far: ${(run.actual_ai_cost_cents / 100).toFixed(2)} (estimated ${(run.estimated_cost_low_cents / 100).toFixed(2)}–${(run.estimated_cost_high_cents / 100).toFixed(2)})
-              {run.max_total_spend_cents != null && ` · cap $${(run.max_total_spend_cents / 100).toFixed(2)}`}
+              Estimated ${(run.estimated_cost_low_cents / 100).toFixed(2)} to ${(run.estimated_cost_high_cents / 100).toFixed(2)}
+              {run.max_total_spend_cents != null && `, cap $${(run.max_total_spend_cents / 100).toFixed(2)}`}
             </p>
-            <p className="text-sm text-muted">Bounces: {run.bounce_count}</p>
-            <Button variant="danger" onClick={() => void (async () => { setBusy(true); setError(await stopRun()); setBusy(false); })()} disabled={busy} loading={busy}>
+            <Button variant="danger" className="self-start" onClick={() => void (async () => { setBusy(true); setError(await stopRun()); setBusy(false); })()} disabled={busy} loading={busy}>
               <XCircle className="h-4 w-4" aria-hidden /> Stop autopilot
             </Button>
           </div>
         </Card>
       )}
 
-      <Card>
+      <Collapsible icon={Ban} title="Do-not-contact list" summary={blocklist.length === 0 ? 'Nothing blocked' : `${blocklist.length} blocked`}>
         <div className="flex flex-col gap-3">
-          <p className="font-semibold">Do-not-contact list</p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-end gap-2">
             <Input label="Email or domain" value={blockValue} onChange={(e) => setBlockValue(e.target.value)} placeholder="acme.com" />
             <Input label="Reason (optional)" value={blockReason} onChange={(e) => setBlockReason(e.target.value)} />
             <Button
@@ -86,7 +97,7 @@ export function AutopilotStatus() {
           </div>
           {blocklist.length === 0 && <p className="text-sm text-muted">Nothing blocked.</p>}
           {blocklist.map((b) => (
-            <div key={b.id} className="flex items-center justify-between rounded-lg bg-surface/50 p-2 text-sm">
+            <div key={b.id} className="flex items-center justify-between rounded-control bg-surface p-2 text-sm">
               <span>{b.value}{b.reason && ` — ${b.reason}`}</span>
               <button type="button" onClick={() => void removeBlocklistEntry(b.id)} className="text-danger" aria-label={`Remove ${b.value}`}>
                 <XCircle className="h-4 w-4" aria-hidden />
@@ -94,7 +105,7 @@ export function AutopilotStatus() {
             </div>
           ))}
         </div>
-      </Card>
+      </Collapsible>
     </div>
   );
 }

@@ -36,7 +36,7 @@ export function PlaceholderAddForm({ scope, onAdd }: PlaceholderAddFormProps) {
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-dashed border-line p-3">
+    <div className="flex flex-col gap-2 rounded-control border border-dashed border-line p-3">
       <div className="flex flex-col gap-2 sm:flex-row">
         <Input label="Label" value={label} onChange={(e) => changeLabel(e.target.value)} placeholder="e.g. Google Meet link" />
         <Input label="Placeholder name" value={key} onChange={(e) => { setKey(slugifyVariableKey(e.target.value)); setKeyEdited(true); }} placeholder="google_meet_link" />

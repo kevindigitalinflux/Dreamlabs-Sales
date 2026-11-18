@@ -41,7 +41,7 @@ export function SequenceList() {
         {sequences.filter((s) => matchesCategory(s, categoryFilter)).map((s) => (
           <li key={s.id}>
             <button type="button" onClick={() => canEdit(s) ? setEditing(s) : undefined}
-              className={`w-full rounded-xl border border-line bg-card p-4 text-left ${canEdit(s) ? 'cursor-pointer hover:bg-surface/50' : 'cursor-default'}`}>
+              className={`w-full rounded-surface border border-line bg-raised shadow-raised p-4 text-left ${canEdit(s) ? 'cursor-pointer hover:bg-surface' : 'cursor-default'}`}>
               <div className="flex items-center gap-2">
                 <span className="font-heading text-sm font-bold">{s.name}</span>
                 {s.is_active === false && <span className="text-xs text-muted">Inactive draft</span>}
@@ -50,7 +50,7 @@ export function SequenceList() {
               </div>
               {s.description && <p className="mt-1 truncate text-sm text-muted">{s.description}</p>}
               <p className="mt-2 text-xs text-muted">{s.steps.length} {s.steps.length === 1 ? 'step' : 'steps'}</p>
-              <p className="mt-1 text-xs text-cyan">{timelineLabel(s.steps)}</p>
+              <p className="mt-1 text-xs text-link">{timelineLabel(s.steps)}</p>
             </button>
           </li>
         ))}

@@ -94,7 +94,7 @@ export const EmailTextEditor = forwardRef<HTMLTextAreaElement, EmailTextEditorPr
         onLink={(url) => apply((t, s, e) => insertLink(t, s, e, url))}
       />
       {showPreview && (
-        <section aria-label="How it will look" className="rounded-lg border border-line bg-surface/40 p-3">
+        <section aria-label="How it will look" className="rounded-control border border-line bg-raised p-3">
           <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-muted"><Eye className="h-3.5 w-3.5" aria-hidden /> How it will look</p>
           <FormattedEmail body={previewBody ?? value} />
         </section>

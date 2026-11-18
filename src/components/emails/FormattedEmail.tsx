@@ -17,7 +17,7 @@ function renderInline(pieces: Inline[]): ReactNode[] {
       const href = websiteHref(p.href);
       if (!href) return <span key={i}>{p.text}</span>;
       return (
-        <a key={i} href={href} target="_blank" rel="noreferrer noopener" className="break-all text-violet underline">
+        <a key={i} href={href} target="_blank" rel="noreferrer noopener" className="break-all text-link underline">
           {p.text}
         </a>
       );

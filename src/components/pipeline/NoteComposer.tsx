@@ -6,6 +6,7 @@ import { useVoiceDictation } from '../../hooks/useVoiceDictation';
 import { VoiceButton, VoiceStatus, voiceFieldClass } from '../ui/VoiceControls';
 import type { LeadPatch } from '../../lib/leadUpdates';
 import type { Lead, LeadSuggestion, NoteType } from '../../types';
+import { Tabs } from '../ui/Tabs';
 import { Button } from '../ui/Button';
 import { Input, SelectField, Textarea } from '../ui/Input';
 import { Modal } from '../ui/Modal';
@@ -113,14 +114,7 @@ export function NoteComposer({ open, onClose, lead, addNote, onUpdateLead }: Not
         />
       ) : phase === 'compose' ? (
         <div className="flex flex-col gap-4">
-          <div className="flex overflow-hidden rounded-lg border border-line" role="tablist">
-            <button type="button" role="tab" aria-selected={tab === 'debrief'} onClick={() => setTab('debrief')} className={`min-h-11 flex-1 cursor-pointer text-sm font-semibold ${tab === 'debrief' ? 'bg-violet/25' : 'text-muted'}`}>
-              Quick debrief
-            </button>
-            <button type="button" role="tab" aria-selected={tab === 'free'} onClick={() => setTab('free')} className={`min-h-11 flex-1 cursor-pointer text-sm font-semibold ${tab === 'free' ? 'bg-violet/25' : 'text-muted'}`}>
-              Free text
-            </button>
-          </div>
+          <Tabs label="Note type" value={tab} onChange={(id) => setTab(id as 'debrief' | 'free')} tabs={[{ id: 'debrief', label: 'Quick debrief' }, { id: 'free', label: 'Free text' }]} />
 
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={aiParse} onChange={(e) => setAiParse(e.target.checked)} className="h-4 w-4 accent-violet-500" />

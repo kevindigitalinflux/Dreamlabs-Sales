@@ -6,7 +6,7 @@ export function StepProgress({ step, total }: { step: number; total: number }) {
     <div className="flex flex-col gap-1.5">
       <p className="text-xs font-semibold text-muted">Step {step} of {total}</p>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface">
-        <div className={`h-full rounded-full bg-cyan transition-all motion-reduce:transition-none ${widthClass[fraction]}`} />
+        <div className={`h-full rounded-full bg-violet transition-all motion-reduce:transition-none ${widthClass[fraction]}`} />
       </div>
     </div>
   );

@@ -74,7 +74,7 @@ export function AuthCallback() {
           <p className="mb-4 text-sm text-muted">
             We couldn't finish signing you in. Please try again.
           </p>
-          <a href="/login" className="text-sm font-semibold text-violet hover:text-violet/80">
+          <a href="/login" className="text-sm font-semibold text-link hover:text-violet/80">
             Back to sign in
           </a>
         </div>

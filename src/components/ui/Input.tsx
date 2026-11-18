@@ -3,7 +3,7 @@ import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from 'rea
 import { Listbox } from './Listbox';
 
 const FIELD_CLASSES =
-  'w-full rounded-lg border border-line bg-surface px-3 text-base text-offwhite outline-none placeholder:text-muted focus:border-cyan';
+  'w-full rounded-control border border-field bg-raised px-3 text-base text-offwhite outline-none placeholder:text-muted focus:border-focus';
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -15,8 +15,8 @@ export function Input({ label, error, className = '', ...rest }: InputProps) {
   const id = useId();
   return (
     <div className="flex w-full flex-col gap-1.5">
-      <label htmlFor={id} className="text-xs font-semibold text-muted">{label}</label>
-      <input id={id} className={`min-h-11 ${FIELD_CLASSES} ${className}`} {...rest} />
+      <label htmlFor={id} className="text-sm font-medium text-muted">{label}</label>
+      <input id={id} className={`min-h-11 md:min-h-10 ${FIELD_CLASSES} ${className}`} {...rest} />
       {error && <p role="alert" className="text-sm text-danger-strong">{error}</p>}
     </div>
   );
@@ -35,7 +35,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
   const id = useId();
   return (
     <div className="flex w-full flex-col gap-1.5">
-      <label htmlFor={id} className="text-xs font-semibold text-muted">{label}</label>
+      <label htmlFor={id} className="text-sm font-medium text-muted">{label}</label>
       <textarea ref={ref} id={id} className={`min-h-28 py-2 text-[18px] ${FIELD_CLASSES} ${className}`} {...rest} />
       {error && <p role="alert" className="text-sm text-danger-strong">{error}</p>}
     </div>
@@ -64,7 +64,7 @@ export function SelectField({ label, value, onChange, children, disabled, classN
     // min-w-0: as an item in a flex row this must be allowed to shrink below its text width, or a
     // long option name stretches the row (and pushes sibling buttons out of view) instead of being truncated.
     <div className="flex w-full min-w-0 flex-col gap-1.5">
-      <label htmlFor={id} className="text-xs font-semibold text-muted">{label}</label>
+      <label htmlFor={id} className="text-sm font-medium text-muted">{label}</label>
       <Listbox id={id} value={value} onChange={onChange} disabled={disabled} showGroupInValue={showGroupInValue} className={`text-base ${className}`}>
         {children}
       </Listbox>

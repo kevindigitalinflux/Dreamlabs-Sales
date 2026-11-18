@@ -13,7 +13,7 @@ const typeLabels = { 'company-context': 'Company context', 'icp-profiles': 'Cust
 export function ImportPreviewCard({ file, files = [file], snapshot, pending, onChange, onRemove }: { file: ImportFile; files?: ImportFile[]; snapshot: ImportSnapshot; pending: string[]; onChange: (file: ImportFile) => void; onRemove: (id: string) => void }) {
   const p = file.parsed;
   const count = p.type === 'company-context' ? 1 : p.data?.length ?? 0;
-  return <section className="min-w-0 rounded-xl border border-line p-3 text-sm">
+  return <section className="min-w-0 rounded-surface border border-line p-3 text-sm">
     <h4 className="break-words font-bold">{file.filename}</h4>
     <p>{p.type ? typeLabels[p.type] : 'Unknown file type'} · {count} {count === 1 ? 'item' : 'items'}</p>
     <Button variant="ghost" onClick={() => onRemove(file.id)} aria-label={`Remove ${file.filename}`}>Remove file</Button>

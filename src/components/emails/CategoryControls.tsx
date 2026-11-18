@@ -49,7 +49,7 @@ export function CategoryFilter({ value, onChange, categories, hasUncategorised }
 export function CategoryBadge({ category }: { category: string | null | undefined }) {
   if (!category) return null;
   return (
-    <span className="flex items-center gap-1 rounded-full bg-violet/20 px-2 py-0.5 text-[11px] font-semibold text-offwhite">
+    <span className="flex items-center gap-1 rounded-full bg-violet-soft px-2 py-0.5 text-[11px] font-semibold text-offwhite">
       <Tag className="h-3 w-3" aria-hidden /> {category}
     </span>
   );

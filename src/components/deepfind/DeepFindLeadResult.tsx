@@ -1,11 +1,12 @@
-import { AlertTriangle, CheckCircle2, CircleSlash, Clock, Loader2, MailCheck, MailX, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, CircleSlash, Clock, Loader2, MailCheck, MailX, XCircle } from 'lucide-react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { DEEP_FIND_STATUS_LABELS, readDeepFindDetails } from '../../lib/deepFindView';
+import { DEEP_FIND_STATUS_LABELS } from '../../lib/deepFindView';
+import { PRIORITY_LABEL, deepFindRowFlags, type DeepFindPriority } from '../../lib/deepFindPriority';
 import type { DeepFindRowWithLead } from '../../hooks/useDeepFindRun';
 import { DeepFindCompanyChoice } from './DeepFindCompanyChoice';
 import { CompanyDomainsEditor } from './CompanyDomainsEditor';
 import { DeepFindSuggestions } from './DeepFindSuggestions';
-import { registrySkipReason } from '../../../supabase/functions/_shared/deepFindSuggestions';
 import { DeepFindAutoChanges } from './DeepFindAutoChanges';
 import { BlockedOwnDomainNotice } from './BlockedOwnDomainNotice';
 import { Heading } from './Heading';
@@ -22,11 +23,25 @@ const STATUS_ICONS: Record<DeepFindRowWithLead['status'], ReactNode> = {
 };
 
 const STATUS_CLASSES: Record<DeepFindRowWithLead['status'], string> = {
-  queued: 'border-line bg-surface',
-  running: 'border-cyan/60 bg-cyan/10',
+  queued: 'border-line bg-raised',
+  running: 'border-violet-line bg-violet-soft',
   done: 'border-green-500/50 bg-green-500/10',
   failed: 'border-red-500/50 bg-red-500/10',
-  skipped: 'border-line bg-surface',
+  skipped: 'border-line bg-raised',
+};
+
+/** Left edge and pill colours by how much the lead needs the user: magenta for most, violet to review, quiet for nothing. */
+const PRIORITY_EDGE: Record<DeepFindPriority, string> = {
+  most: 'border-line border-l-attention',
+  some: 'border-line border-l-violet-line',
+  working: 'border-line border-l-line',
+  none: 'border-line border-l-line',
+};
+const PRIORITY_PILL: Record<DeepFindPriority, string> = {
+  most: 'bg-attention-soft text-attention',
+  some: 'bg-violet-soft text-link',
+  working: 'bg-surface text-muted',
+  none: 'bg-surface text-muted',
 };
 
 /** One titled block inside a lead result. */
@@ -43,24 +58,29 @@ function Section({ title, level, children }: { title: string; level: number; chi
  * with their role, and the names to check.
  */
 export function DeepFindLeadResult({ row, level = 2 }: { row: DeepFindRowWithLead; level?: number }) {
-  const details = readDeepFindDetails(row.domains);
-  // Only the officer step waits for this choice; everything else already ran (the row is done).
-  const registrySkipped = registrySkipReason(row.lead ?? {});
-  const openChoice = details.companyCandidates.length > 0 && !row.lead?.company_number && !registrySkipped;
-  const toCheck = [...details.unverified, ...details.namedByWeb, ...details.namedOnSite];
+  const { details, registrySkipped, openChoice, toCheck, toReview, priority } = deepFindRowFlags(row);
+  // Leads that need a decision open by themselves; the rest stay folded until asked for.
+  const [open, setOpen] = useState(priority === 'most');
   return (
-    <li className="flex min-w-0 flex-col gap-4 rounded-xl border border-line bg-card p-4 text-sm text-offwhite">
+    <li className={`flex min-w-0 flex-col gap-4 rounded-surface border border-l-4 bg-raised p-4 text-sm text-offwhite shadow-raised ${PRIORITY_EDGE[priority]}`}>
       <div className="flex flex-wrap items-center gap-2">
-        <Heading level={level} className="min-w-0 flex-1 break-words font-heading text-base font-bold">{row.lead?.business_name ?? 'A lead you cannot see'}</Heading>
+        <Heading level={level} className="min-w-0 flex-1 font-heading text-base font-bold">
+          <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex min-h-11 w-full cursor-pointer items-center gap-2 text-left focus-visible:outline-2 focus-visible:outline-focus">
+            <ChevronDown className={`h-4 w-4 shrink-0 text-muted transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} aria-hidden />
+            <span className="break-words">{row.lead?.business_name ?? 'A lead you cannot see'}</span>
+          </button>
+        </Heading>
+        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${PRIORITY_PILL[priority]}`}>{PRIORITY_LABEL[priority]}{toReview > 0 && priority === 'some' ? `: ${toReview}` : ''}</span>
         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${STATUS_CLASSES[row.status]}`}>{STATUS_ICONS[row.status]}{DEEP_FIND_STATUS_LABELS[row.status]}</span>
         {row.status === 'done' && (
-          <span className="inline-flex items-center rounded-full border border-line bg-surface px-2.5 py-1 text-xs font-semibold">{row.people_found === 1 ? '1 person added' : `${row.people_found} people added`}</span>
+          <span className="inline-flex items-center rounded-full border border-line bg-raised px-2.5 py-1 text-xs font-semibold">{row.people_found === 1 ? '1 person added' : `${row.people_found} people added`}</span>
         )}
       </div>
+      {open && <div className="flex min-w-0 flex-col gap-4">
       {row.lead && <BlockedOwnDomainNotice leadId={row.lead_id} lead={row.lead} />}
       {row.reason && <p>{row.reason}</p>}
       {openChoice && (
-        <section className="flex flex-col gap-2 rounded-xl border-2 border-violet-line bg-violet/10 p-3.5">
+        <section className="flex flex-col gap-2 rounded-surface border-2 border-violet-line bg-violet-soft p-3.5">
           <Heading level={level + 1} className="flex items-center gap-2 font-heading text-base font-bold"><AlertTriangle size={18} aria-hidden className="shrink-0" />Needs your decision: choose the right company</Heading>
           <p className="text-[13px]">
             Deep find carried on with everything else. Only the company&apos;s officers wait for this: once you choose, they are
@@ -71,13 +91,13 @@ export function DeepFindLeadResult({ row, level = 2 }: { row: DeepFindRowWithLea
       )}
       {registrySkipped && <p role="status">{registrySkipped === 'not_uk' ? 'Companies House skipped: this is not a UK company.' : 'Company matches dismissed for this lead.'}</p>}
       {details.websiteSuspect && (
-        <p role="status" className="flex items-start gap-2 rounded-xl border-2 border-amber-500/60 bg-amber-500/10 p-3">
+        <p role="status" className="flex items-start gap-2 rounded-surface border-2 border-amber-500/60 bg-amber-500/10 p-3">
           <AlertTriangle size={18} aria-hidden className="mt-0.5 shrink-0" />
           <span><span className="font-semibold">Check the website: </span>This website may belong to a different company. {details.websiteReasons.join(' ')}</span>
         </p>
       )}
       {details.dismissedPeople.length > 0 && (
-        <section className="flex flex-col gap-2 rounded-xl border-2 border-amber-500/60 bg-amber-500/10 p-3" aria-label="Dismissed people skipped">
+        <section className="flex flex-col gap-2 rounded-surface border-2 border-amber-500/60 bg-amber-500/10 p-3" aria-label="Dismissed people skipped">
           <p className="flex items-start gap-2">
             <AlertTriangle size={18} aria-hidden className="mt-0.5 shrink-0" />
             <span><span className="font-semibold">{joinNames(details.dismissedPeople.map((p) => p.name))}</span> {details.dismissedPeople.length === 1 ? 'was' : 'were'} dismissed earlier, so Deep find skipped them.</span>
@@ -91,12 +111,12 @@ export function DeepFindLeadResult({ row, level = 2 }: { row: DeepFindRowWithLea
       {details.people.length > 0 && (
         <Section title="People" level={level + 1}>
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {details.people.map((p, i) => <li key={`${p.name}:${i}`} className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-line bg-surface/50 p-2.5">
+            {details.people.map((p, i) => <li key={`${p.name}:${i}`} className="flex min-w-0 flex-col gap-1.5 rounded-control border border-line bg-raised p-2.5">
               <span className="break-words font-semibold">{p.name}</span>
               {p.role && <span className="break-words text-[13px]">{p.role}</span>}
               <span className="flex flex-wrap gap-1.5">
-                {p.source && <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs font-semibold">{p.source}</span>}
-                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${p.email_found ? 'border-green-500/50 bg-green-500/10' : 'border-line bg-surface'}`}>
+                {p.source && <span className="rounded-full border border-line bg-raised px-2 py-0.5 text-xs font-semibold">{p.source}</span>}
+                <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${p.email_found ? 'border-green-500/50 bg-green-500/10' : 'border-line bg-raised'}`}>
                   {p.email_found ? <MailCheck size={12} aria-hidden /> : <MailX size={12} aria-hidden />}{p.email_found ? 'Email found' : 'Email not found'}
                 </span>
               </span>
@@ -108,7 +128,7 @@ export function DeepFindLeadResult({ row, level = 2 }: { row: DeepFindRowWithLea
       {row.lead && <DeepFindAutoChanges headingLevel={level + 1} key={`${row.id}:${row.updated_at}`} leadId={row.lead_id} changes={details.autoApplied} />}
       <CompanyDomainsEditor headingLevel={level + 1} leadId={row.lead_id} domains={details.domains} />
       {details.steps.length > 0 && (
-        <details className="rounded-lg border border-line bg-surface/50 p-3">
+        <details className="rounded-control border border-line bg-raised p-3">
           <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-violet-line">What Deep find did ({details.steps.length} {details.steps.length === 1 ? 'step' : 'steps'})</summary>
           <ul className="mt-2 flex list-disc flex-col gap-2 pl-5 text-[13px] leading-relaxed">
             {details.steps.map((s, i) => <li key={i}>{s}</li>)}
@@ -116,6 +136,7 @@ export function DeepFindLeadResult({ row, level = 2 }: { row: DeepFindRowWithLea
         </details>
       )}
       {row.lead && row.status === 'done' && <QueuedChecksLine leadId={row.lead_id} runId={row.run_id} />}
+      </div>}
     </li>
   );
 }

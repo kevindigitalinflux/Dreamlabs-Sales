@@ -33,10 +33,10 @@ export function SharedPipelineBanner() {
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-cyan/40 bg-cyan/10 p-4">
+    <div className="flex flex-col gap-2 rounded-surface border border-violet-line bg-violet-soft p-4">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 text-sm font-semibold">
-          <Eye className="h-4 w-4 text-cyan" aria-hidden />
+          <Eye className="h-4 w-4 text-link" aria-hidden />
           {permission === 'edit'
             ? "You're viewing a pipeline shared with you. Fork it to work your own copy."
             : "You're viewing a shared pipeline (read-only)."}

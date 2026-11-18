@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { Radar } from 'lucide-react';
+import { Radar, ScanSearch, Target } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useOrg } from '../hooks/useOrg';
 import { useOrgApiSettings } from '../hooks/useOrgApiSettings';
@@ -10,6 +10,7 @@ import { StepProgress } from '../components/ui/StepProgress';
 import { Input, SelectField, Textarea } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { SectionTitle } from '../components/ui/SectionTitle';
 import { Badge } from '../components/ui/Badge';
 import { IcpSelect } from '../components/emails/IcpSelect';
 import { useIcps } from '../hooks/useIcps';
@@ -89,8 +90,8 @@ export function Scraper() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <header className="flex items-center gap-3">
-        <Radar className="h-6 w-6 text-cyan" aria-hidden />
-        <h1 className="text-[28px] font-extrabold">Find leads</h1>
+        <Radar className="h-6 w-6 text-link" aria-hidden />
+        <h1 className="text-[28px] font-bold">Find leads</h1>
       </header>
       <StepProgress step={step} total={TOTAL_STEPS} />
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
@@ -98,7 +99,7 @@ export function Scraper() {
       {step === 1 && (
         <Card>
           <div className="flex flex-col gap-3">
-            <p className="font-semibold">Describe your ideal customer</p>
+            <SectionTitle icon={Target}>Describe your ideal customer</SectionTitle>
             <IcpSelect
               icps={icps}
               value={icpId}
@@ -122,16 +123,16 @@ export function Scraper() {
       {step === 2 && icp && (
         <Card>
           <div className="flex flex-col gap-3">
-            <p className="font-semibold">Here's what I picked up</p>
+            <SectionTitle icon={ScanSearch}>Here's what I picked up</SectionTitle>
             <div className="flex flex-wrap gap-2">
-              <Badge className="bg-violet/15 text-violet">Country: {icp.country === 'GB' ? 'United Kingdom' : icp.country === 'IE' ? 'Ireland' : icp.country === 'US' ? 'United States' : 'Other'}</Badge>
-              {icp.location && <Badge className="bg-violet/15 text-violet">Location: {icp.location}</Badge>}
-              {icp.industry && <Badge className="bg-violet/15 text-violet">Industry: {icp.industry}</Badge>}
-              {icp.min_staff != null && <Badge className="bg-violet/15 text-violet">Min staff: {icp.min_staff}</Badge>}
+              <Badge className="bg-violet-soft text-link">Country: {icp.country === 'GB' ? 'United Kingdom' : icp.country === 'IE' ? 'Ireland' : icp.country === 'US' ? 'United States' : 'Other'}</Badge>
+              {icp.location && <Badge className="bg-violet-soft text-link">Location: {icp.location}</Badge>}
+              {icp.industry && <Badge className="bg-violet-soft text-link">Industry: {icp.industry}</Badge>}
+              {icp.min_staff != null && <Badge className="bg-violet-soft text-link">Min staff: {icp.min_staff}</Badge>}
               {(icp.min_rating != null || icp.max_rating != null) && (
-                <Badge className="bg-violet/15 text-violet">Rating: {icp.min_rating ?? '?'}–{icp.max_rating ?? '?'}</Badge>
+                <Badge className="bg-violet-soft text-link">Rating: {icp.min_rating ?? '?'}–{icp.max_rating ?? '?'}</Badge>
               )}
-              {icp.max_reviews != null && <Badge className="bg-violet/15 text-violet">Max reviews: {icp.max_reviews}</Badge>}
+              {icp.max_reviews != null && <Badge className="bg-violet-soft text-link">Max reviews: {icp.max_reviews}</Badge>}
             </div>
             <SelectField label="Search country" value={icp.country} onChange={(e) => setIcp({ ...icp, country: e.target.value as IcpParams['country'] })}>
               <option value="GB">United Kingdom</option><option value="IE">Ireland</option>
@@ -160,7 +161,7 @@ export function Scraper() {
       {step === 4 && (
         <Card>
           <div className="flex flex-col gap-3">
-            <p className="font-semibold">Ready to search {selectedSources.map((s) => SOURCE_NAMES[s]).join(' and ')}</p>
+            <SectionTitle icon={Radar}>Ready to search {selectedSources.map((s) => SOURCE_NAMES[s]).join(' and ')}</SectionTitle>
             <p className="text-sm text-muted">This runs in the background — you'll be taken to a live results page.</p>
             <label className="flex min-h-11 items-center gap-2">
               <input type="radio" name="pipeline-choice" checked={pipelineChoice === 'existing'} onChange={() => setPipelineChoice('existing')} className="h-4 w-4 accent-violet-500" />

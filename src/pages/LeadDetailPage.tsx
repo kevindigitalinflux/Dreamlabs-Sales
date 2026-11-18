@@ -1,18 +1,19 @@
 import { useState } from 'react';
 import { useParams } from 'react-router';
-import { FileQuestion, MapPin, Plus } from 'lucide-react';
+import { CalendarClock, Contact, FileQuestion, Handshake, Mail, Plus, Send } from 'lucide-react';
 import { useLead } from '../hooks/useLead';
 import { useLeadNotes } from '../hooks/useLeadNotes';
 import { useProfiles } from '../hooks/useProfiles';
-import { STAGES, formatCurrency, initials } from '../lib/utils';
+import { STAGES, dueLabel, formatCurrency, isOverdue, packageLabel } from '../lib/utils';
 import type { Stage } from '../types';
 import { Button } from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
 import { SelectField } from '../components/ui/Input';
 import { Skeleton } from '../components/ui/Skeleton';
 import { EmptyState } from '../components/ui/EmptyState';
-import { StageBadge } from '../components/pipeline/StageBadge';
-import { ReadinessBadge } from '../components/pipeline/ReadinessBadge';
+import { Collapsible } from '../components/ui/Collapsible';
+import { SectionTitle } from '../components/ui/SectionTitle';
+import { Tabs, TabPanel } from '../components/ui/Tabs';
+import { LeadDetailHeader } from '../components/pipeline/LeadDetailHeader';
 import { NextActionEditor } from '../components/pipeline/NextActionEditor';
 import { ContactInfo, PipelineInfo } from '../components/pipeline/LeadPanelSections';
 import { DecisionMakersCard } from '../components/pipeline/DecisionMakersCard';
@@ -23,121 +24,124 @@ import { EmailComposer } from '../components/emails/EmailComposer';
 import { EnrollmentControl } from '../components/emails/EnrollmentControl';
 import { LeadReplies } from '../components/emails/LeadReplies';
 import { PainPointCard } from '../components/pipeline/PainPointCard';
+import { DeepFindModal } from '../components/deepfind/DeepFindModal';
 
-/** Full lead record (SPEC.md §6 "Lead Detail Page") — 8 sections, vertical scroll. */
+/** Full lead record: identity, value and actions on top, then tabs with the detail folded into sections. */
 export function LeadDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { lead, loading, error, updateLead } = useLead(id ?? 'none');
   const { notes, loading: notesLoading, addNote, updateNote, deleteNote } = useLeadNotes(id ?? 'none');
   const { profiles } = useProfiles();
+  const [tab, setTab] = useState('overview');
   const [noteOpen, setNoteOpen] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [deepFindOpen, setDeepFindOpen] = useState(false);
 
   function authorName(userId: string | null): string {
     const p = profiles.find((x) => x.id === userId);
     return p?.full_name ?? p?.email ?? 'Teammate';
   }
 
-  if (loading) return <Skeleton className="h-80 w-full max-w-3xl" />;
+  if (loading) return <Skeleton className="h-80 w-full max-w-4xl" />;
   if (error || !lead) {
     return <EmptyState icon={FileQuestion} title="Lead not found" hint="It may have been removed, or you may not have access to it." />;
   }
 
-  const assignedProfile = profiles.find((p) => p.id === lead.assigned_to);
+  const assignee = profiles.find((p) => p.id === lead.assigned_to);
+  const save = (patch: Parameters<typeof updateLead>[0]) => updateLead(patch);
+  const overdue = isOverdue(lead.next_action_date);
+  const contactHint = [lead.phone ? 'Phone' : null, lead.email ? 'Email' : null, lead.website ? 'Website' : null].filter(Boolean).join(', ') || 'None yet';
+  const dealHint = [packageLabel(lead.package_tier), lead.deal_value !== null ? formatCurrency(lead.deal_value) : null].filter((x) => x && x !== 'None').join(', ') || 'Nothing set';
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4 pb-24 md:pb-4">
-      <header className="flex flex-wrap items-center gap-3">
-        <h1 className="text-[28px] font-extrabold">{lead.business_name}</h1>
-        <StageBadge stage={lead.stage} />
-        <ReadinessBadge readiness={lead.readiness} missing={lead.readiness_missing} />
-        {assignedProfile && (
-          <span title={assignedProfile.full_name ?? assignedProfile.email} className="flex h-8 w-8 items-center justify-center rounded-full bg-purple text-xs font-bold text-on-accent">
-            {initials(assignedProfile.full_name ?? assignedProfile.email)}
-          </span>
-        )}
-        {lead.deal_value !== null && <span className="ml-auto font-heading text-[22px] font-bold text-cyan">{formatCurrency(lead.deal_value)}</span>}
-        <Button variant="secondary" onClick={() => setEmailOpen(true)}>Draft email</Button>
-      </header>
+    <div className="mx-auto flex max-w-4xl flex-col gap-5 pb-24 md:pb-4">
+      <LeadDetailHeader
+        lead={lead}
+        assigneeName={assignee ? assignee.full_name ?? assignee.email : null}
+        onTogglePriority={() => void updateLead({ is_priority: !lead.is_priority })}
+        onEmail={() => setEmailOpen(true)}
+        onDeepFind={() => setDeepFindOpen(true)}
+        onNote={() => setNoteOpen(true)}
+      />
 
-      {(lead.address || lead.city || lead.postcode) && (
-        <p className="flex items-center gap-2 text-sm text-muted">
-          <MapPin className="h-4 w-4" aria-hidden />
-          {[lead.address, lead.city, lead.postcode].filter(Boolean).join(', ')}
-        </p>
-      )}
+      <Tabs label="Lead sections" value={tab} onChange={setTab} tabs={[
+        { id: 'overview', label: 'Overview' },
+        { id: 'contacts', label: 'Contacts' },
+        { id: 'notes', label: 'Notes and emails', count: notes.length || undefined },
+        { id: 'history', label: 'Calls and activity' },
+      ]} />
 
-      <Card>
-        <h2 className="mb-2 text-[18px] font-bold">Contact</h2>
-        <ContactInfo lead={lead} onSave={(patch) => updateLead(patch)} />
-      </Card>
-      <LeadReplies leadId={lead.id} />
-      <PainPointCard leadId={lead.id} icpId={lead.icp_id} refreshKey={notes} />
-
-      <Card>
-        <h2 className="mb-2 text-[18px] font-bold">Decision Makers</h2>
-        <DecisionMakersCard leadId={lead.id} lead={lead} onSave={(patch) => updateLead(patch)} />
-      </Card>
-
-      <Card>
-        <h2 className="mb-2 text-[18px] font-bold">Pipeline</h2>
-        <div className="mb-3">
-          <SelectField label="Stage" value={lead.stage} onChange={(e) => void updateLead({ stage: e.target.value as Stage })}>
-            {STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </SelectField>
+      <TabPanel id="overview" active={tab === 'overview'}>
+        <div className="flex flex-col gap-3">
+          <div className={`rounded-surface border border-l-4 border-line p-4 shadow-raised ${overdue ? 'border-l-attention bg-attention-soft' : 'border-l-violet-line bg-raised'}`}>
+            <p className="text-[13px] text-muted">Next action</p>
+            <b className="block font-heading text-[17px]">{lead.next_action_note ?? 'No next action set'}</b>
+            {lead.next_action_date && <span className={`text-sm ${overdue ? 'font-medium text-attention' : 'text-muted'}`}>{dueLabel(lead.next_action_date)}</span>}
+          </div>
+          <Collapsible icon={CalendarClock} title="Change next action" summary="Date and note"><NextActionEditor lead={lead} onSave={save} /></Collapsible>
+          <Collapsible icon={Contact} title="Contact details" summary={contactHint} defaultOpen><ContactInfo lead={lead} onSave={save} /></Collapsible>
+          <Collapsible icon={Handshake} title="Deal" summary={dealHint}>
+            <div className="flex flex-col gap-4">
+              <SelectField label="Stage" value={lead.stage} onChange={(e) => void updateLead({ stage: e.target.value as Stage })}>
+                {STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </SelectField>
+              <PipelineInfo lead={lead} onSave={save} />
+            </div>
+          </Collapsible>
+          <Collapsible icon={Send} title="Follow-up emails" summary="Sequence and pain point">
+            <div className="flex flex-col gap-4">
+              <EnrollmentControl lead={lead} />
+              <PainPointCard leadId={lead.id} icpId={lead.icp_id} refreshKey={notes} />
+            </div>
+          </Collapsible>
         </div>
-        <PipelineInfo lead={lead} onSave={(patch) => updateLead(patch)} />
-      </Card>
+      </TabPanel>
 
-      <Card>
-        <h2 className="mb-2 text-[18px] font-bold">Next action</h2>
-        <NextActionEditor lead={lead} onSave={(patch) => updateLead(patch)} />
-      </Card>
+      <TabPanel id="contacts" active={tab === 'contacts'}>
+        <DecisionMakersCard leadId={lead.id} lead={lead} onSave={save} />
+      </TabPanel>
 
-      <Card>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-[18px] font-bold">Notes</h2>
-          <Button variant="secondary" onClick={() => setNoteOpen(true)}>Add note</Button>
+      <TabPanel id="notes" active={tab === 'notes'}>
+        <div className="flex flex-col gap-5">
+          <LeadReplies leadId={lead.id} />
+          <section className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <SectionTitle icon={Mail} count={notes.length}>Notes</SectionTitle>
+              <Button variant="secondary" onClick={() => setNoteOpen(true)}>Add note</Button>
+            </div>
+            <NotesTimeline notes={notes} loading={notesLoading} authorName={authorName} onEditNote={updateNote} onDeleteNote={deleteNote} />
+          </section>
+          <section className="flex flex-col gap-3">
+            <SectionTitle icon={Send}>Emails sent</SectionTitle>
+            <EmailLogSection leadId={lead.id} />
+          </section>
         </div>
-        <NotesTimeline notes={notes} loading={notesLoading} authorName={authorName} onEditNote={updateNote} onDeleteNote={deleteNote} />
-      </Card>
+      </TabPanel>
 
-      <Card>
-        <h2 className="mb-2 text-[18px] font-bold">Emails</h2>
-        <EmailLogSection leadId={lead.id} />
-      </Card>
-
-      <Card>
-        <h2 className="mb-2 text-[18px] font-bold">Calls</h2>
-        <CallHistorySection leadId={lead.id} />
-      </Card>
-
-      <Card>
-        <h2 className="mb-2 text-[18px] font-bold">Sequences</h2>
-        <EnrollmentControl lead={lead} />
-      </Card>
-
-      <Card>
-        <h2 className="mb-2 text-[18px] font-bold">Activity</h2>
-        <ActivityHistory notes={notes} loading={notesLoading} />
-      </Card>
+      <TabPanel id="history" active={tab === 'history'}>
+        <div className="flex flex-col gap-5">
+          <section className="flex flex-col gap-3">
+            <SectionTitle icon={Contact}>Calls</SectionTitle>
+            <CallHistorySection leadId={lead.id} />
+          </section>
+          <section className="flex flex-col gap-3">
+            <SectionTitle icon={CalendarClock}>Activity</SectionTitle>
+            <ActivityHistory notes={notes} loading={notesLoading} />
+          </section>
+        </div>
+      </TabPanel>
 
       <button
         type="button"
         onClick={() => setNoteOpen(true)}
         aria-label="Add note"
-        className="fixed bottom-20 right-4 z-40 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-violet text-on-accent shadow-lg md:hidden"
+        className="fixed bottom-20 right-4 z-40 flex h-14 w-14 cursor-pointer items-center justify-center rounded-full bg-linear-to-br from-violet to-purple text-on-accent shadow-glow md:hidden"
       >
         <Plus className="h-6 w-6" aria-hidden />
       </button>
-      <NoteComposer
-        open={noteOpen}
-        onClose={() => setNoteOpen(false)}
-        lead={lead}
-        addNote={addNote}
-        onUpdateLead={(patch) => updateLead(patch)}
-      />
+      <NoteComposer open={noteOpen} onClose={() => setNoteOpen(false)} lead={lead} addNote={addNote} onUpdateLead={save} />
       <EmailComposer lead={lead} open={emailOpen} onClose={() => setEmailOpen(false)} />
+      <DeepFindModal open={deepFindOpen} leadIds={[lead.id]} onClose={() => setDeepFindOpen(false)} />
     </div>
   );
 }

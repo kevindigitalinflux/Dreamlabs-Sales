@@ -40,7 +40,7 @@ export function DialerConfig() {
   if (error) {
     return (
       <div className="mx-auto flex max-w-2xl flex-col gap-4">
-        <h1 className="text-[28px] font-extrabold">Power dialer</h1>
+        <h1 className="text-[28px] font-bold">Power dialer</h1>
         <Card>
           <p role="alert" className="text-sm text-danger">Could not load your dialer settings — {error}</p>
         </Card>
@@ -51,7 +51,7 @@ export function DialerConfig() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <header className="flex items-center gap-3">
-        <h1 className="text-[28px] font-extrabold">Power dialer</h1>
+        <h1 className="text-[28px] font-bold">Power dialer</h1>
         {settings?.is_verified && (
           <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-success">
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Verified

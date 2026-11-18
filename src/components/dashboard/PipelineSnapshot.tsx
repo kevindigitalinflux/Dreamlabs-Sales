@@ -14,7 +14,7 @@ export function PipelineSnapshot({ leads }: { leads: Lead[] }) {
           <Link
             key={s.value}
             to={`/pipeline/list?stage=${s.value}`}
-            className={`flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:opacity-80 ${STAGE_BADGE_CLASSES[s.value]}`}
+            className={`flex min-h-11 items-center gap-2 rounded-control px-3 text-sm font-semibold hover:opacity-80 ${STAGE_BADGE_CLASSES[s.value]}`}
           >
             <Icon className="h-4 w-4" aria-hidden />
             {s.label}

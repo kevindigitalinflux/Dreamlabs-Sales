@@ -10,6 +10,8 @@ interface ModalProps {
   children: ReactNode;
   /** Optional actions pinned to the dialog's bottom edge, outside the scrolling body. */
   footer?: ReactNode;
+  /** `wide` is for dialogs with two columns (an editor beside a preview). */
+  size?: 'md' | 'wide';
 }
 
 /**
@@ -17,7 +19,7 @@ interface ModalProps {
  * Shift+Tab stay inside the dialog; on close, focus returns to the control that opened it. An Escape already
  * handled inside (for example by the select listbox) closes only that, not the dialog.
  */
-export function Modal({ open, onClose, title, children, footer }: ModalProps) {
+export function Modal({ open, onClose, title, children, footer, size = 'md' }: ModalProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -50,8 +52,9 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
   }
 
   if (!open) return null;
+  const width = size === 'wide' ? 'max-w-6xl' : 'max-w-lg';
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose} role="presentation">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/70 p-4" onClick={onClose} role="presentation">
       <div
         ref={dialogRef}
         role="dialog"
@@ -60,8 +63,8 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
         tabIndex={-1}
         onKeyDown={onDialogKeyDown}
         className={footer
-          ? 'flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-line bg-card outline-none'
-          : 'max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-line bg-card p-6 outline-none'}
+          ? `flex max-h-[90vh] w-full ${width} flex-col overflow-hidden rounded-surface border border-line bg-card shadow-raised outline-none`
+          : `max-h-[90vh] w-full ${width} overflow-y-auto rounded-surface border border-line bg-card p-6 shadow-raised outline-none`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className={footer ? 'flex shrink-0 items-center justify-between gap-4 px-6 pb-4 pt-6' : 'mb-4 flex items-center justify-between gap-4'}>
@@ -70,7 +73,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted hover:bg-surface hover:text-offwhite focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-line"
+            className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-control text-muted hover:bg-surface hover:text-offwhite focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-line"
           >
             <X className="h-5 w-5" aria-hidden />
           </button>

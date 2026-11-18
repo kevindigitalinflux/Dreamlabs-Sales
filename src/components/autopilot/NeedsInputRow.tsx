@@ -25,7 +25,7 @@ export function NeedsInputRow({ row, onChanged, onRetry, canReview,externalBusy=
   const [session, setSession] = useState<{ lead: Lead; log: EmailLog } | null>(null);
 
   if (row.resolution === 'discarded' || row.resolution === 'no_draft' || !row.email_log_id) {
-    return <Link to={`/pipeline/leads/${row.lead_id}`} className="text-sm font-semibold text-cyan hover:underline">Open lead to handle it</Link>;
+    return <Link to={`/pipeline/leads/${row.lead_id}`} className="text-sm font-semibold text-link hover:underline">Open lead to handle it</Link>;
   }
   if (row.resolution === 'checking') return <span className="text-sm text-muted">Checking draft...</span>;
   if (row.resolution === 'lookup_failed') {

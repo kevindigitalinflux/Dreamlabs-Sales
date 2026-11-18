@@ -26,15 +26,15 @@ export function OutreachSection({ data, isAdmin }: { data: AnalyticsData; isAdmi
           <h3 className="mb-2 text-sm font-semibold text-muted">Emails</h3>
           <div className="flex items-center justify-around py-6 text-center">
             <div>
-              <p className="text-3xl font-extrabold text-cyan">{data.emailStats.sent}</p>
+              <p className="text-3xl font-extrabold text-link">{data.emailStats.sent}</p>
               <p className="text-xs text-muted">sent</p>
             </div>
             <div>
-              <p className="text-3xl font-extrabold text-cyan">{data.emailStats.replies}</p>
+              <p className="text-3xl font-extrabold text-link">{data.emailStats.replies}</p>
               <p className="text-xs text-muted">replies</p>
             </div>
             <div>
-              <p className="text-3xl font-extrabold text-cyan">{Math.round(data.emailStats.replyRate * 100)}%</p>
+              <p className="text-3xl font-extrabold text-link">{Math.round(data.emailStats.replyRate * 100)}%</p>
               <p className="text-xs text-muted">reply rate</p>
             </div>
           </div>
@@ -48,7 +48,7 @@ export function OutreachSection({ data, isAdmin }: { data: AnalyticsData; isAdmi
         <Card>
           <h3 className="mb-2 text-sm font-semibold text-muted">LinkedIn</h3>
           <div className="flex flex-col items-center justify-center gap-1 py-8 text-center">
-            <span className="text-4xl font-extrabold text-cyan">{data.linkedinSent}</span>
+            <span className="text-4xl font-extrabold text-link">{data.linkedinSent}</span>
             <span className="text-sm text-muted">DMs sent</span>
           </div>
         </Card>
@@ -57,11 +57,11 @@ export function OutreachSection({ data, isAdmin }: { data: AnalyticsData; isAdmi
           <h3 className="mb-2 text-sm font-semibold text-muted">Scraper yield</h3>
           <div className="flex items-center justify-around py-6 text-center">
             <div>
-              <p className="text-3xl font-extrabold text-cyan">{data.scraperYield.found}</p>
+              <p className="text-3xl font-extrabold text-link">{data.scraperYield.found}</p>
               <p className="text-xs text-muted">found</p>
             </div>
             <div>
-              <p className="text-3xl font-extrabold text-cyan">{data.scraperYield.approved}</p>
+              <p className="text-3xl font-extrabold text-link">{data.scraperYield.approved}</p>
               <p className="text-xs text-muted">approved</p>
             </div>
           </div>
@@ -70,7 +70,7 @@ export function OutreachSection({ data, isAdmin }: { data: AnalyticsData; isAdmi
         <Card className="md:col-span-2">
           <h3 className="mb-2 text-sm font-semibold text-muted">Autopilot spend</h3>
           <div className="flex flex-col items-center justify-center gap-1 py-8 text-center">
-            <span className="text-4xl font-extrabold text-cyan">${(data.autopilotSpendCents / 100).toFixed(2)}</span>
+            <span className="text-4xl font-extrabold text-link">${(data.autopilotSpendCents / 100).toFixed(2)}</span>
           </div>
         </Card>
       </div>

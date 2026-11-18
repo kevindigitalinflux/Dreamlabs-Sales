@@ -13,8 +13,8 @@ export function ReplyBanner() {
   const key = alerts.map(a => a.reply_id).sort().join(':');
   if (!count || key === dismissed) return null;
   const first = alerts[0]?.reply;
-  return <div className="flex flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-2 text-sm" role="status">
-    <Link className="min-w-0 flex-1 break-words underline" to="/emails?tab=replies">{count} new {count === 1 ? 'reply' : 'replies'}{first ? ` — ${first.lead?.business_name ?? 'Lead'}: ${first.preview.split('\n')[0]}` : ''}</Link>
+  return <div className="flex flex-wrap items-center gap-3 border-b border-line bg-raised px-4 py-1 text-sm md:px-7" role="status">
+    <Link className="min-w-0 flex-1 truncate text-link underline" to="/emails?tab=replies">{count} new {count === 1 ? 'reply' : 'replies'}{first ? ` — ${first.lead?.business_name ?? 'Lead'}: ${first.preview.split('\n')[0]}` : ''}</Link>
     <button type="button" className="min-h-11 px-2" onClick={() => setDismissed(key)} aria-label="Dismiss new replies banner">Dismiss</button>
   </div>;
 }

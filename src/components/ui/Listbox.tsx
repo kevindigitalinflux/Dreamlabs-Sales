@@ -198,7 +198,7 @@ export function Listbox({ value, onChange, children, id, ariaLabel, disabled, cl
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
         onKeyDown={handleTriggerKeyDown}
-        className={`flex min-h-11 ${fullWidth ? 'w-full' : ''} cursor-pointer items-center justify-between gap-2 rounded-lg border border-line bg-surface py-2 pl-3 pr-3 text-left text-offwhite outline-none hover:border-violet/60 focus:border-violet disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+        className={`flex min-h-11 md:min-h-10 ${fullWidth ? 'w-full' : ''} cursor-pointer items-center justify-between gap-2 rounded-control border border-field bg-raised py-2 pl-3 pr-3 text-left text-offwhite outline-none hover:border-violet/60 focus:border-violet disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       >
         <span className="truncate">{triggerText ?? ''}</span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-muted transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} aria-hidden />
@@ -217,7 +217,7 @@ export function Listbox({ value, onChange, children, id, ariaLabel, disabled, cl
             width: fullWidth ? coords.width : undefined,
             minWidth: fullWidth ? undefined : coords.width,
           }}
-          className="fixed z-50 max-h-64 overflow-auto rounded-lg border border-line bg-card p-1 shadow-lg outline-none"
+          className="fixed z-50 max-h-64 overflow-auto rounded-surface border border-line bg-card shadow-raised p-1 shadow-raised outline-none"
         >
           {parsed.map((o, gi) =>
             isGroup(o) ? (
@@ -267,12 +267,12 @@ function ListboxOption({ opt, selected, highlighted, onSelect, onHover, indent =
       title={typeof opt.label === 'string' ? opt.label : undefined}
       onMouseEnter={onHover}
       onClick={() => !opt.disabled && onSelect()}
-      className={`flex min-h-9 cursor-pointer items-center justify-between gap-2 rounded-md ${indent ? 'pl-4 pr-2' : 'px-2'} text-sm ${
+      className={`flex min-h-9 cursor-pointer items-center justify-between gap-2 rounded-nested ${indent ? 'pl-4 pr-2' : 'px-2'} text-sm ${
         opt.disabled ? 'cursor-not-allowed opacity-50' : ''
-      } ${highlighted ? 'bg-violet/20 text-offwhite' : 'text-offwhite'} ${selected ? 'font-semibold' : ''}`}
+      } ${highlighted ? 'bg-violet-soft text-offwhite' : 'text-offwhite'} ${selected ? 'font-semibold' : ''}`}
     >
       <span className="truncate">{opt.label}</span>
-      {selected && <Check className="h-4 w-4 shrink-0 text-violet" aria-hidden />}
+      {selected && <Check className="h-4 w-4 shrink-0 text-link" aria-hidden />}
     </li>
   );
 }

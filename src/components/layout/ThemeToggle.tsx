@@ -5,13 +5,13 @@ import { useTheme } from '../../hooks/useTheme';
 export function ThemeToggle() {
   const { theme, toggle } = useTheme();
   return (
-    <div role="group" aria-label="Theme" className="flex items-center gap-1 rounded-lg border border-line p-1">
+    <div role="group" aria-label="Theme" className="flex items-center gap-1 rounded-control border border-line bg-raised p-1">
       <button
         type="button"
         onClick={() => theme !== 'light' && toggle()}
         aria-pressed={theme === 'light'}
         aria-label="Light mode"
-        className={`flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-md ${theme === 'light' ? 'bg-violet text-on-accent' : 'text-muted hover:text-offwhite'}`}
+        className={`flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-nested ${theme === 'light' ? 'bg-linear-to-br from-violet to-purple text-on-accent' : 'text-muted hover:text-offwhite'}`}
       >
         <Sun className="h-4 w-4" aria-hidden />
       </button>
@@ -20,7 +20,7 @@ export function ThemeToggle() {
         onClick={() => theme !== 'dark' && toggle()}
         aria-pressed={theme === 'dark'}
         aria-label="Dark mode"
-        className={`flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-md ${theme === 'dark' ? 'bg-violet text-on-accent' : 'text-muted hover:text-offwhite'}`}
+        className={`flex min-h-9 min-w-9 cursor-pointer items-center justify-center rounded-nested ${theme === 'dark' ? 'bg-linear-to-br from-violet to-purple text-on-accent' : 'text-muted hover:text-offwhite'}`}
       >
         <Moon className="h-4 w-4" aria-hidden />
       </button>

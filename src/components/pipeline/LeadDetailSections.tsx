@@ -29,7 +29,7 @@ export function EmailLogSection({ leadId }: { leadId: string }) {
   return (
     <ul className="flex flex-col gap-2">
       {rows.map((r) => (
-        <li key={r.id} className="flex items-center justify-between rounded-lg bg-surface/50 p-3 text-sm">
+        <li key={r.id} className="flex items-center justify-between rounded-control bg-surface p-3 text-sm">
           <span className="truncate font-semibold">{r.subject}</span>
           <span className="shrink-0 text-xs text-muted">{r.status} · {formatShortDate(r.sent_at)}</span>
         </li>
@@ -92,7 +92,7 @@ export function CallHistorySection({ leadId }: { leadId: string }) {
   return (
     <ul className="flex flex-col gap-2">
       {rows.map((r) => (
-        <li key={r.id} className="flex items-center justify-between rounded-lg bg-surface/50 p-3 text-sm">
+        <li key={r.id} className="flex items-center justify-between rounded-control bg-surface p-3 text-sm">
           <span className="truncate font-semibold">
             {r.direction === 'outbound' ? 'Outbound call' : 'Inbound call'}
             {r.outcome && ` · ${OUTCOME_LABELS[r.outcome]}`}

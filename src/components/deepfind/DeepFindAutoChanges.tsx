@@ -13,7 +13,7 @@ export function AutoChangeRows({ changes, busy, notices, onUndo, headingLevel = 
   return <section className="flex min-w-0 flex-col gap-2 text-offwhite">
     <Heading level={headingLevel} className="font-heading text-sm font-bold">Deep find changed these automatically</Heading>
     <ul className="flex min-w-0 flex-col gap-2">
-      {changes.map((change, index) => <li key={`${change.table}:${change.id}:${change.field}:${index}`} className="flex min-w-0 flex-wrap items-center gap-2 rounded-lg border border-line bg-surface/50 p-3">
+      {changes.map((change, index) => <li key={`${change.table}:${change.id}:${change.field}:${index}`} className="flex min-w-0 flex-wrap items-center gap-2 rounded-control border border-line bg-raised p-3">
         <p className="min-w-0 flex-1 break-words text-sm">{change.table === 'leads' ? 'Lead' : 'Contact'} {change.field.replace(/_/g, ' ')}: {String(change.before ?? '') || 'blank'} → {String(change.after)}</p>
         <Button variant="secondary" disabled={busy || !!notices[index]} aria-label={`Undo ${change.field.replace(/_/g, ' ')} change: ${shortValue(change.before) || 'blank'} to ${shortValue(change.after)}`} onClick={() => onUndo(change, index)}>Undo</Button>
         {notices[index] && <p className="w-full text-[13px]">{notices[index]}</p>}
