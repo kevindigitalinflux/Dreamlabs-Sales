@@ -47,6 +47,7 @@ export async function discoverLeadDomains(
     /** At most this many Hunter requests in discovery (default 12). */
     hunterCap?: number;
     budgetMs: number;
+    webBudgetMs?: number;
     /** Website pages the caller already read (readCompanyPages), so the site is not fetched twice. */
     pages?: string[];
     /** Spends one credit before each paid call; false means the cap is reached and the call is not made. */
@@ -83,6 +84,7 @@ export async function discoverLeadDomains(
     website: websiteDomain ? lead.website : null, websiteDomain, known,
     allow: { hunter: opts.allow.hunter && !!hunterKey, site: opts.allow.site && !!websiteDomain, web: opts.allow.web && !!geminiKey, apollo: !!opts.allow.apollo && !!apolloKey },
     budgetMs: opts.budgetMs,
+    webBudgetMs: opts.webBudgetMs,
   }, {
     now: () => Date.now(),
     hunterByName: async (name, t) => (await spendHunter()

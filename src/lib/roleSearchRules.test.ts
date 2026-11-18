@@ -1,7 +1,28 @@
 import {expect,it} from 'vitest'
-import {cleanRoles,roleLadder,roleQuery,judgeRoleHit} from '../../supabase/functions/_shared/roleSearchRules'
+import {cleanRoles,roleLadder,roleQuery,judgeRoleHit,brandName} from '../../supabase/functions/_shared/roleSearchRules'
 const lead={company:'Acme Offices'},rung={rung:'target' as const,roles:['Facilities Manager']};
 const hit={title:'Jane Doe - Facilities Manager - Acme Offices Ltd | LinkedIn',url:'https://uk.linkedin.com/in/jane-doe-1a2b3c/?trk=x',snippet:'Facilities Manager at Acme Offices'};
+it.each([' - ',' | ',' : ',' ('])('extracts a distinctive brand before the first %s separator',separator=>{
+ expect(brandName('Cleancat'+separator+'Commercial Cleaning Services Dublin','Dublin')).toBe('Cleancat');
+});
+it('uses a brand for queries and accepts the brand company without accepting extra company words',()=>{
+ const company='Cleancat - Commercial Cleaning Services Dublin';
+ const query=roleQuery({company,city:'Dublin',roles:['Founder']});
+ expect(query).toContain('"Cleancat"');expect(query).not.toContain('Commercial Cleaning Services');
+ expect(judgeRoleHit({...hit,title:'Ann Roe - Founder - Cleancat',snippet:'Founder at Cleancat'},{company,city:'Dublin'},{rung:'final',roles:['Founder']})).toMatchObject({ok:true,person:{first:'Ann',last:'Roe',title:'Founder'}});
+ expect(judgeRoleHit({...hit,title:'Ann Roe - Founder - Cleancat Solutions',snippet:'Founder at Cleancat Solutions'},{company,city:'Dublin'},{rung:'final',roles:['Founder']})).toEqual({ok:false,why:'company_mismatch'});
+});
+it('retains the whole name when a proposed brand has no distinctive word',()=>{
+ expect(brandName('Cleaning - Commercial Services Dublin','Dublin')).toBe('Cleaning - Commercial Services');
+ expect(roleQuery({company:'Cleaning - Commercial Services Dublin',city:'Dublin',roles:['Owner']})).toContain('"Cleaning - Commercial Services"');
+ expect(brandName('The Ltd | Commercial Cleaning')).toBe('The Ltd | Commercial Cleaning');
+});
+it('drops only a trailing matching city and preserves undescribed names',()=>{
+ expect(brandName('Cleancat DUBLIN','Dublin')).toBe('Cleancat');
+ expect(brandName('Ninjas Cleaning LTD Dublin Cleaners','Dublin')).toBe('Ninjas Cleaning LTD Dublin Cleaners');
+ expect(brandName('Schoonmaakbedrijf luxenettoyage')).toBe('Schoonmaakbedrijf luxenettoyage');
+ expect(brandName('Dublin Cleaning Services','Dublin')).toBe('Dublin Cleaning Services');
+});
 it.each([
  ['Tom Hall, MBA - Owner - Acme Offices','Tom','Hall'],
  ['Mary J. Blige - CEO - Acme Offices','Mary','Blige'],

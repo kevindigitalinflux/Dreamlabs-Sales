@@ -12,16 +12,16 @@ export async function findRolePeople(input: { company: string; registeredName?: 
     if (out.searches >= 3) break;
     if (input.timeLeftMs() < 20_000) { out.stopped = 'time'; break; }
     out.searches++;
-    const result = await input.provider.search(roleQuery({ company: input.company, city: input.city, roles: rung.roles }));
+    const result = await input.provider.search(roleQuery({ company: input.company, city: input.city, roles: rung.roles }), { company: input.company, registeredName: input.registeredName, city: input.city, country: input.country, roles: rung.roles, rung: rung.rung });
     if (!result.ok) {
       if (result.why !== 'none') { out.stopped = result.why; break; }
       continue;
     }
     out.via.push(result.via);
-    for (const hit of result.hits.slice(0, 8)) {
-      const judged = judgeRoleHit(hit, input, rung);
-      if (!judged.ok || out.people.some(person => displayPersonKey(`${person.first} ${person.last}`) === displayPersonKey(`${judged.person.first} ${judged.person.last}`))) continue;
-      out.people.push(judged.person);
+    const candidates = result.via === 'gemini' ? result.people : result.hits.flatMap(hit => { const judged = judgeRoleHit(hit, input, rung); return judged.ok ? [judged.person] : []; });
+    for (const person of candidates.slice(0, 8)) {
+      if (out.people.some(existing => displayPersonKey(`${existing.first} ${existing.last}`) === displayPersonKey(`${person.first} ${person.last}`))) continue;
+      out.people.push(person);
       if (out.people.length === 2) break;
     }
     if (out.people.length) break;

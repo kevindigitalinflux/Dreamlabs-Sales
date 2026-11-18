@@ -119,7 +119,7 @@ export function teamPeopleForLead(pages: { html: string; url: string }[], trust:
 export function shouldSearchAfterTeam(people: Picked[]): boolean { return !people.some(person => person.rung === 'target'); }
 
 /** Team picks consume the same two slots; fallback picks still allow the ladder to run. */
-export function combineTeamRolePeople(team: Picked[], role: (Omit<Picked, 'sourceUrl' | 'linkedinUrl'> & { linkedinUrl: string })[]): DiscoveredRolePerson[] {
+export function combineTeamRolePeople(team: Picked[], role: (Omit<Picked, 'sourceUrl' | 'linkedinUrl'> & { linkedinUrl: string | null })[]): DiscoveredRolePerson[] {
   const combined = [...team.map(person => ({ ...person, source: 'team_page' as const })), ...role.map(person => ({ ...person, source: 'role_search' as const }))];
   return combined.filter((person, index) => combined.findIndex(other => key(`${other.first} ${other.last}`) === key(`${person.first} ${person.last}`)) === index).slice(0, 2);
 }

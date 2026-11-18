@@ -1,4 +1,5 @@
 import { displayPersonKey, fullestPeople } from './personIdentity.ts';
+import { likelyCountry } from './likelyCountry.ts';
 import { contactPhonePatch, isPlausiblePhone, parsePhone, readPhoneEvidence, type BusinessPhone, type PhoneMetadata } from './phoneNumbers.ts';
 // Import-free review and country rules shared by Deep find and its session UI.
 export interface SavedEmailReplacement { contact_id: string; email: string }
@@ -7,6 +8,7 @@ export interface ReviewLead {
   email?: unknown; additional_emails?: unknown; dismissed_suggestions?: unknown;
   country?: unknown; registry_candidates_rejected?: unknown; owner_name?: unknown;
   phone?: unknown; phone_meta?: Record<string, PhoneMetadata>; website?: unknown;
+  additional_phones?: unknown; address?: unknown; postcode?: unknown;
 }
 export interface ReviewContact {
   id: string; first_name?: unknown; last_name?: unknown; email?: unknown; phone?: unknown; dismissed_at?: unknown; title?: unknown; linkedin_url?: unknown;
@@ -168,7 +170,7 @@ export function planSuggestionAdd(s: ReviewSuggestion, lead: ReviewLead, contact
 }
 
 export function registrySkipReason(lead: ReviewLead): 'not_uk' | 'rejected' | null {
-  if (['IE', 'US', 'OTHER'].includes(String(lead.country))) return 'not_uk';
+  if (likelyCountry(lead) === 'non_GB') return 'not_uk';
   return lead.registry_candidates_rejected === true ? 'rejected' : null;
 }
 

@@ -31,6 +31,93 @@ Read in this order: `docs/superpowers/specs/2026-11-16-ui-refresh-design.md`, th
 **State (2026-11-17, Sonnet):** all eight tasks of the Stage 1 brief are built and committed; full report `docs/UI-REFRESH-STAGE1-BUILD-REPORT.md` (gates green: 3,538 tests, tsc, build, edge check). The only open item is the browser look: nothing has been seen running. Next: Kevin runs `npm run dev`, signs in himself, checks both themes, the menu collapse, the pill and account menu, 400 px width and the signed-out pages; fix what he finds; then Stage 2 (Pipeline and lead record first), each group with its own design and mockup for Kevin. Nothing pushed, merged or deployed.
 
 Parked by Kevin (see `docs/TODO.md`): the sign-in redirect bug.
+## Role company proof from sources only (2026-11-17) — START HERE for local Fix 6
+
+Worktree C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2, branch codex/deepfind-budget. Fix 6 base 0201d9e2d6ea236dfed67df82e59811ea4ae6125; this single commit contains the fix, report and handoff. Resolve git rev-parse HEAD for the exact final tip. Kevin directs; Claude architects/reviews; Codex builds. Read the appended Fix 6 in docs/DEEPFIND-BUDGET-BUILD-REPORT.md before the historical sections.
+
+Gemini's model company field is only a rejection veto. Company proof must come from exact named sourceEvidence rows, preserved as separate lines; unrelated rows in the same grounding chunk cannot supply it. All recognized at/of/Experience/legal-suffix and bounded company phrases are checked, and any mismatch rejects even alongside a match. The role must be bound to a matching company in the same source segment. If the model title's role is not supported there, the stored title uses the proven ladder role. The common SearXNG company comparator was factored without changing its policy or any of its 48 fixtures. Model company no longer enters positive company proof.
+
+Both supplied false accepts now return company_mismatch; the descriptive founder-of-Cleancat and legal-suffix positive examples pass. Real-engine fixtures save no person for either defect. Sixteen new regression tests; all seven gates pass before commit: 276 app files / 3,619 passed / one existing opt-in skip; wrapper 8 / 166 passed; both TypeScript, build, whitespace and edge29 PASS. Three old Gemini fixture evidence strings were strengthened to include actual role words; their assertions are unchanged, and an explicit negative owns-only test now proves role_mismatch. Full changed-fixture inventory is in the report.
+
+No provider/production call, key access, install, spending, SQL, VPS change, push, merge or deployment occurred. No task-owned server. Subscription usage unavailable. Independent review, real source phrasing/accuracy, model/runtime/SQL/concurrency and browser/mobile remain unverified. Incremental redeploy is run-deep-find only; prior unrolled branch changes retain their own broader surface. No frontend/wrapper/migration/secret change for Fix 6. The old single-call permission stays withdrawn. Stop here; Claude reviews the exact tip, then Kevin separately authorizes rollout/live checks. Shared context uses a separate Fix 6 checkpoint and preserves accepted-main and earlier snapshots.
+
+## Grounded people and national US phones (2026-11-17) — START HERE for local continuation
+
+Worktree C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2, branch codex/deepfind-budget. Kevin directs; Claude architects/reviews; Codex builds. Continuation base 02b33b6eed0c2c68cd9e0a4b12153ed9b0ac63d6; Fix 5 is 3b99783; this commit contains Fix 2b and the final continuation report. Resolve git rev-parse HEAD for the exact tip. Read docs/DEEPFIND-BUDGET-BUILD-REPORT.md, appended Continuation. The complete local branch has six implementation commits; latest task has one commit per fix and explicit staging.
+
+Gemini now searches current people in sentences, with a data block and strict name/title/company/linkedin_url objects. It requires nonempty grounding plus same-source name evidence and judgeRolePerson, sharing the unchanged SearXNG judge's name/company/current-role/former-role core. Unsupported/invalid LinkedIn becomes null; the proven person still saves as role_search without enrollment. The real ladder and engine pass structured context, and nullable LinkedIn survives role/team combination. Zero-person diagnostics add people_lines and people_kept to the existing five numeric fields. SearXNG keeps roleQuery and its acceptance policy.
+
+Likely country recognizes ten-digit North American national numbers (area/exchange leading digits 2–9) and optional leading 1. UK/Irish national numbers starting with zero stay unknown. Clean saved company_number again takes precedence over country inference and uses registry profile lookup; this supersedes the earlier no-saved-number exception rule. No country or saved company number is assigned or erased. Changed assertions and all synthetic fixtures are listed in the report.
+
+Each fix had red fixtures before production edits and all seven gates before commit. Fix 5 gates: 276 files / 3,591 app passed; Fix 2b final: 276 / 3,603 app passed, one existing opt-in skip; wrapper 8 / 166 passed; both TypeScript/build/whitespace/edge29 PASS. No provider request, key access, package install, spending, SQL, VPS, merge, push or deployment occurred. No task-owned server was started. Subscription usage unavailable; no paid continuation. Real model grounding, production accuracy/timing/credits, SQL/concurrency/runtime and independent re-review remain unverified. The earlier single-call authorization remains withdrawn.
+
+Stop here. Claude reviews the two continuation commits; Kevin separately authorizes rollout/live checks. The conservative publication union is the same ten functions plus frontend listed in the report, with no wrapper/container/schema/migration/secret change. Shared context is saved in a separate continuation checkpoint, preserving accepted-main and older snapshots. Earlier local/live blocks below are historical, not new production authorization.
+
+## Deep find budget and search status (2026-11-17) — START HERE for local work
+
+Worktree C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2. Branch codex/deepfind-budget from fetched origin/main 3e0f2a310a95bb06480b4232d239c7814b0d8a25. Kevin directs; Claude architects/reviews; Codex builds. Read docs/DEEPFIND-BUDGET-BUILD-REPORT.md. Fixes: f6733ed, b8c188c, 10fe463, then this commit containing Fix 4 and final report. Resolve git rev-parse HEAD for the exact final tip. Four implementation commits, explicit staging, no other writer or worktree write.
+
+Discovery web search starts first with its own capped 25-second budget at both Deep find discovery calls; other discovery keeps its 10-second budget and the 30-second remaining-work reserve. Web does not start below 34 seconds left. likelyCountry reads only saved country, shared-parser international phones, UK/US address evidence and UK TLD, preserving unknown behavior. non_GB skips all registry reads including saved-number profiles and consumes no company registry proof AI credit. It never assigns lead.country. HTTP 503/not_configured becomes a quiet refunded search refusal; the provider skips worker search after the first such refusal and excludes it from SearXNG counts while keeping Gemini fallback unchanged. Role failures log only fixed timeout/http_status/bad_json/network codes, never private text.
+
+All seven gates passed before every fix commit. Final 275 app files / 3,580 passed / one existing opt-in skip; 8 wrapper files / 166 passed; both TypeScript, build, whitespace and edge29 PASS. Report includes the changed step/saved-number/503 assertions and all gate counts. Proposed redeploy union: enrich-leads-bulk, find-decision-makers, generate-email, org-api-settings, run-deep-find, run-lookup-jobs, run-selected-autopilot, run-verify-queue, scrape-companies-house, send-email; frontend also consumes the shared registry helper. No wrapper, migration, schema, secret or environment change. No provider, SQL, VPS, install, spending, merge, push or deployment occurred. No task-owned server was started. Subscription usage is unavailable.
+
+Stop here. Claude reviews the four local commits, then Kevin separately authorizes rollout and live timing/credit/quality checks. Production improvement, real provider/runtime/database/concurrency and browser/mobile behavior remain unverified. Accepted-main vault mirror is preserved; the local branch has its own checkpoint. Older historical production authority below does not authorize rollout of this branch.
+
+## HANDOVER 2026-11-17 (Claude) - START HERE, supersedes every block below
+
+Written for the next Claude session (Opus or Sonnet). Roles unchanged: Kevin directs, Claude plans/reviews/deploys, Codex builds. Every merge, push, deploy, migration, VPS change and role change needs Kevin's explicit yes for that action. Codex briefs start with `# Build brief: <task>`.
+
+### Live now
+- `origin/main` = `b23a591` (docs) on top of `af22083` (verifier defects + stage 2 people). Migrations 076 and 077 applied. 24 edge functions deployed from `af22083`.
+- VPS: wrapper rebuilt from `af22083`; SearXNG container STOPPED and `/opt/lookup-worker/docker-compose.override.yml` blanks the wrapper's `SEARX_URL`, so `/search` answers 503 and role search always uses the Gemini backup. Reason: from the VPS IP Google, Brave and DuckDuckGo block it and Bing ignores `site:linkedin.com/in`. Undo: delete the override, `docker compose up -d --no-deps searxng wrapper`. Snapshot `461084` taken 2026-11-16 22:58 UTC (expires 2026-11-17 22:58).
+- Rollback tags: `checkpoint-2026-11-16-before-verifier-defects` (= `8c1c61b`), `checkpoint-2026-11-16-before-stage2` (= `cf6006e`).
+
+### Score of the full build (runs `dc75adb8`, `0f1f24ea`, `0a44237d`, 86 leads, all done, 0 failed, Hunter 0, nothing enrolled or sent)
+| Set | Ready email | Right-role person (role search/team page) | Titled person | LinkedIn | 2+ contact points |
+|---|---|---|---|---|---|
+| UK/US 50 (baseline before) | 27 (25) | 4 (none existed) | 21 (18) | 1 (1) | 26 (24) |
+| Mr Brush UK 30 | 22 | 4 | 21 | 1 | 21 |
+| DI US 20 | 5 | 0 | 0 | 0 | 5 |
+| Ireland 12 | 6 (5) | 1 | 1 | 0 | 6 |
+| EU 12 | 5 (6) | 0 | 0 | 0 | 5 |
+| Gulf 12 | 7 (7) | 1 | 1 | 1 | 7 |
+Pass marks per 50 (at least 40 proven emails, 40 right-role people, 30 LinkedIn, 40 with 2+ points) are far off. Company-match flags: 10 of 86. Checks: 73 not_found, 71 mailbox_missing, 15 deliverable, 14 exists, 8 catch_all, 6 timeout, **41 skipped by `run_time_limit`** (the three runs took 2 h 50 min, so the 3-hour run backstop cut late checks; worth a look). The 6 role people were not yet checked by hand for wrong company.
+
+### Waiting for Kevin's yes
+Codex branch `codex/role-search-hits` (worktree `dreamlabs-sales-verifier-v2`, tip `104921c`, 2 commits on `b23a591`): Gemini role hits are now kept when Gemini's sources are redirect links (name must appear in a linkedin.com-titled source's text), lead names are cut to their brand part ("Cleancat - Commercial Cleaning Services Dublin" -> "Cleancat"), and a count-only `role_search_fallback_shape` is saved when no hit is kept. Claude reviewed it 2026-11-17: logic matches the brief and the real evidence format in `ai.ts` (`"<uri> <title>"` lines, then `"<uri> <supported segment>"`); gates re-run by Claude: tsc clean, 274 files / 3,540 tests (1 skipped), build, edge typecheck, whitespace all pass. APPROVED. Note: the supported segment is Gemini's own sentence tied to that source, not page text, so a wrong name is still possible; `judgeRoleHit` still checks company and role afterwards.
+Rollout once Kevin says yes: fast-forward push `104921c` to `main`, deploy `run-deep-find` only (no migration, no VPS change), re-run the same 86 leads (copy the insert from Log.md 2026-11-16 23:03 with these three run ids as sources; caps 200/72/180), then read `role_search_fallback_shape` on leads with no hits to learn the real Gemini reply shape.
+
+### Open after that, in order
+1. Why US leads score so low (5 of 20 ready, 0 people).
+2. The 41 checks cut by the run time limit.
+3. Search source decision for Kevin: Gemini only (5,000 free grounded searches a month, about 2 per lead) or a paid search API.
+4. Customer profiles have no target roles (built-in ladder in use); Kevin to supply.
+5. Front end not confirmed live (profile role fields, Gemini usage line), phone width unchecked.
+6. Non-English job titles; stages 3 to 5 not planned; repo `worker/docker-compose.yml` still enables SearXNG.
+
+## Role search hits and brand names (2026-11-16) — START HERE for the local build
+
+Worktree C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2, branch codex/role-search-hits, fetched base b23a5912698687a164e40fe3809a959aebc76d51. Kevin directs, Claude architects/reviews, Codex builds. Read docs/ROLE-SEARCH-HITS-BUILD-REPORT.md. Fix 2 (brands) is 7dadcc2; this commit contains Fix 1 (grounded hits/diagnostic), the final report and this handoff. Resolve git rev-parse HEAD for the final exact tip. Two implementation commits only; explicit paths staged. No other writer, worktree write or task-owned server.
+
+The first quoted Cleancat fixtures failed, then passed. Direct grounded URL matches remain supported; redirect chunks can qualify a valid LinkedIn profile only through their LinkedIn domain title or LinkedIn source host plus same-source first/last name evidence. Existing company/current-role/former-person judgment follows unchanged except for the approved strict brand alternative. role_search_fallback_shape stores only lines_parsed, profile_urls, sources, redirect_sources and linkedin_titled_sources from the latest zero-kept-hit fallback, including interrupted lead summaries. No URLs, names or queries enter that object. Tests prove provider evidence reaches a real engine role contact and diagnostics reach normal/error JSON. No old assertion changed.
+
+Kevin withdrew the one real grounded call before any call and instructed that no local key path be created. Both reply-shape fixtures are synthetic. Real shape is NOT VERIFIED; this task made no provider request. Final seven gates: 274 app files / 3,540 passed / one existing opt-in skip; 8 wrapper files / 166 passed; root/wrapper TypeScript, build, whitespace and edge29 PASS. Fix 2 gates: 3,520 app / 166 wrapper. No install, spending, SQL, migration, VPS, merge, push or deployment occurred. Independent review, real reply shape/live improvement, database/container/browser runtime remain unverified. Subscription usage is unavailable; no paid continuation.
+
+Stop here. Claude reviews both fixes. Static import graph finds only run-deep-find for separately authorized redeployment; no frontend/wrapper/secret/migration change is needed. Keep SearXNG's inherited live state untouched. Do not treat historical rollout permissions below as authorization for this branch. Earlier shared-vault branch snapshots are historical; the new task checkpoint records this branch separately and preserves the accepted-main mirror.
+
+## Status (2026-11-16 23:15 UTC, Claude) - START HERE, supersedes every block below
+
+Roles unchanged: Kevin directs, Claude architect/reviewer/deployer, Codex builder. Every merge, push, deploy, migration and role change needs Kevin's explicit yes for that action.
+
+**Live on `main` `af22083` (deployed 2026-11-16):** verifier v2 defects (check window per lead with a 3-hour run backstop, SMTP stall breaker, Microsoft people always on the exists check) and Deep find stage 2 (role search ladder, people from team pages, monthly Gemini search meter, target and fallback roles on customer profiles). Migrations 076 and 077 applied after rolled-back dry runs. 24 edge functions deployed from `af22083`. Claude re-ran all gates: 274 files / 3,512 tests (1 skipped), wrapper 166, tsc, build, 29-entrypoint edge check, whitespace.
+
+**Rollback tags:** `checkpoint-2026-11-16-before-verifier-defects` (= `8c1c61b`), `checkpoint-2026-11-16-before-stage2` (= `cf6006e`). 076 replaces three queue functions; 077 is additive. Hostinger snapshot `461084` (2026-11-16 22:58 UTC, expires after 24 hours).
+
+**VPS differs from the repo on purpose:** the SearXNG container was deployed and tested, then stopped. From this server Google refused, Brave and DuckDuckGo blocked, Startpage and Mojeek gave nothing, and Bing ignored `site:linkedin.com/in` (0 LinkedIn results in 3 test searches). `/opt/lookup-worker/docker-compose.override.yml` sets the wrapper's `SEARX_URL` to empty so `/search` answers 503 and every role search uses the Gemini backup (1 AI unit per search, up to 3 per lead; without a target rung, 2). Undo: delete the override, `docker compose up -d --no-deps searxng wrapper`. Backups: `/opt/lookup-worker-backups/src-20261116`, `/stage2-20261116`. Do not turn SearXNG back on as it is: non-empty junk results stop the Gemini fallback.
+
+**Scoring runs (started 23:03 UTC, Hunter 0, nothing enrolled or sent):** `dc75adb8-9206-4d41-af11-122286eeeb8f` (DI Dreamlabs: 20 US, 12 Ireland, 12 EU), `0f1f24ea-5a39-4116-af33-42e07e52c269` (DI Dreamlabs: 12 Gulf), `0a44237d-bef7-4a4e-89ec-812abc790de7` (Mr Brush: 30 UK). Baselines on the previous build: UK/US runs `898186fe`, `9ae5c3e5` (ready 25/50, titled person 18/50, LinkedIn 1/50, two contact points 24/50); market runs `ff116748`, `c15ace5a` (ready 18/36, people 0/36). Pass marks per 50 leads: at least 40 proven emails, 40 right-role people, 30 LinkedIn, 40 with two contact points, 0 silent wrong company, hard bounces under 2%. Score with `scripts/deepfind-score.sql` (run ids as a uuid array). Test pipelines in DI Dreamlabs: "Deep find test: Ireland", "EU", "Gulf" (12 Google Places cleaning firms each; never enrol or email them).
+
+**Open, in order:** (1) score the three runs and report to Kevin; (2) search source decision: Gemini only (5,000 free grounded searches a month, shown in the usage panel) or a paid search API (needs Kevin's yes); (3) role search uses the whole lead name, so Google-scraped names with descriptions ("Cleancat - Commercial Cleaning Services Dublin") find and match little: brief Codex to use the brand part; (4) all 17 customer profiles have empty target roles (built-in ladder in use), Kevin to supply roles; (5) front end not confirmed live (profile role fields, Gemini usage line), phone width unchecked; (6) non-English job titles are not matched by the built-in ladder; (7) stages 3 to 5 (markets, contact points, run shape) not planned; (8) repo `worker/docker-compose.yml` still enables SearXNG, decide whether to remove it.
 
 ## Stage 2 review fixes (2026-11-16) — START HERE
 

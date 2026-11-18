@@ -10,7 +10,7 @@ it.each(['IE', 'US', 'OTHER'])('skips registry work for %s without a saved numbe
   const service = { from: vi.fn() };
   const result = await resolveRegistry(service, { id: 'lead', country, raw_lead_id: 'raw' }, 'fake');
   expect(result).toMatchObject({ how: 'not_uk', number: null, candidates: [] });
-  expect(registryStep(result)).toBe('Companies House skipped: this is not a UK company.');
+  expect(registryStep(result)).toBe('Companies House: skipped, this company does not look UK-based.');
   expect(service.from).not.toHaveBeenCalled();
   expect(fetchCompanyProfile).not.toHaveBeenCalled();
   expect(searchCompaniesByName).not.toHaveBeenCalled();
@@ -20,9 +20,19 @@ it('remembers a rejected UK choice without re-searching', async () => {
   expect(await resolveRegistry(service, { id: 'lead', registry_candidates_rejected: true }, 'fake')).toMatchObject({ how: 'rejected', candidates: [] });
   expect(service.from).not.toHaveBeenCalled();
 });
-it.each([undefined, null, 'GB', 'IE', 'US', 'OTHER'])('saved company wins over country and rejection for %s', async (country) => {
+it.each([undefined, null, 'GB'])('saved company wins over rejection for %s', async (country) => {
   vi.mocked(fetchCompanyProfile).mockResolvedValue({ name: 'Example' });
   expect(await resolveRegistry({}, { id: 'lead', country, registry_candidates_rejected: true, company_number: '12345678' }, 'fake')).toMatchObject({ how: 'saved', number: '12345678' });
+});
+it.each(['IE','US','OTHER'])('restores saved company precedence for non-UK %s',async country=>{
+ vi.clearAllMocks();
+ expect(await resolveRegistry({}, {id:'lead',country,company_number:'12345678'},'fake')).toMatchObject({how:'saved',number:'12345678'});
+ expect(fetchCompanyProfile).toHaveBeenCalledExactlyOnceWith('12345678','fake');
+});
+it('uses a saved registry number despite a US phone without assigning country',async()=>{
+ vi.clearAllMocks();const lead={id:'lead',phone:'+1 (214) 555-0182',company_number:'12345678'};
+ expect(await resolveRegistry({},lead,'fake')).toMatchObject({how:'saved',number:'12345678'});
+ expect(fetchCompanyProfile).toHaveBeenCalledExactlyOnceWith('12345678','fake');expect(lead).not.toHaveProperty('country');
 });
 it('bounds evidence officer/PSC lookups to three candidates and reuses them for later evidence passes', async () => {
   vi.clearAllMocks();

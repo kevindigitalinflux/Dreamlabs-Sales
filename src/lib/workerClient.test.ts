@@ -509,13 +509,26 @@ it('does not spend the per-lead check cap on stalled-domain refusals',async()=>{
 });
 
 describe('worker web search',()=>{
+ it('treats explicit 503 not_configured as a quiet refunded search refusal',async()=>{
+  const u=usage(),f=worker(503,{error:'not_configured'}),client=make(u,f);
+  expect(await client.search('query')).toMatchObject({ok:false,failure:'not_configured',line:''});
+  expect(await client.search('again')).toMatchObject({ok:false,failure:'not_configured'});
+  expect(client.lines()).toEqual([]);expect(f).toHaveBeenCalledTimes(1);expect(refundCalls(u)).toHaveLength(1);
+ });
+ it.each([{error:'upstream'},{},null])('keeps other 503 bodies unreachable: %j',async body=>{
+  expect(await make(usage(),worker(503,body)).search('query')).toMatchObject({ok:false,failure:'unreachable'});
+ });
+ it('keeps a 503 with an unreadable refusal body unreachable',async()=>{
+  const response=new Response('',{status:503});vi.spyOn(response,'json').mockRejectedValue(new DOMException('private','AbortError'));
+  expect(await make(usage(),async()=>response).search('query')).toMatchObject({ok:false,failure:'unreachable'});
+ });
  it('reserves one search before dispatch and returns bounded hits',async()=>{
   const u=usage();const c=make(u,async(_url,init)=>{expect(reserveCalls(u)[0][1]).toMatchObject({p_resource:'worker_search',p_units:1});expect(JSON.parse(init?.body as string)).toEqual({query:'query'});return new Response(JSON.stringify({results:[{title:'Jane',url:'https://fixture.test/in/jane',snippet:'Manager'}]}))});
   expect(await c.search('query')).toEqual({ok:true,value:[{title:'Jane',url:'https://fixture.test/in/jane',snippet:'Manager'}]});expect(refundCalls(u)).toHaveLength(0);
  });
  it.each(['503','network','throttled'])('refunds %s once and stops searches for that lead',async mode=>{
   const u=usage();const f=vi.fn<typeof fetch>(async()=>{if(mode==='network')throw new Error('network');return new Response(JSON.stringify({error:mode==='throttled'?'throttled':'not_configured'}),{status:mode==='throttled'?429:503})});const c=make(u,f);
-  expect(await c.search('query')).toMatchObject({ok:false,failure:mode==='throttled'?'busy':'unreachable'});await c.search('again');expect(refundCalls(u)).toHaveLength(1);expect(f).toHaveBeenCalledTimes(1);
+  expect(await c.search('query')).toMatchObject({ok:false,failure:mode==='throttled'?'busy':mode==='503'?'not_configured':'unreachable'});await c.search('again');expect(refundCalls(u)).toHaveLength(1);expect(f).toHaveBeenCalledTimes(1);
  });
  it('refuses the usage cap without dispatch',async()=>{const u=usage({data:REFUSED,error:null}),f=worker(200,{});expect(await make(u,f).search('query')).toMatchObject({ok:false,failure:'limit_reached',line:refusalLine('org_limit','worker_search',150)});expect(f).not.toHaveBeenCalled()});
  it('does not refund a fifteen-second client timeout',async()=>{

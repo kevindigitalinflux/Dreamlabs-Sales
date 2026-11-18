@@ -3,14 +3,16 @@ vi.mock('../../supabase/functions/_shared/roleSearch', async original => ({...aw
 // Real engine, fake providers and a filter-aware database. No network, keys or remote writes.
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 vi.mock('../../supabase/functions/_shared/orgApiKeys', () => ({ resolveOrgApiKey: vi.fn(), resolveOrgWorkerConfig: vi.fn() }));
+vi.mock('../../supabase/functions/_shared/ai', async original => ({...await original(),geminiGroundedSearch:vi.fn()}));
 vi.mock('../../supabase/functions/_shared/rateLimit', () => ({ checkRateLimit: vi.fn(async () => true) }));
 vi.mock('../../supabase/functions/_shared/domainDiscoveryLookup', () => ({ discoverLeadDomains: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/knownPersonLookup', () => ({ webSearchDomainFormat: vi.fn(async () => []), readCompanyPages: vi.fn(async () => []), webSearchForPerson: vi.fn(), hunterAccount: vi.fn(), hunterDomainList: vi.fn(), hunterVerifyEmail: vi.fn() }));
 vi.mock('../../supabase/functions/_shared/deepFindPeople', () => ({ lookUpPeople: vi.fn() }));
-vi.mock('../../supabase/functions/_shared/workerClient', () => ({ makeWorkerClient: () => ({ lines: () => [], verifyEmail: vi.fn(), scrapeSite: vi.fn(async () => ({ ok: false, failure: 'not_configured' })) }) }));
+vi.mock('../../supabase/functions/_shared/workerClient', () => ({ makeWorkerClient: () => ({ search:vi.fn(async()=>({ok:false,failure:'not_configured'})),lines: () => [], verifyEmail: vi.fn(), scrapeSite: vi.fn(async () => ({ ok: false, failure: 'not_configured' })) }) }));
 vi.mock('../../supabase/functions/_shared/companiesHouse', () => ({ fetchActiveOfficers: vi.fn(async () => []), searchCompaniesByName: vi.fn(), searchOfficers: vi.fn(async () => []), fetchCompanyProfile: vi.fn() }));
-import { searchCompaniesByName, fetchActiveOfficers } from '../../supabase/functions/_shared/companiesHouse';
+import { searchCompaniesByName, fetchActiveOfficers, fetchCompanyProfile } from '../../supabase/functions/_shared/companiesHouse';
 import { resolveOrgApiKey, resolveOrgWorkerConfig } from '../../supabase/functions/_shared/orgApiKeys';
+import {geminiGroundedSearch} from '../../supabase/functions/_shared/ai';
 import { discoverLeadDomains } from '../../supabase/functions/_shared/domainDiscoveryLookup';
 import { webSearchForPerson, readCompanyPages } from '../../supabase/functions/_shared/knownPersonLookup';
 import { lookUpPeople } from '../../supabase/functions/_shared/deepFindPeople';
@@ -23,6 +25,7 @@ beforeEach(() => {
   vi.clearAllMocks(); roleProfiles=[]; deny = false; aiAllowed = true; beforeWebsiteWrite = undefined;
   savedReadFailure = null; roleReadStarted = false;
   findRolePeople.mockResolvedValue({people:[],searches:0,via:[]});
+  geminiGroundedSearch.mockResolvedValue({text:'',sources:[],sourceEvidence:[]});
   fetchActiveOfficers.mockResolvedValue([]);
   vi.stubGlobal('Deno', { env: { get: () => undefined } });
   vi.stubGlobal('fetch', vi.fn(() => { throw new Error('Unexpected network'); }));
@@ -56,6 +59,66 @@ beforeEach(() => {
   } };
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it.each(['Ann Roe is a Director at Cleancat Logistics Ltd in Cork.','Ann Roe, Director.'])('does not save a Gemini company claim without source company proof: %s',async evidence=>{
+ lead.business_name='Cleancat - Commercial Cleaning Services Dublin';lead.city='Dublin';
+ roleProfiles=[{id:'icp',org_id:'org',target_roles:['Director']}];
+ const redirect='https://vertexaisearch.cloud.google.com/grounding-api-redirect/REDACTED';
+ geminiGroundedSearch.mockResolvedValue({text:JSON.stringify({name:'Ann Roe',title:'Director',company:'Cleancat',linkedin_url:null}),sources:[redirect],sourceEvidence:[`${redirect} linkedin.com`,`${redirect} ${evidence}`]});
+ findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
+ const out=await run();expect(out.status).toBe('done');expect(contacts.some(contact=>contact.first_name==='Ann')).toBe(false);
+ expect(out.domains.role_search_fallback_shape).toMatchObject({people_lines:1,people_kept:0});
+});
+it('does not count a not-configured worker as SearXNG in saved role usage',async()=>{
+ findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
+ const out=await run();expect(out.domains.role_searches_by_provider).toEqual({searxng:0,gemini:2});
+ expect(out.domains.steps).not.toContain('The lookup worker could not be reached.');
+});
+it.each([{phone:'+1 (512) 555-0100'},{address:'Austin, Texas 78701'},{phone:'+353 1 234 5678'},{phone:'214-555-0182'}])('skips all registry work and proof credit for inferred non-UK leads %#',async saved=>{
+ Object.assign(lead,saved);const before=lead.country;
+ resolveOrgApiKey.mockImplementation(async(_s,_o,provider)=>['gemini','companies_house'].includes(provider)?'fake':null);
+ searchCompaniesByName.mockResolvedValue([{company_number:'01234567',title:'ACME LIMITED',company_status:'active'}]);
+ const out=await run();
+ expect(out.status).toBe('done');expect(out.domains.steps).toContain('Companies House: skipped, this company does not look UK-based.');
+ expect(searchCompaniesByName).not.toHaveBeenCalled();expect(fetchCompanyProfile).not.toHaveBeenCalled();expect(fetchActiveOfficers).not.toHaveBeenCalled();
+ expect(out.domains.credits.ai).not.toHaveProperty('company registry proof');expect(lead.country).toBe(before);
+});
+it('uses a saved company number with a US phone without changing country or spending proof credit',async()=>{
+ lead.phone='+1 (214) 555-0182';lead.company_number='12345678';const country=lead.country;
+ resolveOrgApiKey.mockImplementation(async(_s,_o,provider)=>provider==='companies_house'?'fake':null);
+ fetchCompanyProfile.mockResolvedValue({name:'Acme Limited',status:'active',address:null,locality:null});
+ const out=await run();expect(out.status).toBe('done');
+ expect(fetchCompanyProfile).toHaveBeenCalledExactlyOnceWith('12345678','fake');
+ expect(out.domains.credits.ai).not.toHaveProperty('company registry proof');
+ expect(lead.country).toBe(country);expect(lead.company_number).toBe('12345678');
+});
+it('still searches a saved GB lead with a .com website',async()=>{
+ lead.country='GB';lead.website='https://acme.com';
+ resolveOrgApiKey.mockImplementation(async(_s,_o,provider)=>provider==='companies_house'?'fake':null);
+ searchCompaniesByName.mockResolvedValue([]);await run();expect(searchCompaniesByName).toHaveBeenCalled();expect(lead.country).toBe('GB');
+});
+it.each([[120_000,25_000],[40_000,10_000],[33_999,3_999]])('passes separate discovery budgets with %i ms left',async(left,webBudgetMs)=>{
+ const start=Date.now();vi.spyOn(Date,'now').mockReturnValueOnce(start).mockReturnValue(start+120_000-left);
+ await run();
+ expect(discoverLeadDomains.mock.calls[0][2]).toMatchObject({budgetMs:Math.min(10_000,webBudgetMs),webBudgetMs});
+});
+it.each([false,true])('stores only fallback shape counts in the engine result, including interrupted=%s',async interrupted=>{
+ const redirect='https://vertexaisearch.cloud.google.com/grounding-api-redirect/REDACTED';
+ geminiGroundedSearch.mockResolvedValue({text:JSON.stringify({name:'Some Person',title:'Director',company:'Acme',linkedin_url:'https://linkedin.com/in/some-person'}),sources:[redirect],sourceEvidence:[`${redirect} linkedin.com`,`${redirect} Different Person at Acme`]});
+ findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
+ if(interrupted)lookUpPeople.mockRejectedValueOnce(new Error('fixture interrupted'));
+ const out=await run();
+ expect(out.status).toBe(interrupted?'failed':'done');
+ expect(out.domains.role_search_fallback_shape).toEqual({lines_parsed:1,profile_urls:1,sources:1,redirect_sources:1,linkedin_titled_sources:1,people_lines:1,people_kept:0});
+ expect(Object.values(out.domains.role_search_fallback_shape).every(value=>typeof value==='number')).toBe(true);
+ expect(JSON.stringify(out.domains.role_search_fallback_shape)).not.toMatch(/Some|Person|Acme|https/);
+});
+it.each([true,false])('passes grounded evidence through the engine to an accepted role contact, LinkedIn supported=%s',async linked=>{
+ const redirect='https://vertexaisearch.cloud.google.com/grounding-api-redirect/REDACTED';
+ geminiGroundedSearch.mockResolvedValue({text:JSON.stringify({name:'Ann Lee',title:'Office Manager',company:'Acme',linkedin_url:'https://linkedin.com/in/ann-lee'}),sources:[redirect],sourceEvidence:[`${redirect} ${linked?'linkedin.com':'acme.example'}`,`${redirect} Ann Lee is Office Manager at Acme`]});
+ findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
+ const out=await run();expect(contacts.find(c=>c.first_name==='Ann')).toMatchObject({source:'role_search',title:'Office Manager',linkedin_url:linked?'https://linkedin.com/in/ann-lee':null,include_in_sequences:false});
+ expect(out.domains).not.toHaveProperty('role_search_fallback_shape');
+});
 it.each(['ideal_customer_profiles','decision_maker_candidates'])('continues without role/team saves when %s cannot be read',async table=>{
  savedReadFailure=table;lead.website='https://acme.com';
  roleProfiles=[{id:'icp',org_id:'org',target_roles:['Facilities Manager']}];

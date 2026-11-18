@@ -35,7 +35,7 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !=
 export function registryStep(r: RegistryResult): string {
   const name = (r.name ?? '').replace(/[^\p{L}\p{N} &'.,()-]/gu, '').slice(0, 120);
   switch (r.how) {
-    case 'not_uk': return 'Companies House skipped: this is not a UK company.';
+    case 'not_uk': return 'Companies House: skipped, this company does not look UK-based.';
     case 'rejected': return 'Companies House skipped: you rejected the company matches for this lead.';
     case 'saved': return `Companies House: using the company saved on this lead (${name || r.number}).`;
     case 'raw_lead': return `Companies House: using the company this lead was found from (${name || r.number}).`;
