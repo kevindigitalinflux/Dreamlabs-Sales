@@ -1,3 +1,9 @@
+## API key health review fixes — Fix 1 checkpoint (2026-11-18)
+
+Continue on codex/key-health from reviewed 5a60518. Fix 1 is the commit containing this checkpoint; resolve HEAD for its hash. Gemini 429 now requires explicit PerDay/PerMonth quotaId or prepay/credit message evidence for top-up. Generic billing wording means rate_limited. Seven gates pass: 310 app files / 3,795 passed / one existing skip; wrapper 8 / 166; both TypeScript checks/build/whitespace/edge 29. See Review fixes in docs/KEY-HEALTH-BUILD-REPORT.md for red/green evidence and the changed daily-message assertion. Fix 2 (visible-row polling plus focus/visibility recovery for deletes) is next. Migration and provider/cap logic are unchanged. Claude's supplied review includes Deno 2.9.7 proof for the previously approved scope/transport. These fixes and live/browser proof still need review. Local only; no rollout, SQL, provider/key/spending action. Codex stays builder; Claude reviews next.
+
+---
+
 ## API key health — local review checkpoint (2026-11-18)
 
 Kevin approved codex/key-health from fetched origin/main 9a081f0c05397e204d6638818df6e160ec1a77cc, superseding the brief's be3492b. Local build only. Codex remains builder; Claude reviews next. Read docs/KEY-HEALTH-BUILD-REPORT.md for the provider audit, all changed assertions, gate counts, rolled-back SQL and exact proposed 24-function/frontend redeploy list. Task 1 is 79f5394, Task 2 is 816ca6a, and Task 3 is the commit containing this checkpoint (resolve HEAD; full tip also in the shared labelled checkpoint).

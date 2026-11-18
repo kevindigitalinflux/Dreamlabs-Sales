@@ -19,12 +19,30 @@ export const KEY_PROVIDER_COPY: Record<KeyProvider,{name:string; refusedBy:strin
   email_verifier:{name:'Email verifier',refusedBy:'The email verifier',billing:null},
 };
 
+/** Google includes billing wording on short limits; only explicit long quotas or credit evidence imply top-up. */
+function gemini429(body:unknown):KeyState {
+  if(typeof body==='string'){
+    try{body=JSON.parse(body);}catch{return /prepay|credit/i.test(body as string)?'needs_topup':'rate_limited';}
+  }
+  if(!body||typeof body!=='object')return 'rate_limited';
+  const error='error' in body?body.error:body;
+  if(!error||typeof error!=='object')return 'rate_limited';
+  if('message' in error&&typeof error.message==='string'&&/prepay|credit/i.test(error.message))return 'needs_topup';
+  const details='details' in error&&Array.isArray(error.details)?error.details:[];
+  for(const detail of details){
+    if(!detail||typeof detail!=='object'||!('violations' in detail)||!Array.isArray(detail.violations))continue;
+    if(detail.violations.some((entry:unknown)=>entry&&typeof entry==='object'&&'quotaId' in entry&&typeof entry.quotaId==='string'&&/PerDay|PerMonth/i.test(entry.quotaId)))return 'needs_topup';
+  }
+  return 'rate_limited';
+}
+
 /** Read provider hints only in memory; callers persist only the returned fixed state. */
 export function classifyKeyFailure(provider: string,status: number,bodyHint: unknown): KeyState|null {
   if (!KEY_PROVIDERS.includes(provider as KeyProvider)) return null;
   if (status===401 || status===403) return 'refused';
   if (status===402) return 'needs_topup';
   if (status!==429) return null;
+  if (provider==='gemini') return gemini429(bodyHint);
   if (provider==='hunter') return classifyHunter429(bodyHint)==='usage_exhausted' ? 'needs_topup':'rate_limited';
   let hint='';
   try {hint=(typeof bodyHint==='string'?bodyHint:JSON.stringify(bodyHint)??'').slice(0,4000);} catch {return 'rate_limited';}
