@@ -1,3 +1,11 @@
+## Sign-in redirect bug (2026-11-18): settings fixed, code branch waiting
+
+Read `docs/TODO.md` first section. The bug is fixed by Kevin's Supabase URL settings (Site URL and Redirect URLs now point at `https://sales.didreamlabs.com`; `APP_PUBLIC_URL` secret set); Kevin confirmed sign-in works. Code hardening is built on `claude/signin-redirect` (worktree `C:/Users/kevin/Projects/dreamlabs-sales-signinfix`) and is not merged or deployed. Merging needs Kevin's explicit yes; `admin-users` and `pipeline-shares` then need deploying. Built by Claude Sonnet 5.5 at Kevin's direction.
+
+**UI refresh is live on `main`** (merged 2026-11-18, latest `083789b`, rollback tag `checkpoint-2026-11-18-before-ui-refresh-merge`). Its notes are further down this file under "UI refresh Stage 1".
+
+---
+
 ## Fix 11 — Deep find Gemini admission per organisation (2026-11-18)
 
 Kevin's corrected brief supersedes the global/all-Gemini admission policy in the older Task 4/6 notes. Continue on codex/deepfind-parallel from 0708ba65ed87ae1780ce4de4a78bfc09ea4fab73. Only calls with both runId and orgId use minute admission; drafting/replies/notes/ICP/key testing bypass it. The counter key in unapplied migration 078 is (org_id, minute), with gemini_admit(p_org uuid), default twelve per organisation per minute. Run 401/402/403 refusal behavior is preserved. The two standalone ICP/key-test entrypoints match d1bad26 exactly again. No provider/production call or migration execution. See the appended Fix 11 in docs/DEEPFIND-PARALLEL-BUILD-REPORT.md for gates, changed assertions and updated redeploy scope. This checkpoint is in the single Fix 11 commit; resolve HEAD for its hash. Claude remains architect/reviewer; Codex remains builder. Independent review and real SQL/concurrency remain pending; rollout is not authorized. Shared context uses a separate Fix 11 checkpoint and preserves accepted-main/earlier snapshots.

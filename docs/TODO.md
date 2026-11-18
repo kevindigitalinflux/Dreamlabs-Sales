@@ -1,10 +1,10 @@
-## Parked 2026-11-16: sign-in lands on the old workers.dev address
+## Sign-in lands on the old workers.dev address: FIXED 2026-11-18 (settings), code hardening waiting for a merge yes
 
-Signing in with Google at `sales.didreamlabs.com` drops the person on `dreamlabs-sales.kevindigitalinflux.workers.dev`, so the custom domain shows the login screen again. Kevin decided: the old address should redirect to `sales.didreamlabs.com`. Full brief: `docs/SIGNIN-REDIRECT-BUILD-BRIEF.md` on local branch `claude/signin-redirect-brief` (`b04ba37`, worktree `dreamlabs-sales-signin`, not pushed).
+Cause (confirmed from Kevin's dashboard values): Supabase Site URL was the workers.dev address and `sales.didreamlabs.com` was missing from Redirect URLs, so Google sign-in from the main address fell back to the Site URL. Kevin changed the settings on 2026-11-18 (Site URL `https://sales.didreamlabs.com`; Redirect URLs `https://sales.didreamlabs.com/**`, `http://localhost:5173/**`, `https://dreamlabs-sales.kevindigitalinflux.workers.dev/**`) and ran `npx supabase secrets set APP_PUBLIC_URL=https://sales.didreamlabs.com`. Kevin confirmed sign-in works. Email templates are Supabase defaults and needed no change.
 
-- [ ] Kevin: Supabase, Authentication, URL Configuration: note current Site URL and Redirect URLs; set Site URL to `https://sales.didreamlabs.com`; Redirect URLs to `https://sales.didreamlabs.com/**`, `http://localhost:5173/**`, `https://dreamlabs-sales.kevindigitalinflux.workers.dev/**`; check the invite and reset email templates use `{{ .ConfirmationURL }}`.
-- [x] Code items C1 to C5 built 2026-11-18 on branch `claude/signin-redirect` (not merged): helper, Google error message, exact invite check, shared email link rule, redirect from workers.dev. Gates green.
-- [ ] Kevin's yes to merge; deploy `admin-users` and `pipeline-shares`; K5 `APP_PUBLIC_URL` secret. **Merge the redirect only after the Supabase settings above are done**, or Google sign-in from the old address could fail for everyone.
+- [x] Supabase Site URL and Redirect URLs, K1 to K5 (Kevin, 2026-11-18). Working.
+- [x] Code items C1 to C5 built on branch `claude/signin-redirect` (worktree `dreamlabs-sales-signinfix`, tip `1880d47` plus the docs commit): return-address helper, Google sign-in error message, exact invite-address check, shared email link rule, redirect from workers.dev to the main address. Gates green (300 files, 3,730 tests, tsc, build, edge shim).
+- [ ] NOT merged, NOT deployed. Optional hardening now that the settings fix works. Needs Kevin's yes to merge and push `claude/signin-redirect` to `main`, then deploy `admin-users` and `pipeline-shares` (edge functions). The workers.dev redirect (C5) is safe now that the settings are in place.
 
 # Dreamlabs Sales: to-do list
 
