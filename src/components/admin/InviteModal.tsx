@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Input, SelectField } from '../ui/Input';
 import { Modal } from '../ui/Modal';
 import { authRedirectUrl } from '../../lib/authRedirect';
+import { readableInvokeError } from '../../lib/invokeError';
 
 interface InviteModalProps {
   open: boolean;
@@ -37,7 +38,7 @@ export function InviteModal({ open, onClose, orgId, onInvited, canInviteAdmin }:
       },
     });
     setSubmitting(false);
-    const apiError = err?.message ?? (data as { error?: string } | null)?.error;
+    const apiError = err ? await readableInvokeError(err) : (data as { error?: string } | null)?.error;
     if (apiError) return setError(apiError);
     setFullName('');
     setEmail('');

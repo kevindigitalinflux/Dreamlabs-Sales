@@ -6,6 +6,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { Listbox } from '../ui/Listbox';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { readableInvokeError } from '../../lib/invokeError';
 
 interface UserTableProps {
   members: OrgMemberRow[];
@@ -28,7 +29,7 @@ export function UserTable({ members, orgId, onChanged, isOwner }: UserTableProps
       body: { action: 'set_org_role', org_id: orgId, user_id: userId, role },
     });
     setBusyId(null);
-    const apiError = err?.message ?? (data as { error?: string } | null)?.error;
+    const apiError = err ? await readableInvokeError(err) : (data as { error?: string } | null)?.error;
     if (apiError) setError(apiError);
     else onChanged();
   }
@@ -41,7 +42,7 @@ export function UserTable({ members, orgId, onChanged, isOwner }: UserTableProps
     });
     setBusyId(null);
     setPendingRemoval(null);
-    const apiError = err?.message ?? (data as { error?: string } | null)?.error;
+    const apiError = err ? await readableInvokeError(err) : (data as { error?: string } | null)?.error;
     if (apiError) setError(apiError);
     else onChanged();
   }

@@ -5,6 +5,7 @@ import { MailX, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { readableInvokeError } from '../lib/invokeError';
 
 /** Public, unauthenticated unsubscribe confirmation page — reached via a link in an outreach email. */
 export function Unsubscribe() {
@@ -17,7 +18,7 @@ export function Unsubscribe() {
     if (!leadId) return;
     setState('busy');
     const { data, error: err } = await supabase.functions.invoke('unsubscribe', { body: { lead_id: leadId } });
-    if (err) { setState('error'); setError(err.message); return; }
+    if (err) { setState('error'); setError(await readableInvokeError(err)); return; }
     const result = data as { ok?: boolean; business_name?: string; error?: string };
     if (result.error) { setState('error'); setError(result.error); return; }
     setBusinessName(result.business_name ?? null);

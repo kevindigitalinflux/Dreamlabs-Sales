@@ -18,6 +18,7 @@ import { ModeSwitch, type AutopilotModeChoice } from '../components/autopilot/Mo
 import { SourceStep } from '../components/autopilot/SourceStep';
 import { SelectedSetup } from '../components/autopilot/SelectedSetup';
 import type { IcpParams, ScrapeSource } from '../types';
+import { readableInvokeError } from '../lib/invokeError';
 
 const DURATIONS = [1, 7, 14, 21, 30] as const;
 
@@ -54,7 +55,7 @@ export function AutopilotSetup() {
     setBusy(true); setError(null);
     const { data, error: err } = await supabase.functions.invoke('parse-icp', { body: { raw_input: rawInput, org_id: currentOrg.id } });
     setBusy(false);
-    if (err) return setError(err.message);
+    if (err) return setError(await readableInvokeError(err));
     const result = data as { params?: IcpParams; error?: string };
     if (result.error) return setError(result.error);
     if (result.params) {

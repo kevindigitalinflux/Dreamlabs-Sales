@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { EmailProvider, UserEmailSettings } from '../types';
 import { useAuth } from './useAuth';
+import { readableInvokeError } from '../lib/invokeError';
 
 export interface SaveInput {
   provider: EmailProvider;
@@ -45,7 +46,7 @@ export function useEmailSettings() {
     const { data, error: err } = await supabase.functions.invoke('email-settings', {
       body: { action: 'save', ...input, password: input.password || undefined },
     });
-    if (err) return err.message;
+    if (err) return await readableInvokeError(err);
     const apiErr = (data as { error?: string }).error;
     if (apiErr) return apiErr;
     await refresh();
@@ -54,7 +55,7 @@ export function useEmailSettings() {
 
   const sendTest = useCallback(async (): Promise<string | null> => {
     const { data, error: err } = await supabase.functions.invoke('email-settings', { body: { action: 'test' } });
-    if (err) return err.message;
+    if (err) return await readableInvokeError(err);
     const apiErr = (data as { error?: string }).error;
     if (apiErr) return apiErr;
     await refresh();

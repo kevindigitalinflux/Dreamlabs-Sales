@@ -22,11 +22,17 @@ Independent review, SQL/RLS/concurrency, Deno AsyncLocalStorage/background lifet
 
 ---
 
-## Sign-in redirect bug (2026-11-18): settings fixed, code branch waiting
+## UI refresh and sign-in work: FINISHED and live (2026-11-18)
 
-Read `docs/TODO.md` first section. The bug is fixed by Kevin's Supabase URL settings (Site URL and Redirect URLs now point at `https://sales.didreamlabs.com`; `APP_PUBLIC_URL` secret set); Kevin confirmed sign-in works. Code hardening is built on `claude/signin-redirect` (worktree `C:/Users/kevin/Projects/dreamlabs-sales-signinfix`) and is not merged or deployed. Merging needs Kevin's explicit yes; `admin-users` and `pipeline-shares` then need deploying. Built by Claude Sonnet 5.5 at Kevin's direction.
+Built by Claude (Fable 5.2 started, Sonnet 5.5 finished) at Kevin's direction; nothing outstanding from Kevin's list.
 
-**UI refresh is live on `main`** (merged 2026-11-18, latest `083789b`, rollback tag `checkpoint-2026-11-18-before-ui-refresh-merge`). Its notes are further down this file under "UI refresh Stage 1".
+- **UI refresh** is live on `main` (details further down under "UI refresh Stage 1"). Rollback tags: `checkpoint-2026-11-18-before-ui-refresh-merge`, `checkpoint-2026-11-18-ui-refresh-before-kanban-and-lighter-dark`.
+- **Sign-in redirect bug** is fixed. Cause: Supabase Site URL was the old workers.dev address and `sales.didreamlabs.com` was missing from Redirect URLs. Kevin corrected the Supabase URL settings and set `APP_PUBLIC_URL`. Code hardening is merged and deployed: tested return-address helper, Google sign-in error message, exact invite-address check (`admin-users`), shared email link rule (`pipeline-shares`), workers.dev to main-address redirect (`src/lib/canonicalRedirect.ts`, `src/main.tsx`, `src/bootstrap.tsx`). Both edge functions were deployed by Kevin from `9a081f0`. Rollback tags: `checkpoint-2026-11-18-before-signin-merge`, `checkpoint-2026-11-18-before-welcome-ui`.
+- **Welcome page** (invite link landing) restyled to the sign-in look with the splash and bubble intro, live.
+- **Server errors now show their real reason** on screen (`readableInvokeError` in `src/lib/invokeError.ts`, used by admin, invites, scraper, autopilot setup, dialer and email settings, Dream Agent, unsubscribe). Example: inviting an email that already has an account says so.
+- **Rule: every new app address goes in three places:** Supabase Redirect URLs, the `APP_ORIGINS` secret, and (if it becomes the main address) Supabase Site URL and `APP_PUBLIC_URL`.
+- **Deploy check note:** since the sign-in change the app loads from a second chunk (`assets/bootstrap-*.js`), so grep that file, not only `index-*.js`, when confirming a front-end deploy.
+- **Known, not mine to fix here:** `check-replies` returned 503 about 7 times in 24 h out of 275 runs (spread through the day, likely mailbox connection trouble); `parse-icp` once returned 502 (upstream). Worth a look if replies seem to be missing. Old worktrees `dreamlabs-sales-uirefresh`, `-signin`, `-signinfix` can be removed. No independent review of the UI refresh or sign-in code has been done; phone width and light mode were not checked screen by screen.
 
 ---
 

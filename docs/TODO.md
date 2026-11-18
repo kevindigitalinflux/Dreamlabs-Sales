@@ -1,10 +1,6 @@
-## Sign-in lands on the old workers.dev address: FIXED 2026-11-18 (settings), code hardening waiting for a merge yes
+## Sign-in lands on the old workers.dev address: DONE 2026-11-18
 
-Cause (confirmed from Kevin's dashboard values): Supabase Site URL was the workers.dev address and `sales.didreamlabs.com` was missing from Redirect URLs, so Google sign-in from the main address fell back to the Site URL. Kevin changed the settings on 2026-11-18 (Site URL `https://sales.didreamlabs.com`; Redirect URLs `https://sales.didreamlabs.com/**`, `http://localhost:5173/**`, `https://dreamlabs-sales.kevindigitalinflux.workers.dev/**`) and ran `npx supabase secrets set APP_PUBLIC_URL=https://sales.didreamlabs.com`. Kevin confirmed sign-in works. Email templates are Supabase defaults and needed no change.
-
-- [x] Supabase Site URL and Redirect URLs, K1 to K5 (Kevin, 2026-11-18). Working.
-- [x] Code items C1 to C5 built on branch `claude/signin-redirect` (worktree `dreamlabs-sales-signinfix`, tip `1880d47` plus the docs commit): return-address helper, Google sign-in error message, exact invite-address check, shared email link rule, redirect from workers.dev to the main address. Gates green (300 files, 3,730 tests, tsc, build, edge shim).
-- [ ] NOT merged, NOT deployed. Optional hardening now that the settings fix works. Needs Kevin's yes to merge and push `claude/signin-redirect` to `main`, then deploy `admin-users` and `pipeline-shares` (edge functions). The workers.dev redirect (C5) is safe now that the settings are in place.
+Fixed by Kevin's Supabase URL settings and `APP_PUBLIC_URL`, then hardened in code (helper, error message, exact invite check, shared link rule, workers.dev redirect, restyled Welcome page, real error reasons). All merged to `main` and deployed (edge functions `admin-users`, `pipeline-shares` deployed by Kevin). Kevin tested Google sign-in, an invite email and the invite link. Nothing open. See the top block of `docs/HANDOFF.md`.
 
 # Dreamlabs Sales: to-do list
 

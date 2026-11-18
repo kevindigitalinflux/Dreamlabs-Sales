@@ -19,6 +19,7 @@ import type { IcpParams } from '../types';
 import { SOURCE_NAMES, sourceAvailability, type SearchSource } from '../lib/scrapeMerge';
 import { startScrapeSearch } from '../lib/scrapeSearch';
 import { ScrapeSourceChoices } from '../components/scraper/ScrapeSourceChoices';
+import { readableInvokeError } from '../lib/invokeError';
 
 const TOTAL_STEPS = 4;
 
@@ -55,7 +56,7 @@ export function Scraper() {
       body: { raw_input: rawInput, org_id: currentOrg.id },
     });
     setBusy(false);
-    if (err) return setError(err.message);
+    if (err) return setError(await readableInvokeError(err));
     const result = data as { params?: IcpParams; error?: string };
     if (result.error) return setError(result.error);
     if (result.params) {
