@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { DialerProvider, UserDialerSettings } from '../types';
+import { readableInvokeError } from '../lib/invokeError';
 
 export interface DialerSaveInput {
   provider: DialerProvider;
@@ -16,7 +17,7 @@ export function useDialerSettings() {
 
   const refresh = useCallback(async () => {
     const { data, error: err } = await supabase.functions.invoke('dialer-settings', { body: { action: 'get' } });
-    if (err) setError(err.message);
+    if (err) setError(await readableInvokeError(err));
     else {
       setSettings((data as { settings: UserDialerSettings | null }).settings);
       setError(null);
@@ -30,7 +31,7 @@ export function useDialerSettings() {
     const { data, error: err } = await supabase.functions.invoke('dialer-settings', {
       body: { action: 'save', ...input, api_key: input.api_key || undefined },
     });
-    if (err) return err.message;
+    if (err) return await readableInvokeError(err);
     const apiErr = (data as { error?: string }).error;
     if (apiErr) return apiErr;
     await refresh();

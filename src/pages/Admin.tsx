@@ -15,6 +15,7 @@ import { UserTable } from '../components/admin/UserTable';
 import { InviteModal } from '../components/admin/InviteModal';
 import { NewOrgModal } from '../components/admin/NewOrgModal';
 import { AssignmentPanel } from '../components/admin/AssignmentPanel';
+import { readableInvokeError } from '../lib/invokeError';
 
 interface OrgOption { id: string; name: string }
 
@@ -36,7 +37,7 @@ export function Admin() {
   const loadOrgs = useCallback(async () => {
     const { data, error: err } = await supabase.functions.invoke('admin-users', { body: { action: 'list_orgs' } });
     setLoadingOrgs(false);
-    if (err) return setError(err.message);
+    if (err) return setError(await readableInvokeError(err));
     const orgs = (data as { orgs: OrgOption[] }).orgs;
     setOrgOptions(orgs);
     setManageOrgId((prev) => isPlatformOwner ? (prev || currentOrg?.id || orgs[0]?.id || '') : (currentOrg?.id || orgs[0]?.id || ''));
@@ -47,7 +48,7 @@ export function Admin() {
     setLoadingMembers(true);
     const { data, error: err } = await supabase.functions.invoke('admin-users', { body: { action: 'list_org_members', org_id: orgId } });
     setLoadingMembers(false);
-    if (err) return setError(err.message);
+    if (err) return setError(await readableInvokeError(err));
     setMembers((data as { members: OrgMemberRow[] }).members);
   }, []);
 

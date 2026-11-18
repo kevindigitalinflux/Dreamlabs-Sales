@@ -15,6 +15,7 @@ import { useOrgPackages } from './useOrgPackages';
 import { useIcps } from './useIcps';
 import { usePersistedState } from './usePersistedState';
 import type { DreamAgentAction, DreamAgentUpdatePatch, Lead } from '../types';
+import { readableInvokeError } from '../lib/invokeError';
 
 const NO_MESSAGES: string[] = [];
 const NO_ACTIONS: DreamAgentAction[] = [];
@@ -83,7 +84,7 @@ export function useDreamAgentSession() {
       body: { org_id: currentOrg.id, pipeline_id: matchPipelineId, messages: nextMessages },
     });
     setLoading(false);
-    if (invokeErr) { setError(invokeErr.message); return; }
+    if (invokeErr) { setError(await readableInvokeError(invokeErr)); return; }
     const result = data as { actions?: unknown; error?: string };
     if (result.error) { setError(result.error); return; }
     // sanitizeDreamAgentActions must validate against the lead index the AI was

@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Modal } from '../ui/Modal';
+import { readableInvokeError } from '../../lib/invokeError';
 
 interface NewOrgModalProps {
   open: boolean;
@@ -23,7 +24,7 @@ export function NewOrgModal({ open, onClose, onCreated }: NewOrgModalProps) {
     setError(null);
     const { data, error: err } = await supabase.functions.invoke('admin-users', { body: { action: 'create_org', name } });
     setSubmitting(false);
-    const apiError = err?.message ?? (data as { error?: string } | null)?.error;
+    const apiError = err ? await readableInvokeError(err) : (data as { error?: string } | null)?.error;
     if (apiError) return setError(apiError);
     const org = (data as { org: { id: string; name: string } }).org;
     setName('');
