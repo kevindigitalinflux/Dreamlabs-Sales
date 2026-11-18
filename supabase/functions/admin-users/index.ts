@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { decideAdminAction } from '../_shared/adminPolicy.ts';
+import { isAllowedInviteRedirect } from '../_shared/appUrl.ts';
 import type { AdminAction, AdminContext, OrgRole } from '../_shared/adminPolicy.ts';
 
 const APP_ORIGINS = (Deno.env.get('APP_ORIGINS') ?? 'http://localhost:5173').split(',');
@@ -120,7 +121,7 @@ Deno.serve(async (req) => {
     if (!orgId) return json({ error: 'org_id is required' }, 400, headers);
     if (orgRole !== 'admin' && orgRole !== 'contractor' && orgRole !== 'team_member') return json({ error: 'Invalid org_role' }, 400, headers);
     if (!email) return json({ error: 'email is required' }, 400, headers);
-    if (!APP_ORIGINS.some((o) => redirectTo.startsWith(o))) return json({ error: 'redirect_to not allowed' }, 400, headers);
+    if (!isAllowedInviteRedirect(redirectTo, Deno.env.get('APP_ORIGINS') ?? 'http://localhost:5173')) return json({ error: 'redirect_to not allowed' }, 400, headers);
     const denied = await authorize('invite', orgId, undefined, orgRole);
     if (denied) return denied;
     const { data: org } = await service.from('organizations').select('id').eq('id', orgId).maybeSingle();

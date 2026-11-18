@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { transformSync } from "esbuild";
 import { describe, expect, it, vi } from "vitest";
 import { decideAdminAction } from "../../supabase/functions/_shared/adminPolicy";
+import { isAllowedInviteRedirect } from "../../supabase/functions/_shared/appUrl";
 function setup(options = {}) {
   const writes = [];
   const reads = [];
@@ -74,7 +75,7 @@ function setup(options = {}) {
   const js = transformSync(source, { loader: "ts", target: "es2022" }).code;
   let clients = 0;
   const createClient = () => ++clients % 2 === 1 ? { auth: { getUser: async () => ({ data: { user: { id: "caller" } } }) } } : service;
-  new Function("Deno", "createClient", "decideAdminAction", js)(deno, createClient, decideAdminAction);
+  new Function("Deno", "createClient", "decideAdminAction", "isAllowedInviteRedirect", js)(deno, createClient, decideAdminAction, isAllowedInviteRedirect);
   const request = (body) => handler(new Request("http://local", { method: "POST", body: JSON.stringify(body) }));
   return { request, writes, reads, rpc };
 }
