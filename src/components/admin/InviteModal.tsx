@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { Button } from '../ui/Button';
 import { Input, SelectField } from '../ui/Input';
 import { Modal } from '../ui/Modal';
+import { authRedirectUrl } from '../../lib/authRedirect';
 
 interface InviteModalProps {
   open: boolean;
@@ -32,7 +33,7 @@ export function InviteModal({ open, onClose, orgId, onInvited, canInviteAdmin }:
         org_role: orgRole,
         email,
         full_name: fullName,
-        redirect_to: `${window.location.origin}/welcome`,
+        redirect_to: authRedirectUrl('/welcome', window.location.origin),
       },
     });
     setSubmitting(false);

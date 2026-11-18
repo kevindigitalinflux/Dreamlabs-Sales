@@ -8,6 +8,7 @@ import { FloatingField } from '../components/auth/FloatingField';
 import { EyeToggle } from '../components/auth/EyeToggle';
 import { ArrowIcon, GoogleIcon, ShieldIcon } from '../components/auth/icons';
 import { BigBubbles, BUBBLE_REVEAL_HOLD_MS, BUBBLE_REVEAL_MS } from '../components/branding/BigBubbles';
+import { authRedirectUrl } from '../lib/authRedirect';
 
 /** Email + password sign-in. No self-registration — accounts are invite-only. */
 export function Login() {
@@ -46,10 +47,17 @@ export function Login() {
 
   /** Kicks off the Google OAuth redirect flow; AuthCallback enforces invite-only access. */
   async function handleGoogleSignIn() {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
+    setError(null);
+    try {
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: authRedirectUrl('/auth/callback', window.location.origin) },
+      });
+      if (oauthError) throw oauthError;
+    } catch (err) {
+      console.error('Google sign-in could not start', err);
+      setError('Google sign-in could not start. Please try again.');
+    }
   }
 
   return (

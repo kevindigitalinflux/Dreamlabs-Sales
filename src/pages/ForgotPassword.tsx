@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { AuthCard, AuthLogoTile, AuthShell, BRAND_GRADIENT, BUTTON_SHADOW } from '../components/auth/AuthChrome';
 import { FloatingField } from '../components/auth/FloatingField';
 import { ArrowIcon } from '../components/auth/icons';
+import { authRedirectUrl } from '../lib/authRedirect';
 
 /** Requests a Supabase password-reset email; the link lands on ResetPassword. */
 export function ForgotPassword() {
@@ -18,7 +19,7 @@ export function ForgotPassword() {
     setSubmitting(true);
     setError(null);
     const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: authRedirectUrl('/reset-password', window.location.origin),
     });
     setSubmitting(false);
     if (err) setError(err.message);
