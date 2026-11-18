@@ -20,7 +20,7 @@ it.each([
  const log=vi.spyOn(console,'error').mockImplementation(()=>{});
  try {
   const provider=makeSearchProvider({worker:{search:async()=>({ok:false,failure:'not_configured'})},reserveAi:async()=>true,gemini:async()=>{throw error}});
-  expect(await provider.search('private query')).toEqual({ok:false,why:'failed'});
+  expect(await provider.search('private query')).toEqual({ok:false,why:code==='http_429'?'busy':'failed'});
   expect(log).toHaveBeenCalledExactlyOnceWith('Role search unavailable',code);
   expect(JSON.stringify(log.mock.calls)).not.toMatch(/private|key|prompt|reply|query/);
  }finally{log.mockRestore()}
@@ -70,7 +70,7 @@ it.each(['https://linkedin.com/company/acme','https://linkedin.com.attacker.test
 it('emits only fixed numeric fallback shape counts when no hit is kept',async()=>{
  const onFallbackShape=vi.fn();const reply={...redirectReply,text:['prose','{bad}',JSON.stringify({...person,name:'Someone Else'}),JSON.stringify({...person,name:'Someone Else',linkedin_url:'https://linkedin.com/company/acme'})].join('\n')};
  expect(await fallback(reply,onFallbackShape).search('private query')).toMatchObject({ok:true,people:[]});
- expect(onFallbackShape).toHaveBeenCalledExactlyOnceWith({lines_parsed:2,profile_urls:1,sources:1,redirect_sources:1,linkedin_titled_sources:1,people_lines:2,people_kept:0});
+ expect(onFallbackShape).toHaveBeenCalledExactlyOnceWith({lines_parsed:2,profile_urls:1,sources:1,redirect_sources:1,linkedin_titled_sources:1,people_lines:2,people_kept:0,objects_found:2});
  expect(JSON.stringify(onFallbackShape.mock.calls)).not.toMatch(/Jane|Doe|query|https|Acme/);
  const kept=vi.fn();await fallback(redirectReply,kept).search('query');expect(kept).not.toHaveBeenCalled();
 });

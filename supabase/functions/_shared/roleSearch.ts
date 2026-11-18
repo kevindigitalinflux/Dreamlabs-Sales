@@ -2,7 +2,7 @@ import { judgeRoleHit, roleLadder, roleQuery, type RoleCandidate } from './roleS
 import { displayPersonKey } from './personIdentity.ts';
 import type { SearchProvider } from './searchProvider.ts';
 
-export interface RoleSearchResult { people: RoleCandidate[]; searches: number; via: ('searxng' | 'gemini')[]; stopped?: 'time' | 'limit' | 'cap' | 'failed' }
+export interface RoleSearchResult { people: RoleCandidate[]; searches: number; via: ('searxng' | 'gemini')[]; stopped?: 'time' | 'limit' | 'cap' | 'failed' | 'busy' }
 
 /** Stop at the first successful rung, before a fourth search or a third person. */
 export async function findRolePeople(input: { company: string; registeredName?: string | null; city?: string | null; country?: string | null; profile: { targetRoles?: unknown; fallbackRoles?: unknown } | null; provider: SearchProvider; timeLeftMs: () => number }): Promise<RoleSearchResult> {
@@ -64,6 +64,7 @@ export function officersForRoleSearch<T>(officers: T[], roleHit: boolean): T[] {
 export function roleSearchLine(result: Pick<RoleSearchResult, 'people' | 'via' | 'stopped'>): string {
   const line = result.people.length ? `Role search: found ${result.people.length} (${result.people.map(person => `${person.first} ${person.last}, ${person.title}`).join('; ')}).`
     : result.stopped === 'limit' ? 'Role search: skipped, the web search allowance for today is used up.'
+    : result.stopped === 'busy' ? 'Role search: skipped, Gemini is busy.'
     : result.stopped === 'cap' ? 'Role search: skipped, the AI call cap was reached.'
     : result.stopped === 'time' ? 'Role search: ran out of time.' : 'Role search: nobody in the target roles was found.';
   return line + (result.via.includes('gemini') ? ' Used the backup search.' : '');

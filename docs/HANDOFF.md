@@ -1,3 +1,19 @@
+## Fix 11 — Deep find Gemini admission per organisation (2026-11-18)
+
+Kevin's corrected brief supersedes the global/all-Gemini admission policy in the older Task 4/6 notes. Continue on codex/deepfind-parallel from 0708ba65ed87ae1780ce4de4a78bfc09ea4fab73. Only calls with both runId and orgId use minute admission; drafting/replies/notes/ICP/key testing bypass it. The counter key in unapplied migration 078 is (org_id, minute), with gemini_admit(p_org uuid), default twelve per organisation per minute. Run 401/402/403 refusal behavior is preserved. The two standalone ICP/key-test entrypoints match d1bad26 exactly again. No provider/production call or migration execution. See the appended Fix 11 in docs/DEEPFIND-PARALLEL-BUILD-REPORT.md for gates, changed assertions and updated redeploy scope. This checkpoint is in the single Fix 11 commit; resolve HEAD for its hash. Claude remains architect/reviewer; Codex remains builder. Independent review and real SQL/concurrency remain pending; rollout is not authorized. Shared context uses a separate Fix 11 checkpoint and preserves accepted-main/earlier snapshots.
+
+---
+
+## Deep find parallel processing — local checkpoint 2026-11-17
+
+Kevin authorized ten local tasks on codex/deepfind-parallel from fetched origin/main d1bad26de090285e1afa65bed1b04e5d40d16da0. Codex remains builder; Claude remains architect/reviewer. Tasks 1–9 commits: d301d94, 300f9eb, 746e8c1, 29b55b0, 7c071cf, 605a197, d32461b, a5c82f4, a6a3d6b. Task 10 is the commit containing this checkpoint; resolve git rev-parse HEAD for the exact final tip. Read docs/DEEPFIND-PARALLEL-BUILD-REPORT.md for the audit, gates, assertions, rolled-back SQL and proposed 23-function/frontend rollout.
+
+Migration 078 is written only: atomic maintenance, three bounded cron invocations, fair SQL claims, shared Gemini twelve-per-minute admission, once-per-resource run notices, sized check backstop and parallelism snapshots, monotonic Gemini key refusal, and scrape defaults 400/1600. Role Gemini gets up to 25 seconds; grounded JSON accepts pretty/fenced/array objects without changing person proof; trusted company pages/footers recognize owner/name pairs. Contacts remain non-enrolled. Firecrawl and Places caps are unchanged. Every task starts with red fixtures and has all seven local gates before its explicit-path commit; exact final counts are in the report.
+
+No SQL, deployment, push, merge, VPS change, provider/production request, key access, installation or spending. No task-owned server. The brief-execution hook was read and manually invoked, without changing hook/trust setup; automatic interception is unverified. SQL validity/concurrency/cron, browser/mobile, real model/source accuracy and throughput remain unverified. Independent Claude review is pending. The exact deadline formula remains three hours under the existing fifty-lead cap. Stop after this build/report; rollout and one real concurrency run need separate Kevin authorization. Accepted-main vault mirror is preserved; use the labelled deepfind-parallel checkpoint. Subscription usage is unavailable; checkpoints are proactive.
+
+---
+
 ## UI refresh Stage 1 (2026-11-16) - separate task, START HERE for UI work
 
 Worktree `C:/Users/kevin/Projects/dreamlabs-sales-uirefresh`, branch `claude/ui-refresh-stage1` (from `claude/ui-refresh-design`, which holds the approved design and the brief). **Role change, directed by Kevin on 2026-11-16: Claude builds this stage directly (Fable first, then Opus or Sonnet may continue); Codex is not the builder for it.** Kevin approved the design and told Claude to proceed with the build.
@@ -31,6 +47,7 @@ Read in this order: `docs/superpowers/specs/2026-11-16-ui-refresh-design.md`, th
 **State (2026-11-17, Sonnet):** all eight tasks of the Stage 1 brief are built and committed; full report `docs/UI-REFRESH-STAGE1-BUILD-REPORT.md` (gates green: 3,538 tests, tsc, build, edge check). The only open item is the browser look: nothing has been seen running. Next: Kevin runs `npm run dev`, signs in himself, checks both themes, the menu collapse, the pill and account menu, 400 px width and the signed-out pages; fix what he finds; then Stage 2 (Pipeline and lead record first), each group with its own design and mockup for Kevin. Nothing pushed, merged or deployed.
 
 Parked by Kevin (see `docs/TODO.md`): the sign-in redirect bug.
+
 ## Role company proof from sources only (2026-11-17) — START HERE for local Fix 6
 
 Worktree C:/Users/kevin/Projects/dreamlabs-sales-verifier-v2, branch codex/deepfind-budget. Fix 6 base 0201d9e2d6ea236dfed67df82e59811ea4ae6125; this single commit contains the fix, report and handoff. Resolve git rev-parse HEAD for the exact final tip. Kevin directs; Claude architects/reviews; Codex builds. Read the appended Fix 6 in docs/DEEPFIND-BUDGET-BUILD-REPORT.md before the historical sections.

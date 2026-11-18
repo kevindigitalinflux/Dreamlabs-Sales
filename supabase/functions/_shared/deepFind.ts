@@ -1,3 +1,6 @@
+import { roleGeminiBudgetMs } from './deepFindTimeBudget.ts';
+import { claimRunNotice, readGeminiRefusal, geminiRefusalLine } from './geminiAdmission.ts';
+import { completeDeepFindRun, maintainDeepFind } from './deepFindMaintenance.ts';
 import type { GeminiSearchContext } from './geminiSearchMeter.ts';
 import { geminiGroundedSearch } from './ai.ts';
 import { makeSearchProvider, type RoleSearchFallbackShape } from './searchProvider.ts';
@@ -48,7 +51,7 @@ import { DOMAIN_SOURCE_LABELS, safeFailure, websiteSuspicion, WEB_BUDGET_MS, typ
 import { creditLine, problemLines, type ProblemInput } from './deepFindProblems.ts';
 import {
   MAX_HUNTER_PEOPLE_PER_LEAD, deepFindSummary, emailOnLead, extractTeamMembers, findSamePerson, samePersonMatches,
-  hunterPeople, namedPersonIsStored, parseLeadPersonName, peopleToLookUp, stuckAction, type ExistingContact, type LeadStats, type SitePerson,
+  hunterPeople, namedPersonIsStored, parseLeadPersonName, peopleToLookUp, type ExistingContact, type LeadStats, type SitePerson,
 } from './deepFindRules.ts';
 import { makeRunVerifyGate, saveRunResult } from './runVerifyGateStore.ts';
 import { makeWorkerClient } from './workerClient.ts';
@@ -152,7 +155,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     return { status: 'skipped', reason: 'This organisation reached its daily Deep find limit. Try again tomorrow.' };
   }
 
-  const geminiMeter: GeminiSearchContext = { service, orgId: run.org_id, sharedKey: false };
+  let geminiRefused: number | null = null;
+  const geminiMeter: GeminiSearchContext = { service, orgId: run.org_id, sharedKey: false, runId: run.id,
+    onRefused: status => { geminiRefused = status; } };
   let [hunterKey, geminiKey, chKey, apolloKey, firecrawlKey, placesKey, ocKey] = await Promise.all([
     resolveOrgApiKey(service, run.org_id, 'hunter'),
     resolveOrgApiKey(service, run.org_id, 'gemini', source => { geminiMeter.sharedKey = source === 'global'; }),
@@ -162,6 +167,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     resolveOrgApiKey(service, run.org_id, 'google_places', source => { placesContext.shared = source === 'global'; }),
     resolveOrgApiKey(service, run.org_id, 'opencorporates'),
   ]);
+  try { geminiRefused = await readGeminiRefusal(geminiMeter); }
+  catch { console.error('deep_find_gemini_status_unavailable'); geminiKey = null; }
+  if (geminiRefused) geminiKey = null;
   const configured = { hunterKey, geminiKey, apolloKey, firecrawlKey, placesKey, ocKey };
   let deepEnabled = effort === 'custom';
   if (!deepEnabled) { hunterKey = null; geminiKey = null; apolloKey = null; firecrawlKey = null; placesKey = null; ocKey = null; }
@@ -185,7 +193,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   });
   // Own worker key first; shared worker requires the global fallback flag or WORKER_SHARED_ORG_IDS.
   const workerConfig = await resolveOrgWorkerConfig(service, run.org_id, Deno.env.get('WORKER_SHARED_ORG_IDS'));
-  const worker = makeWorkerClient({ usage: service, orgId: run.org_id, config: workerConfig, verifyGate: makeRunVerifyGate(service, run.org_id, run.id), verifyTimeLeftMs: () => Math.max(0, left()),retryTransient:domain=>cachedMailProvider(domain)==='unknown' });
+  const worker = makeWorkerClient({ usage: service, orgId: run.org_id, config: workerConfig, verifyGate: makeRunVerifyGate(service, run.org_id, run.id), verifyTimeLeftMs: () => Math.max(0, left()),claimDailyNotice: resource => claimRunNotice(service, run.id, resource), retryTransient:domain=>cachedMailProvider(domain)==='unknown' });
   const { data: contactData, error: contactErr } = await service.from('decision_maker_candidates').select('*').eq('lead_id', lead.id);
   if (contactErr) return { status: 'failed', reason: 'Could not read this lead\'s contacts.' };
   const rows = (contactData ?? []) as Contact[];
@@ -652,7 +660,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
     if (current.error) { steps.push('Role search: skipped, could not read saved data.'); break roleSearch; }
     const profile = chooseRoleProfile(profiles.data ?? [], run.org_id, str(lead.icp_id));
     const teamFound = teamPeopleForLead([...fetchedPhonePages, ...confirmedSites.flatMap(site => site.phonePages ?? [])], {
-      company: companyForRoles, confirmedDomains: discovery.domains.filter(domain => !domain.needs_check && verified.has(domain.domain)).map(domain => domain.domain),
+      company: companyForRoles, registeredName: registry.name, city: str(lead.city), country: str(lead.country), roles: roleLadder(profile).flatMap(rung => rung.roles), confirmedDomains: discovery.domains.filter(domain => !domain.needs_check && verified.has(domain.domain)).map(domain => domain.domain),
       suspectDomains: suspicion.suspect && siteDomain ? [siteDomain] : [],
     }).filter(person => !ownerSuppressed(person.first + ' ' + person.last));
     const teamPicked = pickTeamPeople(teamFound, roleLadder(profile));
@@ -666,7 +674,10 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         if (allowed) spend.used.ai['role search'] = (spend.used.ai['role search'] ?? 0) + 1;
         return allowed;
       },
-      gemini: configured.geminiKey ? prompt => geminiGroundedSearch(prompt, configured.geminiKey!, Math.min(15_000, Math.max(1, left() - 5_000)), geminiMeter) : undefined,
+      gemini: configured.geminiKey ? prompt => {
+        const budget = roleGeminiBudgetMs(left());
+        return budget === null ? Promise.resolve({text:'',sources:[]}) : geminiGroundedSearch(prompt, configured.geminiKey!, budget, geminiMeter);
+      } : undefined,
     });
     const roleResult = shouldSearchAfterTeam(teamPicked) ? await findRolePeople({ company: companyForRoles, registeredName: registry.name, city: str(lead.city), country: str(lead.country), profile,
       provider: { search: async (query, context) => { if (workerConfig || configured.geminiKey) await checkpoint(); return provider.search(query, context); } }, timeLeftMs: left }) : { people: [], searches: 0, via: [] };
@@ -692,7 +703,7 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
         if (stored) Object.assign(stored, contact);
       }
     }
-    if (shouldSearchAfterTeam(teamPicked)) steps.push(roleSearchLine({ ...roleResult, via: roleSearchUsage.gemini > 0 ? [...roleResult.via, 'gemini'] : roleResult.via }));
+    if (shouldSearchAfterTeam(teamPicked) && (!geminiRefused || roleResult.people.length)) steps.push(roleSearchLine({ ...roleResult, via: roleSearchUsage.gemini > 0 ? [...roleResult.via, 'gemini'] : roleResult.via }));
   }
   await addRegistryOfficers();
   for (const site of ownSites) for (const html of site.pages) {
@@ -1379,7 +1390,9 @@ export async function processDeepFindLead(service: SupabaseClient, run: DeepFind
   }
   for (const [domain, lines] of domainDetails) steps.push(domain + ': ' + [...lines].join(' '));
   steps.push(...firecrawl.lines());
-  steps.push(...problemLines(problems));
+  const refusalLine = geminiRefusalLine(geminiRefused);
+  if (refusalLine && !steps.includes(refusalLine)) steps.push(refusalLine);
+  steps.push(...problemLines(problems.filter(p => !geminiRefused || !(p.step === 'web' || (p.step === 'person' && p.target.includes('Web search'))))));
   steps.push(creditLine({ ...spend.used, firecrawl: firecrawl.pagesUsed() }));
 
   // LinkedIn auto-capture, like findDecisionMakers, for contacts this run created or filled
@@ -1533,11 +1546,7 @@ async function updateRow(service: SupabaseClient, id: string, patch: Record<stri
 
 /** Completes an active run once none of its rows is queued or running. */
 async function completeIfDone(service: SupabaseClient, runId: string): Promise<void> {
-  const { count } = await service.from('deep_find_leads').select('id', { count: 'exact', head: true })
-    .eq('run_id', runId).in('status', ['queued', 'running']);
-  if ((count ?? 1) > 0) return;
-  const { error } = await service.from('deep_find_runs').update({ status: 'completed', finished_at: nowIso() }).eq('id', runId).eq('status', 'active');
-  if (error) console.error('deep find: complete run failed');
+  await completeDeepFindRun(service,runId);
 }
 
 /** Cancels a run (engine side) and skips its queued rows. */
@@ -1550,25 +1559,7 @@ export async function cancelDeepFindRun(service: SupabaseClient, runId: string, 
 
 /** Housekeeping: interrupted rows are requeued once then failed; queued rows of ended runs are skipped; empty runs complete. */
 async function housekeeping(service: SupabaseClient): Promise<void> {
-  const { data: running } = await service.from('deep_find_leads').select('id, claimed_at, attempts').eq('status', 'running');
-  const now = new Date();
-  for (const r of (running ?? []) as { id: string; claimed_at: string | null; attempts: number; domains?: Record<string, unknown> }[]) {
-    const action = stuckAction(r, now);
-    if (action === 'ignore') continue;
-    const patch = action === 'requeue'
-      ? { status: 'queued', claimed_at: null }
-      : { status: 'failed', reason: 'This lead was interrupted twice, so Deep find stopped trying.', finished_at: nowIso() };
-    await service.from('deep_find_leads').update({ ...patch, updated_at: nowIso() }).eq('id', r.id).eq('status', 'running');
-  }
-  const { data: orphans } = await service.from('deep_find_leads').select('id, deep_find_runs!inner(status)')
-    .eq('status', 'queued').neq('deep_find_runs.status', 'active');
-  const ids = ((orphans ?? []) as { id: string }[]).map((o) => o.id);
-  if (ids.length > 0) {
-    await service.from('deep_find_leads').update({ status: 'skipped', reason: 'The Deep find was stopped before this lead.', updated_at: nowIso() })
-      .in('id', ids).eq('status', 'queued');
-  }
-  const { data: active } = await service.from('deep_find_runs').select('id').eq('status', 'active');
-  for (const r of (active ?? []) as { id: string }[]) await completeIfDone(service, r.id);
+  await maintainDeepFind(service);
 }
 
 /**
@@ -1607,6 +1598,11 @@ export async function runDeepFindTick(service: SupabaseClient, startedAt: number
       if (!placesRuns.has(run.id)) placesRuns.set(run.id, createPlacesContext(service, run.org_id));
       out = await processDeepFindLead(service, run, row, placesRuns.get(run.id), startedAt + WALL_BUDGET_MS);
     } catch { console.error('deep find: claimed lead processing failed'); out = { status: 'failed', reason: 'Something went wrong while searching this lead.' }; }
+    try {
+      const refusal = await readGeminiRefusal({service,orgId:run.org_id,sharedKey:false,runId:run.id});
+      const line = geminiRefusalLine(refusal);
+      if (line) out.domains = {...out.domains, steps:[...new Set([...(Array.isArray(out.domains?.steps) ? out.domains.steps as string[] : []),line])]};
+    } catch { console.error('deep_find_gemini_status_unavailable'); }
     const effort = effortPolicy(row.domains);
     const label = effort === 'custom' ? 'Custom' : EFFORT_LEVELS[effort].label;
     const freshSteps = row.domains?.start_fresh === true && Array.isArray(row.domains.steps)

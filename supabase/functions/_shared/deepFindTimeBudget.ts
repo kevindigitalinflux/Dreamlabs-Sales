@@ -8,3 +8,8 @@ const LEAD_BUDGET_MS = 120_000;
 export function leadDeadline(now: number, invocationDeadline = Infinity): number {
   return Math.min(now + LEAD_BUDGET_MS, invocationDeadline - FINAL_SAVE_RESERVE_MS);
 }
+
+/** Do not start a role fallback below twenty seconds; leave five seconds after its request. */
+export function roleGeminiBudgetMs(leftMs: number): number | null {
+  return leftMs < 20000 ? null : Math.min(25000,leftMs-5000);
+}

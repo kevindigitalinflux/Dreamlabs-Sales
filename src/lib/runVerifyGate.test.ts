@@ -180,3 +180,7 @@ it('persists domain-note suppression independently of the worker verdict',async(
  const later=new RunVerifyGate(f.store,()=>12001,async()=>{});
  expect(await later.run('b@example.com',35000,async()=>({ok:true,value:{status:'unverifiable',reason:'unknown'}}))).toMatchObject({ok:true,value:{reason:'unknown'},domainNoteSuppressed:true});
 });
+it.each(['busy','limit_reached'] as const)('does not spend domain starts or canary on worker %s',async failure=>{
+ const f=fixture();await f.gate().run('a@example.com',33000,async()=>({ok:false,failure,line:'refused'}));
+ expect((await f.store.read()).state['example.com']).toMatchObject({starts:[],canaryDone:false});
+});

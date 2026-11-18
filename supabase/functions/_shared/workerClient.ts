@@ -21,7 +21,7 @@ export interface WorkerClient {
   lines(): string[];
 }
 
-export interface WorkerClientOptions { usage: UsageClient; orgId: string; config: WorkerConfig | null; fetchImpl?: typeof fetch; verifyGate?: RunVerifyGate; verifyTimeLeftMs?: () => number; retryTransient?:(domain:string)=>boolean }
+export interface WorkerClientOptions { usage: UsageClient; orgId: string; config: WorkerConfig | null; fetchImpl?: typeof fetch; verifyGate?: RunVerifyGate; verifyTimeLeftMs?: () => number; retryTransient?:(domain:string)=>boolean; claimDailyNotice?: (resource: string) => Promise<boolean> }
 
 type Kind = 'verify' | 'scrape' | 'msExists' | 'search';
 type Stopped = { failure: WorkerFailure; line: string };
@@ -50,7 +50,11 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
     if (!config) return stop(kind, 'not_configured', kind === 'search' ? '' : workerFailureLine('not_configured'));
     const resource = WORKER_RESOURCE[kind];
     const reserve = await reserveUsage(usage, orgId, resource, units);
-    if (!reserve.ok) return {...stop(kind, 'limit_reached', refusalLine(reserve.reason, resource, reserve.limit)),allowanceReached:reserve.reason==='org_limit'||reserve.reason==='shared_pool'};
+    if (!reserve.ok) {
+      const daily = reserve.reason === 'org_limit' || reserve.reason === 'shared_pool';
+      const show = !daily || !opts.claimDailyNotice || await opts.claimDailyNotice(resource);
+      return {...stop(kind, 'limit_reached', show ? refusalLine(reserve.reason, resource, reserve.limit) : ''), allowanceReached: daily};
+    }
     if (Date.now() >= deadline) {
       // The local deadline expired before dispatch: the worker did no work. Keep later calls eligible.
       await refundUsage(usage, orgId, resource, units, reserve.day);
@@ -133,7 +137,7 @@ export function makeWorkerClient(opts: WorkerClientOptions): WorkerClient {
         }
         if(!admitted){verifyCalls++;admitted=true;firstStarted=Date.now();}attempts++;
         const raw = await call('verify', 1, '/verify-email', { email }, options?.timeoutMs);
-        if (!raw.ok && raw.failure === 'domain_stalled') { verifyCalls--; admitted = false; }
+        if (!raw.ok && ['domain_stalled','busy','limit_reached'].includes(raw.failure)) { verifyCalls--; admitted = false; }
         if (!raw.ok) return { ok: false, failure: raw.failure, line: raw.line,allowanceReached:raw.allowanceReached };
         const reply = parseVerifyReply(raw.json, email);
         if (!reply) { const line = workerFailureLine('bad_response'); addLine(line); return { ok: false, failure: 'bad_response', line }; }

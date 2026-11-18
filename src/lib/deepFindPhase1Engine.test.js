@@ -66,7 +66,7 @@ it.each(['Ann Roe is a Director at Cleancat Logistics Ltd in Cork.','Ann Roe, Di
  geminiGroundedSearch.mockResolvedValue({text:JSON.stringify({name:'Ann Roe',title:'Director',company:'Cleancat',linkedin_url:null}),sources:[redirect],sourceEvidence:[`${redirect} linkedin.com`,`${redirect} ${evidence}`]});
  findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
  const out=await run();expect(out.status).toBe('done');expect(contacts.some(contact=>contact.first_name==='Ann')).toBe(false);
- expect(out.domains.role_search_fallback_shape).toMatchObject({people_lines:1,people_kept:0});
+ expect(out.domains.role_search_fallback_shape).toMatchObject({people_lines:1,people_kept:0,objects_found:1});
 });
 it('does not count a not-configured worker as SearXNG in saved role usage',async()=>{
  findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
@@ -108,7 +108,7 @@ it.each([false,true])('stores only fallback shape counts in the engine result, i
  if(interrupted)lookUpPeople.mockRejectedValueOnce(new Error('fixture interrupted'));
  const out=await run();
  expect(out.status).toBe(interrupted?'failed':'done');
- expect(out.domains.role_search_fallback_shape).toEqual({lines_parsed:1,profile_urls:1,sources:1,redirect_sources:1,linkedin_titled_sources:1,people_lines:1,people_kept:0});
+ expect(out.domains.role_search_fallback_shape).toEqual({lines_parsed:1,profile_urls:1,sources:1,redirect_sources:1,linkedin_titled_sources:1,people_lines:1,people_kept:0,objects_found:1});
  expect(Object.values(out.domains.role_search_fallback_shape).every(value=>typeof value==='number')).toBe(true);
  expect(JSON.stringify(out.domains.role_search_fallback_shape)).not.toMatch(/Some|Person|Acme|https/);
 });
@@ -287,4 +287,26 @@ it('a fallback team-page person still allows the search ladder',async()=>{
  lead.website='https://acme.com';roleProfiles=[{id:'icp',org_id:'org',target_roles:['Facilities Manager']}];
  readCompanyPages.mockImplementationOnce(async(_url,_budget,_extra,onPage)=>{const html='<article><h3>Ann Lee</h3><p>Office Manager</p></article>';onPage(html,'https://acme.com/team');return [html]});
  await run();expect(findRolePeople).toHaveBeenCalledTimes(1);expect(contacts.find(c=>c.first_name==='Ann')).toMatchObject({source:'team_page',include_in_sequences:false});
+});
+it('a saved run refusal skips all Gemini work and gives this lead one combined step',async()=>{
+ const original=service.rpc;service.rpc=vi.fn(async(name,args)=>name==='gemini_run_status'?{data:402}:original(name,args));
+ const out=await run();expect(geminiGroundedSearch).not.toHaveBeenCalled();
+ expect(out.domains.steps.filter(line=>line.includes('Gemini refused the key'))).toEqual(['Web search and role search skipped: Gemini refused the key (error 402). Check the Gemini billing or key.']);
+});
+it('the real engine passes the twenty-five second role fallback budget',async()=>{
+ findRolePeople.mockImplementationOnce(async input=>{await input.provider.search('fixture',{company:'Acme',roles:['Owner'],rung:'final'});return {people:[],searches:1,via:['gemini']};});
+ await run();expect(geminiGroundedSearch).toHaveBeenCalled();expect(geminiGroundedSearch.mock.calls[0][2]).toBe(25000);
+});
+it('saves a trusted homepage owner pair as a team contact without enrollment',async()=>{
+ lead.website='https://acme.com';roleProfiles=[{id:'icp',org_id:'org',target_roles:['Owner']}];
+ readCompanyPages.mockImplementationOnce(async(_url,_budget,_extra,onPage)=>{const html='<html><body><footer>Owner, Gary Ramsay</footer></body></html>';onPage(html,'https://acme.com/');return [html]});
+ const out=await run();expect(contacts.find(c=>c.first_name==='Gary')).toMatchObject({last_name:'Ramsay',source:'team_page',include_in_sequences:false,title:'Owner'});expect(findRolePeople).not.toHaveBeenCalled();expect(out.people_found).toBe(1);
+});
+it('a Deep find admission RPC failure skips the role step without failing the lead',async()=>{
+ const original=service.rpc;service.rpc=vi.fn(async(name,args)=>name==='gemini_admit'?{error:{message:'fixture unavailable'}}:original(name,args));
+ const realAi=await vi.importActual('../../supabase/functions/_shared/ai');
+ geminiGroundedSearch.mockImplementation(realAi.geminiGroundedSearch);
+ findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
+ const out=await run();expect(out.status).toBe('done');expect(out.domains.steps).toContain('Role search: skipped, Gemini is busy. Used the backup search.');
+ expect(service.rpc).toHaveBeenCalledWith('gemini_admit',{p_org:'org'});expect(fetch.mock.calls.some(([url])=>String(url).includes('generativelanguage.googleapis.com'))).toBe(false);
 });

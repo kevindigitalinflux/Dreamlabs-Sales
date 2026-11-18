@@ -5,6 +5,7 @@ import { runDeepFindTick } from '../../supabase/functions/_shared/deepFind';
 function database() {
   const tables = { deep_find_runs: [], deep_find_leads: [], org_members: [{ user_id: 'user', org_id: 'org' }], leads: [] };
   const service = { async rpc(name) {
+    if (name === 'deep_find_housekeeping' || name === 'deep_find_complete') return {data:false,error:null};
     if (name !== 'deep_find_claim') throw new Error('Unexpected RPC');
     const row = tables.deep_find_leads.find(r => r.status === 'queued');
     if (row) { row.status = 'running'; row.attempts = (row.attempts ?? 0) + 1; }

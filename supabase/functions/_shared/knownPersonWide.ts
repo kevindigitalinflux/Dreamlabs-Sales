@@ -1,3 +1,4 @@
+import { jsonObjects } from './jsonObjects.ts';
 // supabase/functions/_shared/knownPersonWide.ts
 // Pure helpers for the wider known-person lookup (Hunter company list, email pattern, the company's own website,
 // web search). No imports on purpose: tested from src/lib. Everything here treats provider, page and model text as
@@ -558,20 +559,18 @@ export function parseWebFindings(
 ): { email: string | null; linkedin_url: string | null } {
   const none = { email: null, linkedin_url: null };
   if (typeof text !== 'string' || text.length > 20_000) return none;
-  const open = text.indexOf('{');
-  const close = text.lastIndexOf('}');
-  if (open < 0 || close <= open) return none;
-  let obj: unknown;
-  try { obj = JSON.parse(text.slice(open, close + 1)); } catch { return none; }
-  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return none;
-  const o = obj as Record<string, unknown>;
-  const prose = `${text.slice(0, open)} ${text.slice(close + 1)}`.toLowerCase();
-  const d = domainList(domain);
-  let email = cleanEmail(o.email);
-  if (email && !(onAnyDomain(email, d) && !isGenericMailbox(email) && localPartNamesPerson(email, first, last) && prose.includes(email))) {
-    email = null;
+  const objects = jsonObjects(text);
+  const prose = objects.reduceRight((value, span) => value.slice(0,span.start)+' '.repeat(span.end-span.start)+value.slice(span.end),text).toLowerCase();
+  const result: {email: string | null; linkedin_url: string | null} = {...none};
+  for (const {value:o} of objects) {
+    const d = domainList(domain);
+    let email = cleanEmail(o.email);
+    if (email && !(onAnyDomain(email, d) && !isGenericMailbox(email) && localPartNamesPerson(email, first, last) && prose.includes(email))) {
+      email = null;
+    }
+    let linkedin = cleanLinkedinProfile(o.linkedin_url);
+    if (linkedin && !prose.includes(linkedin.slice('https://www.'.length).toLowerCase())) linkedin = null;
+    result.email ??= email; result.linkedin_url ??= linkedin;
   }
-  let linkedin = cleanLinkedinProfile(o.linkedin_url);
-  if (linkedin && !prose.includes(linkedin.slice('https://www.'.length).toLowerCase())) linkedin = null;
-  return { email, linkedin_url: linkedin };
+  return result;
 }

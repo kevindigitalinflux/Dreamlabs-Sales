@@ -1,3 +1,4 @@
+import { companyEvidenceMatcher, judgeRoleEvidence, personCompanyProof, roleLadder, type RoleLead } from './roleSearchRules.ts';
 export interface TeamPerson { first: string; last: string; title: string; linkedinUrl: string | null; sourceUrl: string }
 type Rung = 'target' | 'fallback' | 'final';
 type Picked = TeamPerson & { rung: Rung };
@@ -107,12 +108,55 @@ export function pickTeamPeople(people: TeamPerson[], ladder: { rung: Rung; roles
 }
 
 /** Trust is supplied by the existing domain assessment; this performs no fetching. */
-export function teamPeopleForLead(pages: { html: string; url: string }[], trust: { company: string; confirmedDomains: string[]; suspectDomains: string[] }): TeamPerson[] {
+export function teamPeopleForLead(pages: { html: string; url: string }[], trust: RoleLead & { confirmedDomains: string[]; suspectDomains: string[]; roles?: string[] }): TeamPerson[] {
   return pages.flatMap(page => {
     let domain: string; try { domain = new URL(page.url).hostname.toLowerCase().replace(/^www\./, ''); } catch { return []; }
     if (!trust.confirmedDomains.includes(domain) || trust.suspectDomains.includes(domain)) return [];
-    return teamPeopleFromPage(page).filter(person => key(`${person.first} ${person.last}`) !== key(trust.company));
+    return [...teamPeopleFromPage(page), ...roleNamesFromPage(page, trust)].filter(person => key(`${person.first} ${person.last}`) !== key(trust.company));
   }).filter((person, index, all) => all.findIndex(other => key(`${other.first} ${other.last}`) === key(`${person.first} ${person.last}`)) === index);
+}
+
+/** Trusted company pages can identify people in plain prose and footers without a team card. */
+function roleNamesFromPage(page: {html: string; url: string}, lead: RoleLead & {roles?: string[]}): TeamPerson[] {
+  const roles = lead.roles ?? roleLadder(null).flatMap(rung => rung.roles);
+  const blocks: string[] = [];
+  const excluded = (node: HtmlNode) => /script|style|nav|testimonial|review|client/i.test(`${node.tag} ${node.attrs.id ?? ''} ${node.attrs.class ?? ''}`);
+  const visibleText = (node: HtmlNode | string): string => typeof node === 'string' ? decode(node)
+    : excluded(node) ? '' : node.children.map(visibleText).join(' ');
+  const visit = (node: HtmlNode) => {
+    if (excluded(node)) return;
+    const children = node.children.filter((child): child is HtmlNode => typeof child !== 'string');
+    if (!children.some(child => /^(html|head|body|main|p|div|section|article|li|footer|header|h[1-6])$/.test(child.tag))) blocks.push(visibleText(node));
+    else {
+      for (const child of node.children) if (typeof child === 'string') blocks.push(decode(child)); else visit(child);
+    }
+  };
+  visit(htmlTree(page.html));
+  const output: TeamPerson[] = [], seen = new Set<string>();
+  const namePattern = String.raw`\p{Lu}[\p{L}'’\-]*(?:\s+\p{Lu}[\p{L}'’\-]*){1,3}`;
+  const matchesCompany = companyEvidenceMatcher(lead);
+  for (const block of blocks) for (const segment of block.split(/[.;|·\n]/)) {
+    if (/\b(?:former|formerly|previously|retired|said)\b|\bex-|\bwas a\b/i.test(segment)) continue;
+    const add = (name: string, title: string) => {
+      if (!validName(name) || seen.has(key(name)) || output.length >= 12) return;
+      const proof = personCompanyProof({name,evidence:segment},lead,{rung:'final',roles});
+      if (proof.some(item => !matchesCompany(item.phrase))) return;
+      // The confirmed website establishes the company; explicit foreign-employer text above still vetoes it.
+      const judged = judgeRoleEvidence([name,title,lead.company],segment,lead,{rung:'final',roles});
+      if (!judged.ok) return;
+      seen.add(key(name));
+      output.push({...judged.person,sourceUrl:page.url});
+    };
+    for (const role of roles) {
+      const folded = role.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/[a-z]/gi,char=>`[${char.toUpperCase()}${char.toLowerCase()}]`);
+      for (const match of segment.matchAll(new RegExp(`\\b${folded}\\b\\s*[,–:-]\\s*(${namePattern})`,'gu'))) add(match[1],role);
+      for (const match of segment.matchAll(new RegExp(`(${namePattern})\\s*[,–:-]\\s*\\b${folded}\\b`,'gu'))) add(match[1],role);
+      if ((role.toLowerCase()==='owner' && /\bowner-led\b/i.test(segment)) || (role.toLowerCase()==='founder' && /\bfounder\b/i.test(segment))) {
+        for (const match of segment.matchAll(new RegExp(`\\bI['’]m\\s+(${namePattern})`,'gu'))) add(match[1],role);
+      }
+    }
+  }
+  return output;
 }
 
 /** A target team hit already satisfies the preferred role rung. */

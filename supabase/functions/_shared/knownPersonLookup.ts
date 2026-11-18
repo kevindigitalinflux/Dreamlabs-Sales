@@ -1,3 +1,4 @@
+import { jsonObjects } from './jsonObjects.ts';
 import type { GeminiSearchContext } from './geminiSearchMeter.ts';
 // supabase/functions/_shared/knownPersonLookup.ts
 // Provider calls for the known-person lookup. Keys are only ever sent to the provider: never logged, returned, or put in an error.
@@ -326,7 +327,7 @@ export async function webSearchForPerson(p: WebSearchPerson, geminiKey: string, 
     if (p.includeEvidence && linkedin) {
       // This automatic path requires the actual returned URL, not a normalised HTTP or regional-host variant.
       try {
-        const raw = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)) as { linkedin_url?: unknown };
+        const raw = jsonObjects(text).map(span=>span.value).find(row=>cleanFoundField('linkedin_url',row.linkedin_url)===parsed.linkedin_url) ?? {};
         linkedin = typeof raw.linkedin_url === 'string' && /^https:\/\/www\.linkedin\.com\/in\/[A-Za-z0-9_-]+\/?$/.test(raw.linkedin_url.trim()) ? raw.linkedin_url.trim() : null;
       } catch { linkedin = null; }
     }

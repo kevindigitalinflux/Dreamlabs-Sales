@@ -622,6 +622,7 @@ export interface IdealCustomerProfile {
 
 /** A Deep find run (migration 057). Counters and status are written by the run-deep-find engine only. */
 export interface DeepFindRun {
+  gemini_refused_status?: number | null;
   id: string;
   org_id: string;
   created_by: string;

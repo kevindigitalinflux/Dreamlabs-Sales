@@ -535,3 +535,12 @@ describe('worker web search',()=>{
   vi.useFakeTimers();const u=usage();const pending=make(u,async(_url,init)=>new Promise<Response>((_r,reject)=>init?.signal?.addEventListener('abort',()=>reject(new DOMException('abort','AbortError'))))).search('query');await vi.advanceTimersByTimeAsync(15000);expect(await pending).toMatchObject({ok:false,failure:'timeout'});expect(refundCalls(u)).toHaveLength(0);
  });
 });
+
+it('shares a daily refusal notice across lead clients and never sends a refused scrape', async()=>{
+ const u=usage({data:REFUSED,error:null}), f=worker(200,SCRAPE_OK);
+ const notice=vi.fn().mockResolvedValueOnce(true).mockResolvedValue(false);
+ const a=makeWorkerClient({usage:u,orgId:'org',config:CONFIG,fetchImpl:f,claimDailyNotice:notice});
+ const b=makeWorkerClient({usage:u,orgId:'org',config:CONFIG,fetchImpl:f,claimDailyNotice:notice});
+ await a.scrapeSite('fixture.test');await b.scrapeSite('fixture.test');
+ expect(a.lines()).toHaveLength(1);expect(b.lines()).toEqual([]);expect(f).not.toHaveBeenCalled();expect(refundCalls(u)).toHaveLength(0);
+});
