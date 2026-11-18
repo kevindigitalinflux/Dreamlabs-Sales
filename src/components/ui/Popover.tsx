@@ -62,7 +62,7 @@ export function Popover({ open, onClose, anchorRef, label, align = 'end', classN
       aria-label={label}
       tabIndex={-1}
       style={{ top: place?.top ?? 0, left: place?.left ?? 0, maxHeight: place?.maxHeight, visibility: place ? 'visible' : 'hidden' }}
-      className={`fixed z-50 overflow-y-auto rounded-surface border border-line bg-card/90 p-2 shadow-raised outline-none backdrop-blur ${className}`}
+      className={`fixed z-50 overflow-y-auto rounded-surface border border-line bg-card p-2 shadow-raised outline-none ${className}`}
     >
       {children}
     </div>,

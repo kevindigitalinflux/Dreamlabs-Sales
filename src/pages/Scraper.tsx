@@ -125,14 +125,14 @@ export function Scraper() {
           <div className="flex flex-col gap-3">
             <SectionTitle icon={ScanSearch}>Here's what I picked up</SectionTitle>
             <div className="flex flex-wrap gap-2">
-              <Badge className="bg-violet/15 text-link">Country: {icp.country === 'GB' ? 'United Kingdom' : icp.country === 'IE' ? 'Ireland' : icp.country === 'US' ? 'United States' : 'Other'}</Badge>
-              {icp.location && <Badge className="bg-violet/15 text-link">Location: {icp.location}</Badge>}
-              {icp.industry && <Badge className="bg-violet/15 text-link">Industry: {icp.industry}</Badge>}
-              {icp.min_staff != null && <Badge className="bg-violet/15 text-link">Min staff: {icp.min_staff}</Badge>}
+              <Badge className="bg-violet-soft text-link">Country: {icp.country === 'GB' ? 'United Kingdom' : icp.country === 'IE' ? 'Ireland' : icp.country === 'US' ? 'United States' : 'Other'}</Badge>
+              {icp.location && <Badge className="bg-violet-soft text-link">Location: {icp.location}</Badge>}
+              {icp.industry && <Badge className="bg-violet-soft text-link">Industry: {icp.industry}</Badge>}
+              {icp.min_staff != null && <Badge className="bg-violet-soft text-link">Min staff: {icp.min_staff}</Badge>}
               {(icp.min_rating != null || icp.max_rating != null) && (
-                <Badge className="bg-violet/15 text-link">Rating: {icp.min_rating ?? '?'}–{icp.max_rating ?? '?'}</Badge>
+                <Badge className="bg-violet-soft text-link">Rating: {icp.min_rating ?? '?'}–{icp.max_rating ?? '?'}</Badge>
               )}
-              {icp.max_reviews != null && <Badge className="bg-violet/15 text-link">Max reviews: {icp.max_reviews}</Badge>}
+              {icp.max_reviews != null && <Badge className="bg-violet-soft text-link">Max reviews: {icp.max_reviews}</Badge>}
             </div>
             <SelectField label="Search country" value={icp.country} onChange={(e) => setIcp({ ...icp, country: e.target.value as IcpParams['country'] })}>
               <option value="GB">United Kingdom</option><option value="IE">Ireland</option>

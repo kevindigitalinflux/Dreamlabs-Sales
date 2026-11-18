@@ -37,7 +37,7 @@ export function Collapsible({ title, summary, defaultOpen = false, open, onOpenC
         aria-controls={bodyId}
         className={`flex w-full cursor-pointer items-center gap-3 text-left ${flat ? 'min-h-11 rounded-nested px-3' : 'min-h-14 rounded-surface px-4'} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus`}
       >
-        {Icon && <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-nested bg-violet/15 text-link"><Icon className="h-4 w-4" aria-hidden /></span>}
+        {Icon && <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-nested bg-violet-soft text-link"><Icon className="h-4 w-4" aria-hidden /></span>}
         <span className="font-heading text-[15px] font-semibold">{title}</span>
         {summary && !isOpen && <span className="min-w-0 flex-1 truncate text-sm text-muted">{summary}</span>}
         <ChevronDown className={`ml-auto h-4 w-4 shrink-0 text-muted transition-transform motion-reduce:transition-none ${isOpen ? 'rotate-180' : ''}`} aria-hidden />

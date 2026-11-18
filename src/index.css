@@ -32,7 +32,9 @@
   /* Aurora refresh (2026-11-16). Violet used as TEXT differs per theme because one value cannot pass contrast on both bases; cyan is no longer a text colour. */
   --color-link: #6A1FD6;
   --color-attention: #C21850;
-  --color-attention-soft: rgba(240, 56, 107, 0.10);
+  --color-attention-soft: #FCE7EE;
+  /* Solid tint for icon tiles, selected chips and pills (violet text on it passes contrast). */
+  --color-violet-soft: #ECE2FF;
   --color-focus: #007474;
   --shadow-raised: 0 14px 32px -18px rgba(4, 15, 73, 0.28);
   --shadow-glow: 0 8px 24px -8px rgba(139, 50, 255, 0.55);
@@ -98,13 +100,14 @@
   /* Dark surfaces are solid fills, one step apart: page #040F49, sections and cards (raised) #1C2C82, dialogs and menus (card) #263898. */
   --color-card: #263898;
   --color-raised: #1C2C82;
-  --color-surface: rgba(244, 244, 248, 0.13);
-  --color-muted: rgba(244, 244, 248, 0.82);
-  --color-line: rgba(244, 244, 248, 0.28);
-  --color-field: rgba(244, 244, 248, 0.60);
+  --color-surface: #2E3F98;
+  --color-muted: #C6C9E0;
+  --color-line: #5666BC;
+  --color-field: #8E9AD8;
+  --color-violet-soft: #47349C;
   --color-link: #D4B8FF;
   --color-attention: #FFA0BA;
-  --color-attention-soft: rgba(240, 56, 107, 0.16);
+  --color-attention-soft: #652A5A;
   --color-focus: #00DFDF;
   --shadow-raised: 0 18px 40px -18px rgba(2, 6, 40, 0.55);
 
@@ -147,14 +150,3 @@
   to { transform: translateX(0); }
 }
 
-/* Signed-in backdrop: two brand glows behind the whole app. Mounted once in AppShell. */
-.app-backdrop {
-  background:
-    radial-gradient(60% 50% at 100% 0%, rgba(139, 50, 255, 0.16), transparent 70%),
-    radial-gradient(55% 50% at 0% 100%, rgba(100, 55, 139, 0.14), transparent 70%);
-}
-:root[data-theme="dark"] .app-backdrop {
-  background:
-    radial-gradient(60% 50% at 100% 0%, rgba(139, 50, 255, 0.34), transparent 70%),
-    radial-gradient(55% 50% at 0% 100%, rgba(100, 55, 139, 0.45), transparent 70%);
-}

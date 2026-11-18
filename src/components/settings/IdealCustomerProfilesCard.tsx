@@ -34,7 +34,7 @@ export function IdealCustomerProfilesCard({ isOrgAdmin }: { isOrgAdmin: boolean 
         {loading && <Skeleton className="h-20 w-full" />}
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
         {!loading && icps.length === 0 && (
-          <p className="flex items-center gap-2 rounded-control bg-surface/60 p-3 text-sm text-muted">
+          <p className="flex items-center gap-2 rounded-control bg-surface p-3 text-sm text-muted">
             <Users className="h-4 w-4 shrink-0" aria-hidden />
             {isOrgAdmin ? 'No profiles yet. Add your first one, for example "Property managers".' : 'No profiles yet. An org admin can add them.'}
           </p>
@@ -42,7 +42,7 @@ export function IdealCustomerProfilesCard({ isOrgAdmin }: { isOrgAdmin: boolean 
         <ul className="grid gap-2 sm:grid-cols-2">
           {icps.map((p) => (
             <li key={p.id}>
-              <button type="button" onClick={() => setEditing(p)} className="w-full cursor-pointer rounded-control border border-line bg-raised/40 p-3 text-left hover:bg-surface/70">
+              <button type="button" onClick={() => setEditing(p)} className="w-full cursor-pointer rounded-control border border-line bg-raised p-3 text-left hover:bg-surface">
                 <span className="block text-sm font-bold">{p.name}</span>
                 <span className="mt-1 line-clamp-2 block whitespace-pre-wrap break-words text-xs text-muted">{p.summary ?? p.pain_points ?? 'No details yet'}</span>
               </button>

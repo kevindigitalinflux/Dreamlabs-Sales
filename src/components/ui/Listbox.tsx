@@ -269,7 +269,7 @@ function ListboxOption({ opt, selected, highlighted, onSelect, onHover, indent =
       onClick={() => !opt.disabled && onSelect()}
       className={`flex min-h-9 cursor-pointer items-center justify-between gap-2 rounded-nested ${indent ? 'pl-4 pr-2' : 'px-2'} text-sm ${
         opt.disabled ? 'cursor-not-allowed opacity-50' : ''
-      } ${highlighted ? 'bg-violet/20 text-offwhite' : 'text-offwhite'} ${selected ? 'font-semibold' : ''}`}
+      } ${highlighted ? 'bg-violet-soft text-offwhite' : 'text-offwhite'} ${selected ? 'font-semibold' : ''}`}
     >
       <span className="truncate">{opt.label}</span>
       {selected && <Check className="h-4 w-4 shrink-0 text-link" aria-hidden />}

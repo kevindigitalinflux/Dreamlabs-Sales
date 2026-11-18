@@ -18,7 +18,7 @@ export function EmailPreviewPane({ to, subject, body, linksText, attachmentNames
   return (
     <section aria-label="How the email will look" className="flex min-w-0 flex-col gap-3 lg:sticky lg:top-0">
       <p className="flex items-center gap-2 text-sm font-semibold text-muted">
-        <span className="flex h-7 w-7 items-center justify-center rounded-nested bg-violet/15 text-link"><Eye className="h-4 w-4" aria-hidden /></span>
+        <span className="flex h-7 w-7 items-center justify-center rounded-nested bg-violet-soft text-link"><Eye className="h-4 w-4" aria-hidden /></span>
         How it will look{caption ? <span className="font-normal">, {caption}</span> : null}
       </p>
       <div className="overflow-hidden rounded-surface border border-line bg-card shadow-raised">

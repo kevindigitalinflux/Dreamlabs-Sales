@@ -41,7 +41,7 @@ export function SequenceList() {
         {sequences.filter((s) => matchesCategory(s, categoryFilter)).map((s) => (
           <li key={s.id}>
             <button type="button" onClick={() => canEdit(s) ? setEditing(s) : undefined}
-              className={`w-full rounded-surface border border-line bg-raised shadow-raised p-4 text-left ${canEdit(s) ? 'cursor-pointer hover:bg-surface/50' : 'cursor-default'}`}>
+              className={`w-full rounded-surface border border-line bg-raised shadow-raised p-4 text-left ${canEdit(s) ? 'cursor-pointer hover:bg-surface' : 'cursor-default'}`}>
               <div className="flex items-center gap-2">
                 <span className="font-heading text-sm font-bold">{s.name}</span>
                 {s.is_active === false && <span className="text-xs text-muted">Inactive draft</span>}

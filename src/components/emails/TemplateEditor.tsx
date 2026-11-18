@@ -128,7 +128,7 @@ export function TemplateEditor({ template, isAdmin, onSave, onDelete, onClose, o
               ))}
               {customKeys.map((key) => (
                 <button key={key} type="button" onClick={() => insertVar(key)} title={`Your value: ${customValues[key] ?? ''}`}
-                  className="min-h-8 cursor-pointer rounded-full border border-violet-line bg-violet/10 px-3 text-[13px] font-medium text-link hover:bg-violet/20 focus-visible:outline-2 focus-visible:outline-focus">
+                  className="min-h-8 cursor-pointer rounded-full border border-violet-line bg-violet-soft px-3 text-[13px] font-medium text-link hover:bg-violet-soft focus-visible:outline-2 focus-visible:outline-focus">
                   {`{{${key}}}`}
                 </button>
               ))}

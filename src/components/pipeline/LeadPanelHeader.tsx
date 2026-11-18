@@ -24,7 +24,7 @@ export function LeadPanelHeader({ lead, onClose, onUpdate, onEmail, onDeepFind }
   return (
     <div className="shrink-0 px-6 pb-4 pt-5">
       <div className="flex items-start gap-3">
-        <span aria-hidden className="flex h-11 w-11 shrink-0 items-center justify-center rounded-nested bg-linear-to-br from-violet to-purple font-heading text-base font-bold text-on-accent">{initials(lead.business_name)}</span>
+        <span aria-hidden className="flex h-11 w-11 shrink-0 items-center justify-center rounded-nested bg-violet font-heading text-base font-bold text-on-accent">{initials(lead.business_name)}</span>
         <div className="min-w-0">
           <h2 className="font-heading text-[22px] font-bold leading-tight">{lead.business_name}</h2>
           {subtitle && <p className="truncate text-sm text-muted">{subtitle}</p>}

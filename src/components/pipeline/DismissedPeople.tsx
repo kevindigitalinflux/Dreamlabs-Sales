@@ -56,7 +56,7 @@ export function DismissedPeople({ leadId, reloadKey, onRestored, helperRef }: { 
       {error&&<p role="alert" className="text-sm text-danger">{error}</p>}
       {!visible.length&&review.summary&&<p role="status" className="text-sm">{review.summary}</p>}
       {visible.length > 0 && (
-        <section className="flex flex-col gap-2 rounded-surface border border-line bg-raised/50 p-3 text-offwhite" aria-labelledby={`dismissed-${leadId}`}>
+        <section className="flex flex-col gap-2 rounded-surface border border-line bg-raised p-3 text-offwhite" aria-labelledby={`dismissed-${leadId}`}>
           <h3 id={`dismissed-${leadId}`} ref={headingRef} tabIndex={-1} className="font-heading text-sm font-bold focus-visible:outline-2 focus-visible:outline-violet-line">Dismissed people ({visible.length})</h3>
           <ReviewBatchControls review={{...review,busy:review.busy||loading}} ids={visible.map(p=>p.id)} approveLabel="Restore selected" onApprove={()=>void restoreSelected()} />
           <ul className="flex flex-col gap-2">

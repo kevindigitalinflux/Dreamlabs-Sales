@@ -339,7 +339,7 @@ export function EmailComposer({ lead, open, onClose, draft: savedDraft = null, a
               </div>
             )}
             {diff && (
-              <div className="max-h-48 overflow-y-auto rounded-control bg-surface/60 p-3 text-xs">
+              <div className="max-h-48 overflow-y-auto rounded-control bg-surface p-3 text-xs">
                 <p className="mb-1 flex items-center gap-1 font-bold uppercase tracking-wide text-muted"><WandSparkles className="h-3.5 w-3.5" aria-hidden />Template → AI changes</p>
                 {diff.map((l, i) => (
                   <p key={i} className={`whitespace-pre-wrap ${l.kind === 'added' ? 'text-success' : l.kind === 'removed' ? 'text-danger/70 line-through' : 'text-muted'}`}>{l.text || ' '}</p>

@@ -66,7 +66,7 @@ function StepCard({ index, step, options, onChange, onRemove }: {
   return (
     <li ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }}
       className="flex min-w-0 items-end gap-2 rounded-surface border border-l-4 border-line border-l-violet-line bg-raised p-3 shadow-raised">
-      <span aria-hidden className="mb-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-nested bg-violet/15 font-heading text-sm font-bold text-link">{index + 1}</span>
+      <span aria-hidden className="mb-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-nested bg-violet-soft font-heading text-sm font-bold text-link">{index + 1}</span>
       <button type="button" {...attributes} {...listeners} aria-label="Reorder step" className="mb-1 flex h-11 w-11 shrink-0 cursor-grab items-center justify-center rounded-control text-muted hover:bg-surface"><GripVertical className="h-4 w-4" aria-hidden /></button>
       {/* shrink-0 keeps the days box a fixed, readable width however long the template name is. */}
       <div className="w-24 shrink-0">
@@ -168,7 +168,7 @@ export function SequenceBuilder({ sequence, isAdmin, onSave, onDelete, onClose }
         </div>
         <div className="flex min-w-0 flex-col gap-3">
           <SectionTitle icon={ListOrdered} count={form.steps.length}>Steps</SectionTitle>
-          <div className="flex items-center gap-2 rounded-nested bg-violet/10 px-3 py-2 text-sm font-semibold text-link">
+          <div className="flex items-center gap-2 rounded-nested bg-violet-soft px-3 py-2 text-sm font-semibold text-link">
             <CalendarClock className="h-4 w-4 shrink-0" aria-hidden />{timelineLabel(form.steps)}
           </div>
           <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>

@@ -24,7 +24,7 @@ const STATUS_ICONS: Record<DeepFindRowWithLead['status'], ReactNode> = {
 
 const STATUS_CLASSES: Record<DeepFindRowWithLead['status'], string> = {
   queued: 'border-line bg-raised',
-  running: 'border-violet-line bg-violet/10',
+  running: 'border-violet-line bg-violet-soft',
   done: 'border-green-500/50 bg-green-500/10',
   failed: 'border-red-500/50 bg-red-500/10',
   skipped: 'border-line bg-raised',
@@ -39,7 +39,7 @@ const PRIORITY_EDGE: Record<DeepFindPriority, string> = {
 };
 const PRIORITY_PILL: Record<DeepFindPriority, string> = {
   most: 'bg-attention-soft text-attention',
-  some: 'bg-violet/15 text-link',
+  some: 'bg-violet-soft text-link',
   working: 'bg-surface text-muted',
   none: 'bg-surface text-muted',
 };
@@ -80,7 +80,7 @@ export function DeepFindLeadResult({ row, level = 2 }: { row: DeepFindRowWithLea
       {row.lead && <BlockedOwnDomainNotice leadId={row.lead_id} lead={row.lead} />}
       {row.reason && <p>{row.reason}</p>}
       {openChoice && (
-        <section className="flex flex-col gap-2 rounded-surface border-2 border-violet-line bg-violet/10 p-3.5">
+        <section className="flex flex-col gap-2 rounded-surface border-2 border-violet-line bg-violet-soft p-3.5">
           <Heading level={level + 1} className="flex items-center gap-2 font-heading text-base font-bold"><AlertTriangle size={18} aria-hidden className="shrink-0" />Needs your decision: choose the right company</Heading>
           <p className="text-[13px]">
             Deep find carried on with everything else. Only the company&apos;s officers wait for this: once you choose, they are
@@ -111,7 +111,7 @@ export function DeepFindLeadResult({ row, level = 2 }: { row: DeepFindRowWithLea
       {details.people.length > 0 && (
         <Section title="People" level={level + 1}>
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {details.people.map((p, i) => <li key={`${p.name}:${i}`} className="flex min-w-0 flex-col gap-1.5 rounded-control border border-line bg-raised/50 p-2.5">
+            {details.people.map((p, i) => <li key={`${p.name}:${i}`} className="flex min-w-0 flex-col gap-1.5 rounded-control border border-line bg-raised p-2.5">
               <span className="break-words font-semibold">{p.name}</span>
               {p.role && <span className="break-words text-[13px]">{p.role}</span>}
               <span className="flex flex-wrap gap-1.5">
@@ -128,7 +128,7 @@ export function DeepFindLeadResult({ row, level = 2 }: { row: DeepFindRowWithLea
       {row.lead && <DeepFindAutoChanges headingLevel={level + 1} key={`${row.id}:${row.updated_at}`} leadId={row.lead_id} changes={details.autoApplied} />}
       <CompanyDomainsEditor headingLevel={level + 1} leadId={row.lead_id} domains={details.domains} />
       {details.steps.length > 0 && (
-        <details className="rounded-control border border-line bg-raised/50 p-3">
+        <details className="rounded-control border border-line bg-raised p-3">
           <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-violet-line">What Deep find did ({details.steps.length} {details.steps.length === 1 ? 'step' : 'steps'})</summary>
           <ul className="mt-2 flex list-disc flex-col gap-2 pl-5 text-[13px] leading-relaxed">
             {details.steps.map((s, i) => <li key={i}>{s}</li>)}

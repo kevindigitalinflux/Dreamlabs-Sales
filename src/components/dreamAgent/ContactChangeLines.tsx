@@ -34,7 +34,7 @@ export function ContactChanges({ existing, draft }: ContactChangeLinesProps) {
     <div className="flex flex-col gap-1">
       <ul className="flex flex-col gap-1">
         {lines.map((l) => (
-          <li key={l.label} className="flex flex-wrap items-center gap-2 rounded-control bg-surface/60 p-2 text-sm">
+          <li key={l.label} className="flex flex-wrap items-center gap-2 rounded-control bg-surface p-2 text-sm">
             <span className="w-24 text-xs font-semibold text-muted">{l.label}</span>
             <span className="text-muted line-through">{l.from}</span>
             <ArrowRight className="h-3.5 w-3.5 text-muted" aria-hidden />

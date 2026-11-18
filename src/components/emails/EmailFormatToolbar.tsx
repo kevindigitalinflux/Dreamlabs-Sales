@@ -33,7 +33,7 @@ function ToolButton({ label, icon, pressed, onClick, disabled }: { label: string
       onMouseDown={keepSelection}
       onClick={onClick}
       className={`inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1.5 rounded-control border px-3 text-sm font-semibold transition-colors motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 ${
-        pressed ? 'border-violet bg-violet/15 text-offwhite' : 'border-line bg-raised text-muted hover:text-offwhite'
+        pressed ? 'border-violet bg-violet-soft text-offwhite' : 'border-line bg-raised text-muted hover:text-offwhite'
       }`}
     >
       {icon}

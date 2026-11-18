@@ -78,7 +78,7 @@ export function ListTable({ leads, profiles, sortKey, sortDir, onSort, onOpen, s
                 <span className="block max-w-72 truncate">{lead.business_name}</span>
                 <small className="block max-w-72 truncate text-[13px] font-normal text-muted">{lead.owner_name ?? 'No owner yet'}</small>
                 {deepFindRunning?.has(lead.id) && (
-                  <span className="ml-2 rounded-full bg-violet/15 px-2 py-0.5 text-[11px] font-semibold text-link">Deep find running</span>
+                  <span className="ml-2 rounded-full bg-violet-soft px-2 py-0.5 text-[11px] font-semibold text-link">Deep find running</span>
                 )}
               </td>
               <td className="px-3 py-3"><StageBadge stage={lead.stage} /></td>

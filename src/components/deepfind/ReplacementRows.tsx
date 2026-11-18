@@ -38,7 +38,7 @@ export function ReplacementRows({ suggestions, busy, onAction }: { suggestions: 
   if (groups.length === 0&&!review.summary&&!review.busy) return null;
   return <><ReviewBatchControls review={{...review,busy:locked}} ids={visible.map(g=>suggestionKey(g.primary))} approveLabel="Replace selected" rejectLabel="Dismiss selected" onApprove={()=>void batch('replace')} onReject={()=>void batch('dismiss')} />
   <ul className="grid min-w-0 grid-cols-1 gap-2 text-offwhite">
-    {visible.map((g) => <li key={g.contactId} className="flex min-w-0 flex-col gap-2 rounded-control border border-line bg-raised/50 p-3">
+    {visible.map((g) => <li key={g.contactId} className="flex min-w-0 flex-col gap-2 rounded-control border border-line bg-raised p-3">
       <label className="flex min-h-11 items-center gap-2"><input type="checkbox" aria-label={`Select replacement for ${g.name}: ${g.oldEmail} to ${g.primary.value}`} disabled={locked} checked={review.selected.has(suggestionKey(g.primary))} onChange={()=>review.toggle(suggestionKey(g.primary))} />Select primary guess</label>
       <p className={`${WRAP} text-sm font-semibold`}>{g.name}</p>
       <p className="flex min-w-0 flex-wrap items-center gap-2 text-sm">

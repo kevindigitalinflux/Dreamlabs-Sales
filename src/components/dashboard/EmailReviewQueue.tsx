@@ -65,7 +65,7 @@ export function EmailReviewQueue({ drafts, loading, onReview, onChanged, selecte
           )}
           <span className="font-heading text-sm font-bold">{d.lead?.business_name ?? d.to_email}</span>
           <EmailVerificationBadge value={verification.get(d.to_email)} />
-          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${d.sequence_enrollment_id ? 'bg-violet/25 text-offwhite' : 'bg-surface text-muted'}`}>
+          <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${d.sequence_enrollment_id ? 'bg-violet-soft text-offwhite' : 'bg-surface text-muted'}`}>
             {d.sequence_enrollment_id ? 'Sequence' : 'Manual'}
           </span>
           {d.status === 'failed' && (

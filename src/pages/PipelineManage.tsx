@@ -229,7 +229,7 @@ export function PipelineManage() {
             <li key={share.id} className="flex flex-col gap-3 rounded-surface border border-line bg-raised shadow-raised p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold">{share.pipelines.name}</span>
-                <Badge className={share.permission === 'edit' ? 'bg-violet/15 text-link' : 'bg-surface text-muted'}>
+                <Badge className={share.permission === 'edit' ? 'bg-violet-soft text-link' : 'bg-surface text-muted'}>
                   {share.permission === 'edit' ? 'Can edit' : 'View only'}
                 </Badge>
               </div>

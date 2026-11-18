@@ -19,7 +19,7 @@ interface Props {
 function Tile({ icon: Icon, label, value, tone = 'plain' }: { icon: LucideIcon; label: string; value: string; tone?: 'plain' | 'attention' }) {
   return (
     <div className={`flex items-center gap-3 rounded-nested px-3 py-2.5 ${tone === 'attention' ? 'bg-attention-soft' : 'bg-surface'}`}>
-      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-nested ${tone === 'attention' ? 'bg-attention/15 text-attention' : 'bg-violet/15 text-link'}`}><Icon className="h-4 w-4" aria-hidden /></span>
+      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-nested ${tone === 'attention' ? 'bg-attention-soft text-attention' : 'bg-violet-soft text-link'}`}><Icon className="h-4 w-4" aria-hidden /></span>
       <span className="min-w-0">
         <b className={`block truncate font-heading text-[15px] font-bold ${tone === 'attention' ? 'text-attention' : ''}`}>{value}</b>
         <span className="text-[13px] text-muted">{label}</span>
@@ -35,10 +35,10 @@ export function LeadDetailHeader({ lead, assigneeName, onTogglePriority, onEmail
   const subtitle = [lead.owner_name, lead.vertical].filter(Boolean).join(', ');
   return (
     <header className="overflow-hidden rounded-surface border border-line bg-raised shadow-raised">
-      <div className="h-1.5 bg-linear-to-r from-violet via-purple to-magenta" aria-hidden />
+      <div className="h-1.5 bg-violet" aria-hidden />
       <div className="flex flex-col gap-4 p-5">
         <div className="flex flex-wrap items-start gap-4">
-          <span aria-hidden className="flex h-14 w-14 shrink-0 items-center justify-center rounded-surface bg-linear-to-br from-violet to-purple font-heading text-xl font-bold text-on-accent shadow-glow">{initials(lead.business_name)}</span>
+          <span aria-hidden className="flex h-14 w-14 shrink-0 items-center justify-center rounded-surface bg-violet font-heading text-xl font-bold text-on-accent">{initials(lead.business_name)}</span>
           <div className="min-w-0 flex-1 basis-60">
             <div className="flex items-center gap-2">
               <h1 className="min-w-0 break-words font-heading text-[28px] font-bold leading-tight">{lead.business_name}</h1>

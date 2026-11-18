@@ -24,7 +24,7 @@ import { MailboxStatus } from '../components/settings/MailboxStatus';
 function ConnectionLink({ to, icon: Icon, title, hint }: { to: string; icon: LucideIcon; title: string; hint: string }) {
   return (
     <Link to={to} className="flex min-h-14 items-center gap-3 rounded-surface border border-line bg-raised px-4 py-3 shadow-raised hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-nested bg-violet/15 text-link"><Icon className="h-4 w-4" aria-hidden /></span>
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-nested bg-violet-soft text-link"><Icon className="h-4 w-4" aria-hidden /></span>
       <span className="min-w-0 flex-1">
         <span className="block font-heading text-[15px] font-semibold">{title}</span>
         <span className="block text-sm text-muted">{hint}</span>

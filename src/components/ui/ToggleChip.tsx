@@ -4,7 +4,7 @@ const BASE =
   'inline-flex min-h-11 md:min-h-10 cursor-pointer items-center gap-2 rounded-control border px-3 text-sm font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
 const OFF = 'border-line bg-raised text-muted hover:bg-surface hover:text-offwhite';
 const ON: Record<'default' | 'attention', string> = {
-  default: 'border-violet-line bg-violet/15 text-link',
+  default: 'border-violet-line bg-violet-soft text-link',
   attention: 'border-attention bg-attention-soft text-attention',
 };
 

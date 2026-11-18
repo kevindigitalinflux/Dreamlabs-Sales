@@ -16,7 +16,7 @@ export function TopBar() {
         type="button"
         onClick={toggle}
         aria-pressed={focusMode}
-        className={`mr-auto flex min-h-11 cursor-pointer items-center gap-2 rounded-control px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus md:min-h-10 ${focusMode ? 'bg-violet/20 text-link' : 'text-muted hover:bg-surface hover:text-offwhite'}`}
+        className={`mr-auto flex min-h-11 cursor-pointer items-center gap-2 rounded-control px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus md:min-h-10 ${focusMode ? 'bg-violet-soft text-link' : 'text-muted hover:bg-surface hover:text-offwhite'}`}
       >
         <Focus className="h-4 w-4" aria-hidden />
         {focusMode ? 'Exit focus' : 'Focus'}

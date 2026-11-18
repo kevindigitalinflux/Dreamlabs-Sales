@@ -96,7 +96,7 @@ export function DreamAgent() {
 
       <div className="flex flex-col gap-4">
         {messages.map((m, i) => (
-          <p key={i} className="rounded-surface border border-line bg-raised/60 p-4 text-sm">{m}</p>
+          <p key={i} className="rounded-surface border border-line bg-raised p-4 text-sm">{m}</p>
         ))}
         <AgentActionReview key={`${currentOrg?.id}:${round}`} actions={actions} resolutions={resolutions} busy={loading} onResolve={resolveAction} applyErrors={applyErrors}
           onPickLead={(index,id)=>{const action=actions[index];if(action.type==='ambiguous')void handleClarify(action.mentioned_text,id);}}

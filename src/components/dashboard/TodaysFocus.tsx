@@ -29,7 +29,7 @@ export function TodaysFocus({ leads, onOpen }: TodaysFocusProps) {
               tabIndex={0}
               onClick={() => onOpen(lead)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onOpen(lead); }}
-              className={`flex cursor-pointer flex-wrap items-center gap-3 rounded-control border p-3 hover:bg-surface/60 ${overdue ? 'border-attention/40 bg-attention-soft' : 'border-line bg-card'}`}
+              className={`flex cursor-pointer flex-wrap items-center gap-3 rounded-control border p-3 hover:bg-surface ${overdue ? 'border-attention/40 bg-attention-soft' : 'border-line bg-card'}`}
             >
               <span className="font-heading text-sm font-bold">{lead.business_name}</span>
               <StageBadge stage={lead.stage} />

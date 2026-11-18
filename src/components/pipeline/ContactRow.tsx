@@ -44,11 +44,11 @@ export function ContactRow({ contact, lead, isMain, busy, apolloConfigured, erro
   }
   const own = isOwnSource(contact.source);
   return (
-    <li className="rounded-control bg-surface/60 p-2 text-sm">
+    <li className="rounded-control bg-surface p-2 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] uppercase text-muted">{candidateSourceLabel(contact.source)}</span>
         {contact.kind === 'general' && <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] uppercase text-muted">General inbox</span>}
-        {isMain && <span className="rounded-full bg-violet/20 px-2 py-0.5 text-[10px] font-semibold uppercase text-link">Main</span>}
+        {isMain && <span className="rounded-full bg-violet-soft px-2 py-0.5 text-[10px] font-semibold uppercase text-link">Main</span>}
         <span className="font-semibold">{name}</span>
         {contact.title && <span className="text-muted">({contact.title})</span>}
         <button type="button" aria-label={`Edit ${name}`} onClick={() => setEditing(true)} className="ml-auto flex h-8 w-8 cursor-pointer items-center justify-center rounded text-muted hover:text-offwhite">

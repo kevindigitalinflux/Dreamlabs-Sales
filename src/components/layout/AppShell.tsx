@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router';
 import { Sidebar } from './Sidebar';
+import { BackLink } from './BackLink';
 import { TopBar } from './TopBar';
 import { MobileNav } from './MobileNav';
 import { useFocusMode } from '../../hooks/useFocusMode';
@@ -16,7 +17,6 @@ export function AppShell() {
     <ThemeProvider>
       <JobsProvider>
         <ReplyAlertsProvider>
-        <div aria-hidden className="app-backdrop pointer-events-none fixed inset-0" />
         <div className="relative flex min-h-screen">
           {!focusMode && <Sidebar />}
           <div className="flex min-w-0 flex-1 flex-col">
@@ -24,6 +24,7 @@ export function AppShell() {
             {!focusMode && <ReplyBanner />}
             {!focusMode && <JobsAnnouncer />}
             <main className="flex-1 p-4 pb-20 md:px-7 md:py-6 md:pb-6">
+              <BackLink />
               <Outlet />
             </main>
           </div>

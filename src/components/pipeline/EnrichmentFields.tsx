@@ -21,7 +21,7 @@ export function EnrichmentFields({r,name,fromSnapshot,checked,replaceExisting,to
                   const to = r.proposed[field]!;
                   const isChecked = checked[r.lead_id]?.has(field) ?? false;
                   return (
-                    <li key={field} className="flex flex-wrap items-center gap-2 rounded bg-surface/60 p-2 text-sm">
+                    <li key={field} className="flex flex-wrap items-center gap-2 rounded bg-surface p-2 text-sm">
                       <input type="checkbox" checked={isChecked} disabled={busy} onChange={() => toggle(r.lead_id, field)} className="h-4 w-4 accent-violet-500" aria-label={`Apply ${field} for ${lead?.business_name ?? r.lead_id}`} />
                       <span className="w-16 text-xs font-semibold text-muted">{FIELD_LABELS[field]}</span>
                       {keepsExisting ? (

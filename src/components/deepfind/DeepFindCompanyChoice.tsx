@@ -57,7 +57,7 @@ export function DeepFindCompanyChoice({ leadId, candidates }: { leadId: string; 
       <div className="flex flex-col gap-2 rounded-surface border border-line bg-raised shadow-raised p-3">
         <p className="text-[13px]">Not a UK company, or your company is not listed?</p>
         <Button variant="primary" className="w-full whitespace-normal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-line" disabled={busy !== null} aria-expanded={rejecting} onClick={() => setRejecting((open) => !open)}>None of these / not a UK company</Button>
-        {rejecting && <div ref={countryChoice} className="flex min-w-0 flex-col gap-2 rounded-control border border-line bg-raised/50 p-3">
+        {rejecting && <div ref={countryChoice} className="flex min-w-0 flex-col gap-2 rounded-control border border-line bg-raised p-3">
           <SelectField label="Where is this company?" value={country} disabled={busy !== null} onChange={(e) => setCountry(e.target.value as typeof country)}>
             <option value="IE">Ireland</option><option value="US">United States</option><option value="OTHER">Other country</option>
             <option value="unlisted">It is a UK company, my company is not listed</option>

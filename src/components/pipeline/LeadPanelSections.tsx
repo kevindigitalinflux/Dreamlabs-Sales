@@ -213,7 +213,7 @@ export function NotesPreview({ notes, loading, onEditNote, onDeleteNote }: {
     <div className="flex flex-col gap-2">
       <ul className="flex flex-col gap-2">
         {visible.map((n) => (
-          <li key={n.id} className="rounded-control bg-surface/60 p-2 text-sm">
+          <li key={n.id} className="rounded-control bg-surface p-2 text-sm">
             {onEditNote
               ? <EditableNote note={n} onSave={onEditNote} onDelete={onDeleteNote} clamp />
               : <p className="line-clamp-3 whitespace-pre-wrap break-words">{n.content}</p>}
