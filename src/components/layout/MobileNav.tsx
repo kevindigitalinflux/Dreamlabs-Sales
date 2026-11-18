@@ -1,3 +1,4 @@
+import {ApiKeyHealthBadge} from '../settings/ApiKeyHealthBadge';
 import { NavLink } from 'react-router';
 import { KanbanSquare, LayoutDashboard, Settings, Mail } from 'lucide-react';
 import { useReplyAlerts } from '../../hooks/useReplyAlerts';
@@ -32,6 +33,7 @@ export function MobileNav() {
         >
           <Icon className="h-5 w-5" aria-hidden />
           {label}
+          {to === '/settings' && <ApiKeyHealthBadge />}
           {to === '/emails' && <ReplyCountBadge count={count} />}
         </NavLink>
       ))}

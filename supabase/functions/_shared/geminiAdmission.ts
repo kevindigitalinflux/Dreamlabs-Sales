@@ -1,3 +1,4 @@
+import {keySectionHref} from './keyHealthRules.ts';
 import type { GeminiMeterClient, GeminiSearchContext } from './geminiSearchMeter.ts';
 
 /** Only Deep find contexts participate in minute admission and run refusal. */
@@ -45,3 +46,6 @@ export async function recordGeminiRefusal(context: GeminiSearchContext | undefin
   if (result.error) { console.error('gemini_refusal_save_failed'); throw new Error('Gemini 429: busy'); }
   context.onRefused?.([401,402,403].includes(result.data as number) ? result.data as number : status);
 }
+
+/** The run warning and saved step link to the same provider section. */
+export function geminiRefusalHref():string {return keySectionHref('gemini');}

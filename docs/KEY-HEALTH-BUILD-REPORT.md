@@ -6,6 +6,8 @@ Local build on codex/key-health. Kevin approved the newer fetched origin/main 9a
 
 Three gated tasks: (1) health classification/recording and migration; (2) provider-call wiring/audit; (3) UI/desktop alerts and final handoff. Every task starts with red fixtures, all seven gates precede each explicit-path commit. Independent review and live 402 proof remain unverified. The local edge check is a TypeScript shim, not Deno runtime proof.
 
+Final checkpoint: all three local tasks are built and gated. The Task 1/2 pending notes below are historical; the final acceptance section supersedes them. No rollout occurred.
+
 ## Task 1 — rules, best-effort recorder and migration
 
 Added pure fixed-provider wording/links and status classification, reusing Hunter's existing 429 distinction. Gemini RESOURCE_EXHAUSTED with exhausted daily quota is a top-up problem; per-minute throttling remains rate_limited. All twelve provider values are covered. Timeouts, network and 5xx do not create key problems. RPC arguments contain fixed codes only, never bodies, keys or URLs.
@@ -101,7 +103,7 @@ Every network transport found by source search is covered below; IMAP's method n
 | Apollo | knownPersonLookup apolloMatchPerson/apolloOrgSearch; apolloHunterLookup lookupApolloPhone; apolloPeopleSearch searchApolloDecisionMaker, searchApolloDecisionMakers, revealApolloPerson; enrich-apollo organisation enrichment; org-api-settings auth/health | Shared timeout/direct observer and resolver source; false is_logged_in key-test response is not a successful clear. |
 | Google Places | placesClient newPage, legacyPage, legacyPlaceDetails; scrape-google-places fetchPlaceDetails; shared validatePlacesKey | Shared timeout/direct observer handles New and legacy response shapes, retaining API credential/source identity. No reservation or refund change. |
 | Google Places Pro | org-api-settings validateKey Places New IDs-only request | Candidate key-test binding identifies the pro section separately. No normal scraper consumer exists yet, as already documented in orgApiKeys; no new paid route is added. |
-| Companies House | companiesHouse fetchFirstOfficer, fetchActiveOfficers, searchCompanyByName, searchCompaniesByName, searchCompaniesByStem, fetchCompanyProfile, searchOfficers, fetchOfficerAppointments; registryProofPeople fetchActivePscNames; scrape-companies-house direct search; org-api-settings key validation | Shared timeout/direct observer; Basic credential mapped to the resolver event. Existing registry ordering unchanged. |
+| Companies House | companiesHouse fetchFirstOfficer, fetchActiveOfficers, searchCompanyByName, searchCompaniesByName, findRegisteredCompany, fetchCompanyProfile, searchOfficers, fetchOfficerAppointments; registryProofPeople fetchActivePscNames; scrape-companies-house direct search; org-api-settings key validation | Shared timeout/direct observer; Basic credential mapped to the resolver event. Existing registry ordering unchanged. |
 | CRO | cro searchCroCompanies HTTP request used by scrape-cro and key validation | Direct observer matches the existing normalized Basic email:key credential at CRO hosts. |
 | OpenCorporates | openCorporates search and detail requests; org-api-settings search validation | Shared timeout/direct observer maps api_token to org/global source. |
 | Firecrawl | firecrawlClient validateFirecrawlKey credit-usage and makeFirecrawlClient.readTeam scrape | Default request is the module-local observer; normal injected fixture requests remain local. Existing own-key-only policy and page cap unchanged. |
@@ -123,3 +125,46 @@ All seven final gates PASS: app304 files /3,771 passed /one existing skip; wrapp
 ### Exact redeploy surface (current source graph; proposed only)
 
 Provider-consuming entrypoints with request scopes: check-replies, check-sequences, draft-linkedin-message, draft-reply, enrich-apollo, enrich-hunter, enrich-leads-bulk, find-decision-makers, generate-email, org-api-settings, parse-csv-leads, parse-icp, parse-notes, parse-session-notes, reveal-decision-maker, run-deep-find, run-lookup-jobs, run-selected-autopilot, run-verify-queue, scrape-companies-house, scrape-cro, scrape-google-places, send-email, suggest-sequence. Migration079 must be reviewed/applied before rollout, plus frontend after Task3. No wrapper/container/VPS, secret/env, schedule or quota change. A final transitive scan will check this list before the report closes.
+
+## Task 3 — settings, banner, menu badge and desktop alerts
+
+Added an organisation-scoped health hook with a unique useId realtime channel per mounted instance. It rejects stale organisation loads, removes its channel on cleanup, and expires soft rate-limit rows after fifteen minutes without waiting for another database event. Loading, error and empty states are explicit.
+
+Every key section can show summary/body health even without an organisation key. Flags use existing red/amber tokens, first-failure time, fixed feature labels, billing links and existing save or explicit current-key test actions. Shared-key flags explain platform ownership and hide billing links from non-platform owners. A new problem or matching URL hash opens its section. Existing provider instructions were extracted into apiProviderConfig/ProviderRow; the worker keeps its existing management permissions. Pro/standalone-verifier health sections appear only for a flag or matching hash, preserving the existing single Places setup slot. The verifier section points to the actual worker connection.
+
+The AppShell banner shows one critical problem per provider; admins receive the fix link and members receive the softer ask-an-admin text. Session dismissal includes org/provider/first_failed_at. Desktop alerts reuse the existing desktop preference/permission/storage pattern and never request permission. They require admin membership, opt-in and already-granted permission; shown identities survive refresh/remount, and clicks open the correct section. This is a separate health hook sharing useDesktopPreference from useDesktopNotifications, rather than passing synthetic jobs through the job-notification planner. The existing card now mentions key alerts. Both Settings navigation surfaces receive the admin-only count badge.
+
+Deep find's run warning and saved refusal step link to the actual route /settings/organization#gemini. The old warning text and refusal behavior remain unchanged. No cap, quota, provider ordering, eligibility or verdict rule changed.
+
+New UI/hook fixtures failed before implementation. Fixtures cover admin/member copy, session dismissal/new identity, shared-key flags without a saved key, billing visibility, auto-open/hash routing, unique channel cleanup/org-switch races, stale-rate expiry, admin badge, popup opt-in/permission/deduplication/clicks, RPC returned errors and ignored 5xx/network transport failures. Existing organizationSettings tests gained a MemoryRouter and health/test mocks; existing assertions were retained. Existing deepFindRefusalView gained a MemoryRouter only; its assertion remains unchanged. The earlier orgApiSettings quota-health allowance is the only changed existing behavioral assertion. No existing test was deleted or weakened.
+
+## Acceptance evidence
+
+1. MET locally — fixed classification for every provider, quota versus rate limits, success memo, returned/thrown RPC failures, source provenance and concurrent shared-key isolation pass fixture tests. No provider request or secret access occurred.
+2. MET as written artefact — migration 079 and the rolled-back SQL above cover member RLS, service-only mutation RPCs, throttle, severity retention, cleanup and cascade. NOT VERIFIED against Postgres: migration and dry run were not executed.
+3. MET in hook/component fixtures and static rendering — settings flags, current-key tests, admin/member banner, new-problem dismissal identity, admin badge, unique realtime channels, soft-limit expiry and one desktop popup per problem. NOT VERIFIED visually: the browser runtime reported no available browser; browsers.list returned an empty list. No fallback browser or preview server was started. Phone layout, both themes, native notifications and real realtime delivery still need browser verification.
+4. MET locally — all seven gates passed before each task commit. Gate environment: VITE_SUPABASE_URL=http://127.0.0.1:54321 and VITE_SUPABASE_ANON_KEY=local-test-placeholder. Commands: npx tsc --noEmit; npx vitest run; npm run build; git diff --check (safecrlf disabled only for the command); node scripts/places-edge-typecheck.mjs; worker/wrapper npx tsc --noEmit and npx vitest run. Final rerun after the organisation-keyed settings reset passed on 2026-11-18 at 15:41 local time.
+
+| Task / commit | App files | App tests passed | Existing skips | Wrapper files / tests | Other gates |
+| --- | ---: | ---: | ---: | --- | --- |
+| 1 — 79f5394 | 302 | 3,751 | 1 | 8 / 166 | Both TypeScript, build, whitespace, edge 29 PASS |
+| 2 — 816ca6a | 304 | 3,771 | 1 | 8 / 166 | Both TypeScript, build, whitespace, edge 29 PASS |
+| 3 — commit containing this final report | 310 | 3,788 | 1 | 8 / 166 | Both TypeScript, build, whitespace, edge 29 PASS |
+
+Resolve git rev-parse HEAD on codex/key-health for the final report-containing commit. The shared branch checkpoint records that full hash externally, avoiding a self-referential commit identifier. Logs are local ignored .superpowers/key-health-task{1,2,3}-*.log. Build reports the existing large-chunk warning. No gate failure remains.
+
+## Final redeploy list — proposed, not performed
+
+A final transitive relative-import scan from the changed shared modules confirms exactly these 24 provider-consuming edge functions: check-replies, check-sequences, draft-linkedin-message, draft-reply, enrich-apollo, enrich-hunter, enrich-leads-bulk, find-decision-makers, generate-email, org-api-settings, parse-csv-leads, parse-icp, parse-notes, parse-session-notes, reveal-decision-maker, run-deep-find, run-lookup-jobs, run-selected-autopilot, run-verify-queue, scrape-companies-house, scrape-cro, scrape-google-places, send-email, suggest-sequence. Also review/apply migration 079 and deploy the frontend. No wrapper/VPS, secret, environment, schedule or quota update is required. Migration must precede consumers. These are review instructions, not authorization to publish.
+
+## Not verified — final
+
+Independent Claude review is pending. Postgres SQL syntax/runtime, grants/RLS enforcement, concurrent UPSERT behavior, realtime delivery, Deno node:async_hooks compatibility and edge background-write lifetime were not exercised. The edge gate checks 29 entrypoints through a TypeScript shim; Node fixtures do not prove Deno compatibility. Real provider schemas, billing links, live key-test/save and Gemini 402 behavior remain unverified. No browser connection was available, so phone width, both themes and native desktop notification delivery remain unverified. UI fixture/static-render evidence does not replace those checks.
+
+After review and separately authorized rollout, a fresh real provider request or explicit current-key test must produce the held Gemini 402 and its health row/banner/flag/popup. An already-refused Deep find run can suppress subsequent Gemini requests, so its old run flag alone cannot create a new health observation. A successful real key test/save must then remove the row and clear the visible problem. No such live proof was attempted here.
+
+## Deviations and open questions
+
+Kevin explicitly approved base 9a081f0 instead of be3492b. The inactive standalone email_verifier has schema/classifier/health-display support but no actual standalone transport to wire; actual verification uses the observed lookup worker. Google Places Pro currently has key validation but no normal scraper consumer. Member SELECT is granted under RLS while writes/RPCs remain service-only, because revoking member SELECT would make the requested UI impossible. All updates, including escalation within sixty seconds, follow the exact SQL throttle; later source observations are best effort and never block features. Desktop health notifications reuse the existing preference implementation through a separate planner because the job hook accepts job events only. No unresolved behavior decision blocks local review; runtime and visual checks remain explicitly pending.
+
+Subscription usage is unavailable. Checkpoints were saved proactively. RTK shell output reports no automatic hook installed; no hook/trust setup was changed. Codex remains builder; Claude reviews next. Stop after this local report and handoff. No push, merge, deployment, migration execution, provider call, credential access, install or spending occurred.

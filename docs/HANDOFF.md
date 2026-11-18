@@ -1,3 +1,13 @@
+## API key health — local review checkpoint (2026-11-18)
+
+Kevin approved codex/key-health from fetched origin/main 9a081f0c05397e204d6638818df6e160ec1a77cc, superseding the brief's be3492b. Local build only. Codex remains builder; Claude reviews next. Read docs/KEY-HEALTH-BUILD-REPORT.md for the provider audit, all changed assertions, gate counts, rolled-back SQL and exact proposed 24-function/frontend redeploy list. Task 1 is 79f5394, Task 2 is 816ca6a, and Task 3 is the commit containing this checkpoint (resolve HEAD; full tip also in the shared labelled checkpoint).
+
+Health telemetry records fixed provider failures at actual HTTP boundaries with resolver org/global provenance and invocation-scoped success memo. Migration 079 is written only. Settings summary/body flags, linked open sections, current-key testing, admin/member app banner, admin navigation badge and opt-in already-permitted desktop notifications are built. Final seven gates PASS: 310 app files / 3,788 passed / one existing skip; wrapper 8 / 166; both TypeScript checks, build, whitespace and edge 29. Each task began with red fixtures and was gated before its explicit-path commit. No cap, quota, provider order or Deep find verdict changed.
+
+Independent review, SQL/RLS/concurrency, Deno AsyncLocalStorage/background lifetime, realtime, real provider/402 proof, phone/themes and native notifications remain NOT VERIFIED. Browser runtime had no connection. The standalone email verifier has no active consumer in this base; actual checks use the covered worker. No push, merge, deploy, SQL execution, key access, provider request, install, spending or VPS change. No task-owned server. Shared context uses a labelled key-health branch snapshot; accepted-main mirror is preserved. Usage is unavailable. Stop after report; rollout needs separate Kevin authorization. Older blocks remain historical.
+
+---
+
 ## Sign-in redirect bug (2026-11-18): settings fixed, code branch waiting
 
 Read `docs/TODO.md` first section. The bug is fixed by Kevin's Supabase URL settings (Site URL and Redirect URLs now point at `https://sales.didreamlabs.com`; `APP_PUBLIC_URL` secret set); Kevin confirmed sign-in works. Code hardening is built on `claude/signin-redirect` (worktree `C:/Users/kevin/Projects/dreamlabs-sales-signinfix`) and is not merged or deployed. Merging needs Kevin's explicit yes; `admin-users` and `pipeline-shares` then need deploying. Built by Claude Sonnet 5.5 at Kevin's direction.

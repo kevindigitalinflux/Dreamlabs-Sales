@@ -1,3 +1,4 @@
+import {ApiKeyHealthBanner} from '../settings/ApiKeyHealthBanner';
 import { Outlet } from 'react-router';
 import { Sidebar } from './Sidebar';
 import { BackLink } from './BackLink';
@@ -21,6 +22,7 @@ export function AppShell() {
           {!focusMode && <Sidebar />}
           <div className="flex min-w-0 flex-1 flex-col">
             <TopBar />
+            <ApiKeyHealthBanner />
             {!focusMode && <ReplyBanner />}
             {!focusMode && <JobsAnnouncer />}
             <main className="flex-1 p-4 pb-20 md:px-7 md:py-6 md:pb-6">

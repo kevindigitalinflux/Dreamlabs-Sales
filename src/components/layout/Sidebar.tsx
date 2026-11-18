@@ -1,3 +1,4 @@
+import {ApiKeyHealthBadge} from '../settings/ApiKeyHealthBadge';
 import { NavLink } from 'react-router';
 import { BarChart3, Contact, KanbanSquare, LayoutDashboard, ListChecks, Mail, PanelLeftClose, PanelLeftOpen, Phone, Radar, Rocket, Settings, Shield, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -53,6 +54,7 @@ export function Sidebar() {
   const { count: replies } = useReplyAlerts();
   const { collapsed, toggle } = useNavCollapsed();
   const badges: Record<string, ReactNode> = {
+    '/settings': <ApiKeyHealthBadge />,
     '/emails': replies > 0 ? <ReplyCountBadge count={replies} /> : null,
     '/outreach/autopilot': needsInput ? (
       <span className="rounded-full bg-violet/25 px-2 py-0.5 text-[11px] font-bold text-nav-active" aria-label={`${needsInput} autopilot leads need your input`}>{needsInput}</span>

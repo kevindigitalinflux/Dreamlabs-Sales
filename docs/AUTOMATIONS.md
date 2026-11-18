@@ -1,3 +1,11 @@
+## API key health telemetry and browser alerts (2026-11-18, local only)
+
+Provider responses trigger best-effort fixed-code service RPCs into org_api_key_health (migration 079 written, not applied). Source modules own the observations; resolver events supply organisation/shared provenance. SQL throttles failure updates to once per minute per org/provider and preserves critical state; success clears once per invocation/org/provider. No new schedule, quota or paid request is added.
+
+Realtime updates drive current-org settings flags, critical app banners and admin badges. Desktop key alerts require the existing opt-in and already-granted permission, and are remembered once per problem identity. Session banner dismissal does not change server health. No email/message is sent. Supabase owns persistence; the browser owns display/desktop alerts. See docs/KEY-HEALTH-BUILD-REPORT.md for audit, gates and unverified SQL/browser/runtime proof. Nothing in this section is deployed.
+
+---
+
 ## Fix 11 — corrected Gemini pacing scope (2026-11-18, local only)
 
 This supersedes the all-Gemini/global admission row below. Only Deep find calls carrying runId and orgId reserve a minute unit, atomically per organisation, default twelve. Drafting, replies, notes, ICP parsing and key validation make no admission RPC. Deep find's run-level key-refusal flag remains. Migration078 is edited in place and not applied. Automation ownership and all other quotas/schedules are unchanged. See the appended Fix 11 report and its two-organisation rolled-back dry run. Independent review, SQL and live isolation remain unverified.

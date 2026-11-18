@@ -1,3 +1,5 @@
+import {Link} from 'react-router';
+import {geminiRefusalHref} from '../../../supabase/functions/_shared/geminiAdmission';
 import { AlertTriangle, CheckCircle2, ChevronDown, CircleSlash, Clock, Loader2, MailCheck, MailX, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
@@ -131,7 +133,7 @@ export function DeepFindLeadResult({ row, level = 2 }: { row: DeepFindRowWithLea
         <details className="rounded-control border border-line bg-raised p-3">
           <summary className="cursor-pointer font-semibold focus-visible:outline-2 focus-visible:outline-violet-line">What Deep find did ({details.steps.length} {details.steps.length === 1 ? 'step' : 'steps'})</summary>
           <ul className="mt-2 flex list-disc flex-col gap-2 pl-5 text-[13px] leading-relaxed">
-            {details.steps.map((s, i) => <li key={i}>{s}</li>)}
+            {details.steps.map((s, i) => <li key={i}>{s}{s.startsWith('Web search and role search skipped: Gemini refused the key')&&<> <Link className="text-link underline" to={geminiRefusalHref()}>Fix this key</Link></>}</li>)}
           </ul>
         </details>
       )}

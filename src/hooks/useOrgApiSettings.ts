@@ -87,8 +87,14 @@ export function useOrgApiSettings() {
     return null;
   }, [currentOrg, refresh]);
 
+  const test=useCallback(async(provider:OrgApiSetting['provider']):Promise<string|null>=>{
+    if(!currentOrg)return 'No organization selected';
+    const result=await supabase.functions.invoke('org-api-settings',{body:{action:'test',org_id:currentOrg.id,provider}});
+    if(result.error)return extractErrorMessage(result.error);
+    return result.data?.error??null;
+  },[currentOrg]);
   const ready = loadedOrg === currentOrg?.id;
-  return { settings: ready ? settings : [], loading: loading || !ready, save, refresh,
+  return { settings: ready ? settings : [], loading: loading || !ready, save, test, refresh,
     workerHost: ready ? workerHost : null, sharedWorker: ready && sharedWorker, removeWorker: () => removeKey('lookup_worker'),
     removeFirecrawl: () => removeKey('firecrawl'), loadError: ready ? loadError : null };
 }

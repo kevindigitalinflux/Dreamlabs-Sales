@@ -34,7 +34,7 @@ export function classifyKeyFailure(provider: string,status: number,bodyHint: unk
 }
 
 /** Links target a single provider section without including credentials or provider response text. */
-export function keySectionHref(provider: KeyProvider): string {return `/settings/api-keys#${provider}`;}
+export function keySectionHref(provider: KeyProvider): string {return `/settings/organization#${provider}`;}
 
 /** Fixed user-facing wording, shared by flags, banners and popups. */
 export function keyHealthReason(provider: KeyProvider,state: KeyState): string {

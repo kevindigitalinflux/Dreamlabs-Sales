@@ -62,3 +62,10 @@ it('orders slow quota observations before a later successful retry',async()=>{
  await keyHealthFetch('https://generativelanguage.googleapis.com/test',init,async()=>Response.json({}));await flush();});
  expect(rpc.mock.calls.map(([name])=>name)).toEqual(['api_key_failure','api_key_ok']);
 });
+it('returns the original server/network failure without recording a key problem',async()=>{
+ vi.stubGlobal('EdgeRuntime',{waitUntil:(task:Promise<unknown>)=>pending.push(task)});const rpc=vi.fn(async(_name:string,_args:Record<string,unknown>)=>({data:true}));
+ await withKeyHealthRequest('lookup',async()=>{bindKeyHealth({rpc},'org','gemini','fixture','org');const url='https://generativelanguage.googleapis.com/test?key=fixture';
+ for(const status of [500,503,504])expect((await keyHealthFetch(url,{},async()=>Response.json({}, {status}))).status).toBe(status);
+ await expect(keyHealthFetch(url,{},async()=>{throw Error('fixture network')})).rejects.toThrow('fixture network');await flush();});
+ expect(rpc).not.toHaveBeenCalled();
+});

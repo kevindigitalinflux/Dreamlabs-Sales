@@ -24,7 +24,7 @@ export function DesktopNotificationsCard() {
   const { checked, disabled, status } = desktopSwitchState(enabled, permission);
   return <Card><div className="flex flex-col gap-3">
     <h2 className="text-[18px] font-bold">Desktop notifications</h2>
-    <p className="text-sm">When this tab is in the background, show a silent pop-up for new replies and when a job needs you, finishes or fails. Reply pop-ups show the business and first line only.</p>
+    <p className="text-sm">Show a silent pop-up when an API key needs attention. When this tab is in the background, also show new replies and when a job needs you, finishes or fails. Reply pop-ups show the business and first line only.</p>
     <label className="flex items-center gap-3 text-sm">
       <input type="checkbox" role="switch" checked={checked}
         disabled={asking || disabled}

@@ -1,3 +1,4 @@
+import {MemoryRouter} from 'react-router';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {expect,it,vi} from 'vitest';
@@ -6,6 +7,6 @@ vi.mock('../lib/deepFind',()=>({cancelDeepFind:vi.fn()}));
 vi.mock('../components/deepfind/DeepFindLeadResult',()=>({DeepFindLeadResult:()=>null}));
 import {DeepFindProgress} from '../components/deepfind/DeepFindProgress';
 it('renders one fixed run warning rather than a warning for every row',()=>{
- const html=renderToStaticMarkup(createElement(DeepFindProgress,{runId:'fixture'}));
+ const html=renderToStaticMarkup(createElement(MemoryRouter,null,createElement(DeepFindProgress,{runId:'fixture'})));
  expect(html.match(/Gemini refused the key/g)).toHaveLength(1);expect(html).toContain('error 402');
 });

@@ -1,11 +1,13 @@
 import { workerConnectionStatus } from '../../lib/workerStatus';
 import { useState } from 'react';
 import { Server } from 'lucide-react';
-import { Collapsible } from '../ui/Collapsible';
+import {KeyHealthSection} from './KeyHealthSection';
+import type {ApiKeyHealthRow} from '../../lib/keyHealthView';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 
-export function LookupWorkerCard({ configured, shared, host, onSave, onRemove }: {
+export function LookupWorkerCard({ configured, shared, host, onSave, onRemove, health, platformOwner, onTest }: {
+  health?:ApiKeyHealthRow; platformOwner?:boolean; onTest?:()=>Promise<string|null>;
   configured: boolean; shared: boolean; host: string | null;
   onSave(value: string): Promise<string | null>; onRemove(): Promise<string | null>;
 }) {
@@ -24,7 +26,7 @@ export function LookupWorkerCard({ configured, shared, host, onSave, onRemove }:
       setMessage('Could not update the worker connection. Try again.');
     } finally { setBusy(false); }
   }
-  return <Collapsible icon={Server} title="Lookup worker" summary={configured ? <span className="font-medium text-success">Connected</span> : 'Not connected'}><div className="flex min-w-0 flex-col gap-3">
+  return <KeyHealthSection provider="lookup_worker" row={health} platformOwner={platformOwner} icon={Server} title="Lookup worker" summary={configured ? <span className="font-medium text-success">Connected</span> : 'Not connected'}><div className="flex min-w-0 flex-col gap-3">
     <p className="break-words text-sm">{workerConnectionStatus(configured, shared, host)}</p>
     <Input label="Worker address" type="url" autoComplete="off" placeholder="https://worker.example.com"
       value={address} onChange={(e) => setAddress(e.target.value)} disabled={busy} />
@@ -34,6 +36,7 @@ export function LookupWorkerCard({ configured, shared, host, onSave, onRemove }:
       <Button onClick={() => void submit(false)} disabled={busy || !address.trim() || !secret.trim()} loading={busy}>Save</Button>
       {configured && <Button variant="secondary" onClick={() => void submit(true)} disabled={busy}>Remove</Button>}
     </div>
+    {onTest&&<Button variant="secondary" disabled={busy} onClick={()=>{setBusy(true);void onTest().then(error=>setMessage(error??'Worker connection test passed.')).catch(()=>{console.error('worker_key_test_failed');setMessage('Could not test this connection.');}).finally(()=>setBusy(false));}}>Test current key</Button>}
     {message && <p role="status" className="text-sm">{message}</p>}
-  </div></Collapsible>;
+  </div></KeyHealthSection>;
 }
