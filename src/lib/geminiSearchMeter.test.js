@@ -1,4 +1,3 @@
-vi.mock('../../supabase/functions/_shared/geminiAdmission', () => ({ admitGemini: vi.fn(async()=>{}), recordGeminiRefusal: vi.fn(async()=>{}) }));
 import {afterEach,expect,it,vi} from 'vitest'
 import {countGeminiSearch,geminiSearchPresentation,parseGeminiSearchSnapshot} from '../../supabase/functions/_shared/geminiSearchMeter'
 import {geminiGroundedSearch} from '../../supabase/functions/_shared/ai'

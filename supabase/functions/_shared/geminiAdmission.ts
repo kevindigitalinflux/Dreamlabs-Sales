@@ -1,26 +1,17 @@
 import type { GeminiMeterClient, GeminiSearchContext } from './geminiSearchMeter.ts';
 
-/** Use the existing service secret only on the server; never expose RPC errors or credentials. */
-export function geminiService(): GeminiMeterClient {
-  return { async rpc(name, args) {
-    try {
-      const env = (globalThis as unknown as { Deno?: { env: { get(name: string): string | undefined } } }).Deno?.env;
-      const url = env?.get('SUPABASE_URL'), key = env?.get('SUPABASE_SERVICE_ROLE_KEY');
-      if (!url || !key) return { error: true };
-      const response = await fetch(`${url}/rest/v1/rpc/${name}`, { method: 'POST',
-        headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(args), signal: AbortSignal.timeout(5000) });
-      return response.ok ? { data: await response.json() } : { error: true };
-    } catch { console.error('gemini_admission_unavailable'); return { error: true }; }
-  } };
+/** Only Deep find contexts participate in minute admission and run refusal. */
+export function isDeepFindContext(context?: GeminiSearchContext): context is GeminiSearchContext & { runId: string } {
+  return !!context?.runId && !!context.orgId;
 }
 
-/** Shared database admission precedes every Gemini HTTP request, including ungrounded JSON calls. */
+/** Deep find admission is shared across invocations within the same organisation. */
 export async function admitGemini(context?: GeminiSearchContext): Promise<void> {
+  if (!isDeepFindContext(context)) return;
   const refused = await readGeminiRefusal(context);
   if (refused) { context?.onRefused?.(refused); throw new Error('Gemini '+refused+': refused'); }
   let result;
-  try { result = await (context?.service ?? geminiService()).rpc('gemini_admit', {}); }
+  try { result = await context.service.rpc('gemini_admit', {p_org:context.orgId}); }
   catch { console.error('gemini_admission_unavailable'); throw new Error('Gemini 429: busy'); }
   if (result.error || result.data !== true) throw new Error('Gemini 429: busy');
 }
@@ -40,7 +31,7 @@ export function geminiRefusalLine(status: unknown): string | null {
 }
 /** Read before every call; a database failure refuses admission rather than bypassing the flag. */
 export async function readGeminiRefusal(context?: GeminiSearchContext): Promise<number | null> {
-  if (!context?.runId) return null;
+  if (!isDeepFindContext(context)) return null;
   try {
     const result = await context.service.rpc('gemini_run_status',{p_run:context.runId});
     if (result.error) throw new Error('unavailable');
@@ -49,7 +40,7 @@ export async function readGeminiRefusal(context?: GeminiSearchContext): Promise<
 }
 /** Persist the first key refusal. Never log provider bodies or the credential. */
 export async function recordGeminiRefusal(context: GeminiSearchContext | undefined, status: number): Promise<void> {
-  if (!context?.runId || ![401,402,403].includes(status)) return;
+  if (!isDeepFindContext(context) || ![401,402,403].includes(status)) return;
   const result = await context.service.rpc('gemini_run_status',{p_run:context.runId,p_status:status});
   if (result.error) { console.error('gemini_refusal_save_failed'); throw new Error('Gemini 429: busy'); }
   context.onRefused?.([401,402,403].includes(result.data as number) ? result.data as number : status);

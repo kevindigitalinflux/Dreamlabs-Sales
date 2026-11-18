@@ -1,4 +1,3 @@
-import { admitGemini } from '../_shared/geminiAdmission.ts';
 import { validatePlacesKey } from '../_shared/placesClient.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { corsHeaders, json } from '../_shared/cors.ts';
@@ -15,7 +14,6 @@ async function validateKey(provider: Provider, key: string): Promise<string | nu
     if (provider === 'gemini') {
       // Keep in sync with AI_MODEL in _shared/ai.ts — gemini-2.5-flash was
       // retired by Google; using a dead model here would reject every valid key.
-      await admitGemini();
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${key}`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: 'Reply with the single word OK.' }] }] }) },

@@ -1,3 +1,9 @@
+## Fix 11 — Deep find Gemini admission per organisation (2026-11-18)
+
+Kevin's corrected brief supersedes the global/all-Gemini admission policy in the older Task 4/6 notes. Continue on codex/deepfind-parallel from 0708ba65ed87ae1780ce4de4a78bfc09ea4fab73. Only calls with both runId and orgId use minute admission; drafting/replies/notes/ICP/key testing bypass it. The counter key in unapplied migration 078 is (org_id, minute), with gemini_admit(p_org uuid), default twelve per organisation per minute. Run 401/402/403 refusal behavior is preserved. The two standalone ICP/key-test entrypoints match d1bad26 exactly again. No provider/production call or migration execution. See the appended Fix 11 in docs/DEEPFIND-PARALLEL-BUILD-REPORT.md for gates, changed assertions and updated redeploy scope. This checkpoint is in the single Fix 11 commit; resolve HEAD for its hash. Claude remains architect/reviewer; Codex remains builder. Independent review and real SQL/concurrency remain pending; rollout is not authorized. Shared context uses a separate Fix 11 checkpoint and preserves accepted-main/earlier snapshots.
+
+---
+
 ## Deep find parallel processing — local checkpoint 2026-11-17
 
 Kevin authorized ten local tasks on codex/deepfind-parallel from fetched origin/main d1bad26de090285e1afa65bed1b04e5d40d16da0. Codex remains builder; Claude remains architect/reviewer. Tasks 1–9 commits: d301d94, 300f9eb, 746e8c1, 29b55b0, 7c071cf, 605a197, d32461b, a5c82f4, a6a3d6b. Task 10 is the commit containing this checkpoint; resolve git rev-parse HEAD for the exact final tip. Read docs/DEEPFIND-PARALLEL-BUILD-REPORT.md for the audit, gates, assertions, rolled-back SQL and proposed 23-function/frontend rollout.

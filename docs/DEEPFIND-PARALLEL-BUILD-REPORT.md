@@ -82,7 +82,7 @@ BEGIN;
 -- \i supabase/migrations/078_deep_find_parallel.sql
 -- SQL Editor: paste the full 078 body above the following DO block.
 DO $$
-DECLARE owner_id uuid:=gen_random_uuid(); org uuid; pipe uuid;
+DECLARE owner_id uuid:=gen_random_uuid(); org uuid; org_b uuid; pipe uuid;
  a uuid; b uuid; lead uuid; queued uuid; picked uuid; i integer; signature text; client_role text;
 BEGIN
  ASSERT NOT EXISTS(SELECT 1 FROM public.deep_find_runs WHERE status='active'), 'Empty disposable runs required';
@@ -91,7 +91,8 @@ BEGIN
  INSERT INTO auth.users(instance_id,id,aud,role,email,encrypted_password,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
  VALUES('00000000-0000-0000-0000-000000000000',owner_id,'authenticated','authenticated','parallel-audit@example.test','',now(),'{}','{}',now(),now());
  INSERT INTO public.organizations(name,created_by) VALUES('Parallel audit',owner_id) RETURNING id INTO org;
- INSERT INTO public.org_members(org_id,user_id,role) VALUES(org,owner_id,'admin');
+ INSERT INTO public.organizations(name,created_by) VALUES('Parallel audit B',owner_id) RETURNING id INTO org_b;
+ INSERT INTO public.org_members(org_id,user_id,role) VALUES(org,owner_id,'admin'),(org_b,owner_id,'admin');
  INSERT INTO public.pipelines(org_id,name,is_default,created_by) VALUES(org,'Parallel audit',false,owner_id) RETURNING id INTO pipe;
  PERFORM set_config('request.jwt.claims','{"role":"service_role"}',true);
  INSERT INTO public.deep_find_runs(org_id,created_by,lead_count,started_at) VALUES(org,owner_id,2,now()-interval '2 minutes') RETURNING id INTO a;
@@ -115,8 +116,11 @@ BEGIN
  BEGIN UPDATE public.deep_find_runtime_config SET deep_find_parallel=0; RAISE EXCEPTION 'Missing lower bound'; EXCEPTION WHEN check_violation THEN NULL; END;
  BEGIN UPDATE public.deep_find_runtime_config SET deep_find_parallel=6; RAISE EXCEPTION 'Missing upper bound'; EXCEPTION WHEN check_violation THEN NULL; END;
  DELETE FROM public.gemini_minute_usage;
- FOR i IN 1..12 LOOP ASSERT public.gemini_admit(); END LOOP;
- ASSERT NOT public.gemini_admit(), 'Thirteenth call admitted';
+ FOR i IN 1..12 LOOP ASSERT public.gemini_admit(org); END LOOP;
+ ASSERT NOT public.gemini_admit(org), 'Org A thirteenth call admitted';
+ ASSERT public.gemini_admit(org_b), 'Org A exhausted Org B allowance';
+ ASSERT (SELECT used=12 FROM public.gemini_minute_usage WHERE org_id=org AND minute=date_trunc('minute',now()));
+ ASSERT (SELECT used=1 FROM public.gemini_minute_usage WHERE org_id=org_b AND minute=date_trunc('minute',now()));
  SELECT lead_id INTO lead FROM public.deep_find_leads WHERE run_id=a LIMIT 1;
  UPDATE public.deep_find_runs SET started_at=now()-interval '70 minutes' WHERE id=a;
  INSERT INTO public.deep_find_check_queue(org_id,run_id,lead_id,address,domain,kind)
@@ -139,7 +143,7 @@ BEGIN
   ASSERT NOT has_table_privilege(client_role,'public.deep_find_runtime_config','UPDATE');
   ASSERT NOT has_table_privilege(client_role,'public.gemini_minute_usage','SELECT');
   FOREACH signature IN ARRAY ARRAY['public.deep_find_claim(integer)','public.deep_find_complete(uuid)',
-   'public.deep_find_housekeeping()','public.gemini_admit()','public.deep_find_notice_once(uuid,text)',
+   'public.deep_find_housekeeping()','public.gemini_admit(uuid)','public.deep_find_notice_once(uuid,text)',
    'public.deep_find_checks_claim(integer)','public.deep_find_checks_expire()'] LOOP
    ASSERT NOT has_function_privilege(client_role,signature,'EXECUTE');
    ASSERT has_function_privilege('service_role',signature,'EXECUTE');
@@ -252,3 +256,47 @@ The brief-execution hook was manually invoked; automatic lifecycle interception 
 Each app run retains one pre-existing opt-in skip. Other five gates are root TypeScript, production build, git diff --check (safecrlf disabled for checking only), the 29-entrypoint local edge TypeScript shim and wrapper TypeScript. Commands: npx tsc --noEmit; npx vitest run; npm run build; git -c core.safecrlf=false diff --check; node scripts/places-edge-typecheck.mjs; then npx tsc --noEmit and npx vitest run in worker/wrapper. Environment: VITE_SUPABASE_URL=http://127.0.0.1:54321 and VITE_SUPABASE_ANON_KEY=local-test-placeholder. Per-task ignored logs are .superpowers/parallel-taskN-*.log. Final Task 10 full gates passed before commit. All staging is by explicit path. Repository sync hooks are disabled for these local commits to preserve the accepted-main vault mirror; this does not disable the separately invoked brief-execution hook.
 
 There are 53 more passing app tests than the fetched baseline (3,619), with the same 166 wrapper tests and existing skip. These fixtures demonstrate changed behavior locally, not production uplift. The final worktree is intended to be clean after the Task 10 commit. Shared status/handoff/index and a labelled checkpoint record the full resolved tip and hashes after commit; no accepted-main mirror is overwritten.
+
+
+## Fix 11 — Deep find admission per organisation (2026-11-18)
+
+### Result
+
+The global all-Gemini guard was the wrong scope. This correction follows Kevin/Claude's replacement brief and supersedes Tasks 4/6's earlier admission policy. Only calls carrying both Deep find runId and orgId are admitted. The default twelve-per-minute allowance is now per organisation, shared across that organisation's concurrent runs/invocations. Drafting, reply/note parsing, ICP parsing and key tests do not perform a minute-admission RPC and cannot be blocked by Deep find's counter. The monthly informational meter remains separate and unchanged.
+
+### What changed and SQL reasoning
+
+ai.ts checks isDeepFindContext before admission in both Gemini transports. admitGemini defensively applies the same condition and passes p_org. The unused global service-environment/REST admission fallback was removed. Calls outside Deep find retain d1bad26's HTTP error behavior too; Deep find retains its fixed refusal handling and 401/402/403 run flag. The flag's SQL and its existing four tests are unchanged.
+
+org-api-settings and parse-icp no longer import or call admission; git diff against d1bad26 for both entrypoints is empty. No local credential path is used or created. Existing Deep find meter contexts already carry runId/orgId throughout discovery, roles, person/registry search and research-summary JSON. Other meter contexts carry only orgId, so their existing monthly counting continues without minute admission.
+
+Unapplied migration078 now defines gemini_minute_usage with organisation FK and composite primary key (org_id, minute). gemini_admit(p_org uuid) uses that same conflict target and a conditional UPSERT against gemini_per_minute. Concurrent requests for one organisation serialize on its minute row and cannot increment past its limit; another organisation has a distinct row. Service-only grants, RLS, empty search_path and the one-day cleanup are retained. No extra migration is introduced. The earlier report's full rolled-back dry run is updated in place to exhaust org A's twelve units, reject its thirteenth, admit org B and assert counts12/1; its privilege check uses gemini_admit(uuid). This SQL is written and source-reviewed, NOT EXECUTED.
+
+### Acceptance evidence
+
+1. Deep find only: MET in real drafting/grounded transport fixtures, missing-run/missing-org contexts and source checks for both standalone entrypoints. Drafting succeeds with no service environment access or admission HTTP/RPC; a non-Deep-find grounded call makes only its monthly-meter RPC.
+2. Per organisation: MET for adapter routing fixtures and SQL source contracts (composite key/conflict target/signature/service grants). Org A refusal does not stop org B's adapter admission. Database enforcement under real contention is NOT VERIFIED; the executable dry-run assertions are provided for approved execution.
+3. Refusal flag retained: MET, all four existing 401/402/403/429 fixtures pass unchanged. No flag SQL, callback wording or reset rule was changed.
+4. RPC failure stays a busy step: MET for returned/thrown-error transport fixtures and the real engine fixture. The engine completes the lead, records the existing busy/backup-search step and sends no Gemini HTTP request.
+
+### TDD and changed assertions
+
+Before product edits, six behavior assertions failed for global routing/outside admission, and three source assertions failed for ICP/key-test admission and SQL key shape. Updated existing admission tests now supply runId and expect p_org plus the existing run-status read. The two old positive standalone-guard source assertions now require no admission import/call. A new SQL source assertion covers the organisation key/signature/grants/cleanup. Admission mocks were removed from the existing monthly-meter, known-person and drafting suites; their behavioral assertions are unchanged, so those transports exercise the actual scope guard. Existing run-refusal tests are byte-for-byte unchanged. The new engine fixture expects the established 'Used the backup search.' suffix; no existing assertion was weakened.
+
+The first full gate reached a line-ending whitespace failure in the two restored entrypoints; exact d1bad26 file bytes resolved it without a behavior change. Later full test runs caught two overly broad new engine expectations: the missing established suffix and a no-fetch assertion that also included mocked DNS attempts. The fixture now checks the actual requirement: no Gemini request. No product change was required for those fixture corrections. Final gate results follow below.
+
+### Updated redeploy list (proposed, not performed)
+
+Relative to0708ba6, the recursive conservative import graph yields14 entrypoints: check-replies, check-sequences, draft-linkedin-message, draft-reply, find-decision-makers, generate-email, org-api-settings, parse-csv-leads, parse-icp, parse-notes, parse-session-notes, run-deep-find, run-selected-autopilot, suggest-sequence. The two restored standalone entrypoints are included when replacing a0708ba6 build. Shared-module changes must reach non-Deep-find callers as well, so they regain the unguarded behavior.
+
+For the whole branch relative to d1bad26, the conservative23-function/frontend union in the previous rollout section remains: transitive shared worker/usage/type imports still reach some otherwise-restored entrypoints. The Fix11 correction itself has no frontend or wrapper code change. Migration078 must use the revised per-org schema/signature before deploying these callers. No migration has been applied here, so an in-place draft update is sufficient; this is not an upgrade script for an already-applied older078. No secret/environment/VPS, Places or Firecrawl change.
+
+### Not verified / deviations
+
+SQL parsing/execution/RLS and actual per-org contention/isolation remain NOT VERIFIED under the local-only/no-migration limit. No provider, production or credential access, install, paid usage, push, merge, deployment, SQL or VPS action occurred. Independent Claude review is pending. The actual BUILD BRIEF DETECTED reminder was received in context for this message, and brief-execution was read/applied; hook configuration was not changed. There is no departure from the corrected scope. Earlier global-admission claims are historical and superseded by Fix11. Subscription usage is unavailable; the final project/shared checkpoint is saved proactively.
+
+### Fix 11 gates and commit
+
+All seven gates PASS before the single Fix11 commit: root npx tsc --noEmit; npx vitest run (289 files /3,679 passed /one existing skip); npm run build; git -c core.safecrlf=false diff --check; node scripts/places-edge-typecheck.mjs (29 entrypoints); wrapper npx tsc --noEmit; wrapper npx vitest run (8 files /166 passed). Environment remains the local Supabase URL/placeholder anon key listed above. Logs .superpowers/parallel-fix11-*.log. Seven app tests were added relative to0708ba6; no wrapper tests or code changed. Final read-only checks confirm the run-refusal test file is unchanged and both standalone entrypoints have an empty diff against d1bad26.
+
+Branch codex/deepfind-parallel; base0708ba65ed87ae1780ce4de4a78bfc09ea4fab73. Fix11 is the commit containing this section; resolve git rev-parse HEAD for the exact tip. Project instructions/handoff/automation register record the superseding scope. Shared checkpoint records the resolved full tip after commit, with source hashes. Local-only limits are preserved; independent review and SQL execution remain pending.

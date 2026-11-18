@@ -1,3 +1,9 @@
+## Fix 11 — corrected Gemini pacing scope (2026-11-18, local only)
+
+This supersedes the all-Gemini/global admission row below. Only Deep find calls carrying runId and orgId reserve a minute unit, atomically per organisation, default twelve. Drafting, replies, notes, ICP parsing and key validation make no admission RPC. Deep find's run-level key-refusal flag remains. Migration078 is edited in place and not applied. Automation ownership and all other quotas/schedules are unchanged. See the appended Fix 11 report and its two-organisation rolled-back dry run. Independent review, SQL and live isolation remain unverified.
+
+---
+
 ## Deep find parallel processing (2026-11-17, local only)
 
 This branch proposes migration 078 and preserves the existing Supabase-only automation ownership. Nothing below is deployed or applied here. Details and unverified runtime checks are in docs/DEEPFIND-PARALLEL-BUILD-REPORT.md.

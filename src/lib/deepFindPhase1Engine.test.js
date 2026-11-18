@@ -302,3 +302,11 @@ it('saves a trusted homepage owner pair as a team contact without enrollment',as
  readCompanyPages.mockImplementationOnce(async(_url,_budget,_extra,onPage)=>{const html='<html><body><footer>Owner, Gary Ramsay</footer></body></html>';onPage(html,'https://acme.com/');return [html]});
  const out=await run();expect(contacts.find(c=>c.first_name==='Gary')).toMatchObject({last_name:'Ramsay',source:'team_page',include_in_sequences:false,title:'Owner'});expect(findRolePeople).not.toHaveBeenCalled();expect(out.people_found).toBe(1);
 });
+it('a Deep find admission RPC failure skips the role step without failing the lead',async()=>{
+ const original=service.rpc;service.rpc=vi.fn(async(name,args)=>name==='gemini_admit'?{error:{message:'fixture unavailable'}}:original(name,args));
+ const realAi=await vi.importActual('../../supabase/functions/_shared/ai');
+ geminiGroundedSearch.mockImplementation(realAi.geminiGroundedSearch);
+ findRolePeople.mockImplementationOnce(async input=>(await vi.importActual('../../supabase/functions/_shared/roleSearch')).findRolePeople(input));
+ const out=await run();expect(out.status).toBe('done');expect(out.domains.steps).toContain('Role search: skipped, Gemini is busy. Used the backup search.');
+ expect(service.rpc).toHaveBeenCalledWith('gemini_admit',{p_org:'org'});expect(fetch.mock.calls.some(([url])=>String(url).includes('generativelanguage.googleapis.com'))).toBe(false);
+});
