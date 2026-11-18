@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { sendMail } from '../_shared/smtp.ts';
+import { publicAppUrl } from '../_shared/appUrl.ts';
 
 const APP_ORIGINS = (Deno.env.get('APP_ORIGINS') ?? 'http://localhost:5173').split(',');
 
@@ -45,7 +46,7 @@ async function notifyShare(
     if (!settings?.is_verified) return;
     const { data: pass } = await service.rpc('app_get_smtp_secret', { uid: sharerId });
     if (!pass) return;
-    const appUrl = APP_ORIGINS.find((o) => o.startsWith('https://')) ?? APP_ORIGINS[0];
+    const appUrl = publicAppUrl(Deno.env.get('APP_PUBLIC_URL'), Deno.env.get('APP_ORIGINS'));
     const greeting = recipientName ? `Hi ${recipientName},` : 'Hi,';
     await sendMail(
       { host: settings.smtp_host, port: settings.smtp_port, user: settings.smtp_user, pass: pass as string, fromName: settings.from_name },
