@@ -88,7 +88,7 @@ export function Jobs() {
           title="Finished"
           summary={`${groups.finished.length} ${groups.finished.length === 1 ? 'job' : 'jobs'}`}
           defaultOpen={!busyNow}
-         
+
         >
           <ul className="flex flex-col gap-2">{groups.finished.map(row)}</ul>
         </Collapsible>
