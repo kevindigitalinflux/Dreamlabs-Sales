@@ -1,3 +1,9 @@
+## API key health recovery refresh — local review fixes (2026-11-18)
+
+The browser health hook now listens only to org-filtered INSERT/UPDATE events. It re-reads current-org health every sixty seconds while visible rows exist and the tab is visible; focus and return-to-visible also refresh. Hidden/empty views do not poll; org switching/unmount clean up timers, listeners and channels. Reads use existing RLS rather than exposing cross-org DELETE primary keys. Gemini per-minute quota wording now means rate_limited; only explicit long-quota identifiers or credits indicate top-up. No server schedule, provider call, cap, migration or ownership change. See Review fixes in docs/KEY-HEALTH-BUILD-REPORT.md. Built locally; not deployed.
+
+---
+
 ## API key health telemetry and browser alerts (2026-11-18, local only)
 
 Provider responses trigger best-effort fixed-code service RPCs into org_api_key_health (migration 079 written, not applied). Source modules own the observations; resolver events supply organisation/shared provenance. SQL throttles failure updates to once per minute per org/provider and preserves critical state; success clears once per invocation/org/provider. No new schedule, quota or paid request is added.

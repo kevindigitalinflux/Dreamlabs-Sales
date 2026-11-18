@@ -17,7 +17,10 @@ export function useApiKeyHealth(orgId:string|null|undefined) {
       setRaw(Array.isArray(result.data)?result.data:[]);setClock(Date.now());setError(null);setLoaded(orgId);
     }catch{if(active){console.error('api_key_health_read_failed');setError('Could not load API key status.');setLoaded(orgId);}}};
     reload.current=load;void load();
-    const channel=supabase.channel(`api-key-health-${orgId}-${instance}`).on('postgres_changes',{event:'*',schema:'public',table:'org_api_key_health',filter:`org_id=eq.${orgId}`},()=>{void load();}).subscribe();
+    const filter={schema:'public',table:'org_api_key_health',filter:`org_id=eq.${orgId}`};
+    const channel=supabase.channel(`api-key-health-${orgId}-${instance}`)
+      .on('postgres_changes',{...filter,event:'INSERT'},()=>{void load();})
+      .on('postgres_changes',{...filter,event:'UPDATE'},()=>{void load();}).subscribe();
     return ()=>{active=false;reload.current=async()=>{};void supabase.removeChannel(channel);};
   },[orgId,instance]);
   const rows=loaded===orgId&&orgId?visibleKeyHealth(raw,orgId,clock):[];
@@ -27,5 +30,18 @@ export function useApiKeyHealth(orgId:string|null|undefined) {
     const timer=setTimeout(()=>setClock(Date.now()),Math.max(1,Math.min(...expiries)-Date.now()));
     return ()=>clearTimeout(timer);
   },[raw,loaded,orgId,clock]);
+  const hasRows=rows.length>0;
+  useEffect(()=>{
+    if(!orgId)return;
+    let timer:ReturnType<typeof setInterval>|undefined;
+    const visible=()=>document.visibilityState==='visible';
+    const refreshVisible=()=>{if(visible())void reload.current();};
+    const stop=()=>{if(timer!==undefined){clearInterval(timer);timer=undefined;}};
+    const schedule=()=>{stop();if(hasRows&&visible())timer=setInterval(refreshVisible,60_000);};
+    const visibility=()=>{schedule();refreshVisible();};
+    // Filtered realtime cannot deliver deletes safely; visible polling reads through member RLS.
+    schedule();window.addEventListener('focus',refreshVisible);document.addEventListener('visibilitychange',visibility);
+    return ()=>{stop();window.removeEventListener('focus',refreshVisible);document.removeEventListener('visibilitychange',visibility);};
+  },[orgId,hasRows]);
   return {rows,loading:!!orgId&&loaded!==orgId,error,refresh:()=>{void reload.current();}};
 }

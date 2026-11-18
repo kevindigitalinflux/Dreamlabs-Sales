@@ -182,3 +182,26 @@ Gemini 429 now has a separate classification branch. A details[].violations[].qu
 TDD evidence: the exact quoted Google per-minute body, the existing generic daily-message fixture and the truncated billing fixture failed before the change (three failures). All targeted fixtures then passed. Seven final gates PASS before this commit: 310 app files / 3,795 passed / one existing skip; wrapper 8 / 166; both TypeScript checks, production build, whitespace and edge 29. Local logs: .superpowers/key-health-fix1-*.log. Commands and placeholder environment are unchanged from the original report. This report-containing commit is Fix 1; the next checkpoint records its exact hash.
 
 Changed existing assertion: keyHealthRules.test.ts's Gemini RESOURCE_EXHAUSTED message “Quota exceeded for daily requests” without a quotaId changes from needs_topup to rate_limited. A prose reference to daily requests is no longer sufficient proof under the corrected rule. All existing other-provider assertions remain unchanged. Seven added cases cover the exact per-minute body (object and JSON string), explicit day/month quota ids, prepayment credits, truncated billing, null and malformed/PerSecond details. Fix 2 remains pending at this checkpoint.
+
+### Fix 2 — clear recovered keys on mounted screens
+
+useApiKeyHealth now subscribes explicitly to org-filtered INSERT and UPDATE only. It has no DELETE subscription, filtered or otherwise. Recovery reads the current org through the existing SELECT/RLS path: every sixty seconds while at least one row is visible and the tab is visible. A hidden tab stops the interval; becoming visible or receiving window focus triggers a read immediately, including when the previous result was empty. Initial mount still performs its existing scoped load. Org switching and unmount remove the interval, visibility/focus listeners and realtime channel; the existing active-load guard rejects pending old-org responses. Local rate-limit expiry remains separate and unchanged.
+
+TDD evidence: six new fixtures failed before the fix, reproducing the stale clear and absent subscription/poll/listener behavior. All twelve hook tests then passed. Eight added fixtures cover filtered event types; deleted-row clear at exactly sixty seconds; no periodic reads for empty/expired rows; hidden/initially-hidden tabs; visibility/focus refresh; complete cleanup; and a pending old-org poll during an org switch. Existing four hook assertions were retained; only the harness gained browser EventTargets, visibility state and filter capture. No other existing assertion changed in Fix 2.
+
+Seven final gates PASS before the Fix 2 commit: 310 app files / 3,803 passed / one existing skip; wrapper 8 / 166; both TypeScript checks, production build, whitespace and edge 29. Logs: .superpowers/key-health-fix2-*.log. The existing build chunk-size warning remains non-failing. No SQL, provider calls, key access, installation, spending or publication occurred.
+
+### Review-fix commits and acceptance
+
+| Fix | Commit | App files / passed / skipped | Wrapper files / passed | Gates |
+| --- | --- | --- | --- | --- |
+| Gemini quota evidence | 4823a7955c781e20276b5c1aa2ed4affd4ad31a8 | 310 / 3,795 / 1 | 8 / 166 | All seven PASS |
+| Scoped recovery refresh | Commit containing this final continuation report; resolve HEAD | 310 / 3,803 / 1 | 8 / 166 | All seven PASS |
+
+The final full hash is recorded in the external shared branch-checkpoint manifest. Both commits use explicit staging paths; the accepted-main vault mirror is preserved. The only changed pre-existing behavioral assertion across these fixes is the Gemini daily-message-without-quotaId case described in Fix 1.
+
+MET locally: the exact Google fixture now means rate_limited; explicit day/month identifiers and prepayment credits mean needs_topup; truncated billing means rate_limited. Other providers' fixtures pass unchanged. MET in fake-timer hook fixtures: recovered rows disappear at sixty seconds, no periodic refresh happens with no visible row or while hidden, focus/visibility restore refresh, and no timer/listener remains after cleanup. Existing stale-org guards and unique channels remain covered. Migration 079 is byte-unchanged from 5a60518; no cap/quota/provider-order code changed.
+
+NOT VERIFIED here: deployed Supabase deletion/recovery and browser lifecycle/phone/theme/native-notification behavior, held real Gemini 402, live provider response variations and SQL/RLS/concurrency. The supplied brief's Claude Deno review is recorded above; this builder did not repeat it or make live requests. Independent review of these two new commits remains pending. No new browser visual claim is made for this hook-only repair.
+
+Redeploy list is unchanged: migration 079 still awaits separately authorized application; all 24 previously enumerated edge functions still apply because Fix 1 changes the shared classifier, plus the frontend for Fix 2. No new function, wrapper, VPS, secret, environment, schedule or quota change. Do not deploy from this report alone. Codex stays builder; Claude reviews next. No behavior gap or open decision remains for this local brief. Subscription usage is unavailable; saved checkpoints are proactive.

@@ -1,3 +1,11 @@
+## API key health review fixes — final local checkpoint (2026-11-18)
+
+Continue on codex/key-health from reviewed 5a60518. Fix 1: 4823a7955c781e20276b5c1aa2ed4affd4ad31a8. Fix 2 is the commit containing this checkpoint (resolve HEAD; full hash in the shared review-fixes checkpoint). Read Review fixes in docs/KEY-HEALTH-BUILD-REPORT.md. Gemini 429 top-up requires explicit daily/monthly quota identifiers or prepay/credit message evidence. Filtered INSERT/UPDATE plus a sixty-second visible-row/visible-tab refresh and focus/visibility reload clear deleted health rows without DELETE events. All timers/listeners/channels clean up on org switch/unmount; pending old-org reads are rejected.
+
+Both fixes started red and passed all seven gates before separate explicit-path commits. Final 310 app files / 3,803 passed / one existing skip; wrapper 8 / 166; both TypeScript checks, build, whitespace and edge 29 PASS. One existing Gemini daily-message assertion changed to rate_limited; hook assertions retained. Migration 079 is unchanged. All 24 functions plus frontend remain the proposed rollout list, not performed. Claude's supplied brief reports the original scope/transport tested under Deno 2.9.7 and approves those original parts; these new fixes need review. Live recovery/realtime, SQL/RLS/concurrency, actual Gemini 402 and browser/native notification proof remain unverified by this builder. Local only: no provider/key/spending/SQL/VPS/publication action, no task-owned process. Codex remains builder; Claude reviews next. Shared accepted-main mirror remains preserved; use the labelled key-health review-fixes checkpoint. Stop after report.
+
+---
+
 ## API key health — local review checkpoint (2026-11-18)
 
 Kevin approved codex/key-health from fetched origin/main 9a081f0c05397e204d6638818df6e160ec1a77cc, superseding the brief's be3492b. Local build only. Codex remains builder; Claude reviews next. Read docs/KEY-HEALTH-BUILD-REPORT.md for the provider audit, all changed assertions, gate counts, rolled-back SQL and exact proposed 24-function/frontend redeploy list. Task 1 is 79f5394, Task 2 is 816ca6a, and Task 3 is the commit containing this checkpoint (resolve HEAD; full tip also in the shared labelled checkpoint).
