@@ -97,17 +97,17 @@
 :root[data-theme="dark"] {
   --color-offwhite: #F4F4F8;
   --color-bg: #040F49;
-  /* Dark surfaces are solid fills, one step apart: page #040F49, sections and cards (raised) #1C2C82, dialogs and menus (card) #263898. */
-  --color-card: #263898;
-  --color-raised: #1C2C82;
-  --color-surface: #2E3F98;
-  --color-muted: #C6C9E0;
-  --color-line: #5666BC;
-  --color-field: #8E9AD8;
-  --color-violet-soft: #47349C;
+  /* Dark surfaces are solid fills, one step apart: page #040F49, sections and cards (raised) #2A3AA0 (brighter, so they stand clear of the page), dialogs and menus (card) the same fill, and a darker inset (surface) #1E2B88 for blocks inside a section. */
+  --color-card: #2A3AA0;
+  --color-raised: #2A3AA0;
+  --color-surface: #1E2B88;
+  --color-muted: #D6D9EE;
+  --color-line: #7C8BDD;
+  --color-field: #B6C0F2;
+  --color-violet-soft: #3D2F9E;
   --color-link: #D4B8FF;
   --color-attention: #FFA0BA;
-  --color-attention-soft: #652A5A;
+  --color-attention-soft: #5E2860;
   --color-focus: #00DFDF;
   --shadow-raised: 0 18px 40px -18px rgba(2, 6, 40, 0.55);
 
